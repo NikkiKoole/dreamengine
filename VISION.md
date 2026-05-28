@@ -124,6 +124,24 @@ The editor should feel *distinct*, not necessarily *limited*. Custom pixel font,
 - Shift+click eyedropper auto-syncs the swatch palette
 - Stamp auto-copies on selection drag (no need for Cmd+C)
 
+#### Open question — what do "frames" actually mean?
+
+The sprite editor lets you flip between N "frames" with `[1]/[2]`, where each frame is a snapshot of *the entire spritesheet*. But the runtime only ever sees one sheet — whichever frame is active at ▶ run becomes `sprites.png`. **That mismatch is the central design tension**, and the system was built before we knew what it should mean.
+
+**What the interaction uniquely buys you.** When you flip between frames, the same canvas position shows different pixels. That is the gold-standard authoring affordance for animation — you draw frame 2 *with frame 1 as visual reference*, pixel by pixel. PICO-8 doesn't have this — you put each animation step in a *different* sprite slot and mentally align them. DIV Game Studio has something like it. We seem to have stumbled into a genuinely good authoring UI.
+
+**Four directions, rough-to-most-promising:**
+
+1. **"Just authoring scratch space."** Frames are an iteration aid; only the active one exports. Rename them "snapshots". Honest — throws away the runtime potential.
+
+2. **"Alternate full sheets."** `sheet(n)` in the cart picks which whole spritesheet is active. Palette swaps, day/night, mode swaps. Coarse — less interesting than per-sprite.
+
+3. **"Sheet-strips."** #2 and #4 combined. Strictly more capability; more concepts to teach.
+
+4. **"Sprite animation strips." ★** Each sprite slot has an N-frame strip. Switching frames in the editor switches *which frame of every sprite* you're seeing. Runtime: `spr(idx, x, y)` auto-cycles at a sprite-defined fps, or `sprf(idx, frame, x, y)` for manual. Walk cycles become *data*, not code. Matches DIV (one of our stated inspirations), matches the terse-API aesthetic, and the authoring UI we already built is exactly the right UI for it.
+
+**Tentative lean: #4.** No rush — the current behavior is harmless as a scratch tool until we commit. The interesting realization is that we've already built the most-novel half of the feature (simultaneous-position drawing) without realizing it; what's left is wiring up the runtime side.
+
 ### Map Editor ✓ Built — wasn't in the original vision
 - 128×64 grid of sprite indices, dimensions configurable per cart (`-DMAP_W` / `-DMAP_H`)
 - Same five tools as the sprite editor + brush + zoom slider

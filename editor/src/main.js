@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { cpp } from '@codemirror/lang-cpp'
 import { foldGutter, foldKeymap } from '@codemirror/language'
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap, completeAnyWord, completeFromList } from '@codemirror/autocomplete'
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { dayTheme } from './dayTheme.js'
 import { studioDocs } from './studioDocs.js'
@@ -223,11 +224,13 @@ const state = EditorState.create({
   doc: startDoc,
   extensions: [
     history(),
-    keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap, ...closeBracketsKeymap]),
+    keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap, ...closeBracketsKeymap, ...searchKeymap]),
     lineNumbers(),
     foldGutter(),
     highlightActiveLine(),
+    highlightSelectionMatches(),
     closeBrackets(),
+    search({ top: true }),
     autocompletion({ override: [cKeywords, completeAnyWord] }),
     studioHover,
     studioClickToHelp,
