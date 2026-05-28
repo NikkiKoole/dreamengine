@@ -3,38 +3,41 @@
 }
 
 h {
-  height: 28px;
-  line-height: 28px;
-  font-weight: bold;
+  font-weight: normal;
   color: var(--fg-dim);
-  padding: 0 6px;
+  font-size: 11px;
 }
 
 .whole {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
 }
 
-/* ── topbar ── */
-.topbar {
-  margin-left: 56px;
+/* ── topbar + actions — unified bar at the top, matches map editor ── */
+.topbar,
+.actions {
+  margin-left: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--fg-dim);
 }
+.topbar  { border-bottom: none; padding-bottom: 0; }   /* visually continuous with .actions below */
+.actions { padding-top: 6px; gap: 4px; }
 
 .topbar input[type=number] {
-  width: 48px;
-  height: 28px;
-  background: var(--bg2);
+  width: 52px;
+  background: var(--bg);
   border: 1px solid var(--border);
   color: var(--fg);
   font-family: var(--font);
-  font-size: 12px;
-  font-weight: bold;
-  padding: 0 6px;
+  font-size: 11px;
+  padding: 3px 6px;
 }
 .topbar input[type=number]:focus {
   outline: none;
@@ -45,6 +48,7 @@ h {
 .swatches-and-canvas {
   display: flex;
   gap: 12px;
+  padding: 12px;
 }
 
 .swatches {
@@ -134,23 +138,40 @@ canvas {
   gap: 4px;
 }
 
-button {
-  height: 28px;
-  padding: 0 10px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  font-family: var(--font);
-  font-size: 12px;
-  font-weight: bold;
-  cursor: pointer;
+.history {
+  margin-left: 56px;
+  margin-top: 4px;
+  display: flex;
+  gap: 4px;
 }
-button.active {
+.history button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.history button:disabled:hover {
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.actions button,
+.history button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+  text-transform: lowercase;
+}
+.actions button.active,
+.history button.active {
   background: var(--accent);
   color: var(--bg);
   border-color: var(--accent);
 }
-button:hover:not(.active) {
+.actions button:hover:not(.active),
+.history button:hover:not(.active) {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -158,7 +179,7 @@ button:hover:not(.active) {
 /* ── tilemap ── */
 .tilemap {
   position: relative;
-  margin-left: 56px;
+  align-self: flex-start;   /* keeps it top-aligned next to the canvas */
 }
 
 /* ── frames ── */

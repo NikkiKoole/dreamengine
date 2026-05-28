@@ -1,10 +1,13 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4 }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, touchControls: false }
 
 function load() {
   return {
-    screenW: parseInt(localStorage.getItem('screenW') || DEFAULTS.screenW),
-    screenH: parseInt(localStorage.getItem('screenH') || DEFAULTS.screenH),
-    scale:   parseInt(localStorage.getItem('scale')   || DEFAULTS.scale),
+    screenW:       parseInt(localStorage.getItem('screenW') || DEFAULTS.screenW),
+    screenH:       parseInt(localStorage.getItem('screenH') || DEFAULTS.screenH),
+    scale:         parseInt(localStorage.getItem('scale')   || DEFAULTS.scale),
+    mapW:          parseInt(localStorage.getItem('mapW')    || DEFAULTS.mapW),
+    mapH:          parseInt(localStorage.getItem('mapH')    || DEFAULTS.mapH),
+    touchControls: localStorage.getItem('touchControls') === '1',
   }
 }
 
@@ -60,6 +63,16 @@ export function buildSettingsPanel(el) {
   keysSection.appendChild(table)
   keysSection.appendChild(note('key remapping coming soon'))
   el.appendChild(keysSection)
+
+  // ── touch controls ───────────────────────────────────────────
+  const touchSection = section('touch')
+  touchSection.appendChild(checkbox(
+    'show on-screen stick + A/B buttons',
+    settings.touchControls,
+    v => { settings.touchControls = v; save('touchControls', v ? '1' : '0') },
+  ))
+  touchSection.appendChild(note('floating stick on the left, A/B on the right. carts can override with touch_controls(true/false).'))
+  el.appendChild(touchSection)
 }
 
 function section(title) {
@@ -86,6 +99,20 @@ function field(label, type, value, onChange) {
   input.addEventListener('change', e => onChange(parseInt(e.target.value)))
   wrap.innerHTML = `<span>${label}</span>`
   wrap.appendChild(input)
+  return wrap
+}
+
+function checkbox(label, value, onChange) {
+  const wrap = document.createElement('label')
+  wrap.className = 'settings-field'
+  const input = document.createElement('input')
+  input.type = 'checkbox'
+  input.checked = value
+  input.addEventListener('change', e => onChange(e.target.checked))
+  wrap.appendChild(input)
+  const span = document.createElement('span')
+  span.textContent = label
+  wrap.appendChild(span)
   return wrap
 }
 

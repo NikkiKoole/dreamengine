@@ -48,7 +48,7 @@ eventually2/
 4. Compiles: `clang cart.c studio.c -I runtime -I raylib/include libraylib.a -framework ... -DSCREEN_W=X -DSCREEN_H=Y -DSCALE=Z -o build/cart`
 5. Spawns `build/cart` with `cwd = build/` (so it finds sprites.png and the font)
 
-Raylib is at `/usr/local/opt/raylib` (installed via Homebrew).
+Raylib is installed via Homebrew. `main.cjs` auto-detects the path: `/opt/homebrew/opt/raylib` on Apple Silicon, `/usr/local/opt/raylib` on Intel.
 
 ## The runtime model
 
@@ -77,7 +77,7 @@ void pixel(int x, int y, int color);
 // constants
 SCREEN_W, SCREEN_H          // canvas dimensions
 BTN_UP/DOWN/LEFT/RIGHT/A/B  // button indices
-CLR_BLACK/WHITE/RED/GREEN/BLUE  // palette shortcuts (0-4, full palette is 0-31)
+CLR_BLACK, CLR_DARK_BLUE, ... CLR_PEACH  // all 32 PICO-8 palette colors (0-31), named in studio.h
 ```
 
 ## Adding a new API function
@@ -108,4 +108,4 @@ CLR_BLACK/WHITE/RED/GREEN/BLUE  // palette shortcuts (0-4, full palette is 0-31)
 - Changing `main.cjs` or `preload.cjs` requires restarting Electron (`npm start`); Vite hot-reloads everything else
 - The build log auto-hides after 3 seconds on success, stays open on compile errors
 - `SCREEN_W`, `SCREEN_H`, and `SCALE` are passed as `-D` flags at compile time from the settings tab
-- The palette in `studio.c` currently only has 5 colors defined (indices 0–4); the rest are uninitialized (TODO)
+- The palette in `studio.c` is the full 32-color PICO-8 palette (indices 0–31), matching the sprite editor's `pico32.json`. All 32 are named `CLR_*` in `studio.h`

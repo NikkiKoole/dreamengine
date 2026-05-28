@@ -23,14 +23,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const swatches        = document.querySelector('.swatches')
   const framesList      = document.querySelector('.frames-list')
   const togglegroup     = document.querySelector('.actions')
+  const undoButton      = document.querySelector('#undo-button')
+  const redoButton      = document.querySelector('#redo-button')
 
   // ── settings ───────────────────────────────────────────────
   const settings = {
     cellwidth:   16,
     cellheight:  16,
-    scale:       16,
-    mapwidth:    256,   // 16 cols × 16px
-    mapheight:   256,   // 16 rows × 16px  → 256 sprites total
+    scale:       28,   // 28 × 16 = 448, matches the palette height (16 swatches × 28px)
+    mapwidth:    128,   //  8 cols × 16px
+    mapheight:   128,   //  8 rows × 16px  → 64 sprites total
     mapscale:    2,
     worldwidth:  16,
     worldheight: 16,
@@ -86,6 +88,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (localStorage.frames) {
     frames = JSON.parse(localStorage.frames)
+    // normalize older/buggy saves: every frame starts with a clean single-entry undo history
+    frames.forEach(f => { f.undoStack = [f.data]; f.undoPointer = 0 })
   } else {
     addFrame()
   }
@@ -210,16 +214,26 @@ document.addEventListener('DOMContentLoaded', function () {
       undoStack.push(current)
       frame.undoPointer++
     }
+    updateHistoryButtons()
   }
 
   function undo(context) {
     const frame = frames[framePointer]
     if (frame.undoPointer > 0) { frame.undoPointer--; restoreFromUndoStack() }
+    updateHistoryButtons()
   }
 
   function redo(context) {
     const frame = frames[framePointer]
     if (frame.undoPointer < frame.undoStack.length - 1) { frame.undoPointer++; restoreFromUndoStack() }
+    updateHistoryButtons()
+  }
+
+  function updateHistoryButtons() {
+    const frame = frames[framePointer]
+    if (!frame || !undoButton || !redoButton) return
+    undoButton.disabled = frame.undoPointer <= 0
+    redoButton.disabled = frame.undoPointer >= frame.undoStack.length - 1
   }
 
   function restoreFromUndoStack() {
@@ -238,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── frames ─────────────────────────────────────────────────
   function addFrame(empty = true) {
     const frame = empty ? emptyCanvas : tilemap.toDataURL()
-    frames.splice(framePointer + 1, 0, { data: frame, undoStack: [frame], undoPointer: 1 })
+    frames.splice(framePointer + 1, 0, { data: frame, undoStack: [frame], undoPointer: 0 })
     makeFramesUI()
   }
 
@@ -262,6 +276,7 @@ document.addEventListener('DOMContentLoaded', function () {
       frameIsReady = true
       if (mousePressed) mousedownCanvas(mousePressedEvent)
       copyTilemapToSprite()
+      updateHistoryButtons()
     }
     img.src = frames[framePointer].data
     setCorrectFrameActiveClass()
@@ -339,6 +354,29 @@ document.addEventListener('DOMContentLoaded', function () {
     mousePressed = true
     const { action } = tooldata
     const { x, y } = getPixelPos(e)
+
+    // shift+click = eyedropper (independent of which tool is active)
+    if (e.shiftKey && e.which === 1) {
+      const px = x * settings.scale + (settings.scale >> 1)   // sample cell center
+      const py = y * settings.scale + (settings.scale >> 1)
+      const [r, g, b, a] = getColorAt(ctx, px, py)
+      if (a > 0) {
+        tooldata.rgba = [r, g, b, 255]
+        setImageData(tooldata.id, tooldata.rgba)
+        // sync the swatch palette: mark the matching swatch active
+        const swatches = document.querySelectorAll('.swatches div')
+        swatches.forEach(s => {
+          const m = s.style.backgroundColor.match(/\d+/g)
+          if (m && +m[0] === r && +m[1] === g && +m[2] === b) {
+            swatches.forEach(o => o.className = '')
+            s.className = 'active'
+          }
+        })
+      }
+      mousePressed = false   // don't drag-paint after picking
+      return
+    }
+
     if (action === 'fill') { floodfill(x, y, e.which); addToUndoStack(); return }
     if (e.which === 1) {
       if (action === 'selection') {
@@ -360,6 +398,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const { cellwidth, cellheight, scale } = settings
         canvasOverlay.getContext('2d').clearRect(0, 0, cellwidth * scale, cellheight * scale)
         pasteTempSelectionToMain()
+      } else if (selection) {
+        // real drag — auto-copy to the clipboard so the stamp tool just works
+        // (no need for Cmd+C anymore)
+        copyToClipboard(ctx)
       }
     }
     if (e.which === 1 && action === 'linetool') {
@@ -376,6 +418,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const { cellwidth, cellheight, scale } = settings
       canvasOverlay.getContext('2d').clearRect(0, 0, cellwidth * scale, cellheight * scale)
     }
+    const statusEl = document.querySelector('.sprite-status')
+    if (statusEl) statusEl.textContent = 'pixel —'
   }
 
   function mouseup() {
@@ -385,6 +429,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function mousemoveCanvas(e) {
     mousePressedEvent = { which: e.which, offsetX: e.offsetX, offsetY: e.offsetY }
+    // update the hover-status line
+    const statusEl = document.querySelector('.sprite-status')
+    if (statusEl) {
+      const { x, y } = getPixelPos(e)
+      const { cellwidth, cellheight } = settings
+      if (x >= 0 && y >= 0 && x < cellwidth && y < cellheight) statusEl.textContent = `pixel (${x}, ${y})`
+    }
     if (!frameIsReady) return
     const { action } = tooldata
     if (mousePressed && action === 'pixel') {
@@ -409,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function () {
     Array.from(e.target.parentNode.children).forEach(s => s.className = '')
     e.target.className = 'active'
     const arr = e.target.style.backgroundColor.replace('rgb(', '').replace(')', '').split(',')
-    tooldata.rgba = arr
+    tooldata.rgba = arr.map(c => parseInt(c, 10))   // numbers, not strings — strict-equals checks rely on this
     setImageData(tooldata.id, tooldata.rgba)
   }
 
@@ -588,9 +639,13 @@ document.addEventListener('DOMContentLoaded', function () {
   function floodfill(x, y, which) {
     const { tl, br } = getRect()
     const context = getContextToDrawIn()
-    let rgba = which !== 1 ? [0, 0, 0, 0] : tooldata.rgba
+    // the exact color this fill will paint (alpha 0 when erasing)
+    const paint = which === 1
+      ? [+tooldata.rgba[0], +tooldata.rgba[1], +tooldata.rgba[2], 255]
+      : [0, 0, 0, 0]
     const [r1, g1, b1, a1] = getColorAt(context, x, y)
-    if (r1 === rgba[0] && g1 === rgba[1] && b1 === rgba[2]) return
+    // already the target color? painting wouldn't change anything — bail, or we'd loop forever
+    if (r1 === paint[0] && g1 === paint[1] && b1 === paint[2] && a1 === paint[3]) return
     const stack = pointInRect(x, y, tl.x, tl.y, br.x, br.y) ? [[x, y]] : []
     while (stack.length > 0) {
       const [cx, cy] = stack.pop()
@@ -620,6 +675,9 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── keyboard ───────────────────────────────────────────────
   function keydownHandler(e) {
     if (e.target.nodeName === 'INPUT') return
+    // only handle sprite-editor shortcuts when the sprites tab is showing,
+    // otherwise Cmd+Z etc. would fire while editing code on the code tab
+    if (!document.getElementById('panel-sprites')?.classList.contains('active')) return
     if (selection) {
       if (e.key === 'ArrowUp')    moveSelectionCanvas(0, -1)
       if (e.key === 'ArrowDown')  moveSelectionCanvas(0,  1)
@@ -686,11 +744,7 @@ document.addEventListener('DOMContentLoaded', function () {
   chResizer.value = settings.cellheight
   chResizer.addEventListener('change', e => { settings.cellheight = Number(e.target.value); updateSpriteCanvasSize(ctx); addToUndoStack() })
 
-  const zoomSlider = document.querySelector('#zoomRange')
-  zoomSlider.addEventListener('input', e => { settings.scale = Math.pow(2, 1 + parseInt(e.target.value)); updateSpriteCanvasSize(ctx) })
-
-  const zoomTilemapSlider = document.querySelector('#zoomRangeTilemap')
-  zoomTilemapSlider.addEventListener('input', e => { settings.mapscale = Number(e.target.value); updateTilemapSize() })
+  // zoom is locked at 100% (settings.scale = 28). slider was removed.
 
   const brushSlider = document.querySelector('#brushRange')
   const brushInput  = document.querySelector('#brushInput')
@@ -698,6 +752,10 @@ document.addEventListener('DOMContentLoaded', function () {
   brushInput.value  = tooldata.brushsize
   brushSlider.addEventListener('input',  e => { tooldata.brushsize = e.target.value; brushInput.value  = e.target.value })
   brushInput.addEventListener('change', e => { tooldata.brushsize = e.target.value; brushSlider.value = e.target.value })
+
+  undoButton.addEventListener('click', () => { undo(ctx) })
+  redoButton.addEventListener('click', () => { redo(ctx) })
+  updateHistoryButtons()
 
   document.querySelector('#help-button').addEventListener('click', () => {
     const panel = document.querySelector('#help-text')
