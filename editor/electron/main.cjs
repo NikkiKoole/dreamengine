@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu } = require('electron')
 const { exec, spawn }                  = require('child_process')
 const path                             = require('path')
 const fs                               = require('fs')
@@ -24,7 +24,27 @@ function createWindow() {
   win.loadURL('http://localhost:5173')
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'dreamengine',
+      submenu: [{ role: 'quit' }]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ]
+    }
+  ]))
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
