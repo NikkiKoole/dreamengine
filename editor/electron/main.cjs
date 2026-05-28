@@ -6,8 +6,11 @@ const fs                               = require('fs')
 const RUNTIME_DIR = path.join(__dirname, '../../runtime')
 const BUILD_DIR   = path.join(__dirname, '../../build')
 const RAYLIB      = '/usr/local/opt/raylib'
+const RAYLIB_WIN  = '/usr/local/opt/raylib-win64/raylib-5.5_win64_mingw-w64'
+const MINGW       = 'x86_64-w64-mingw32-gcc'
 const CART_SRC    = path.join(BUILD_DIR, 'cart.c')
 const CART_BIN    = path.join(BUILD_DIR, 'cart')
+const CART_EXE    = path.join(BUILD_DIR, 'cart.exe')
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -144,12 +147,27 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
       const proc = spawn(CART_BIN, [], { detached: true, stdio: 'ignore', cwd: BUILD_DIR })
       proc.unref()
 
+      // also cross-compile for Windows in the background
+      if (fs.existsSync(MINGW) || fs.existsSync(`/usr/local/bin/${MINGW}`)) {
+        const winArgs = [
+          `"${CART_SRC}"`, `"${studioC}"`,
+          `-I"${RUNTIME_DIR}"`, `-I"${BUILD_DIR}"`, `-I"${RAYLIB_WIN}/include"`,
+          '-Os',
+          `"${RAYLIB_WIN}/lib/libraylib.a"`,
+          '-lopengl32', '-lgdi32', '-lwinmm', '-lcomdlg32',
+          '-Wl,--gc-sections',
+          `-o "${CART_EXE}"`,
+        ]
+        exec(`${MINGW} ${winArgs.join(' ')}`, () => {})
+      }
+
       resolve({
         ok:     true,
         cmd,
-        output: warnings || null,   // any remaining warnings
+        output: warnings || null,
         src:    CART_SRC,
         bin:    CART_BIN,
+        exe:    CART_EXE,
       })
     })
   })
