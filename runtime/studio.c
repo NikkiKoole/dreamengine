@@ -65,10 +65,15 @@ int main(void) {
     }
 
     if (SPRITES_DATA_LEN > 0) {
-        Image img = LoadImageFromMemory(".png", SPRITES_DATA, SPRITES_DATA_LEN);
+        Image img = {
+            .data    = (void *)SPRITES_DATA,
+            .width   = SPRITES_WIDTH,
+            .height  = SPRITES_HEIGHT,
+            .mipmaps = 1,
+            .format  = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+        };
         spritesheet = LoadTextureFromImage(img);
         SetTextureFilter(spritesheet, TEXTURE_FILTER_POINT);
-        UnloadImage(img);
     }
 
     while (!WindowShouldClose()) {

@@ -64,7 +64,10 @@ runBtn.addEventListener('click', async () => {
   // export sprite sheet from editor canvas before compiling
   const tilemapCanvas = document.querySelector('#tilemap-canvas')
   if (tilemapCanvas) {
-    await window.studio.saveSprites(tilemapCanvas.toDataURL('image/png'))
+    const ctx  = tilemapCanvas.getContext('2d')
+    const imgd = ctx.getImageData(0, 0, tilemapCanvas.width, tilemapCanvas.height)
+    const b64  = btoa(String.fromCharCode(...imgd.data))
+    await window.studio.saveSprites(b64, tilemapCanvas.width, tilemapCanvas.height)
   }
 
   const result = await window.studio.run(code, settings)
