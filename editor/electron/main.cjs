@@ -22,6 +22,19 @@ function createWindow() {
   })
 
   win.loadURL('http://localhost:5173')
+
+  win.webContents.on('before-input-event', (event, input) => {
+    if (!input.meta && !input.control) return
+    switch (input.key.toLowerCase()) {
+      case 'c': event.preventDefault(); win.webContents.copy();      break
+      case 'v': event.preventDefault(); win.webContents.paste();     break
+      case 'x': event.preventDefault(); win.webContents.cut();       break
+      case 'a': event.preventDefault(); win.webContents.selectAll(); break
+      case 'z': event.preventDefault()
+        input.shift ? win.webContents.redo() : win.webContents.undo()
+        break
+    }
+  })
 }
 
 app.whenReady().then(() => {
