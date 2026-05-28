@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, Menu, session } = require('electron')
-const { exec, spawn }                  = require('child_process')
+const { exec, execSync, spawn }        = require('child_process')
 const path                             = require('path')
 const fs                               = require('fs')
 
@@ -92,10 +92,27 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
 
   fs.writeFileSync(CART_SRC, code)
 
+  // embed sprites.png as a C header
+  const spritesHeader = path.join(BUILD_DIR, 'sprites_data.h')
+  const spritesPng    = path.join(BUILD_DIR, 'sprites.png')
+  if (fs.existsSync(spritesPng)) {
+    try {
+      const xxd = execSync('xxd -i sprites.png', { cwd: BUILD_DIR }).toString()
+      fs.writeFileSync(spritesHeader,
+        xxd.replace(/unsigned char sprites_png\[\]/,       'static const unsigned char SPRITES_DATA[]')
+           .replace(/unsigned int sprites_png_len/,        'static const unsigned int  SPRITES_DATA_LEN'))
+    } catch {
+      fs.writeFileSync(spritesHeader, 'static const unsigned char SPRITES_DATA[]={};static const unsigned int SPRITES_DATA_LEN=0;\n')
+    }
+  } else {
+    fs.writeFileSync(spritesHeader, 'static const unsigned char SPRITES_DATA[]={};static const unsigned int SPRITES_DATA_LEN=0;\n')
+  }
+
   const args = [
     `"${CART_SRC}"`,
     `"${studioC}"`,
     `-I"${RUNTIME_DIR}"`,
+    `-I"${BUILD_DIR}"`,
     `-I"${RAYLIB}/include"`,
     `-DSCREEN_W=${screenW}`,
     `-DSCREEN_H=${screenH}`,

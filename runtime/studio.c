@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include "dos_8x8_font.h"
+#include "sprites_data.h"
 
 // ------------------------------------------------------------
 // internal state
@@ -63,14 +64,11 @@ int main(void) {
         custom_font = true;
     }
 
-    {
-        // look for sprites.png next to the binary, not relative to cwd
-        char spritePath[512];
-        snprintf(spritePath, sizeof(spritePath), "%ssprites.png", GetApplicationDirectory());
-        if (FileExists(spritePath)) {
-            spritesheet = LoadTexture(spritePath);
-            SetTextureFilter(spritesheet, TEXTURE_FILTER_POINT);
-        }
+    if (SPRITES_DATA_LEN > 0) {
+        Image img = LoadImageFromMemory(".png", SPRITES_DATA, SPRITES_DATA_LEN);
+        spritesheet = LoadTextureFromImage(img);
+        SetTextureFilter(spritesheet, TEXTURE_FILTER_POINT);
+        UnloadImage(img);
     }
 
     while (!WindowShouldClose()) {
