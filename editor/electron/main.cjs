@@ -117,12 +117,14 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
     `-DSCREEN_W=${screenW}`,
     `-DSCREEN_H=${screenH}`,
     `-DSCALE=${scale}`,
+    '-Os',
     `"${RAYLIB}/lib/libraylib.a"`,
     '-framework OpenGL',
     '-framework Cocoa',
     '-framework IOKit',
     '-framework CoreVideo',
     '-framework CoreFoundation',
+    '-Wl,-dead_strip',
     `-o "${CART_BIN}"`,
   ]
 
