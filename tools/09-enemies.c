@@ -2,7 +2,7 @@
 
 int px, py, sx, sy, score;
 float ex, ey;
-int dead = 0, ready = 0;
+int dead = 0;
 
 void reset() {
     px = 152; py = 92;
@@ -11,8 +11,9 @@ void reset() {
     score = 0; dead = 0;
 }
 
+void init() { reset(); }
+
 void update() {
-    if (!ready) { reset(); ready = 1; }
     if (dead) {
         if (btnp(0, BTN_A) || btnp(0, BTN_B)) reset();
         return;

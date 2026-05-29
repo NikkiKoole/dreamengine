@@ -70,6 +70,7 @@
 // callbacks — you implement these (update is optional)
 // ------------------------------------------------------------
 
+void init(void);    // called once after the window opens — optional
 void draw(void);
 void update(void);
 

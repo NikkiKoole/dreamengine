@@ -4,10 +4,8 @@
 #define COUNT 7
 #define FPS   5.0f
 
-void update() {
-    // colorkey runs once — too expensive to call every frame
-    static bool ready = false;
-    if (!ready) { colorkey(CLR_BLACK); ready = true; }
+void init() {
+    colorkey(CLR_BLACK);
 }
 
 void draw() {

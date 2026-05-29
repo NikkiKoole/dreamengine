@@ -320,9 +320,10 @@ static void crash_handler(int sig) {
 }
 
 // ------------------------------------------------------------
-// weak stub — user can omit update() and it still compiles
+// weak stubs — user can omit init() and/or update() and it still compiles
 // ------------------------------------------------------------
 
+__attribute__((weak)) void init(void)   {}
 __attribute__((weak)) void update(void) {}
 
 // ------------------------------------------------------------
@@ -376,6 +377,8 @@ int main(int argc, char **argv) {
             SetTextureFilter(spritesheet, TEXTURE_FILTER_POINT);
         }
     }
+
+    init();
 
     while (!WindowShouldClose()) {
         poll_virtual_touches();

@@ -178,14 +178,12 @@ int x    = SCREEN_W;
 int y    = 92;
 int face = 1;           // 1 = right, -1 = left  (set by sgn())
 
-void update() {
-    // build a tile floor on the first frame (draw something in sprite slot 1 to see it)
-    static bool map_built = false;
-    if (!map_built) {
-        for (int cx = 0; cx < MAP_W; cx++) mset(cx, 11, 1);
-        map_built = true;
-    }
+void init() {
+    // build a tile floor (draw something in sprite slot 1 to see it)
+    for (int cx = 0; cx < MAP_W; cx++) mset(cx, 11, 1);
+}
 
+void update() {
     bpm(85);
 
     // chord progression: Am7 → Fmaj7 → Cmaj7 → G7  (vi - IV - I - V in C)
