@@ -194,13 +194,13 @@ if (IsKeyPressed(KEY_F1)) watch_show = !watch_show;
 
 ---
 
-## Open decisions (resolve before writing code)
+## Open decisions — ✅ all resolved (shipped with the leans)
 
-1. **Name: `printh`?** Alternatives: `say`, `trace`, `dbg`. `log` is perfect-but-collides with `<math.h>`. Lean **`printh`** (PICO-8 match, charming pun).
-2. **Log panel: tab or docked panel?** Lean **docked panel** below build log (always visible, has its own `×` collapse like the search panel).
-3. **`watch()` position: configurable?** **No, fixed top-left for v1.** Add `watch_position(x, y)` later if needed.
-4. **Strip ANSI escapes from raylib's stdout?** **Yes** — tiny regex on the renderer side, ~5 lines.
-5. **Default `watch_visible`: `true` or `false`?** Lean **`true`** — learner sees watches immediately. Cart can hide for screenshots.
+1. **Name: `printh`?** → **`printh`** shipped (PICO-8 match, dodges `<math.h>`'s `log`).
+2. **Log panel: tab or docked panel?** → **docked panel**, but bottom-docked (not below the build log) with its own `clear` + `×`. Auto-hides 3s after a clean, silent exit, mirroring the build log; reopens on new output.
+3. **`watch()` position: configurable?** → **fixed top-left** for v1. `watch_position(x, y)` still deferred.
+4. **Strip ANSI escapes?** → **yes**, regex on the renderer side (`stripAnsi` in shell.js).
+5. **Default `watch_visible`?** → **`true`**; F1 toggles; cart can call `watch_visible(false)` for clean screenshots.
 
 ---
 
@@ -219,29 +219,31 @@ if (IsKeyPressed(KEY_F1)) watch_show = !watch_show;
 
 ---
 
-## Follow-on: crash capture
+## Crash capture — ✅ done
 
-Once the stderr pipe is wired, crash capture is ~20 more lines:
+Shipped alongside the main feature (the design above anticipated it as a follow-on; it landed in the same pass):
 
-- **studio.c**: `signal(SIGSEGV, crash_handler)` → writes "cart crashed: signal N" + the last `watch()` values to stderr → exit.
-- **shell.js**: when `cart:exit` arrives with `code !== 0`, the log-panel exit banner turns red: `─── cart crashed (signal 11) ───`.
+- **studio.c**: `signal()` registers a handler for **SIGSEGV / SIGFPE / SIGABRT / SIGBUS**. The handler writes `*** cart crashed: signal N ***` + the last `watch()` values to stderr using async-signal-safe `write()` (not `fprintf`, which isn't safe in a handler), then restores `SIG_DFL` and **re-raises** so the process dies for real and the editor sees the actual signal.
+- **main.cjs**: forwards `{ code, signal }` on exit.
+- **shell.js**: a non-zero/signal exit turns the banner red — `─── cart crashed (SIGSEGV) ───`.
 
-`watch()` + crash capture compose beautifully — you get the variables' last values alongside the crash. That converts a mystifying silent failure into a debuggable moment.
+`watch()` + crash capture compose exactly as hoped — verified live: a null deref produced `signal 11` plus `last watched values: x = 60`. A mystifying silent failure becomes a debuggable moment.
+
+**Platform note:** the build now passes `-fno-delete-null-pointer-checks`, so a plain beginner null *write* (`*p = 42;`) reliably faults instead of being optimized into a SIGTRAP or elided. arm64 integer divide-by-zero still does NOT trap (returns 0) — SIGFPE won't fire on Apple Silicon, so a `volatile` null read/write is the dependable test crash.
 
 ---
 
-## When picking this up
+## Smoke test (as shipped — for regression checks)
 
-1. Resolve open decisions 1–5 above (or just go with the leans).
-2. Order to build:
-   1. `studio.h` declarations
-   2. `studio.c` impls (`printh`, `watch`, `watch_visible`, overlay, F1 toggle, frame-end aging)
-   3. `main.cjs` spawn change + IPC
-   4. `preload.cjs` `onLog` / `onExit`
-   5. log panel DOM/CSS in shell.js + shell.css
-   6. docs (studioDocs + shell sections)
-3. Smoke test:
-   - Add `printh("hello %d", 42)` to the starter cart's `update()` — see it in the log panel.
-   - Add `watch("frame", "%d", beat())` — see it tick in the corner.
-   - Press F1 — overlay hides.
-   - Force a crash (`int *p = 0; *p = 1;`) — banner should turn red. *(Crash banner needs the follow-on PR.)*
+Run inside the Electron app (`npm start`); the panel/overlay only work there. Note: changing `main.cjs` needs an Electron restart.
+
+- `printh("hello %d", 42)` in `update()` → line in the bottom runtime log panel.
+- `watch("frame", "%d", beat())` → ticks in the top-left of the game window.
+- Press **F1** → overlay hides/shows.
+- Force a crash with a `volatile` null read — `volatile int *p = 0; int v = *p; watch("v","%d",v);` → game window closes, panel shows `*** cart crashed: signal 11 ***` + last watched values, and a red `─── cart crashed (SIGSEGV) ───` banner. (A plain `*p = 42;` write also crashes now, thanks to `-fno-delete-null-pointer-checks`.)
+- A cart that prints nothing and exits cleanly → panel flashes the green exit banner, then auto-hides after 3s.
+
+## Still open / future
+
+- `watch_position(x, y)` — overlay is fixed top-left for now.
+- Whether to add `-fno-delete-null-pointer-checks` was resolved (yes); no other build-flag changes pending.
