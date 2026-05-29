@@ -358,5 +358,50 @@
     "title": "bubble bobble",
     "description": "A tribute to Bubble Bobble. You are Bub, the bubble dragon: run and jump across the platforms, press B to blow a bubble that drifts up and traps a monster, then jump into the trapped monster to POP it into fruit — grab the fruit for points. Clear every monster to advance to the next, tougher wave. Don’t touch a free monster or you lose one of your three lives. LEFT/RIGHT run, A jumps, B blows a bubble.",
     "file": "bubblebobble.cart.png"
+  },
+  {
+    "title": "maze generator",
+    "file": "maze.cart.png",
+    "description": "Carve a maze, then solve it — two classic algorithms on one screen. A recursive backtracker knocks down walls to random unvisited neighbours and backs up a stack at dead ends, guaranteeing every cell is reachable. Then a breadth-first flood spreads out ring by ring from the start; the moment it touches the exit, the came-from links trace the shortest path. Z builds a fresh maze and animates the carve + solve."
+  },
+  {
+    "title": "A* pathfinding",
+    "file": "astar.cart.png",
+    "description": "How a game finds its way around walls. A* always expands the most promising cell, scoring f = g + h: steps taken plus a guess (Manhattan distance) of steps remaining — that guess steers it toward the goal instead of flooding everywhere. Closed cells are explored, open cells are the frontier, yellow is the shortest path. Arrows move the cursor, A toggles a wall, B runs the search or returns to editing."
+  },
+  {
+    "title": "ripple tank",
+    "file": "ripple.cart.png",
+    "description": "Water, and how waves add up. Each cell next height is the average of its neighbours minus its previous height, damped so ripples fade. Drop two stones and the rings cross: crests meeting crests pile up, crests meeting troughs cancel — interference, the same maths behind sound and light. Arrows move the stone, Z drops it, and rain falls on its own."
+  },
+  {
+    "title": "verlet rope",
+    "file": "rope.cart.png",
+    "description": "How games fake rope and cloth, cheaply. The rope is a line of points; each frame every point keeps moving the way it was already going (Verlet integration stores the previous position) and gravity tugs it down. Then the links are relaxed a few times — nudging each pair back to the right segment length — and believable rope falls out, no springs or forces. Arrows swing the anchor, Z flicks the tail, X flips gravity."
+  },
+  {
+    "title": "boids",
+    "file": "boids.cart.png",
+    "description": "A flock with no leader, from three little rules. Each boid watches only nearby neighbours and obeys: separation (steer away from anyone too close), alignment (match the flock heading), cohesion (drift toward the flock centre). Nobody is in charge yet the swarm moves like one organism — emergence. Steer the predator with the arrows and watch the flock part and regroup around it."
+  },
+  {
+    "title": "lil hero (zelda)",
+    "description": "A tiny Legend of Zelda. Explore a 3x3 grid of rooms — the screen slides when you step through a doorway — stab enemies with your sword, and at full hearts the sword throws a beam. Octoroks spit rocks, Moblins chase you; killing them drops hearts and rupees. Find the room with the Triforce and grab it. WASD/arrows move, Z sword.",
+    "file": "zelda.cart.png"
+  },
+  {
+    "title": "falling sand",
+    "file": "sand.cart.png",
+    "description": "A powder toy from a handful of per-cell rules. Each cell is one material: sand falls and slides down diagonals so it piles into slopes (and sinks through water), water falls then spreads sideways to find its level, stone never moves. No pile or puddle is ever drawn on purpose — the shapes emerge from grains each making one tiny local decision, the same idea as the fire and ripple carts. WASD move the cursor, hold Z to paint, X cycles material (sand/water/stone/eraser)."
+  },
+  {
+    "title": "papers, please",
+    "description": "A document-inspection game after Lucas Pope's classic. An applicant hands over a passport (and, on later days, an entry permit); cross-check their fields against the day's posted RULEBOOK and stamp APPROVE or DENY. Catch expired passports, banned nations, missing permits, mismatched names and expired permits — the rules tighten each day, so a clean entrant one day is a denial the next. Five mistakes and you're terminated. A approves, B denies. Glory to Arstotzka.",
+    "file": "papers.cart.png"
+  },
+  {
+    "title": "joust",
+    "description": "A tribute to the Williams arcade classic. Ride your flying mount over a lava pit: tap A to FLAP against constant gravity, steer with LEFT/RIGHT (you carry momentum), and the screen wraps left to right. Charge enemy riders — whoever is higher at the moment of contact wins; equal height bounces you both apart. A beaten rider drops an egg: grab it for points before it hatches into a fresh enemy. Clear the wave to advance. Three lives; the lava is always fatal.",
+    "file": "joust.cart.png"
   }
 ]
