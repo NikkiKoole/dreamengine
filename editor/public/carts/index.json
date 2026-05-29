@@ -45,6 +45,16 @@
     "file": "09-enemies.cart.png"
   },
   {
+    "title": "11. noise",
+    "description": "Smooth organic randomness. Two layers of scrolling hills and twinkling stars, all from noise2().",
+    "file": "11-noise.cart.png"
+  },
+  {
+    "title": "12. high score",
+    "description": "Mash buttons for 10 seconds. Your best score saves between runs with save() and load().",
+    "file": "12-hiscore.cart.png"
+  },
+  {
     "title": "10. build a world",
     "description": "Paint tiles in the map editor. Your player walks through the world and the camera follows.",
     "file": "10-world.cart.png"
