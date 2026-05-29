@@ -85,8 +85,28 @@
     "file": "16-spirograph.cart.png"
   },
   {
+    "title": "17. hypotrochoid",
+    "description": "A point on a small circle rolling inside a larger one traces an intricate curve. Four presets (8-loop, 5-petal, 9-loop, trefoil) — press A to cycle. Uses the parametric equation directly with cos_deg and sin_deg.",
+    "file": "17-hypotrochoid.cart.png"
+  },
+  {
+    "title": "space invaders",
+    "description": "Classic arcade shooter. 8×3 alien grid that speeds up as you clear it, 3 enemy bullets, lives. Left/right to move, A to shoot.",
+    "file": "18-invaders.cart.png"
+  },
+  {
     "title": "pong",
     "description": "2-player pong. First to 7 wins. Player 1: W/S — Player 2: up/down arrows.",
     "file": "pong.cart.png"
+  },
+  {
+    "title": "asteroids",
+    "description": "Classic vector shooter. Rotate and thrust your ship, blast rocks apart, survive endless waves. Left/right to rotate, up to thrust, Z to fire.",
+    "file": "asteroids.cart.png"
+  },
+  {
+    "title": "snake",
+    "description": "Classic snake. Eat the flashing food to grow, avoid walls and your own tail. Speeds up as you get longer. Arrow keys to steer.",
+    "file": "snake.cart.png"
   }
 ]
