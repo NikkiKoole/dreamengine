@@ -348,5 +348,15 @@
     "title": "pang",
     "description": "Demake of the 1989 Capcom classic (Buster Bros). Big balls bounce around the arena under gravity. Fire your harpoon-wire straight up and a hit SPLITS a ball into two smaller, faster ones — medium into small, small into tiny, and the tiniest just pop. Clear them all to advance; a ball touching you costs a life. Each size bounces to its own height, so the screen fills with chaos as you break the big ones down. Left/Right move, A or Up fires (up to two wires at once).",
     "file": "pang.cart.png"
+  },
+  {
+    "title": "bomberman",
+    "description": "Battle mode: you (white) versus three AI bombers in a destructible maze of hard pillars and soft crates. Drop bombs that burst after a moment into a cross of flame — it breaks crates (sometimes revealing power-ups), chains other bombs, and kills any bomber it catches, including you. Grab power-ups: B = more bombs at once, F = bigger fire, S = more speed. The AI hunts crates and rivals but flees its own blasts. Last bomber standing wins. Arrows / WASD move, Z or X drops a bomb.",
+    "file": "bomberman.cart.png"
+  },
+  {
+    "title": "bubble bobble",
+    "description": "A tribute to Bubble Bobble. You are Bub, the bubble dragon: run and jump across the platforms, press B to blow a bubble that drifts up and traps a monster, then jump into the trapped monster to POP it into fruit — grab the fruit for points. Clear every monster to advance to the next, tougher wave. Don’t touch a free monster or you lose one of your three lives. LEFT/RIGHT run, A jumps, B blows a bubble.",
+    "file": "bubblebobble.cart.png"
   }
 ]
