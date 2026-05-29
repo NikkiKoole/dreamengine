@@ -23,9 +23,7 @@ void update() {
     float age = now() - spawn_t;
     if (age > 2.5f) { lives--; spawn(); return; }
 
-    if (near(ex, ey, SCREEN_W/2, SCREEN_H/2, 8 + (int)((2.5f - age) * 8))) {
-        if (btnp(0, BTN_A) || btnp(0, BTN_B)) { score++; spawn(); }
-    }
+    if (btnp(0, BTN_A) || btnp(0, BTN_B)) { score++; spawn(); }
 }
 
 void draw() {
@@ -43,9 +41,7 @@ void draw() {
     int r = 8 + (int)((2.5f - age) * 8);
     circfill(ex, ey, r, CLR_YELLOW);
 
-    // press z/x while near center to catch
-    circfill(SCREEN_W/2, SCREEN_H/2, 8, CLR_GREEN);
-    print_centered("z or x to catch!", SCREEN_H - 16, CLR_LIGHT_GREY);
+    print_centered("press z to catch!", SCREEN_H - 16, CLR_LIGHT_GREY);
 
     // HUD using print_centered and print_right
     rectfill(0, 0, SCREEN_W, 14, CLR_DARKER_BLUE);

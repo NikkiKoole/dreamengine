@@ -4,6 +4,8 @@ import { getMapBytes, loadMapBytes } from './map-editor.js'
 import { studioDocs } from './studioDocs.js'
 import { settings, buildSettingsPanel } from './settings.js'
 
+let currentCartName = ''  // set when a cart is loaded; used as the game window title
+
 // ── tab switching ─────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
@@ -225,7 +227,7 @@ async function buildTutorialsPanel() {
     card.appendChild(info)
 
     if (window.studio) {
-      card.addEventListener('click', () => loadCartFromUrl(url))
+      card.addEventListener('click', () => { currentCartName = title; loadCartFromUrl(url) })
     } else {
       card.classList.add('tutorial-card-disabled')
       card.title = 'run requires the desktop app'
@@ -283,7 +285,7 @@ runBtn.addEventListener('click', async () => {
   // export the current map as raw bytes
   await window.studio.saveMap(getMapBytes())
 
-  const result = await window.studio.run(code, settings)
+  const result = await window.studio.run(code, { ...settings, cartName: currentCartName })
 
   runBtn.textContent = '▶ run'
   runBtn.disabled = false
@@ -337,7 +339,7 @@ function applyCart(cart) {
 loadCartBtn.addEventListener('click', async () => {
   if (!window.studio) return
   const cart = await window.studio.loadCart()
-  if (cart && cart.ok) applyCart(cart)
+  if (cart && cart.ok) { if (cart.name) currentCartName = cart.name; applyCart(cart) }
 })
 
 // ── build for web ─────────────────────────────────────────────
@@ -374,7 +376,7 @@ document.addEventListener('drop', async e => {
   if (!file || !file.name.endsWith('.png')) return
   const filePath = window.studio.getFilePath(file)
   const cart = await window.studio.loadCartFile(filePath)
-  if (cart && cart.ok) applyCart(cart)
+  if (cart && cart.ok) { if (cart.name) currentCartName = cart.name; applyCart(cart) }
 })
 
 let hideTimer = null

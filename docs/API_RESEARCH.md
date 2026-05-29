@@ -18,18 +18,27 @@ For reference, the current API (all of `studio.h`) groups into:
 
 | Group | Symbols |
 |---|---|
-| **Callbacks** | `update`, `draw` |
+| **Callbacks** | `update`, `draw`, `init` |
 | **Input — buttons** | `btn`, `btnp`, `BTN_*` |
 | **Input — touch** | `touch_count`, `touch_x`, `touch_y`, `tap`, `stick_x/y`, `touch_controls` |
-| **Graphics** | `cls`, `spr`, `sprf`, `sspr`, `pset`, `pget`, `print`, `line`, `rect`, `rectfill`, `circ`, `circfill`, `camera`, `clip` |
+| **Graphics** | `cls`, `spr`, `sprf`, `sspr`, `pset`, `pget`, `print`, `print_centered`, `print_right`, `line`, `rect`, `rectfill`, `circ`, `circfill`, `tri`, `trifill`, `camera`, `clip`, `colorkey`, `map_scale` |
 | **Map** | `mget`, `mset`, `map`, `MAP_W`, `MAP_H` |
 | **Sound** | `sfx`, `music`, `note`, `hit`, `tone`, `chord`, `strum`, `schedule`, `bpm`, `beat`, `beat_pos`, `every`, `euclid`, `chance`, `degree` |
-| **Utility** | `rnd`, `now`, `sgn`, `mid` |
+| **Math** | `abs`, `min`, `max`, `clamp`, `mid`, `sgn`, `lerp`, `remap`, `distance`, `length`, `angle_to`, `dx`, `dy`, `sin_deg`, `cos_deg` |
+| **Collision** | `boxes_touch`, `circles_touch`, `near`, `point_in_box`, `touching_map`, `tile_at`, `touching_color`, `bounce_at_edges` |
+| **Animation** | `anim`, `anim_once` |
+| **Easing** | `ease_in`, `ease_out`, `ease_in_out` |
+| **Noise** | `noise`, `noise2`, `noise3` |
+| **Persistence** | `save`, `load` |
+| **Time** | `now`, `frame`, `timer`, `timer_reset` |
+| **Strings** | `str` |
+| **Random** | `rnd`, `rnd_between`, `rnd_float`, `rnd_float_between` |
+| **Camera** | `camera`, `follow` |
+| **Turtle / pen** | `turtle_home`, `turtle_move`, `turtle_turn`, `turtle_face`, `turtle_at`, `pen_down`, `pen_up`, `pen_color`, `pen_size` |
+| **Debug** | `watch`, `watch_visible`, `printh` |
 | **Palette** | 32 `CLR_*` constants |
 
-Roughly ~70 functions / constants. Strong on graphics, input, sound,
-and tile maps. **Weak on collision, math helpers, animation, and
-anything that takes time to evolve (tweens, easing, particles).**
+Roughly ~100 functions / constants. Strong across the board now. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, pause/fps debug, and `spr_ext` rotation.**
 
 ---
 
@@ -876,6 +885,47 @@ Probably defer until someone actually asks.
 
 ---
 
+### 19. Shipped but undocumented — things that exist but weren't in this doc
+
+These were added during implementation without a corresponding design note here.
+
+#### Triangles — `tri` / `trifill`
+
+```c
+void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color);     // triangle border
+void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color); // filled triangle (any winding)
+```
+
+Fills the obvious gap between `rect` and freeform shapes. `trifill` uses a scanline rasteriser and accepts any vertex winding order.
+
+#### Sprite transparency — `colorkey`
+
+```c
+void colorkey(int color);  // set transparent color for sprites. -1 = no transparency.
+```
+
+Called once when the transparency color changes, not every frame. Lets carts pick a background color to treat as alpha without needing a separate alpha channel.
+
+#### Map zoom — `map_scale`
+
+```c
+void map_scale(int n);  // integer zoom for map drawing; default 1
+```
+
+Scales cells when drawing the map — useful for zoomed-in views or chunky tile games.
+
+#### Debug overlay — `watch` / `watch_visible` / `printh`
+
+```c
+void watch(const char *name, const char *fmt, ...);  // show a named live value in the corner
+void watch_visible(bool on);                         // hide/show the overlay (F1 toggles it)
+void printh(const char *fmt, ...);                   // printf to the editor's runtime log panel
+```
+
+`watch` is the fast path for debugging: call it every frame and the value updates live in the corner of the game window without polluting the canvas. `printh` sends output to the editor's build log — useful for one-shot diagnostics. Together these replace printf-debugging with something more ergonomic.
+
+---
+
 ## What to defer or skip
 
 - **Particle systems** — fun but a lot of state. Carts can write
@@ -922,34 +972,28 @@ real games — collision, motion at angle, score display, walking
 sprites, bouncing balls, timed rounds.
 
 ### Second pass
-- **`noise()`** (Perlin) for organic motion.
-- **Persistence**: `save(slot, val)` / `load(slot)` for high scores.
-- **Easings**: `ease_in`, `ease_out`, `ease_in_out`.
-- **`follow()`** — camera follow helper.
-- **Events**: `broadcast` / `received` — small but worth a real
-  pass since it touches the main-loop drain semantics.
-- **`rnd_between` / `rnd_float` / `rnd_float_between`** — round
-  out the random surface.
-- **More Strudel**: `pitch("c4")` for note-name parsing,
-  `sometimes`/`often`/`rarely`, `arp` for chord arpeggios,
-  `stutter`, `palindrome`, `off_beat`. Pure functions throughout.
-- **Dilla timing**: `groove(g, midi, instr, vol, dur_ms)` +
-  `groove_swing` / `groove_jitter` / `groove_push` for per-group
-  micro-timing. The thing that turns a quantized beat into a
-  *song*.
+
+> **✓ Mostly shipped.** The items marked ✓ below are implemented. Strudel extras and Dilla timing remain open.
+
+- ✓ **`noise()`** / `noise2()` / `noise3()` — organic motion, terrain, animated 2D.
+- ✓ **Persistence**: `save(slot, val)` / `load(slot)` for high scores.
+- ✓ **Easings**: `ease_in`, `ease_out`, `ease_in_out`.
+- ✓ **`follow()`** — camera follow helper.
+- ✓ **`rnd_between` / `rnd_float` / `rnd_float_between`** — full random surface.
+- **Events**: `broadcast` / `received` — still open. Touches main-loop drain semantics.
+- **More Strudel**: `pitch("c4")`, `sometimes`/`often`/`rarely`, `arp`, `stutter`, `palindrome`, `off_beat` — still open.
+- **Dilla timing**: `groove` + `groove_swing` / `groove_jitter` / `groove_push`, `tick` / `tick_pos` / `PPQ` — still open.
 
 ### Third pass (own projects)
-- **Turtle graphics** — its own paradigm, big payoff but earns a
-  separate ship with example carts (`turtle_move`/`turn`/`face`/
-  `home`/`at` + `pen_down`/`up`/`color`).
-- **Gamepad support** — `gp_axis(slot, axis)`, `gp_present(slot)`,
-  internal augment of `btn()`/`btnp()` to also read controllers.
-- **Pause + debug**: `pause(bool)`, `paused()`, `fps()`,
-  `voices_active()`.
-- **Print alignment**: `print_centered`, `print_right`.
+
+> **Partially shipped.** Turtle and print helpers are done. Gamepad, pause/debug, and spr_ext remain open.
+
+- ✓ **Turtle graphics** — `turtle_home/move/turn/face/at`, `pen_down/up/color`, `pen_size`.
+- ✓ **Print alignment**: `print_centered`, `print_right`.
+- **Gamepad support** — `gp_axis(slot, axis)`, `gp_present(slot)`, internal augment of `btn()`/`btnp()`.
+- **Pause + debug**: `pause(bool)`, `paused()`, `fps()`, `voices_active()`.
 - **`spr_ext`** with rotation + scale — opens up effects.
-- **Sound tracker UI** — if the code-first sound path turns out
-  not to be enough.
+- **Sound tracker UI** — if the code-first sound path turns out not to be enough.
 
 ---
 

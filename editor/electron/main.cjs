@@ -190,7 +190,8 @@ ipcMain.handle('cart:load', async () => {
 
   const chunks = extractCartChunks(fs.readFileSync(filePaths[0]))
   if (!chunks.source) return { ok: false, error: 'Not a dreamengine cart' }
-  return { ok: true, source: chunks.source, spritesDataUrl: chunks.sprites || null, mapBase64: chunks.map || null }
+  const name = path.basename(filePaths[0]).replace(/\.cart\.png$/i, '')
+  return { ok: true, name, source: chunks.source, spritesDataUrl: chunks.sprites || null, mapBase64: chunks.map || null }
 })
 
 ipcMain.handle('cart:load-buffer', async (_event, bytes) => {
@@ -202,7 +203,8 @@ ipcMain.handle('cart:load-buffer', async (_event, bytes) => {
 ipcMain.handle('cart:load-file', async (_event, filePath) => {
   const chunks = extractCartChunks(fs.readFileSync(filePath))
   if (!chunks.source) return { ok: false, error: 'Not a dreamengine cart' }
-  return { ok: true, source: chunks.source, spritesDataUrl: chunks.sprites || null, mapBase64: chunks.map || null }
+  const name = path.basename(filePath).replace(/\.cart\.png$/i, '')
+  return { ok: true, name, source: chunks.source, spritesDataUrl: chunks.sprites || null, mapBase64: chunks.map || null }
 })
 
 // ── sprites handler ───────────────────────────────────────────
@@ -316,7 +318,8 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
       // not detached / not unref'd → the cart dies with the editor.
       const wc = _event.sender
       const send = (ch, payload) => { if (!wc.isDestroyed()) wc.send(ch, payload) }
-      const proc = spawn(CART_BIN, [], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
+      const cartTitle = cfg?.cartName ? `dreamengine: ${cfg.cartName}` : 'dreamengine'
+      const proc = spawn(CART_BIN, ['--title', cartTitle], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
       proc.stdout.on('data', chunk => send('cart:log', chunk.toString()))   // raylib trace (warnings only) + stray printf
       proc.stderr.on('data', chunk => send('cart:log', chunk.toString()))   // printh() output
       proc.on('exit', (code, signal) => send('cart:exit', { code, signal }))

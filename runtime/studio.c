@@ -416,10 +416,12 @@ static void loop_step(void) {
 
 int main(int argc, char **argv) {
 #ifndef PLATFORM_WEB
-    int screenshot_mode        = 0;
-    int screenshot_frames_done = 0;
+    int         screenshot_mode        = 0;
+    int         screenshot_frames_done = 0;
+    const char *window_title           = "dreamengine";
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--screenshot") == 0) screenshot_mode = 1;
+        else if (strcmp(argv[i], "--title") == 0 && i + 1 < argc) window_title = argv[++i];
     }
     signal(SIGSEGV, crash_handler);   // bad/null pointer
     signal(SIGFPE,  crash_handler);   // divide by zero, etc.
@@ -434,7 +436,7 @@ int main(int argc, char **argv) {
 #ifndef PLATFORM_WEB
     if (screenshot_mode) SetWindowState(FLAG_WINDOW_HIDDEN);
 #endif
-    InitWindow(SCREEN_W * SCALE, SCREEN_H * SCALE, "dreamengine");
+    InitWindow(SCREEN_W * SCALE, SCREEN_H * SCALE, window_title);
 #ifndef PLATFORM_WEB
     InitAudioDevice();
     sound_init();

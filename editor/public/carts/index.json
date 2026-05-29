@@ -71,7 +71,7 @@
   },
   {
     "title": "14. hud layout",
-    "description": "print_centered and print_right for clean UI. Also uses rnd_between, near, and frame().",
+    "description": "A star spawns at a random spot and shrinks — press Z before it disappears to score. Miss it and lose a life. Shows print_centered and print_right for HUD layout.",
     "file": "14-hud.cart.png"
   },
   {
@@ -115,8 +115,33 @@
     "file": "snake.cart.png"
   },
   {
+    "title": "robotron 2084",
+    "description": "Twin-stick arena shooter. WASD to move, arrows to shoot 8-way. Rescue civilians, blast grunts and enforcers, dodge bullets. Brains convert civilians to zombies. Hulks can't be killed!",
+    "file": "robotron.cart.png"
+  },
+  {
+    "title": "platform game",
+    "description": "Side-scrolling platformer with sprites and a tile map. Stomp red enemies from above, collect coins, watch your lives. Left/right to move, Z or up to jump.",
+    "file": "platform.cart.png"
+  },
+  {
     "title": "lunar lander",
     "description": "Physics-based lander. Rotate and thrust your way onto the lit green pad slowly enough to survive. Levels get harder — pads get narrower. Left/right to rotate, up or Z to thrust.",
     "file": "lander.cart.png"
+  },
+  {
+    "title": "GTA",
+    "description": "Top-down open world sandbox. Walk and shoot twin-stick, or jack a car and run people over. 5 stars = BUSTED. WASD: move/drive — Arrows: aim+shoot — Z: enter/exit car.",
+    "file": "gta.cart.png"
+  },
+  {
+    "title": "frogger",
+    "description": "Classic Frogger. Hop across 4 lanes of traffic, ride logs across the river, land on all 5 lily pads to advance. Each round speeds up. 3 lives. Arrow keys to hop.",
+    "file": "frogger.cart.png"
+  },
+  {
+    "title": "paratrooper",
+    "description": "Rotate your AA gun and shoot down paratroopers before they capture it. Helicopters drop soldiers — shoot them in the air or on the ground. Game over when 2 reach each side of your gun. Left/right to aim, Z to fire.",
+    "file": "paratrooper.cart.png"
   }
 ]
