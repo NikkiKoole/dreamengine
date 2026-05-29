@@ -23,10 +23,14 @@ static float S[4][4] = {
     { 72,  54,  72,  1080 },   // 4:3 ratio — 4-loop trefoil
 };
 
+#define DRAW_FRAMES 480.0f   // ~8 seconds to trace the full pattern (at 60fps)
+#define HOLD_FRAMES 120      // hold the finished figure for ~2 seconds before redrawing
+
 static int   pat     = 0;
 static float t       = 0;
 static float prev_x, prev_y;
 static bool  started = false;
+static int   hold    = 0;
 
 static float spiro_x(float a) {
     float arm = S[pat][0] - S[pat][1];
@@ -50,20 +54,30 @@ void draw() {
         cls(CLR_BLACK);
         prev_x = spiro_x(0);
         prev_y = spiro_y(0);
+        t = 0;
+        hold = 0;
         started = true;
     }
 
-    int steps = (int)(S[pat][3] / 120.0f) + 1;
-    for (int i = 0; i < steps && t < S[pat][3]; i++) {
-        t += 0.5f;
-        float nx = spiro_x(t), ny = spiro_y(t);
-        line((int)prev_x, (int)prev_y, (int)nx, (int)ny,
-             1 + ((int)(t / 45.0f)) % 15);
-        prev_x = nx;
-        prev_y = ny;
-    }
+    float cycle = S[pat][3];
 
-    if (t >= S[pat][3]) { t = 0; started = false; }
+    if (t < cycle) {
+        // advance one frame's worth of angle, drawn in small steps so the line stays smooth
+        float target = t + cycle / DRAW_FRAMES;
+        if (target > cycle) target = cycle;   // clamp so the last point lands exactly on t=cycle
+        while (t < target) {
+            t += 0.5f;
+            if (t > target) t = target;       // the closing segment meets the start point cleanly
+            float nx = spiro_x(t), ny = spiro_y(t);
+            line((int)prev_x, (int)prev_y, (int)nx, (int)ny,
+                 1 + ((int)(t / 45.0f)) % 15);
+            prev_x = nx;
+            prev_y = ny;
+        }
+    } else if (++hold > HOLD_FRAMES) {
+        // finished one full round — held the closed figure, now redraw
+        started = false;
+    }
 
     print(str("pattern %d/4 — press A for next", pat + 1), 4, SCREEN_H - 12, CLR_DARK_GREY);
 }
