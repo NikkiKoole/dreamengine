@@ -4,7 +4,7 @@
 > session. This is the stuff that isn't obvious from the code or git log. Keep it
 > short; prune what goes stale.
 
-_Last updated: 2026-05-29_
+_Last updated: 2026-05-29 (session 2)_
 
 ---
 
@@ -17,27 +17,26 @@ _Last updated: 2026-05-29_
 - **Cart format shipped** — `.cart.png` files embed source + sprites + map as `zTXt`
   PNG chunks. The visible image is a screenshot of the game (saved automatically on
   exit). See below for full details.
-- **Tutorials page shipped** — 10 tutorial carts in `editor/public/carts/`, a gallery
+- **Tutorials page shipped** — 12 tutorial carts in `editor/public/carts/`, a gallery
   panel in the editor, and a cart authoring toolchain in `tools/`. See
   [`docs/TOOLS.md`](./TOOLS.md) for the full workflow.
+- **API pass 2 shipped** — `follow()`, `save()`/`load()`, `noise()`/`noise2()`/`noise3()`,
+  inline error markers in the CodeMirror editor.
 
 ---
 
 ## Next on the todo list (by impact)
 
-1. **Inline error markers** — map clang `cart.c:line:col` errors to CodeMirror gutter
-   marks. The compile pipe is already wired in `main.cjs`. Tightest follow-on to the
-   debug tools.
-2. **`follow(target_x, target_y, world_w, world_h)`** — camera follow helper proposed
-   in API_RESEARCH §8. Currently inlined in `tools/10-world.c`; should be a real API
-   function. One-liner internally.
-3. **Persistence** — `save(slot, val)` / `load(slot)`, 64 int slots per cart stored as
-   `build/cart.dat`. Proposed in API_RESEARCH §6. Trivial in main.cjs land.
-4. **Noise** — `noise(x)`, `noise2(x,y)`, `noise3(x,y,z)`. Perlin/value noise.
-   Proposed in API_RESEARCH §5.
-5. **Process/coroutine model** — the Level-2 differentiator from VISION.md. Weeks of
-   architectural work.
-6. **Browser sharing** — emscripten build so carts run in a browser tab.
+1. **API pass 3** — easings (`ease_in/out/in_out`), `rnd_float()` / `rnd_between()`,
+   `print_centered()` / `print_right()`, `broadcast()` / `received()` events,
+   `frame()` counter. All proposed in API_RESEARCH passes 2–3.
+2. **Process/coroutine model** — the Level-2 differentiator from VISION.md. Weeks of
+   architectural work. `wait N seconds` / `loop … frame;` inside a process.
+3. **Browser sharing** — emscripten build so carts run in a browser tab.
+4. **Sound tracker UI** — the sound tab is disabled; code-first sound works but a
+   tracker would let you design sfx/music in the editor.
+5. **Pixel-perfect sprite collision** — walk the sprite alpha; AABB covers 95% of cases
+   but this would be the next collision improvement.
 
 ---
 
@@ -93,7 +92,9 @@ Cart sources live in `tools/XX-name.c`. Config files (sprites + map) live in
 `tools/XX-name.cart.js`. Finished carts go in `editor/public/carts/`.
 `editor/public/carts/index.json` is the metadata list the tutorials panel reads.
 
-10 tutorial carts are already shipped (01-hello through 10-world).
+12 tutorial carts are shipped (01-hello through 12-hiscore).
+- 11-noise: two-layer scrolling terrain + twinkling stars via `noise2()`
+- 12-hiscore: button-mashing game with `save()`/`load()` high score persistence
 
 ---
 
@@ -108,8 +109,11 @@ Cart sources live in `tools/XX-name.c`. Config files (sprites + map) live in
   will look fine; carts that need user input obviously won't show gameplay.
 - **arm64 integer divide-by-zero does NOT trap** (returns 0) — SIGFPE won't fire on
   Apple Silicon. Use a `volatile` null read for reliable test crashes.
-- **`follow()`** is in API_RESEARCH but NOT yet implemented in studio.c — cart 10
-  inlines the camera math manually. Don't use it until it's shipped.
+- **`follow()`** is now implemented. Cart 10 uses it correctly.
+- **`save()`/`load()`** write to `build/cart.sav` (cwd of the running cart). All carts
+  share this file for now — per-cart persistence comes with named cart files later.
+- **Inline error markers** — red gutter dot + red line background on clang error lines.
+  Cleared on next compile. Pattern matched: `cart.c:LINE:` in stderr output.
 - **Raylib auto-detected:** `/opt/homebrew/opt/raylib` (Apple Silicon) or
   `/usr/local/opt/raylib` (Intel). Both `main.cjs` and `tools/make-cart.js` do this.
 
