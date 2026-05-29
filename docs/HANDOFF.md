@@ -4,7 +4,7 @@
 > session. This is the stuff that isn't obvious from the code or git log. Keep it
 > short; prune what goes stale.
 
-_Last updated: 2026-05-29 (session 4)_
+_Last updated: 2026-05-29 (session 5)_
 
 ---
 
@@ -26,6 +26,9 @@ _Last updated: 2026-05-29 (session 4)_
   `print_centered`/`print_right`, `frame()`. 14 tutorial carts total.
 - **`tri()` / `trifill()` added** — triangle border and filled triangle.
 - **`rect()` corner overshoot fixed** — was using `DrawRectangleLines` then `DrawLine` (both add line caps); now uses four 1px `DrawRectangle` slices. Pixel-perfect corners.
+- **`init()` callback added** — called once after the window opens, before the first `update()`. Weak stub like `update()`. Replaces the `static bool` workaround for one-time setup (`colorkey`, map building, etc.).
+- **`anim()` phase offset added** — signature is now `anim(n_frames, fps, phase)` where `phase` 0..1 shifts the cycle start. Use `(float)i/count` to stagger multiple entities.
+- **Tutorial cart 15** — walk cycle with sprites, phase 0 vs staggered, uses `init()` + `colorkey()` + `anim()`.
 
 ---
 
@@ -132,6 +135,11 @@ Cart sources live in `tools/XX-name.c`. Config files (sprites + map) live in
 - **`trifill()` winding order** — Raylib's `DrawTriangle` needs counter-clockwise winding
   in Y-down screen coords. In Y-down space, cross product > 0 means clockwise visually
   (opposite of math convention), so swap when `cross > 0`.
+- **`init()` fires after window + sprites are fully loaded** — safe to call `colorkey()`,
+  `mset()`, etc. It does NOT run during `--screenshot` mode's 3-frame early exit, but
+  that's fine since screenshot mode still calls it once before the loop.
+- **`anim()` breaking change** — added required `phase` param. No existing cart was using
+  `anim()` when the change was made, so nothing broke.
 - **`colorkey(color)`** is fully shipped — studio.c keeps a clean copy of the original
   spritesheet as `spritesheet_img` so `colorkey(-1)` correctly restores full opacity.
   Has a tutorial cart at `05b-colorkey.cart.png`.
