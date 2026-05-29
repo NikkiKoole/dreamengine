@@ -3,7 +3,10 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <string.h>
+#include <signal.h>
+#include <unistd.h>
 #include <math.h>
 #include "dos_8x8_font.h"
 #include "sprites_data.h"
@@ -32,6 +35,7 @@ static bool            btn_curr[2][BTN_COUNT];
 static bool            btn_prev[2][BTN_COUNT];
 
 static uint8_t         map_data[MAP_W * MAP_H];
+static int             map_scale_factor = 1;   // map_scale() — integer zoom for map drawing
 
 // ------------------------------------------------------------
 // touch state (all coordinates in window pixels unless noted)
@@ -213,6 +217,106 @@ static void load_palette() {
 }
 
 // ------------------------------------------------------------
+// debug — printh() log + watch() overlay
+// ------------------------------------------------------------
+
+void printh(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);   // stderr: raylib's trace goes to stdout, so this stays clean
+    va_end(ap);
+    fputc('\n', stderr);
+    fflush(stderr);              // line-buffer through the pipe so the editor sees it promptly
+}
+
+typedef struct {
+    char name[24];
+    char value[40];
+    int  age;                    // frames since last touched
+} WatchEntry;
+
+#define WATCH_MAX 16
+static WatchEntry watches[WATCH_MAX];
+static int        watch_count = 0;
+static bool       watch_show  = true;   // F1 toggles
+
+void watch(const char *name, const char *fmt, ...) {
+    int slot = -1;
+    for (int i = 0; i < watch_count; i++) {
+        if (strcmp(watches[i].name, name) == 0) { slot = i; break; }
+    }
+    if (slot < 0) {
+        if (watch_count >= WATCH_MAX) return;   // silently drop overflow
+        slot = watch_count++;
+        snprintf(watches[slot].name, sizeof(watches[slot].name), "%s", name);
+    }
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(watches[slot].value, sizeof(watches[slot].value), fmt, ap);
+    va_end(ap);
+    watches[slot].age = 0;
+}
+
+void watch_visible(bool on) { watch_show = on; }
+
+// age entries each frame; drop any untouched for ~1 second so conditional
+// watches vanish on their own when their branch stops firing
+static void age_watches(void) {
+    for (int i = watch_count - 1; i >= 0; i--) {
+        if (++watches[i].age > 60) {
+            watches[i] = watches[--watch_count];   // swap-remove
+        }
+    }
+}
+
+// drawn in window space (after the canvas is scaled up), like the touch overlay
+static void draw_watch_overlay(void) {
+    if (!watch_show || watch_count == 0) return;
+    int pad = 8, lh = 14;
+    int w = 220, h = pad*2 + watch_count * lh;
+
+    DrawRectangle(8, 8, w, h, (Color){ 0, 0, 0, 180 });
+    DrawRectangleLines(8, 8, w, h, (Color){ 200, 200, 200, 120 });
+
+    for (int i = 0; i < watch_count; i++) {
+        char line[80];
+        snprintf(line, sizeof(line), "%s: %s", watches[i].name, watches[i].value);
+        DrawTextEx(game_font, line,
+            (Vector2){ 8 + pad, 8 + pad + i * lh },
+            12, 1, WHITE);
+    }
+}
+
+// crash capture — on a fatal signal, dump the cart's last watch() values to
+// stderr (so they land in the editor's runtime log), then re-raise so the OS
+// still kills the process and the editor sees the real signal. Uses raw write()
+// because printf-family calls aren't safe inside a signal handler.
+static void write_str(const char *s) { write(STDERR_FILENO, s, strlen(s)); }
+
+static void crash_handler(int sig) {
+    write_str("\n*** cart crashed: signal ");
+    char nbuf[12]; int n = 0, s = sig < 0 ? 0 : sig;
+    char rev[12]; int r = 0;
+    do { rev[r++] = '0' + (s % 10); s /= 10; } while (s > 0);
+    while (r > 0) nbuf[n++] = rev[--r];
+    nbuf[n] = '\0';
+    write_str(nbuf);
+    write_str(" ***\n");
+
+    if (watch_count > 0) write_str("last watched values:\n");
+    for (int i = 0; i < watch_count; i++) {
+        write_str("  ");
+        write_str(watches[i].name);
+        write_str(" = ");
+        write_str(watches[i].value);
+        write_str("\n");
+    }
+
+    signal(sig, SIG_DFL);   // restore default and re-raise so the process dies for real
+    raise(sig);
+}
+
+// ------------------------------------------------------------
 // weak stub — user can omit update() and it still compiles
 // ------------------------------------------------------------
 
@@ -223,6 +327,11 @@ __attribute__((weak)) void update(void) {}
 // ------------------------------------------------------------
 
 int main(void) {
+    signal(SIGSEGV, crash_handler);   // bad/null pointer
+    signal(SIGFPE,  crash_handler);   // divide by zero, etc.
+    signal(SIGABRT, crash_handler);   // abort()/assert
+    signal(SIGBUS,  crash_handler);   // misaligned / bad memory access
+    SetTraceLogLevel(LOG_WARNING);   // keep raylib's INFO chatter out of the runtime log panel
     InitWindow(SCREEN_W * SCALE, SCREEN_H * SCALE, "dreamengine");
     InitAudioDevice();
     sound_init();
@@ -261,6 +370,7 @@ int main(void) {
     while (!WindowShouldClose()) {
         poll_virtual_touches();
         update_stick();
+        if (IsKeyPressed(KEY_F1)) watch_show = !watch_show;
         sound_tick(GetFrameTime());
 
         // snapshot last frame's canvas so pget() has stable pixels to read
@@ -292,7 +402,10 @@ int main(void) {
                 WHITE
             );
             draw_touch_overlay();
+            draw_watch_overlay();
         EndDrawing();
+
+        age_watches();   // frame-end: expire watches whose branch stopped firing
     }
 
     if (custom_font) UnloadFont(game_font);
@@ -475,12 +588,24 @@ void mset(int cx, int cy, int n) {
     map_data[cy * MAP_W + cx] = (uint8_t)(n & 0xFF);
 }
 
+void map_scale(int n) {
+    map_scale_factor = (n < 1) ? 1 : n;
+}
+
 void map(int cx, int cy, int sx, int sy, int cw, int ch) {
+    if (spritesheet.width == 0) return;
+    int cols = spritesheet.width / CELL_W;
+    if (cols < 1) cols = 1;
+    int dw = CELL_W * map_scale_factor;   // on-screen size of one cell
+    int dh = CELL_H * map_scale_factor;
     for (int yi = 0; yi < ch; yi++) {
         for (int xi = 0; xi < cw; xi++) {
             int v = mget(cx + xi, cy + yi);
             if (v == 0) continue;  // cell 0 = empty (skipped)
-            spr(v, sx + xi * SPRITE_SIZE, sy + yi * SPRITE_SIZE);
+            // pull a CELL_W×CELL_H rect from the sheet, blit it scaled to dw×dh (no smoothing)
+            Rectangle src = { (float)((v % cols) * CELL_W), (float)((v / cols) * CELL_H), (float)CELL_W, (float)CELL_H };
+            Rectangle dst = { (float)(sx + xi * dw - cam_x), (float)(sy + yi * dh - cam_y), (float)dw, (float)dh };
+            DrawTexturePro(spritesheet, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
         }
     }
 }
@@ -502,4 +627,151 @@ int mid(int a, int b, int c) {
     int lo = a < b ? a : b;
     int hi = a > b ? a : b;
     return c < lo ? lo : (c > hi ? hi : c);
+}
+
+// ------------------------------------------------------------
+// timer — a resettable stopwatch on top of GetTime()
+// ------------------------------------------------------------
+
+static double timer_base = 0.0;
+
+float timer(void)       { return (float)(GetTime() - timer_base); }
+void  timer_reset(void) { timer_base = GetTime(); }
+
+// ------------------------------------------------------------
+// math — angles in degrees (0 = right, 90 = down)
+// (abs() comes from libc; we only declare it in studio.h)
+// ------------------------------------------------------------
+
+int min(int a, int b) { return a < b ? a : b; }
+int max(int a, int b) { return a > b ? a : b; }
+
+float clamp(float v, float lo, float hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+float lerp(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+float remap(float v, float a, float b, float c, float d) {
+    if (b == a) return c;                 // empty source range — avoid divide-by-zero
+    return c + (v - a) * (d - c) / (b - a);
+}
+
+float distance(int x1, int y1, int x2, int y2) {
+    float ddx = (float)(x2 - x1), ddy = (float)(y2 - y1);
+    return sqrtf(ddx*ddx + ddy*ddy);
+}
+
+float length(int x, int y) {
+    float fx = (float)x, fy = (float)y;
+    return sqrtf(fx*fx + fy*fy);
+}
+
+float angle_to(int x1, int y1, int x2, int y2) {
+    return atan2f((float)(y2 - y1), (float)(x2 - x1)) * RAD2DEG;
+}
+
+float dx(float steps, float degrees) {
+    return steps * cosf(degrees * DEG2RAD);
+}
+
+float dy(float steps, float degrees) {
+    return steps * sinf(degrees * DEG2RAD);
+}
+
+float sin_deg(float degrees) { return sinf(degrees * DEG2RAD); }
+float cos_deg(float degrees) { return cosf(degrees * DEG2RAD); }
+
+// ------------------------------------------------------------
+// collision
+// ------------------------------------------------------------
+
+bool boxes_touch(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh) {
+    return ax < bx + bw && ax + aw > bx &&
+           ay < by + bh && ay + ah > by;
+}
+
+bool point_in_box(int px, int py, int bx, int by, int bw, int bh) {
+    return px >= bx && px < bx + bw && py >= by && py < by + bh;
+}
+
+bool circles_touch(int ax, int ay, int ar, int bx, int by, int br) {
+    float ddx = (float)(ax - bx), ddy = (float)(ay - by);
+    float r  = (float)(ar + br);
+    return ddx*ddx + ddy*ddy <= r*r;
+}
+
+bool near(int ax, int ay, int bx, int by, int d) {
+    float ddx = (float)(ax - bx), ddy = (float)(ay - by);
+    return ddx*ddx + ddy*ddy <= (float)d * (float)d;
+}
+
+bool touching_map(int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) return false;
+    int sw = CELL_W * map_scale_factor, sh = CELL_H * map_scale_factor;
+    int cx0 = x / sw, cx1 = (x + w - 1) / sw;
+    int cy0 = y / sh, cy1 = (y + h - 1) / sh;
+    for (int cy = cy0; cy <= cy1; cy++)
+        for (int cx = cx0; cx <= cx1; cx++)
+            if (mget(cx, cy) != 0) return true;
+    return false;
+}
+
+int tile_at(int px, int py) {
+    return mget(px / (CELL_W * map_scale_factor), py / (CELL_H * map_scale_factor));
+}
+
+bool touching_color(int x, int y, int w, int h, int color) {
+    int target = color % PALETTE_SIZE;
+    for (int py = y; py < y + h; py++)
+        for (int px = x; px < x + w; px++)
+            if (pget(px, py) == target) return true;
+    return false;
+}
+
+void bounce_at_edges(int *x, int *y, int *vx, int *vy, int w, int h) {
+    if (!x || !y || !vx || !vy) return;
+    if      (*x < 0)            { *x = 0;            if (*vx < 0) *vx = -*vx; }
+    else if (*x + w > SCREEN_W) { *x = SCREEN_W - w; if (*vx > 0) *vx = -*vx; }
+    if      (*y < 0)            { *y = 0;            if (*vy < 0) *vy = -*vy; }
+    else if (*y + h > SCREEN_H) { *y = SCREEN_H - h; if (*vy > 0) *vy = -*vy; }
+}
+
+// ------------------------------------------------------------
+// animation
+// ------------------------------------------------------------
+
+int anim(int n_frames, float fps) {
+    if (n_frames <= 0) return 0;
+    int f = (int)(now() * fps) % n_frames;
+    if (f < 0) f += n_frames;
+    return f;
+}
+
+int anim_once(int n_frames, float fps, float start_t) {
+    if (n_frames <= 0) return 0;
+    int f = (int)((now() - start_t) * fps);
+    if (f < 0) f = 0;
+    if (f >= n_frames) f = n_frames - 1;
+    return f;
+}
+
+// ------------------------------------------------------------
+// strings — printf into a small ring of reusable buffers
+// ------------------------------------------------------------
+
+const char *str(const char *fmt, ...) {
+    #define STR_BUFS 8
+    #define STR_LEN  128
+    static char bufs[STR_BUFS][STR_LEN];
+    static int  which = 0;
+    char *b = bufs[which];
+    which = (which + 1) % STR_BUFS;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(b, STR_LEN, fmt, ap);
+    va_end(ap);
+    return b;
 }

@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, touchControls: false }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false }
 
 function load() {
   return {
@@ -7,6 +7,8 @@ function load() {
     scale:         parseInt(localStorage.getItem('scale')   || DEFAULTS.scale),
     mapW:          parseInt(localStorage.getItem('mapW')    || DEFAULTS.mapW),
     mapH:          parseInt(localStorage.getItem('mapH')    || DEFAULTS.mapH),
+    cellW:         parseInt(localStorage.getItem('cellW')   || DEFAULTS.cellW),
+    cellH:         parseInt(localStorage.getItem('cellH')   || DEFAULTS.cellH),
     touchControls: localStorage.getItem('touchControls') === '1',
   }
 }

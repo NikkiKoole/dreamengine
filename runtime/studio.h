@@ -119,9 +119,19 @@ void clip(int x, int y, int w, int h);                  // scissor rect. clip(0,
 #define MAP_H   64
 #endif
 
+// map cell size in pixels — how big a rect each cell pulls from the spritesheet.
+// independent of the sprite editor's tile size; defaults to it (16). set via -DCELL_W/-DCELL_H.
+#ifndef CELL_W
+#define CELL_W 16
+#endif
+#ifndef CELL_H
+#define CELL_H 16
+#endif
+
 int  mget(int cx, int cy);                              // sprite index at cell (cx,cy); 0 if out of bounds
 void mset(int cx, int cy, int n);                       // write sprite index n into cell (cx,cy)
-void map(int cx, int cy, int sx, int sy, int cw, int ch); // draw a cw×ch chunk of the map starting at cell (cx,cy) to screen (sx,sy). cells with value 0 are skipped. respects camera().
+void map(int cx, int cy, int sx, int sy, int cw, int ch); // draw a cw×ch chunk of the map starting at cell (cx,cy) to screen (sx,sy). each cell is a CELL_W×CELL_H rect of the sheet. value-0 cells skipped. respects camera() + map_scale().
+void map_scale(int n);                                  // integer zoom for map drawing; default 1 (cells drawn at native CELL_W×CELL_H)
 
 // ------------------------------------------------------------
 // sound — PICO-8-style 4-channel synth
@@ -180,5 +190,60 @@ int   rnd(int n);          // random int in [0, n); rnd(6) → 0..5
 float now(void);           // seconds since startup
 int   sgn(int n);          // -1 if n<0, 0 if n==0, 1 if n>0
 int   mid(int a, int b, int c);  // middle value of three. use for clamp: mid(lo, val, hi)
+float timer(void);         // seconds since the last timer_reset() (or startup) — a resettable stopwatch
+void  timer_reset(void);   // reset timer() back to 0
+
+// ------------------------------------------------------------
+// math — angles are in degrees everywhere (0 = right, 90 = down)
+// ------------------------------------------------------------
+
+int   abs(int v);                                          // absolute value — drops the minus sign
+int   min(int a, int b);                                   // smaller of two
+int   max(int a, int b);                                   // bigger of two
+float clamp(float v, float lo, float hi);                  // keep v between lo and hi
+float lerp(float a, float b, float t);                     // mix a and b: t=0 → a, t=1 → b
+float remap(float v, float a, float b, float c, float d);  // remap v from range a..b into range c..d
+
+float distance(int x1, int y1, int x2, int y2);            // distance between two points (pixels)
+float length(int x, int y);                                // length of vector (x,y)
+float angle_to(int x1, int y1, int x2, int y2);            // direction in degrees from point 1 to point 2
+float dx(float steps, float degrees);                      // x movement of `steps` pixels in `degrees` direction (keep position in a float)
+float dy(float steps, float degrees);                      // y movement of `steps` pixels in `degrees` direction (keep position in a float)
+float sin_deg(float degrees);                              // sine of an angle in degrees
+float cos_deg(float degrees);                              // cosine of an angle in degrees
+
+// ------------------------------------------------------------
+// collision
+// ------------------------------------------------------------
+
+bool boxes_touch(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh); // do two rectangles overlap? (AABB)
+bool point_in_box(int px, int py, int bx, int by, int bw, int bh);                 // is the point inside the box?
+bool circles_touch(int ax, int ay, int ar, int bx, int by, int br);               // do two circles overlap?
+bool near(int ax, int ay, int bx, int by, int d);                                  // are the two points within d pixels?
+bool touching_map(int x, int y, int w, int h);    // does this pixel-space box overlap any non-empty map cell?
+int  tile_at(int px, int py);                      // map sprite index at pixel (px,py); same as mget(px/16, py/16)
+bool touching_color(int x, int y, int w, int h, int color); // does this box cover any pixel of this palette color?
+void bounce_at_edges(int *x, int *y, int *vx, int *vy, int w, int h);  // flip velocity at screen edges (DVD-logo bounce)
+
+// ------------------------------------------------------------
+// animation
+// ------------------------------------------------------------
+
+int anim(int n_frames, float fps);                     // current frame 0..n_frames-1, looping forever
+int anim_once(int n_frames, float fps, float start_t); // frame of an animation started at start_t; stays on the last frame
+
+// ------------------------------------------------------------
+// strings
+// ------------------------------------------------------------
+
+const char *str(const char *fmt, ...);  // printf into a reusable buffer: print(str("score %d", n), x, y, c)
+
+// ------------------------------------------------------------
+// debug
+// ------------------------------------------------------------
+
+void printh(const char *fmt, ...);                   // printf to the editor's runtime log panel (not the game window)
+void watch(const char *name, const char *fmt, ...);  // show a named live value in the corner of the game window
+void watch_visible(bool on);                         // hide/show the watch overlay (default: on; F1 toggles it)
 
 #endif // STUDIO_H

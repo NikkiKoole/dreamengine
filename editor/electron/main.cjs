@@ -108,6 +108,8 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
   const scale         = cfg?.scale   || 4
   const mapW          = cfg?.mapW    || 128
   const mapH          = cfg?.mapH    || 64
+  const cellW         = cfg?.cellW   || 16
+  const cellH         = cfg?.cellH   || 16
   const touchDefault  = cfg?.touchControls ? 1 : 0
   const studioC       = path.join(RUNTIME_DIR, 'studio.c')
 
@@ -162,8 +164,13 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
     `-DSCALE=${scale}`,
     `-DMAP_W=${mapW}`,
     `-DMAP_H=${mapH}`,
+    `-DCELL_W=${cellW}`,
+    `-DCELL_H=${cellH}`,
     `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
     '-Os',
+    // keep beginners' null-pointer mistakes as real crashes (caught by the
+    // crash handler in studio.c) instead of letting the optimizer delete them
+    '-fno-delete-null-pointer-checks',
     `"${RAYLIB}/lib/libraylib.a"`,
     '-framework OpenGL',
     '-framework Cocoa',
@@ -187,8 +194,15 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
 
       if (err) return resolve({ ok: false, cmd, output: warnings })
 
-      const proc = spawn(CART_BIN, [], { detached: true, stdio: 'ignore', cwd: BUILD_DIR })
-      proc.unref()
+      // pipe the cart's output back to the editor's runtime log panel.
+      // not detached / not unref'd → the cart dies with the editor.
+      const wc = _event.sender
+      const send = (ch, payload) => { if (!wc.isDestroyed()) wc.send(ch, payload) }
+      const proc = spawn(CART_BIN, [], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
+      proc.stdout.on('data', chunk => send('cart:log', chunk.toString()))   // raylib trace (warnings only) + stray printf
+      proc.stderr.on('data', chunk => send('cart:log', chunk.toString()))   // printh() output
+      proc.on('exit', (code, signal) => send('cart:exit', { code, signal }))
+      proc.on('error', () => {})
 
       // also cross-compile for Windows in the background
       if (fs.existsSync(MINGW) || fs.existsSync(`/usr/local/bin/${MINGW}`)) {
@@ -198,8 +212,13 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
           `-DSCREEN_W=${screenW}`,
           `-DSCREEN_H=${screenH}`,
           `-DSCALE=${scale}`,
+          `-DMAP_W=${mapW}`,
+          `-DMAP_H=${mapH}`,
+          `-DCELL_W=${cellW}`,
+          `-DCELL_H=${cellH}`,
           `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
           '-Os',
+          '-fno-delete-null-pointer-checks',
           `"${RAYLIB_WIN}/lib/libraylib.a"`,
           '-lopengl32', '-lgdi32', '-lwinmm', '-lcomdlg32',
           '-Wl,--gc-sections',

@@ -1,16 +1,33 @@
-// visual map editor — paints an MAP_W × MAP_H grid of sprite indices.
-// dimensions are settings-driven and passed to the compile via -DMAP_W / -DMAP_H.
-// see runtime/studio.h for the map() / mget() / mset() runtime API.
+// visual map editor — paints an MAP_W × MAP_H grid of cell indices.
+// map size (cell count) → -DMAP_W / -DMAP_H. cell size (px pulled from the
+// spritesheet) → -DCELL_W / -DCELL_H. these are independent: the cell size is
+// how big a rect each cell slices from the sheet, defaulting to the sprite size.
+// see runtime/studio.h for the map() / map_scale() / mget() / mset() API.
 
 import { settings } from './settings.js'
 
 let MAP_W = settings.mapW
 let MAP_H = settings.mapH
-const SPRITE_SIZE = 16
-const PICKER_PX   = 32   // sprite picker tiles render at 32×32 (2× zoom)
-const PICKER_COLS = 8    // spritesheet is 8×8 grid (64 sprites)
 
-let CELL_PX = parseInt(localStorage.getItem('mapZoom') || '1', 10) * SPRITE_SIZE
+const SHEET_PX     = 128  // spritesheet is 128×128 px
+const PICKER_SCALE = 2    // the picker renders the sheet at 2× so tiles are clickable
+
+// cell size in px = the rect each map cell pulls from the sheet (independent of map zoom)
+let CELL_W = parseInt(localStorage.getItem('cellW') || String(settings.cellW), 10)
+let CELL_H = parseInt(localStorage.getItem('cellH') || String(settings.cellH), 10)
+
+let zoomLevel = parseInt(localStorage.getItem('mapZoom') || '1', 10)  // editor view zoom only
+let CELL_PX_W = CELL_W * zoomLevel   // on-screen px of a cell in the editor canvas
+let CELL_PX_H = CELL_H * zoomLevel
+let SHEET_COLS = Math.max(1, Math.floor(SHEET_PX / CELL_W))  // tiles per sheet row at this cell size
+let SHEET_ROWS = Math.max(1, Math.floor(SHEET_PX / CELL_H))
+
+function recalcCellMetrics() {
+  CELL_PX_W  = CELL_W * zoomLevel
+  CELL_PX_H  = CELL_H * zoomLevel
+  SHEET_COLS = Math.max(1, Math.floor(SHEET_PX / CELL_W))
+  SHEET_ROWS = Math.max(1, Math.floor(SHEET_PX / CELL_H))
+}
 
 let mapData = new Uint8Array(MAP_W * MAP_H)
 let selectedSprite = 1
@@ -83,13 +100,13 @@ function saveToStorage() {
 function renderCell(cx, cy) {
   if (!ctx) return
   const v = mapData[cy * MAP_W + cx]
-  const dx = cx * CELL_PX, dy = cy * CELL_PX
+  const dx = cx * CELL_PX_W, dy = cy * CELL_PX_H
   ctx.fillStyle = ((cx + cy) & 1) ? '#1c1d22' : '#16171a'
-  ctx.fillRect(dx, dy, CELL_PX, CELL_PX)
+  ctx.fillRect(dx, dy, CELL_PX_W, CELL_PX_H)
   if (v > 0 && tilemapCanvas) {
-    const sx = (v % PICKER_COLS) * SPRITE_SIZE
-    const sy = Math.floor(v / PICKER_COLS) * SPRITE_SIZE
-    ctx.drawImage(tilemapCanvas, sx, sy, SPRITE_SIZE, SPRITE_SIZE, dx, dy, CELL_PX, CELL_PX)
+    const sx = (v % SHEET_COLS) * CELL_W
+    const sy = Math.floor(v / SHEET_COLS) * CELL_H
+    ctx.drawImage(tilemapCanvas, sx, sy, CELL_W, CELL_H, dx, dy, CELL_PX_W, CELL_PX_H)
   }
 }
 
@@ -102,21 +119,24 @@ function renderAll() {
 
 function renderPicker() {
   if (!pickerCtx || !tilemapCanvas) return
+  const tw = CELL_W * PICKER_SCALE, th = CELL_H * PICKER_SCALE  // px of one tile in the picker
   pickerCtx.clearRect(0, 0, pickerCanvas.width, pickerCanvas.height)
   pickerCtx.drawImage(tilemapCanvas, 0, 0, pickerCanvas.width, pickerCanvas.height)
+  // cell 0 = empty: cross out the top-left tile
   pickerCtx.fillStyle = 'rgba(0,0,0,0.55)'
-  pickerCtx.fillRect(0, 0, PICKER_PX, PICKER_PX)
+  pickerCtx.fillRect(0, 0, tw, th)
   pickerCtx.strokeStyle = '#ff6e6e'
   pickerCtx.lineWidth   = 2
   pickerCtx.beginPath()
-  pickerCtx.moveTo(2, 2);              pickerCtx.lineTo(PICKER_PX - 2, PICKER_PX - 2)
-  pickerCtx.moveTo(PICKER_PX - 2, 2);  pickerCtx.lineTo(2, PICKER_PX - 2)
+  pickerCtx.moveTo(2, 2);         pickerCtx.lineTo(tw - 2, th - 2)
+  pickerCtx.moveTo(tw - 2, 2);    pickerCtx.lineTo(2, th - 2)
   pickerCtx.stroke()
-  const sx = (selectedSprite % PICKER_COLS) * PICKER_PX
-  const sy = Math.floor(selectedSprite / PICKER_COLS) * PICKER_PX
+  // highlight the selected tile
+  const sx = (selectedSprite % SHEET_COLS) * tw
+  const sy = Math.floor(selectedSprite / SHEET_COLS) * th
   pickerCtx.strokeStyle = '#c9a96e'
   pickerCtx.lineWidth   = 2
-  pickerCtx.strokeRect(sx + 1, sy + 1, PICKER_PX - 2, PICKER_PX - 2)
+  pickerCtx.strokeRect(sx + 1, sy + 1, tw - 2, th - 2)
 }
 
 // ── overlay (line preview, selection rect, cursor brush outline) ──
@@ -129,16 +149,16 @@ function strokeCells(rect, color) {
   overlayCtx.strokeStyle = color
   overlayCtx.lineWidth   = 2
   overlayCtx.strokeRect(
-    rect.x0 * CELL_PX + 1, rect.y0 * CELL_PX + 1,
-    (rect.x1 - rect.x0 + 1) * CELL_PX - 2,
-    (rect.y1 - rect.y0 + 1) * CELL_PX - 2,
+    rect.x0 * CELL_PX_W + 1, rect.y0 * CELL_PX_H + 1,
+    (rect.x1 - rect.x0 + 1) * CELL_PX_W - 2,
+    (rect.y1 - rect.y0 + 1) * CELL_PX_H - 2,
   )
 }
 
 function drawLinePreview(cx0, cy0, cx1, cy1) {
   overlayCtx.fillStyle = 'rgba(201, 169, 110, 0.4)'
   bresenhamCells(cx0, cy0, cx1, cy1).forEach(([cx, cy]) => {
-    overlayCtx.fillRect(cx * CELL_PX, cy * CELL_PX, CELL_PX, CELL_PX)
+    overlayCtx.fillRect(cx * CELL_PX_W, cy * CELL_PX_H, CELL_PX_W, CELL_PX_H)
   })
 }
 
@@ -146,8 +166,8 @@ function drawLinePreview(cx0, cy0, cx1, cy1) {
 function cellFromEvent(e) {
   const rect = canvas.getBoundingClientRect()
   return {
-    cx: Math.floor((e.clientX - rect.left) / CELL_PX),
-    cy: Math.floor((e.clientY - rect.top)  / CELL_PX),
+    cx: Math.floor((e.clientX - rect.left) / CELL_PX_W),
+    cy: Math.floor((e.clientY - rect.top)  / CELL_PX_H),
   }
 }
 
@@ -219,7 +239,7 @@ function eyedropCell(cx, cy) {
 function updateStatus(cx, cy) {
   if (!statusEl) return
   const cellStr = (cx !== undefined && inBounds(cx, cy)) ? `cell (${cx}, ${cy})` : 'cell —'
-  statusEl.textContent = `${cellStr}   sprite #${selectedSprite}   zoom ${CELL_PX / SPRITE_SIZE}×   ${currentTool}`
+  statusEl.textContent = `${cellStr}   tile #${selectedSprite}   cell ${CELL_W}×${CELL_H}   zoom ${zoomLevel}×   ${currentTool}`
 }
 
 // ── tool dispatch ───────────────────────────────────────────────
@@ -407,29 +427,53 @@ function pasteStamp(cx, cy) {
 // ── picker ──────────────────────────────────────────────────────
 function onPickerClick(e) {
   const rect = pickerCanvas.getBoundingClientRect()
-  const sx = Math.floor((e.clientX - rect.left) / PICKER_PX)
-  const sy = Math.floor((e.clientY - rect.top)  / PICKER_PX)
-  if (sx < 0 || sx >= PICKER_COLS || sy < 0) return
-  selectedSprite = sy * PICKER_COLS + sx
+  const tw = CELL_W * PICKER_SCALE, th = CELL_H * PICKER_SCALE
+  const sx = Math.floor((e.clientX - rect.left) / tw)
+  const sy = Math.floor((e.clientY - rect.top)  / th)
+  if (sx < 0 || sx >= SHEET_COLS || sy < 0 || sy >= SHEET_ROWS) return
+  selectedSprite = sy * SHEET_COLS + sx
   renderPicker()
   updateStatus()
 }
 
 // ── zoom / brush ────────────────────────────────────────────────
+// size the map canvas to the current map dims × cell px, then repaint.
+function resizeCanvases() {
+  if (!canvas) return
+  canvas.width  = MAP_W * CELL_PX_W
+  canvas.height = MAP_H * CELL_PX_H
+  ctx.imageSmoothingEnabled = false
+  overlayCanvas.width  = canvas.width
+  overlayCanvas.height = canvas.height
+  overlayCtx.imageSmoothingEnabled = false
+  renderAll()
+  clearOverlay()
+}
+
 function setZoom(level) {
   level = Math.max(1, Math.min(4, level | 0))
-  CELL_PX = level * SPRITE_SIZE
+  zoomLevel = level
+  recalcCellMetrics()
   localStorage.setItem('mapZoom', String(level))
-  if (canvas) {
-    canvas.width  = MAP_W * CELL_PX
-    canvas.height = MAP_H * CELL_PX
-    ctx.imageSmoothingEnabled = false
-    overlayCanvas.width  = canvas.width
-    overlayCanvas.height = canvas.height
-    overlayCtx.imageSmoothingEnabled = false
-    renderAll()
-    clearOverlay()
-  }
+  resizeCanvases()
+  updateStatus()
+}
+
+// change the cell size (px sliced from the sheet). re-slices picker + repaints.
+// existing map indices are reinterpreted under the new slicing — that's expected.
+function setCellSize(newW, newH) {
+  newW = Math.max(1, Math.min(64, newW | 0))
+  newH = Math.max(1, Math.min(64, newH | 0))
+  if (newW === CELL_W && newH === CELL_H) return
+  CELL_W = newW
+  CELL_H = newH
+  settings.cellW = newW
+  settings.cellH = newH
+  localStorage.setItem('cellW', String(newW))
+  localStorage.setItem('cellH', String(newH))
+  recalcCellMetrics()
+  resizeCanvases()
+  renderPicker()
   updateStatus()
 }
 
@@ -462,16 +506,7 @@ function setMapSize(newW, newH) {
   localStorage.setItem('mapH', String(newH))
   undoStack.length = 0
   redoStack.length = 0
-  if (canvas) {
-    canvas.width  = MAP_W * CELL_PX
-    canvas.height = MAP_H * CELL_PX
-    overlayCanvas.width  = canvas.width
-    overlayCanvas.height = canvas.height
-    ctx.imageSmoothingEnabled        = false
-    overlayCtx.imageSmoothingEnabled = false
-    renderAll()
-    clearOverlay()
-  }
+  resizeCanvases()
   saveToStorage()
   updateStatus()
 }
@@ -502,8 +537,9 @@ function init() {
   viewport = document.getElementById('map-viewport')
   statusEl = panel.querySelector('.map-status')
 
-  canvas.width  = MAP_W * CELL_PX
-  canvas.height = MAP_H * CELL_PX
+  recalcCellMetrics()
+  canvas.width  = MAP_W * CELL_PX_W
+  canvas.height = MAP_H * CELL_PX_H
   ctx = canvas.getContext('2d')
   ctx.imageSmoothingEnabled = false
 
@@ -512,8 +548,9 @@ function init() {
   overlayCtx = overlayCanvas.getContext('2d')
   overlayCtx.imageSmoothingEnabled = false
 
-  pickerCanvas.width  = PICKER_COLS * PICKER_PX
-  pickerCanvas.height = PICKER_COLS * PICKER_PX
+  // picker shows the whole sheet at PICKER_SCALE; its grid is keyed off cell size
+  pickerCanvas.width  = SHEET_PX * PICKER_SCALE
+  pickerCanvas.height = SHEET_PX * PICKER_SCALE
   pickerCtx = pickerCanvas.getContext('2d')
   pickerCtx.imageSmoothingEnabled = false
 
@@ -568,8 +605,10 @@ function init() {
   const brushEl = document.getElementById('mapBrushRange')
   const widthEl  = document.getElementById('mapWInput')
   const heightEl = document.getElementById('mapHInput')
+  const cellWEl  = document.getElementById('mapCellWInput')
+  const cellHEl  = document.getElementById('mapCellHInput')
   if (zoomEl) {
-    zoomEl.value = CELL_PX / SPRITE_SIZE
+    zoomEl.value = zoomLevel
     zoomEl.addEventListener('input', e => setZoom(parseInt(e.target.value, 10)))
   }
   const brushInputEl = document.getElementById('mapBrushInput')
@@ -600,6 +639,20 @@ function init() {
     heightEl.addEventListener('change', e => {
       setMapSize(MAP_W, parseInt(e.target.value, 10))
       heightEl.value = MAP_H
+    })
+  }
+  if (cellWEl) {
+    cellWEl.value = CELL_W
+    cellWEl.addEventListener('change', e => {
+      setCellSize(parseInt(e.target.value, 10), CELL_H)
+      cellWEl.value = CELL_W   // reflect clamping
+    })
+  }
+  if (cellHEl) {
+    cellHEl.value = CELL_H
+    cellHEl.addEventListener('change', e => {
+      setCellSize(CELL_W, parseInt(e.target.value, 10))
+      cellHEl.value = CELL_H
     })
   }
 

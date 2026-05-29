@@ -1,6 +1,10 @@
 # Debug tools — `printh()` + `watch()`
 
-**Status:** design sketched, not implemented. Pick up here.
+**Status:** ✅ implemented 2026-05-29 (went with the recommended leans on all 5 open decisions). Followed the design below as written; one addition — `SetTraceLogLevel(LOG_WARNING)` in `main()` keeps raylib's INFO chatter out of the new log panel. Crash-capture (SIGSEGV/FPE/ABRT/BUS) is also DONE: the handler dumps the last `watch()` values to stderr via async-signal-safe `write()`, then re-raises so the editor still sees the real signal — verified live (signal 11 → "last watched values: x = 60" → red banner).
+
+> **Notes for the next session:** `-fno-delete-null-pointer-checks` is now in both compile paths in `main.cjs`, so a plain beginner null *write* (`*p = 42;`) reliably faults as SIGSEGV (caught) instead of being optimized into a SIGTRAP or elided. Still platform-specific: arm64 integer divide-by-zero does NOT trap (returns 0), so SIGFPE won't fire on Apple Silicon — a `volatile` null read/write is the dependable test crash.
+>
+> The runtime-log panel auto-hides after 3s on a clean exit (code 0) with no `printh` output — mirroring the build log. It stays open if the cart printed anything or crashed.
 **Date drafted:** 2026-05-29
 
 ## Why this is the next move

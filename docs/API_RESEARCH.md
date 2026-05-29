@@ -285,8 +285,8 @@ float remap(float v, float a, float b, float c, float d); // "from one range to 
 float distance(int x1, int y1, int x2, int y2);         // "how far apart are these points?"
 float length(int x, int y);                             // "how long is this vector?" (sqrt of x²+y²)
 float angle_to(int x1, int y1, int x2, int y2);         // "what direction (degrees) from A to B?"
-int   dx(float steps, float degrees);                   // "how much x do I move stepping this way?"
-int   dy(float steps, float degrees);                   //  (GameMaker's lengthdir_x/y, renamed)
+float dx(float steps, float degrees);                   // "how much x do I move stepping this way?"
+float dy(float steps, float degrees);                   //  (GameMaker's lengthdir_x/y, renamed)
 
 // trig — degree-based, matches angle_to + dx/dy
 float sin_deg(float degrees);
@@ -894,6 +894,14 @@ Probably defer until someone actually asks.
 ---
 
 ## Suggested first slice
+
+> **✓ Shipped (2026-05-29).** All of pass 1 below is now implemented in
+> `runtime/studio.{h,c}`, documented in `studioDocs.js`, and grouped into
+> `math` / `collision` / `animation` / `strings` help sections (+ `timer`
+> in `utility`). `abs()` is declared in the header but provided by libc.
+> Angles are degrees (0 = right, 90 = down). **`dx()`/`dy()` return `float`**
+> (the spec said `int`; we changed it so repeated `x += dx(...)` keeps
+> sub-pixel motion when position is held in a float). Passes 2–3 are still open.
 
 If we were to ship the next API expansion in one focused pass, I'd
 pick:

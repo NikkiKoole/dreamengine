@@ -161,6 +161,56 @@ html, body {
 }
 .build-close:hover { color: var(--fg); }
 
+/* ── runtime log (printh output + exit banner) ───────────── */
+#runtime-log {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 30%;
+  max-height: 320px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  z-index: 95;
+  flex-direction: column;
+}
+#runtime-log.open { display: flex; }
+
+.rlog-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+.rlog-head .rlog-title { flex: 1; }
+.rlog-head button {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.rlog-head button:hover { color: var(--fg); }
+
+.rlog-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+}
+.rlog-exit  { color: #7ec87e; }
+.rlog-crash { color: #ff6e6e; }
+
 /* ── panels ─────────────────────────────────────────────── */
 #panels {
   position: fixed;
@@ -397,7 +447,11 @@ html, body {
 }
 
 #map-viewport {
-  flex: 1;
+  /* Sizes to the canvas while it fits, but shrinks (and scrolls internally)
+     once canvas + palette would exceed the available width. min-width:0 is
+     what lets a flex item shrink below its content size so overflow kicks in. */
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: auto;
   background: var(--bg);   /* matches the rest of the editor when the map is smaller */
 }
@@ -447,8 +501,11 @@ html, body {
 .map-hint   { color: var(--fg-dim); }
 
 #map-picker {
-  width: 256px;
-  border-left: 1px solid var(--border);
+  flex: 0 0 auto;          /* fixed width — never shrinks, stays pinned beside the canvas */
+  align-self: flex-start;  /* hug the top instead of stretching full height */
+  margin: 24px 24px 24px 0;/* aligns its top with the canvas, hugs its right edge */
+  border: 1px solid var(--border);
+  border-radius: 4px;
   background: var(--bg2);
   padding: 12px;
   display: flex;

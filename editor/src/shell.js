@@ -23,9 +23,14 @@ const sections = [
   { title: 'graphics',   titleNL: 'tekenen',      keys: ['cls', 'spr', 'sprf', 'sspr', 'pget', 'pset', 'print', 'rect', 'rectfill', 'circ', 'circfill', 'line', 'camera', 'clip'] },
   { title: 'input',      titleNL: 'input',        keys: ['btn', 'btnp', 'BTN_UP', 'BTN_DOWN', 'BTN_LEFT', 'BTN_RIGHT', 'BTN_A', 'BTN_B'] },
   { title: 'touch',      titleNL: 'touch',        keys: ['stick_x', 'stick_y', 'touch_count', 'touch_x', 'touch_y', 'tap', 'touch_controls'] },
-  { title: 'map',        titleNL: 'map',          keys: ['map', 'mget', 'mset', 'MAP_W', 'MAP_H'] },
+  { title: 'map',        titleNL: 'map',          keys: ['map', 'map_scale', 'mget', 'mset', 'MAP_W', 'MAP_H'] },
+  { title: 'math',       titleNL: 'wiskunde',     keys: ['abs', 'min', 'max', 'clamp', 'lerp', 'remap', 'distance', 'length', 'angle_to', 'dx', 'dy', 'sin_deg', 'cos_deg'] },
+  { title: 'collision',  titleNL: 'botsingen',    keys: ['boxes_touch', 'point_in_box', 'circles_touch', 'near', 'touching_map', 'tile_at', 'touching_color', 'bounce_at_edges'] },
+  { title: 'animation',  titleNL: 'animatie',     keys: ['anim', 'anim_once'] },
+  { title: 'strings',    titleNL: 'tekst',        keys: ['str'] },
   { title: 'sound',      titleNL: 'geluid',       keys: ['sfx', 'music', 'note', 'hit', 'tone', 'chord', 'strum', 'schedule', 'bpm', 'beat', 'beat_pos', 'every', 'euclid', 'chance', 'degree', 'INSTR_SQUARE', 'INSTR_SAW', 'INSTR_TRI', 'INSTR_NOISE', 'INSTR_SINE', 'SCALE_MAJOR', 'SCALE_MINOR', 'SCALE_PENTA', 'SCALE_PENTA_MIN', 'SCALE_BLUES', 'SCALE_CHROMATIC', 'CHORD_MAJ', 'CHORD_MIN', 'CHORD_DIM', 'CHORD_AUG', 'CHORD_MAJ7', 'CHORD_MIN7', 'CHORD_DOM7', 'CHORD_SUS4', 'CHORD_POWER'] },
-  { title: 'utility',    titleNL: 'hulpmiddelen', keys: ['rnd', 'now', 'sgn', 'mid'] },
+  { title: 'utility',    titleNL: 'hulpmiddelen', keys: ['rnd', 'now', 'sgn', 'mid', 'timer', 'timer_reset'] },
+  { title: 'debug',      titleNL: 'debuggen',     keys: ['printh', 'watch', 'watch_visible'] },
   { title: 'screen',     titleNL: 'scherm',       keys: ['SCREEN_W', 'SCREEN_H'] },
   { title: 'palette',    titleNL: 'palet',        keys: ['CLR_BLACK', 'CLR_DARK_BLUE', 'CLR_DARK_PURPLE', 'CLR_DARK_GREEN', 'CLR_BROWN', 'CLR_DARK_GREY', 'CLR_LIGHT_GREY', 'CLR_WHITE', 'CLR_RED', 'CLR_ORANGE', 'CLR_YELLOW', 'CLR_GREEN', 'CLR_BLUE', 'CLR_INDIGO', 'CLR_PINK', 'CLR_LIGHT_PEACH', 'CLR_BROWNISH_BLACK', 'CLR_DARKER_BLUE', 'CLR_DARKER_PURPLE', 'CLR_BLUE_GREEN', 'CLR_DARK_BROWN', 'CLR_DARKER_GREY', 'CLR_MEDIUM_GREY', 'CLR_LIGHT_YELLOW', 'CLR_DARK_RED', 'CLR_DARK_ORANGE', 'CLR_LIME_GREEN', 'CLR_MEDIUM_GREEN', 'CLR_TRUE_BLUE', 'CLR_MAUVE', 'CLR_DARK_PEACH', 'CLR_PEACH'] },
 ]
@@ -189,6 +194,7 @@ runBtn.addEventListener('click', async () => {
   runBtn.textContent = '⏳ compiling…'
   runBtn.disabled = true
   buildLog.style.display = 'none'
+  rlogClear()
 
   // export sprite sheet from editor canvas before compiling
   const tilemapCanvas = document.querySelector('#tilemap-canvas')
@@ -253,4 +259,96 @@ function showLog(result) {
     out.textContent = result.output
     buildLog.appendChild(out)
   }
+}
+
+// ── runtime log panel (printh() output + exit/crash banner) ───
+// Docked at the bottom of the window. Auto-opens on output, the ×
+// collapses it, and it clears on every ▶ run.
+const runtimeLog = document.getElementById('runtime-log')
+const RLOG_MAX_LINES = 1000
+let rlogBody = null
+let rlogPartial = ''       // holds a trailing line fragment until its newline arrives
+let rlogHadOutput = false  // did the cart print anything this run? (drives auto-hide)
+let rlogHideTimer = null
+
+;(function buildRuntimeLog() {
+  const head = document.createElement('div')
+  head.className = 'rlog-head'
+
+  const title = document.createElement('span')
+  title.className = 'rlog-title'
+  title.textContent = 'runtime log'
+
+  const clearBtn = document.createElement('button')
+  clearBtn.textContent = 'clear'
+  clearBtn.addEventListener('click', rlogClear)
+
+  const closeBtn = document.createElement('button')
+  closeBtn.textContent = '×'
+  closeBtn.title = 'collapse (reopens on new output)'
+  closeBtn.addEventListener('click', () => runtimeLog.classList.remove('open'))
+
+  head.append(title, clearBtn, closeBtn)
+
+  rlogBody = document.createElement('div')
+  rlogBody.className = 'rlog-body'
+
+  runtimeLog.append(head, rlogBody)
+})()
+
+// strip ANSI escape sequences (raylib / terminal coloring)
+function stripAnsi(s) {
+  return s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+}
+
+function rlogClear() {
+  if (rlogBody) rlogBody.innerHTML = ''
+  rlogPartial = ''
+  rlogHadOutput = false
+  clearTimeout(rlogHideTimer)
+}
+
+function rlogAddLine(text, cls) {
+  const line = document.createElement('div')
+  if (cls) line.className = cls
+  line.textContent = text
+  rlogBody.appendChild(line)
+  while (rlogBody.childElementCount > RLOG_MAX_LINES) {
+    rlogBody.removeChild(rlogBody.firstChild)
+  }
+  rlogBody.scrollTop = rlogBody.scrollHeight
+}
+
+function rlogAppend(chunk) {
+  clearTimeout(rlogHideTimer)            // real output → keep the panel open
+  rlogHadOutput = true
+  runtimeLog.classList.add('open')
+  const text = rlogPartial + stripAnsi(chunk)
+  const parts = text.split('\n')
+  rlogPartial = parts.pop()              // last element is an incomplete line
+  for (const p of parts) rlogAddLine(p)
+}
+
+function rlogExit(info) {
+  const { code, signal } = info || {}
+  if (rlogPartial) { rlogAddLine(rlogPartial); rlogPartial = '' }
+  runtimeLog.classList.add('open')
+  const cleanExit = !signal && (code === 0 || code == null)
+  if (signal) {
+    rlogAddLine(`─── cart crashed (${signal}) ───`, 'rlog-crash')
+  } else if (cleanExit) {
+    rlogAddLine('─── cart exited (code 0) ───', 'rlog-exit')
+  } else {
+    rlogAddLine(`─── cart exited (code ${code}) ───`, 'rlog-crash')
+  }
+  // nothing to read (clean exit, no printh output) → auto-hide like the build log
+  if (cleanExit && !rlogHadOutput) {
+    clearTimeout(rlogHideTimer)
+    rlogHideTimer = setTimeout(() => runtimeLog.classList.remove('open'), 3000)
+  }
+}
+
+if (window.studio?.onLog) {
+  window.studio.onLog(rlogAppend)
+  window.studio.onExit(rlogExit)
 }
