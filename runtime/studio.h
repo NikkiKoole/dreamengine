@@ -247,7 +247,7 @@ void bounce_at_edges(int *x, int *y, int *vx, int *vy, int w, int h);  // flip v
 // animation
 // ------------------------------------------------------------
 
-int anim(int n_frames, float fps);                     // current frame 0..n_frames-1, looping forever
+int anim(int n_frames, float fps, float phase);        // current frame 0..n_frames-1, looping forever. phase 0..1 offsets the cycle start — use (float)i/count to stagger multiple entities
 int anim_once(int n_frames, float fps, float start_t); // frame of an animation started at start_t; stays on the last frame
 
 // ------------------------------------------------------------

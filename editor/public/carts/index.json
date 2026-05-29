@@ -75,6 +75,11 @@
     "file": "14-hud.cart.png"
   },
   {
+    "title": "15. animation phase",
+    "description": "anim() with a phase offset — stagger multiple entities so they move out of sync with one line of code.",
+    "file": "15-anim.cart.png"
+  },
+  {
     "title": "pong",
     "description": "2-player pong. First to 7 wins. Player 1: W/S — Player 2: up/down arrows.",
     "file": "pong.cart.png"

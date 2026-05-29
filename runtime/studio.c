@@ -802,9 +802,9 @@ void bounce_at_edges(int *x, int *y, int *vx, int *vy, int w, int h) {
 // animation
 // ------------------------------------------------------------
 
-int anim(int n_frames, float fps) {
+int anim(int n_frames, float fps, float phase) {
     if (n_frames <= 0) return 0;
-    int f = (int)(now() * fps) % n_frames;
+    int f = (int)(now() * fps + phase * n_frames) % n_frames;
     if (f < 0) f += n_frames;
     return f;
 }
