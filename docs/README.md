@@ -23,8 +23,9 @@ docs/
 │   ├── api-notes.md     engine API: classics survey, signatures, naming, cart-patterns
 │   └── audio-notes.md   sound: current engine, chip comparison, expansion roadmap
 ├── guides/            how-to
-│   ├── cart-authoring.md   the make-cart.js / tools/carts toolchain
-│   └── sharing.md          ways to publish finished carts
+│   ├── cart-authoring.md         the make-cart.js / tools/carts toolchain
+│   ├── cart-authoring-prompt.md  reusable AI prompt for designing a new cart
+│   └── sharing.md                ways to publish finished carts
 └── archive/           superseded / done notes, kept for history
 ```
 

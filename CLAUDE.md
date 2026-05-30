@@ -129,7 +129,7 @@ demonstrating it tends to go unnoticed and undertested.
 ## Sprite editor
 
 - Ported from `../eventually` (the sibling project)
-- 16×16 sprites, 256 sprite slots (16×16 grid), pico32 palette
+- 16×16 sprites, 64 sprite slots (8×8 grid → a 128×128 sheet), pico32 palette
 - Tools: pixel, fill, select, stamp, line/circle/rectangle
 - Frames: animation frame strip at the bottom, 1/2/3/4/d keys navigate
 - The tilemap canvas IS the sprite sheet — click a tile to edit it

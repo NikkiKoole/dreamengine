@@ -43,6 +43,7 @@ What this implies elsewhere (docs to update, things now out of scope).
 | [0004](0004-degree-based-trig.md) | Degree-based trig (not radians or turns) | accepted |
 | [0005](0005-defer-tile-collision-helper.md) | Defer `move_and_collide` tile-collision helper | accepted |
 | [0006](0006-library-carts-not-engine.md) | Pathfinding/particles ship as library carts, not engine API | accepted |
+| [0007](0007-pal-recolors-sprites.md) | `pal()` recolors sprites too, via a palette-swap shader | accepted |
 
 > Back-fill candidates (decisions made but not yet written up): C as the language /
 > no-heap globals+stack; the `.cart.png` zTXt format; carts-carry-their-own-settings

@@ -1080,7 +1080,7 @@ Revisit if more tile-based platformers appear.
    void fset(int spr, int flag, bool on);   // set/clear a flag bit on a sprite
    ```
 
-   256 sprites × 8 bits = **256 bytes** of state. A map cell already
+   64 sprites × 8 bits = **64 bytes** of state. A map cell already
    stores a sprite index, so per-tile properties ride on the sprite:
    `platform.c`'s `solid_tile()` collapses from
    `t == TILE_BRICK || t == TILE_GRASS` to `fget(mget(cx,cy), F_SOLID)`,
@@ -1119,9 +1119,22 @@ Revisit if more tile-based platformers appear.
 
    Gives dithered gradients, retro shading, and cheap "texture" without a
    3D pipeline, an ordering table, or UV math — and it composes with `pal`
-   for recolour. **`trifill_tex` is parked** (still under "3D anything" in
-   *defer*); revisit only if the pseudo-3D carts (`mode7`, `raycaster`,
-   `cube3d`, `elite`) actually demand real texture mapping.
+   for recolour.
+
+   > **Update — both shipped.** `fillp`/`fillp_reset` landed (§19). And the
+   > parked affine textured triangle shipped too, as **`tritex(x1,y1,u1,v1,
+   > x2,y2,u2,v2, x3,y3,u3,v3)`** — the pseudo-3D carts (`solid3d`,
+   > `textured3d`) wanted real per-pixel sampling that `fillp` can't give.
+   > UVs are in **sheet pixels** (128×128); passing 2D screen verts (w=1)
+   > makes the GPU interpolate UVs **affinely** — the authentic PS1 "swimmy"
+   > warp, for free. The cart does its own 3D→2D projection (rotate → normal
+   > → backface cull → painter's sort) then feeds screen coords to `tritex`.
+   > For per-face shading, overlay a `fillp` dither of black (1-bits
+   > transparent). **Implementation gotcha** (cost real debugging): texturing
+   > via `rlBegin(RL_TRIANGLES)` draws solid white in raylib's default batch —
+   > the texture never samples. The working form emits a **degenerate
+   > `RL_QUADS`** (4th vertex repeats the 3rd), mirroring how `DrawTexturePro`
+   > textures; that's what's in `studio.c`.
 
 **Route to library carts, not the engine** — this is how to get the
 "Settlers/Sims power" the brainstorm chased without breaking the stateless

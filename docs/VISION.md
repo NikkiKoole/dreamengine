@@ -113,7 +113,7 @@ The editor should feel *distinct*, not necessarily *limited*. Custom pixel font,
 ## The Tools
 
 ### Sprite Editor ✓ Built
-- Tile-based pixel editor, 16×16 tiles, 256 sprites
+- Tile-based pixel editor, 16×16 tiles, 64 sprites (8×8 grid, 128×128 sheet)
 - Fixed 32-color PICO-8 palette
 - Tools: pixel · fill · select · stamp · line
 - Brush slider + size inputs
@@ -160,7 +160,7 @@ The full sound design — current engine, where it sits vs. the SID/NES chips, a
 |---|---|
 | Resolution | 320×200 (configurable per cart) |
 | Colors | 32-color fixed palette (PICO-8) |
-| Sprites | 16×16 tiles, 256 sprite slots |
+| Sprites | 16×16 tiles, 64 sprite slots (8×8, 128×128 sheet) |
 | Map | 128×64 default, configurable up to 512×512 |
 | Sound | 8 voices (more than the 4 in the original sketch — needed for chords) |
 | Code | C, no heap allocation |
