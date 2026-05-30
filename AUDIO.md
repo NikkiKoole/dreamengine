@@ -314,7 +314,127 @@ rich, respectively, hangs off them.
 
 ---
 
-## 8. Open questions
+## 8. Borrowing rich instruments from navkit
+
+There's a sibling project, **navkit** (`~/Projects/navkit/soundsystem`), with a large,
+mature software synth (~53k LOC of header-only engines). It contains fully-built,
+*self-contained* (no malloc, no heap in the hot path) oscillator engines for rich,
+non-chiptune instruments: a Hammond tonewheel organ, Rhodes/Wurlitzer electric piano,
+Karplus-Strong acoustic piano/guitar, bowed strings, mallets, formant/vowel voices, FM,
+additive, and more. Each is a per-sample `processXxxOscillator(voice)` function — exactly
+the shape our audio callback already uses.
+
+The point of pulling from it: **"limited games, but with gorgeous sounds."** A silent-movie
+platformer scored with a real upright piano + a theatre organ beats any amount of bleepy
+breadth. We don't need general synthesis or a tracker for that — we need ~6–8 hand-tuned
+instruments that sound like real money.
+
+### 8.1 The key realization: `instr` is already the delivery vehicle
+
+Adding a Hammond organ needs **no new API and no new concept.** It's one more `INSTR_*`
+id wired to a richer oscillator in the mix loop:
+
+```c
+note(60, INSTR_ORGAN, 6);     // plays a B3 — same call shape as everything else
+chord(48, CHORD_MAJ7, INSTR_EPIANO, 5);
+```
+
+This is the highest-leverage move in the whole doc against the §1 rule: the timbre ceiling
+goes through the roof while the learner-facing surface stays at zero. The §5.4 "instrument
+bank + ADSR" path is about letting carts *build* timbres; this path is about *shipping*
+finished ones. For our audience, shipping finished ones wins — keep the 30 internal params
+of each engine **hidden**, expose them only as fixed presets via id
+(`INSTR_ORGAN_JAZZ`, `INSTR_EPIANO_RHODES`) at most.
+
+### 8.2 The one architectural decision: buffer-free vs. buffered
+
+The only thing that divides "drop in tomorrow" from "decide one thing first" is whether a
+voice has to carry a **delay-line buffer**.
+
+**Buffer-free** — just a few phase accumulators; fits today's tiny `Voice` unchanged, no
+architecture change, no API change. Band-limitable (cap harmonics at Nyquist → no aliasing):
+
+| Instrument | navkit technique | Per-voice | Character |
+|---|---|---|---|
+| **Hammond B3 organ** | 9 additive drawbar sines + key-click noise + percussion + tonewheel crosstalk | ~160 B | ★★★★★ the bargain |
+| **Electric piano** (Rhodes/Wurli/Clav) | 12 inharmonic sine modes + pickup nonlinearity (the growl) | ~280 B | ★★★★★ warm/vintage |
+| **Mallet** (marimba/vibes/celesta) | 4 modal sines + strike weighting | ~60 B | ★★★★ celesta = music-box, very silent-movie |
+| **Additive** (bell/strings/choir/brass) | up to 16 sines, per-partial decay | ~120 B | ★★★ versatile pad |
+| **FM** (2–3 op) | DX-style bells/chimes | ~50 B | ★★★ cheap but expert to dial |
+
+**Buffered** — needs a per-voice Karplus-Strong/waveguide buffer. Cost is **memory only**
+(8 voices × 2 KB = 16 KB — trivial on desktop); CPU is fine (~30% worst case at 8 voices).
+Say "a Voice may hold a small buffer" once and the whole physical-modeling family unlocks:
+
+| Instrument | navkit technique | Per-voice | Notes |
+|---|---|---|---|
+| **Acoustic piano** | Stiff-Karplus + allpass dispersion chain | ~2–4 KB | **the literal "silent-movie pianist."** Dispersion is the secret that makes it sound expensive; buffer shrinkable to 1024 |
+| **Guitar / harp / sitar** | Karplus-Strong + body biquads + jawari buzz | ~2.2 KB | one engine, many presets |
+| **Bowed violin/cello** | dual waveguide + stick-slip friction | ~8 KB | gorgeous sustain; heaviest; optional |
+
+### 8.3 What specifically sells the theatre-organ / silent-film vibe
+
+- **Hammond organ + a simplified Leslie.** The Hammond sound is ~70% Leslie rotary, ~25%
+  drawbars. The organ engine is ~160 B/voice; the Leslie is a **single ~1.5 KB buffer
+  *shared* across all voices** (amplitude + slight Doppler mod, slow/fast speed toggle) —
+  not per-voice. Tiny cost, and it's the line between "9 sines" and "church/theatre organ."
+  An organ *wants to sustain*, so it pairs naturally with the held-channel model (§6).
+- **Acoustic piano** (KS + dispersion) for the pianist themselves.
+- **Formant filter** for "singing"/choir/vocal-organ color — 4 bandpass peaks, ~512 B of
+  vowel tables + ~8 floats/voice, reusing a state-variable filter. Bonus: that **same SVF is
+  the resonant `filter()` from §5.5** — build one filter primitive, get the SID sweep *and*
+  vowel formants from it.
+
+### 8.4 SCW tables — a complementary cheap lever (not a replacement)
+
+navkit also embeds **single-cycle waveforms** (one cycle of a real instrument as a small
+float table; ~600 samples ≈ 2.4 KB each). A hand-picked bank of ~6 (≈8–10 KB) plus ~100
+lines of phase-accumulator + cubic-interpolation playback gives instantly richer *static*
+timbres. But SCW gives a rich *snapshot*, not the *living behavior* — the EP pickup growl,
+the organ key-click, the piano's inharmonic dispersion — that makes the modeled engines feel
+alive. Treat SCW as a cheap timbre-source lever (it could even feed an organ drawbar), not as
+a substitute for the modeled instruments. Aliasing at high notes is acceptable/retro here.
+
+### 8.5 How this reframes the roadmap (§7)
+
+A curated instrument set is a *better* first move than the instrument bank, because it needs
+**no new concept** — beginners keep calling `note`/`chord`/`tone`. Suggested ordering, each
+phase independently shippable:
+
+1. **Buffer-free instruments** — `INSTR_ORGAN`, `INSTR_EPIANO`, `INSTR_MALLET`/`INSTR_CELESTA`,
+   `INSTR_STRINGS`. Zero API/architecture change; four characterful instruments.
+2. **Leslie (shared) + resonant SVF filter** — sells the organ; the filter is the reusable
+   primitive that also gives §5.5 and §8.3's formant.
+3. **The per-voice buffer decision** → `INSTR_PIANO`, `INSTR_GUITAR`/`INSTR_HARP`. The pianist.
+4. **Formant filter** + a couple of cheap character effects (chorus, soft drive, bitcrush).
+5. **Optional:** bowed strings; and/or the SCW bank (§8.4).
+
+### 8.6 Cons / watch-outs
+
+- **Hide the internal params.** Each engine has many knobs; expose fixed presets via id only.
+  The moment a beginner sees "drawbar 4 = 6", the simplicity is gone.
+- **Porting = lift the oscillator fn + its tuning constants.** The engines are self-contained
+  (no malloc, no dependency on navkit's sequencer/effects bus), so each is a clean
+  copy → shrink → rename into `sound.h`. Buffered ones bring their buffer — the only
+  structural change.
+- **Pairs with held channels (§6).** Sustained organ chord + Leslie underneath a fire-and-forget
+  piano melody = a whole silent-film score using both the event and state models.
+
+### 8.7 navkit source pointers (for when we port)
+
+- Organ: `engines/synth.h` (`OrganSettings`) + `engines/synth_oscillators.h`
+  (`processOrganOscillator`); plan in `docs/done/organ-engine-plan.md`
+- Electric piano: `processEPianoOscillator`; Rhodes/Wurli/Clav presets in `instrument_presets.h`
+- Acoustic piano: `processStifKarpOscillator`
+- Guitar: `processGuitarOscillator`; Bowed: `processBowedOscillator`; Mallet: `processMalletOscillator`
+- Leslie: `engines/effects.h`; Formant spec: `docs/vocoder-formant-effect.md`
+- SCW data + embed tool: `engines/scw_data.h`, `tools/scw_embed.c`
+- Calling convention: set `voice.wave`/`frequency`/envelope, then per sample
+  `sample = processXxxOscillator(&voice, sampleRate)` — no heap, all state in-struct.
+
+---
+
+## 9. Open questions
 
 - **Channels vs. handles** for real-time: commit to fixed channels for simplicity, or
   pay for handles to support unbounded controllable emitters?
@@ -328,3 +448,11 @@ rich, respectively, hangs off them.
   with that editor in mind.
 - **Voice budget:** with held channels reserving voices, do we raise `SOUND_VOICES`, or
   is 8 still plenty once some are long-lived?
+- **Per-voice buffers (§8.2):** do we let a `Voice` carry a delay-line buffer (unlocks the
+  whole Karplus-Strong / physical-modeling family at ~2 KB/voice), or stay buffer-free and
+  ship only the additive/modal instruments? This is the gate for a real acoustic piano.
+- **Curated instruments vs. instrument bank:** ship finished `INSTR_*` presets from navkit
+  (§8) *and/or* build the cart-authorable bank (§5.4)? They're complementary, but which is
+  the headline for the audience — sounding great out of the box, or authoring your own?
+- **One filter primitive, two uses:** commit to a single state-variable filter that serves
+  both the SID-style `filter()` sweep (§5.5) and the vowel formant bank (§8.3)?
