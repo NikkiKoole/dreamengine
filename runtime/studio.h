@@ -205,8 +205,27 @@ void map_scale(int n);                                  // integer zoom for map 
 
 void sfx(int n);                              // play sfx slot n; -1 stops all sfx
 void music(int n);                            // play music pattern n; -1 stops music
-void note(int midi, int instr, int vol);                  // one-shot note (250ms). vol 0..7
+void note(int midi, int instr, int vol);                  // one-shot note (250ms). vol 0..7. `instr` is an instrument slot (0..4 are the waves above; define 5..15 yourself)
 void hit(int midi, int instr, int vol, int dur_ms);       // note with custom duration — closed hihat ~30ms, open ~200ms
+
+// instruments — give a slot a waveform + ADSR envelope, then play it like any wave: note(midi, slot, vol)
+void instrument(int slot, int wave, int attack_ms, int decay_ms, int sustain, int release_ms); // define slot 5..15: ms timings, sustain 0..7. pluck = fast attack+short release; pad = slow attack+long release
+void instrument_duty(int slot, float duty);               // pulse width 0.0..1.0 for a square-wave slot (0.5 = square, 0.12 = thin/nasal). no effect on other waves
+
+// one routable LFO per instrument — a slow sine that wobbles one parameter
+#define LFO_PITCH   0   // vibrato — depth in semitones (0.3 subtle, 2 wide)
+#define LFO_DUTY    1   // PWM / duty sweep — depth 0.0..0.5 (square-wave slots only)
+#define LFO_VOLUME  2   // tremolo — depth 0.0..1.0
+#define LFO_CUTOFF  3   // filter sweep / wah — depth in Hz (needs a filter on the slot)
+void instrument_lfo(int slot, int dest, float rate_hz, float depth);  // attach a sine LFO to a slot. dest: LFO_PITCH/DUTY/VOLUME/CUTOFF. rate 4–8 Hz is typical. depth 0 = off
+
+// resonant filter per instrument — sculpts the tone (the SID-style knob)
+#define FILTER_OFF   0
+#define FILTER_LOW   1   // lowpass — keep lows, muffle highs (warm)
+#define FILTER_HIGH  2   // highpass — keep highs, thin out lows (tinny)
+#define FILTER_BAND  3   // bandpass — keep only a band around cutoff (vowel/wah)
+#define FILTER_NOTCH 4   // notch — scoop OUT a band around cutoff (phasey)
+void instrument_filter(int slot, int mode, int cutoff_hz, int resonance);  // mode FILTER_*, cutoff in Hz (e.g. 800), resonance 0..15 (high = whistly peak). sweep cutoff with LFO_CUTOFF
 
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti

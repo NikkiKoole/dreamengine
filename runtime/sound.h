@@ -15,6 +15,7 @@
 #define SOUND_SFX_STEPS    32
 #define SOUND_SFX_SLOTS    32
 #define SOUND_MUSIC_SLOTS  16
+#define SOUND_INSTR_SLOTS  16
 
 // Waveform IDs (INSTR_*) come from studio.h.
 
@@ -38,30 +39,58 @@ typedef struct {
     uint8_t loop;
 } Pattern;
 
+// An instrument = a waveform + an ADSR envelope + pulse duty. `instr` ids in
+// note()/hit()/chord()/tone() index this bank. Slots 0..4 are pre-filled with the
+// five raw waves (near-instant envelope) so old carts keep working; carts define 5+.
+typedef struct {
+    int   wave;
+    int   a_samp, d_samp, r_samp;   // attack / decay / release, in samples
+    float sustain;                  // 0..1
+    float duty;                     // 0..1 pulse width (only used by INSTR_SQUARE)
+    int   lfo_dest;                 // LFO_PITCH / LFO_DUTY / LFO_VOLUME / LFO_CUTOFF
+    float lfo_rate;                 // Hz
+    float lfo_depth;                // 0 = off; units depend on dest
+    int   flt_mode;                 // FILTER_OFF / LOW / HIGH / BAND / NOTCH
+    float flt_cutoff;               // Hz
+    float flt_q;                    // damping coefficient (1/Q); small = resonant
+} Instrument;
+
 typedef struct {
     bool   active;
     int    sfx_idx;            // -1 if standalone note
     int    step;
     int    step_samples;
-    int    step_len_samples;
+    int    step_len_samples;   // for a one-shot note this is the GATE length; release runs after it
     float  phase;
     float  freq;
     float  vol;                // 0..1
     int    wave;
     int    noise_state;
     bool   from_music;
+    // ADSR + LFO snapshot (one-shot notes only; copied from the instrument at note-on)
+    int    a_samp, d_samp, r_samp;
+    float  sustain;
+    float  duty;
+    float  rel_start;          // envelope level at the moment the gate ends (release fades from here)
+    int    lfo_dest;
+    float  lfo_rate, lfo_depth, lfo_phase;
+    int    flt_mode;
+    float  flt_cutoff, flt_q;
+    float  flt_low, flt_band;   // SVF running state
 } Voice;
 
 static Voice         voices[SOUND_VOICES];
 static AudioStream   sound_stream;
 static Sfx           sfx_bank[SOUND_SFX_SLOTS];
 static Pattern       music_bank[SOUND_MUSIC_SLOTS];
+static Instrument    instr_bank[SOUND_INSTR_SLOTS];
 static int           music_current = -1;
 
 // request ring buffer (main thread pushes → audio thread drains)
-// kind: 0=sfx, 1=music, 2=note. -1 in a/b/c slots = "stop" for sfx/music.
+// kind: 0=sfx, 1=music, 2=note, 3=define instrument, 4=set duty. -1 in a/b/c slots = "stop" for sfx/music.
 // delay_samples: 0 = fire immediately; >0 = audio thread holds it in `delayed[]` and fires when countdown expires.
-typedef struct { int kind, a, b, c; int delay_samples; int dur_samples; } SoundReq;
+// e0/e1/e2: extra payload (instrument attack/decay/release samples).
+typedef struct { int kind, a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   32
 #define SOUND_DELAYED_MAX 16
 
@@ -98,6 +127,18 @@ static void sound_push_req(int kind, int a, int b, int c, int delay_samples, int
     req_queue[h].c             = c;
     req_queue[h].delay_samples = delay_samples;
     req_queue[h].dur_samples   = dur_samples;
+    req_queue[h].e0 = req_queue[h].e1 = req_queue[h].e2 = 0;
+    req_head = next;
+}
+
+// Push a control request carrying the extra e0/e1/e2 payload (used by instrument()).
+static void sound_push_ctrl(int kind, int a, int b, int c, int e0, int e1, int e2) {
+    int h = req_head;
+    int next = (h + 1) % SOUND_REQ_QUEUE;
+    if (next == req_tail) return;   // full — drop
+    req_queue[h] = (SoundReq){ .kind = kind, .a = a, .b = b, .c = c,
+                               .delay_samples = 0, .dur_samples = 0,
+                               .e0 = e0, .e1 = e1, .e2 = e2 };
     req_head = next;
 }
 
@@ -107,9 +148,9 @@ static inline float sound_midi_to_freq(int midi) {
     return 440.0f * powf(2.0f, (midi - 69) / 12.0f);
 }
 
-static inline float sound_osc(int wave, float phase, int *noise_state) {
+static inline float sound_osc(int wave, float phase, float duty, int *noise_state) {
     switch (wave) {
-    case INSTR_SQUARE: return phase < 0.5f ? 0.5f : -0.5f;
+    case INSTR_SQUARE: return phase < duty ? 0.5f : -0.5f;
     case INSTR_SAW:    return phase * 2.0f - 1.0f;
     case INSTR_TRI:    return phase < 0.5f ? phase * 4.0f - 1.0f : 3.0f - phase * 4.0f;
     case INSTR_NOISE: {
@@ -119,6 +160,36 @@ static inline float sound_osc(int wave, float phase, int *noise_state) {
     case INSTR_SINE:   return sinf(phase * 6.2831853f);
     }
     return 0.0f;
+}
+
+// ADSR amplitude during the gated (held) portion of a note. `s` = samples since note-on.
+// Attack 0→1 over a, decay 1→sustain over d, then hold at sustain.
+static inline float sound_adsr_gated(int s, int a, int d, float sustain) {
+    if (a > 0 && s < a) return (float)s / (float)a;
+    s -= a;
+    if (d > 0 && s < d) return 1.0f - (1.0f - sustain) * ((float)s / (float)d);
+    return sustain;
+}
+
+// Chamberlin state-variable filter — one sample. Updates the voice's running state and
+// returns the lowpass/highpass/bandpass/notch tap. `q` is damping (1/Q); smaller = more resonant.
+static inline float sound_svf(Voice *v, float in, float cutoff_hz) {
+    float f = 2.0f * sinf(3.14159265f * cutoff_hz / (float)SOUND_SAMPLE_RATE);
+    if (f > 0.99f)   f = 0.99f;          // keep the simple SVF stable
+    if (f < 0.0005f) f = 0.0005f;
+    v->flt_low += f * v->flt_band;
+    float high = in - v->flt_low - v->flt_q * v->flt_band;
+    v->flt_band += f * high;
+    // clamp state so a high-resonance sweep can't blow up
+    if      (v->flt_low  >  4.0f) v->flt_low  =  4.0f; else if (v->flt_low  < -4.0f) v->flt_low  = -4.0f;
+    if      (v->flt_band >  4.0f) v->flt_band =  4.0f; else if (v->flt_band < -4.0f) v->flt_band = -4.0f;
+    switch (v->flt_mode) {
+        case FILTER_LOW:   return v->flt_low;
+        case FILTER_HIGH:  return high;
+        case FILTER_BAND:  return v->flt_band;
+        case FILTER_NOTCH: return high + v->flt_low;
+    }
+    return in;
 }
 
 static int sound_find_voice(void) {
@@ -136,6 +207,9 @@ static void sound_set_step(Voice *v, SfxStep step, int step_dur_units) {
     v->step_samples     = 0;
     v->step_len_samples = (step_dur_units * SOUND_SAMPLE_RATE) / 100;
     if (v->step_len_samples < 1) v->step_len_samples = 1;
+    v->duty = 0.5f;           // SFX steps use the declick envelope, not ADSR; plain square
+    v->lfo_depth = 0.0f;      // and no LFO
+    v->flt_mode = FILTER_OFF; // and no filter
     if (step.pitch == 0 || step.vol == 0) {
         v->vol  = 0.0f;       // silent step — still advances time
     } else {
@@ -182,7 +256,9 @@ static void sound_fire_req(SoundReq r) {
             }
         }
     } else if (r.kind == 2) {       // note (one-shot)
-        int midi = r.a, instr = r.b, vol = r.c;
+        int midi = r.a, slot = r.b, vol = r.c;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) slot = 0;
+        Instrument *ins = &instr_bank[slot];
         int vi = sound_find_voice();
         Voice *v = &voices[vi];
         v->active           = true;
@@ -191,9 +267,54 @@ static void sound_fire_req(SoundReq r) {
         v->phase            = 0.0f;
         v->freq             = sound_midi_to_freq(midi);
         v->vol              = (vol < 0 ? 0 : vol > 7 ? 7 : vol) / 7.0f;
-        v->wave             = instr;
+        v->wave             = ins->wave;
+        v->duty             = ins->duty;
+        v->a_samp           = ins->a_samp;
+        v->d_samp           = ins->d_samp;
+        v->r_samp           = ins->r_samp;
+        v->sustain          = ins->sustain;
+        v->lfo_dest         = ins->lfo_dest;
+        v->lfo_rate         = ins->lfo_rate;
+        v->lfo_depth        = ins->lfo_depth;
+        v->lfo_phase        = 0.0f;
+        v->flt_mode         = ins->flt_mode;
+        v->flt_cutoff       = ins->flt_cutoff;
+        v->flt_q            = ins->flt_q;
+        v->flt_low          = 0.0f;
+        v->flt_band         = 0.0f;
         v->step_samples     = 0;
         v->step_len_samples = r.dur_samples > 0 ? r.dur_samples : SOUND_SAMPLE_RATE / 4;
+        v->rel_start        = sound_adsr_gated(v->step_len_samples, v->a_samp, v->d_samp, v->sustain);
+    } else if (r.kind == 3) {       // define instrument (wave + ADSR)
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        Instrument *ins = &instr_bank[slot];
+        ins->wave    = r.b;
+        ins->sustain = (r.c < 0 ? 0 : r.c > 7 ? 7 : r.c) / 7.0f;
+        ins->a_samp  = r.e0;
+        ins->d_samp  = r.e1;
+        ins->r_samp  = r.e2;
+        // duty is left untouched — set independently via instrument_duty()
+    } else if (r.kind == 4) {       // set instrument pulse duty
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        float duty = r.b / 1000.0f;
+        if (duty < 0.01f) duty = 0.01f;
+        if (duty > 0.99f) duty = 0.99f;
+        instr_bank[slot].duty = duty;
+    } else if (r.kind == 5) {       // set instrument LFO
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        instr_bank[slot].lfo_dest  = r.b;
+        instr_bank[slot].lfo_rate  = r.c  / 1000.0f;
+        instr_bank[slot].lfo_depth = r.e0 / 1000.0f;
+    } else if (r.kind == 6) {       // set instrument filter
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        int res = r.e0 < 0 ? 0 : r.e0 > 15 ? 15 : r.e0;
+        instr_bank[slot].flt_mode   = r.b;
+        instr_bank[slot].flt_cutoff = (float)r.c;
+        instr_bank[slot].flt_q      = 2.0f - res * 0.13f;   // res 0 → damped, 15 → resonant peak
     }
 }
 
@@ -232,37 +353,60 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             Voice *v = &voices[vi];
             if (!v->active) continue;
 
-            // step advance?
-            if (v->step_samples >= v->step_len_samples) {
-                if (v->sfx_idx >= 0) {
-                    Sfx *s = &sfx_bank[v->sfx_idx];
-                    v->step++;
-                    if (v->step >= s->length) {
-                        if (s->loop || v->from_music) {
-                            v->step = 0;
-                        } else {
-                            v->active = false;
-                            continue;
-                        }
+            // step advance? (SFX/music walk their step list; one-shots fall through to ADSR release)
+            if (v->step_samples >= v->step_len_samples && v->sfx_idx >= 0) {
+                Sfx *s = &sfx_bank[v->sfx_idx];
+                v->step++;
+                if (v->step >= s->length) {
+                    if (s->loop || v->from_music) {
+                        v->step = 0;
+                    } else {
+                        v->active = false;
+                        continue;
                     }
-                    sound_set_step(v, s->steps[v->step], s->step_dur);
-                } else {
-                    v->active = false;
-                    continue;
                 }
+                sound_set_step(v, s->steps[v->step], s->step_dur);
             }
 
-            // simple AR envelope per step — kills clicks at start/end
-            float t = (float)v->step_samples / (float)v->step_len_samples;
+            // envelope: SFX use the per-step declick; one-shot notes use the instrument's ADSR
             float env;
-            if      (t < 0.05f) env = t / 0.05f;
-            else if (t > 0.85f) env = (1.0f - t) / 0.15f;
-            else                env = 1.0f;
-            if (env < 0) env = 0;
+            if (v->sfx_idx >= 0) {
+                float t = (float)v->step_samples / (float)v->step_len_samples;
+                if      (t < 0.05f) env = t / 0.05f;
+                else if (t > 0.85f) env = (1.0f - t) / 0.15f;
+                else                env = 1.0f;
+                if (env < 0) env = 0;
+            } else if (v->step_samples < v->step_len_samples) {
+                env = sound_adsr_gated(v->step_samples, v->a_samp, v->d_samp, v->sustain);  // gated A/D/S
+            } else {
+                int rs = v->step_samples - v->step_len_samples;                              // release
+                if (v->r_samp <= 0 || rs >= v->r_samp) { v->active = false; continue; }
+                env = v->rel_start * (1.0f - (float)rs / (float)v->r_samp);
+            }
 
-            mix += sound_osc(v->wave, v->phase, &v->noise_state) * v->vol * env * 0.2f;
+            // LFO (one-shot notes only): one routable sine → pitch / duty / volume / cutoff
+            float duty = v->duty, trem = 1.0f, pitch_mul = 1.0f, cutoff = v->flt_cutoff;
+            if (v->sfx_idx < 0 && v->lfo_depth > 0.0f) {
+                float lfo = sinf(v->lfo_phase * 6.2831853f);            // -1..1
+                v->lfo_phase += v->lfo_rate / (float)SOUND_SAMPLE_RATE;
+                if (v->lfo_phase >= 1.0f) v->lfo_phase -= 1.0f;
+                if      (v->lfo_dest == LFO_PITCH)  pitch_mul = powf(2.0f, (lfo * v->lfo_depth) / 12.0f);
+                else if (v->lfo_dest == LFO_DUTY)   { duty += lfo * v->lfo_depth;
+                                                      if (duty < 0.05f) duty = 0.05f;
+                                                      if (duty > 0.95f) duty = 0.95f; }
+                else if (v->lfo_dest == LFO_VOLUME) trem = 1.0f - 0.5f * v->lfo_depth * (1.0f - lfo);
+                else if (v->lfo_dest == LFO_CUTOFF) cutoff += lfo * v->lfo_depth;
+            }
 
-            v->phase += v->freq / (float)SOUND_SAMPLE_RATE;
+            float s = sound_osc(v->wave, v->phase, duty, &v->noise_state);
+            if (v->sfx_idx < 0 && v->flt_mode != FILTER_OFF) {
+                if (cutoff < 20.0f) cutoff = 20.0f;
+                if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
+                s = sound_svf(v, s, cutoff);
+            }
+            mix += s * v->vol * env * trem * 0.2f;
+
+            v->phase += v->freq * pitch_mul / (float)SOUND_SAMPLE_RATE;
             if (v->phase >= 1.0f) v->phase -= 1.0f;
             v->step_samples++;
         }
@@ -434,6 +578,35 @@ void hit(int midi, int instr, int vol, int dur_ms) {
     sound_push_req(2, midi, instr, vol, 0, dur);
 }
 
+void instrument(int slot, int wave, int attack_ms, int decay_ms, int sustain, int release_ms) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    int a = (attack_ms  * SOUND_SAMPLE_RATE) / 1000;
+    int d = (decay_ms   * SOUND_SAMPLE_RATE) / 1000;
+    int r = (release_ms * SOUND_SAMPLE_RATE) / 1000;
+    if (a < 0) a = 0;
+    if (d < 0) d = 0;
+    if (r < 0) r = 0;
+    sound_push_ctrl(3, slot, wave, sustain, a, d, r);
+}
+
+void instrument_duty(int slot, float duty) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(4, slot, (int)(duty * 1000.0f), 0, 0, 0, 0);
+}
+
+void instrument_lfo(int slot, int dest, float rate_hz, float depth) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    if (rate_hz < 0) rate_hz = 0;
+    if (depth   < 0) depth   = 0;
+    sound_push_ctrl(5, slot, dest, (int)(rate_hz * 1000.0f), (int)(depth * 1000.0f), 0, 0);
+}
+
+void instrument_filter(int slot, int mode, int cutoff_hz, int resonance) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    if (cutoff_hz < 20) cutoff_hz = 20;
+    sound_push_ctrl(6, slot, mode, cutoff_hz, resonance, 0, 0);
+}
+
 void schedule(int delay_ms, int midi, int instr, int vol) {
     int ds = (delay_ms * SOUND_SAMPLE_RATE) / 1000;
     if (ds < 0) ds = 0;
@@ -464,6 +637,24 @@ static void sound_init(void) {
     for (int i = 0; i < SOUND_VOICES;     i++) voices[i].noise_state = 12345 + i;
     for (int i = 0; i < SOUND_MUSIC_SLOTS; i++)
         for (int c = 0; c < 4; c++) music_bank[i].channels[c] = -1;
+
+    // Instrument bank defaults: slots 0..4 are the raw waves with a near-instant
+    // declick-style envelope (so existing carts sound the same); 5..15 start as a
+    // plain square until a cart redefines them with instrument().
+    for (int i = 0; i < SOUND_INSTR_SLOTS; i++) {
+        instr_bank[i].wave    = (i < 5) ? i : INSTR_SQUARE;
+        instr_bank[i].a_samp  = SOUND_SAMPLE_RATE / 200;   // ~5ms attack
+        instr_bank[i].d_samp  = 0;
+        instr_bank[i].r_samp  = SOUND_SAMPLE_RATE / 50;    // ~20ms release
+        instr_bank[i].sustain = 1.0f;
+        instr_bank[i].duty    = 0.5f;
+        instr_bank[i].lfo_dest  = LFO_PITCH;
+        instr_bank[i].lfo_rate  = 0.0f;
+        instr_bank[i].lfo_depth = 0.0f;   // off until instrument_lfo() is called
+        instr_bank[i].flt_mode   = FILTER_OFF;
+        instr_bank[i].flt_cutoff = 1000.0f;
+        instr_bank[i].flt_q      = 1.0f;
+    }
 
     sound_load_demo_data();
 

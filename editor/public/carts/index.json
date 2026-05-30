@@ -140,6 +140,21 @@
     "file": "19-breakout.cart.png"
   },
   {
+    "title": "instruments",
+    "description": "An instrument is a waveform + an ADSR envelope (+ pulse duty), defined once with instrument() then played like any wave: note(midi, slot, vol). Defines four — PLUCK, PAD, LEAD, STAB — and draws each one's volume-over-time envelope so you can SEE the difference a fast vs slow attack and a short vs long release makes. An arpeggio cycles through all four so you hear them. 1-4 select, Z plays the selected one.",
+    "file": "20-instruments.cart.png"
+  },
+  {
+    "title": "lfo",
+    "description": "An LFO is one slow sine wave that wobbles a single knob of an instrument over time — instrument_lfo(slot, dest, rate, depth). Three destinations, one each: LFO_PITCH = vibrato, LFO_VOLUME = tremolo, LFO_DUTY = PWM shimmer (square waves only). Each panel holds a long note on its instrument so you hear the wobble, and animates exactly what's moving — the pitch dot bobbing, the volume bar pumping, the pulse width sweeping. 1-3 select, Z plays the selected one.",
+    "file": "21-lfo.cart.png"
+  },
+  {
+    "title": "filter",
+    "description": "A resonant filter sculpts an instrument's tone — instrument_filter(slot, mode, cutoff_hz, resonance). The same buzzy saw through all four modes: FILTER_LOW (warm), FILTER_HIGH (thin), FILTER_BAND (vowel), FILTER_NOTCH (hollow). resonance 0-15 adds a whistly peak at the cutoff, and an LFO on LFO_CUTOFF sweeps the cutoff for a wah. Each panel draws its frequency-response shape with the cutoff line sweeping live, and holds a long note so you hear the filter move. 1-4 select, Z plays the selected one.",
+    "file": "22-filter.cart.png"
+  },
+  {
     "title": "pong",
     "description": "2-player pong. First to 7 wins. Player 1: W/S — Player 2: up/down arrows.",
     "file": "pong.cart.png"
