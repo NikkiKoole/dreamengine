@@ -164,7 +164,7 @@ int  pget(int x, int y);                                // palette index at (x,y
 void camera(int x, int y);                              // shifts all subsequent drawing by (-x,-y). camera(0,0) resets
 void follow(int tx, int ty, int world_w, int world_h); // center camera on (tx,ty), clamped so world edges don't show
 void clip(int x, int y, int w, int h);                  // scissor rect. clip(0,0,0,0) disables
-void pal(int c0, int c1);                               // remap: draw color c0 as c1 (hit-flash, recolor, fades). persists until pal_reset()
+void pal(int c0, int c1);                               // remap: everything drawn as c0 now draws as c1 — primitives AND sprites (hit-flash, team/clothes recolor, fades). persists until pal_reset()
 void pal_reset(void);                                   // undo all pal() swaps — back to the normal palette
 void fade(float amount);                                // darken the whole screen toward black: 0 = normal, 1 = black. for transitions
 void shake(float amount);                               // kick the screen by `amount` pixels; decays on its own. call on impacts

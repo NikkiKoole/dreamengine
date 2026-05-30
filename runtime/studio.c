@@ -39,6 +39,18 @@ static Font            game_font;
 static bool            custom_font = false;
 static Color           palette[PALETTE_SIZE];
 static Color           base_palette[PALETTE_SIZE];   // pristine copy, for pal_reset()
+// pal()-on-sprites: a palette-swap shader. Sprite texels are exact palette RGBs,
+// so the shader finds each texel's base-palette index and outputs the (possibly
+// remapped) current palette color — reproducing pal() for spr()/sspr() just like
+// it already works for the shape primitives. Gated on pal_active so it costs
+// nothing until a swap is live.
+static Shader          pal_shader;
+static bool            pal_shader_ok = false;
+static int             loc_base_pal  = -1;
+static int             loc_cur_pal   = -1;
+static bool            pal_active    = false;          // any palette[i] != base_palette[i]?
+static float           cur_pal_rgb[PALETTE_SIZE * 3];  // current palette, normalized — uploaded to the shader
+static bool            cur_pal_dirty = true;
 static float           fade_amt   = 0.0f;            // fade()  — 0 normal .. 1 black
 static float           shake_amt  = 0.0f;            // shake() — pixels, self-decaying
 static float           frame_dt   = 0.0f;            // dt()    — seconds since last frame
@@ -52,6 +64,9 @@ static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0
 static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
 static void ovalfill_pat(int cx, int cy, int rx, int ry, int pattern, int c1, int c0);
 static void trifill_pat(int x1, int y1, int x2, int y2, int x3, int y3, int pattern, int c1, int c0);
+// pal()-on-sprites helpers (defined in the graphics section, used earlier in main/pal)
+static void pal_shader_init(void);
+static void pal_recompute(void);
 
 #define BTN_COUNT 6
 static bool            btn_curr[2][BTN_COUNT];
@@ -477,6 +492,7 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
 
     load_palette();
+    pal_shader_init();   // pal()-on-sprites swap shader (needs the GL context from InitWindow)
     init_touch_layout();
 
     if (MAP_DATA_LEN >= sizeof(map_data)) {
@@ -527,6 +543,7 @@ int main(int argc, char **argv) {
     UnloadImage(screenshot);
 
     if (custom_font) UnloadFont(game_font);
+    if (pal_shader_ok) UnloadShader(pal_shader);
     if (spritesheet.width > 0) UnloadTexture(spritesheet);
     if (spritesheet_img.data) UnloadImage(spritesheet_img);
     if (pget_snapshot.data) UnloadImage(pget_snapshot);
@@ -643,6 +660,102 @@ void cls(int color) {
     ClearBackground(palette[color % PALETTE_SIZE]);
 }
 
+// palette-swap fragment shader. The vertex stage is raylib's default (we pass NULL).
+// For each texel: find the nearest base-palette color (sprites use exact palette
+// RGBs, so "nearest" is really "exact"), then output that index's CURRENT palette
+// color — which pal() may have remapped. Alpha is preserved so colorkey() holes
+// stay transparent. The loop indexes the uniform arrays with the loop variable
+// only (no computed index) so it also compiles under GLSL ES 100 on web.
+#ifdef PLATFORM_WEB
+static const char *PAL_FS =
+    "#version 100\n"
+    "precision mediump float;\n"
+    "varying vec2 fragTexCoord;\n"
+    "varying vec4 fragColor;\n"
+    "uniform sampler2D texture0;\n"
+    "uniform vec4 colDiffuse;\n"
+    "uniform vec3 basePal[32];\n"
+    "uniform vec3 curPal[32];\n"
+    "void main() {\n"
+    "    vec4 texel = texture2D(texture0, fragTexCoord);\n"
+    "    float bestD = 1e20;\n"
+    "    vec3 outc = curPal[0];\n"
+    "    for (int i = 0; i < 32; i++) {\n"
+    "        vec3 dd = texel.rgb - basePal[i];\n"
+    "        float dist = dot(dd, dd);\n"
+    "        if (dist < bestD) { bestD = dist; outc = curPal[i]; }\n"
+    "    }\n"
+    "    gl_FragColor = vec4(outc, texel.a) * colDiffuse * fragColor;\n"
+    "}\n";
+#else
+static const char *PAL_FS =
+    "#version 330\n"
+    "in vec2 fragTexCoord;\n"
+    "in vec4 fragColor;\n"
+    "out vec4 finalColor;\n"
+    "uniform sampler2D texture0;\n"
+    "uniform vec4 colDiffuse;\n"
+    "uniform vec3 basePal[32];\n"
+    "uniform vec3 curPal[32];\n"
+    "void main() {\n"
+    "    vec4 texel = texture(texture0, fragTexCoord);\n"
+    "    float bestD = 1e20;\n"
+    "    vec3 outc = curPal[0];\n"
+    "    for (int i = 0; i < 32; i++) {\n"
+    "        vec3 dd = texel.rgb - basePal[i];\n"
+    "        float dist = dot(dd, dd);\n"
+    "        if (dist < bestD) { bestD = dist; outc = curPal[i]; }\n"
+    "    }\n"
+    "    finalColor = vec4(outc, texel.a) * colDiffuse * fragColor;\n"
+    "}\n";
+#endif
+
+// compile the swap shader + push the (constant) base palette. Call once, after the
+// GL context exists. On failure pal_shader_ok stays false and sprites draw normally.
+static void pal_shader_init(void) {
+    pal_shader = LoadShaderFromMemory(0, PAL_FS);
+    if (pal_shader.id == 0) return;
+    loc_base_pal = GetShaderLocation(pal_shader, "basePal");
+    loc_cur_pal  = GetShaderLocation(pal_shader, "curPal");
+    if (loc_base_pal < 0 || loc_cur_pal < 0) { UnloadShader(pal_shader); return; }
+    float base_rgb[PALETTE_SIZE * 3];
+    for (int i = 0; i < PALETTE_SIZE; i++) {
+        base_rgb[i*3+0] = base_palette[i].r / 255.0f;
+        base_rgb[i*3+1] = base_palette[i].g / 255.0f;
+        base_rgb[i*3+2] = base_palette[i].b / 255.0f;
+    }
+    SetShaderValueV(pal_shader, loc_base_pal, base_rgb, SHADER_UNIFORM_VEC3, PALETTE_SIZE);
+    pal_shader_ok = true;
+}
+
+// rebuild the normalized current-palette array + pal_active flag from palette[].
+// called whenever pal()/pal_reset() changes a mapping.
+static void pal_recompute(void) {
+    pal_active = false;
+    for (int i = 0; i < PALETTE_SIZE; i++) {
+        cur_pal_rgb[i*3+0] = palette[i].r / 255.0f;
+        cur_pal_rgb[i*3+1] = palette[i].g / 255.0f;
+        cur_pal_rgb[i*3+2] = palette[i].b / 255.0f;
+        if (palette[i].r != base_palette[i].r ||
+            palette[i].g != base_palette[i].g ||
+            palette[i].b != base_palette[i].b) pal_active = true;
+    }
+    cur_pal_dirty = true;
+}
+
+// wrap a sprite blit in the swap shader when any pal() mapping is live
+static void pal_begin(void) {
+    if (!pal_active || !pal_shader_ok) return;
+    if (cur_pal_dirty) {
+        SetShaderValueV(pal_shader, loc_cur_pal, cur_pal_rgb, SHADER_UNIFORM_VEC3, PALETTE_SIZE);
+        cur_pal_dirty = false;
+    }
+    BeginShaderMode(pal_shader);
+}
+static void pal_end(void) {
+    if (pal_active && pal_shader_ok) EndShaderMode();
+}
+
 void colorkey(int color) {
     if (!spritesheet_img.data) return;
     Image tmp = ImageCopy(spritesheet_img);
@@ -671,14 +784,18 @@ void sprf(int index, int x, int y, bool flip_x, bool flip_y) {
         .height = flip_y ? -SPRITE_SIZE : SPRITE_SIZE,
     };
     Rectangle dst = { x - cam_x, y - cam_y, SPRITE_SIZE, SPRITE_SIZE };
+    pal_begin();
     DrawTexturePro(spritesheet, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
+    pal_end();
 }
 
 void sspr(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh) {
     if (spritesheet.width == 0) return;
     Rectangle src = { sx, sy, sw, sh };
     Rectangle dst = { dx - cam_x, dy - cam_y, dw, dh };
+    pal_begin();
     DrawTexturePro(spritesheet, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
+    pal_end();
 }
 
 void spr_rot(int index, int x, int y, float deg) {
@@ -687,14 +804,18 @@ void spr_rot(int index, int x, int y, float deg) {
     Rectangle src = { (index % cols) * SPRITE_SIZE, (index / cols) * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE };
     float h = SPRITE_SIZE / 2.0f;
     Rectangle dst = { x - cam_x + h, y - cam_y + h, SPRITE_SIZE, SPRITE_SIZE };  // origin maps here, so top-left stays (x,y)
+    pal_begin();
     DrawTexturePro(spritesheet, src, dst, (Vector2){ h, h }, deg, WHITE);
+    pal_end();
 }
 
 void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, float deg, int ox, int oy) {
     if (spritesheet.width == 0) return;
     Rectangle src = { sx, sy, sw, sh };
     Rectangle dst = { dx - cam_x + ox, dy - cam_y + oy, dw, dh };               // pivot (ox,oy) is in dest space, relative to (dx,dy)
+    pal_begin();
     DrawTexturePro(spritesheet, src, dst, (Vector2){ (float)ox, (float)oy }, deg, WHITE);
+    pal_end();
 }
 
 void print(const char *text, int x, int y, int color) {
@@ -1166,8 +1287,8 @@ const char *text_input(void) { return text_buf; }
 bool key(int k)  { return IsKeyDown(k); }
 bool keyp(int k) { return IsKeyPressed(k); }
 
-void pal(int c0, int c1)  { if (c0 >= 0 && c0 < PALETTE_SIZE && c1 >= 0 && c1 < PALETTE_SIZE) palette[c0] = base_palette[c1]; }
-void pal_reset(void)      { for (int i = 0; i < PALETTE_SIZE; i++) palette[i] = base_palette[i]; }
+void pal(int c0, int c1)  { if (c0 >= 0 && c0 < PALETTE_SIZE && c1 >= 0 && c1 < PALETTE_SIZE) { palette[c0] = base_palette[c1]; pal_recompute(); } }
+void pal_reset(void)      { for (int i = 0; i < PALETTE_SIZE; i++) palette[i] = base_palette[i]; pal_recompute(); }
 void fade(float a)        { fade_amt  = a < 0 ? 0 : (a > 1 ? 1 : a); }
 void shake(float a)       { if (a > shake_amt) shake_amt = a; }
 
