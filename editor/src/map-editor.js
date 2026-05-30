@@ -662,8 +662,9 @@ function init() {
     })
   }
 
-  // refresh from spritesheet when entering the map tab — sprites may have changed
-  document.querySelector('.tab[data-tab="map"]')?.addEventListener('click', () => {
+  // refresh from spritesheet when entering the map view (Pixels tab → map sub-toggle)
+  // — sprites may have changed. shell.js fires this when the map sub-panel is shown.
+  window.addEventListener('de:show-map', () => {
     setTimeout(() => {
       tilemapCanvas = document.querySelector('#tilemap-canvas')
       renderAll()

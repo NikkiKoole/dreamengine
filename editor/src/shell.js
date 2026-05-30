@@ -7,18 +7,42 @@ import { settings, buildSettingsPanel, applyCartSettings } from './settings.js'
 let currentCartName = ''  // set when a cart is loaded; used as the game window title
 
 // ── tab switching ─────────────────────────────────────────────
+// The "pixels" tab hosts both the sprite editor (#panel-sprites) and the map
+// editor (#panel-map); a sub-toggle picks which one is visible. The two panels
+// keep their own ids/markup so sprite-editor.js / map-editor.js are unchanged.
+let pixMode = 'sprites'
+
+function showPixels() {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
+  const sub = document.getElementById(pixMode === 'map' ? 'panel-map' : 'panel-sprites')
+  if (sub) sub.classList.add('active')
+  document.querySelectorAll('.pix-toggle [data-pix]').forEach(b =>
+    b.classList.toggle('active', b.dataset.pix === pixMode))
+  // entering the map view: let the map editor refresh from the (maybe-changed) spritesheet
+  if (pixMode === 'map') window.dispatchEvent(new CustomEvent('de:show-map'))
+}
+
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
   const tab = document.querySelector(`.tab[data-tab="${name}"]`)
   if (tab) tab.classList.add('active')
-  const panel = document.getElementById('panel-' + name)
-  if (panel) panel.classList.add('active')
+  if (name === 'pixels') {
+    showPixels()
+  } else {
+    const panel = document.getElementById('panel-' + name)
+    if (panel) panel.classList.add('active')
+  }
   if (name === 'tutorials') {
     const s = document.getElementById('tutorials-search')
     if (s) setTimeout(() => s.focus(), 0)   // panel must be visible before focus takes
   }
 }
+
+// sub-toggle inside the Pixels tab: switch between sprite and map editing
+document.querySelectorAll('.pix-toggle [data-pix]').forEach(btn => {
+  btn.addEventListener('click', () => { pixMode = btn.dataset.pix; showPixels() })
+})
 
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -276,14 +300,16 @@ function markRanges(text, indices) {
 }
 
 async function buildTutorialsPanel() {
-  tutorialsPanel.innerHTML = ''
+  const body = tutorialsPanel.querySelector('#tutorials-body')
+  if (!body) return
+  body.innerHTML = ''
 
   let index
   try {
     const res = await fetch('/carts/index.json')
     index = await res.json()
   } catch {
-    tutorialsPanel.innerHTML = '<p class="tutorials-empty">No tutorials found.</p>'
+    body.innerHTML = '<p class="tutorials-empty">No carts found.</p>'
     return
   }
 
@@ -293,17 +319,17 @@ async function buildTutorialsPanel() {
   search.type = 'search'
   search.placeholder = 'search carts…'
   search.autocomplete = 'off'
-  tutorialsPanel.appendChild(search)
+  body.appendChild(search)
 
   const grid = document.createElement('div')
   grid.className = 'tutorials-grid'
-  tutorialsPanel.appendChild(grid)
+  body.appendChild(grid)
 
   const noMatch = document.createElement('p')
   noMatch.className = 'tutorials-empty'
   noMatch.textContent = 'no carts match'
   noMatch.style.display = 'none'
-  tutorialsPanel.appendChild(noMatch)
+  body.appendChild(noMatch)
 
   const items = index.map(({ title, description, file }, idx) => {
     const card = document.createElement('div')
@@ -378,23 +404,48 @@ async function buildTutorialsPanel() {
 
 buildTutorialsPanel()
 
-// ── settings panel ───────────────────────────────────────────
-buildSettingsPanel(document.getElementById('panel-settings'))
-
-// ── day/night theme ──────────────────────────────────────────
-const themeBtn = document.getElementById('theme-btn')
+// ── day/night theme (toggle lives in the Settings panel) ──────
+let themeMode = localStorage.getItem('theme') || 'night'
 function applyTheme(mode) {
+  themeMode = mode
   document.documentElement.classList.toggle('day', mode === 'day')
-  themeBtn.textContent = mode === 'day' ? '☀' : '☾'
-  themeBtn.title = mode === 'day' ? 'switch to night' : 'switch to day'
+  localStorage.setItem('theme', mode)
   setEditorTheme(mode)
+  const btn = document.getElementById('theme-btn')
+  if (btn) {
+    btn.textContent = mode === 'day' ? '☀ day' : '☾ night'
+    btn.title = mode === 'day' ? 'switch to night' : 'switch to day'
+  }
 }
-applyTheme(localStorage.getItem('theme') || 'night')
-themeBtn.addEventListener('click', () => {
-  const next = document.documentElement.classList.contains('day') ? 'night' : 'day'
-  localStorage.setItem('theme', next)
-  applyTheme(next)
-})
+
+// appended after every settings-panel (re)build so it survives rebuilds
+function mountSettingsExtras(panel) {
+  if (!panel) return
+  const section = document.createElement('div')
+  section.className = 'settings-section'
+  section.innerHTML = '<div class="help-section-title">appearance</div>'
+  const row = document.createElement('div')
+  row.className = 'settings-row'
+  const label = document.createElement('span')
+  label.className = 'settings-field-label'
+  label.textContent = 'theme'
+  const btn = document.createElement('button')
+  btn.id = 'theme-btn'
+  btn.addEventListener('click', () => applyTheme(themeMode === 'day' ? 'night' : 'day'))
+  row.appendChild(label)
+  row.appendChild(btn)
+  section.appendChild(row)
+  panel.appendChild(section)
+}
+
+// ── settings panel ───────────────────────────────────────────
+function rebuildSettings() {
+  const el = document.getElementById('panel-settings')
+  buildSettingsPanel(el)
+  mountSettingsExtras(el)
+  applyTheme(themeMode)   // sync the freshly-created toggle's label
+}
+rebuildSettings()
 
 // ── run button ────────────────────────────────────────────────
 const runBtn  = document.getElementById('run-btn')
@@ -452,6 +503,14 @@ saveCartBtn.addEventListener('click', async () => {
   await window.studio.saveCart({ source: view.state.doc.toString(), spritesDataUrl, mapBase64, settings: cartSettings })
 })
 
+// Cmd/Ctrl+S → save cart, from anywhere (capture phase, so CodeMirror doesn't eat it)
+window.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault()
+    saveCartBtn.click()
+  }
+}, true)
+
 const toast = document.getElementById('toast')
 let toastTimer = null
 function showToast(msg) {
@@ -465,7 +524,7 @@ function applyCart(cart) {
   // run the cart at the config it was authored for (or safe defaults if it
   // carries none) — not whatever globals the editor currently holds
   applyCartSettings(cart.settings)
-  buildSettingsPanel(document.getElementById('panel-settings'))
+  rebuildSettings()
   view.dispatch(view.state.update({
     changes: { from: 0, to: view.state.doc.length, insert: cart.source },
   }))

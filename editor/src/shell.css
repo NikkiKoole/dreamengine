@@ -163,6 +163,28 @@ html, body {
   color: var(--accent);
 }
 
+/* ── pixels sub-toggle (sprites | map) ─────────────────────── */
+.pix-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+}
+.pix-toggle button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: bold;
+  padding: 3px 14px;
+  cursor: pointer;
+}
+.pix-toggle button:hover { color: var(--fg); }
+.pix-toggle button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ── build log ──────────────────────────────────────────── */
 #build-log {
   display: none;
@@ -407,6 +429,11 @@ html, body {
   align-items: center;
 }
 
+.settings-field-label {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
 .settings-field {
   display: flex;
   flex-direction: column;
@@ -556,9 +583,30 @@ html, body {
   overflow-y: auto;
 }
 
+/* carts panel: action bar (save/load/export) + category filter */
+#cart-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+#cart-actions button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: bold;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+#cart-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .tutorials-search {
   position: sticky;
-  top: -32px;                 /* cancels #panel-tutorials padding-top so it pins to the very top */
+  top: -32px;                 /* cancels #panel-tutorials padding-top → pins flush to the top while scrolling */
   z-index: 2;
   width: 100%;
   box-sizing: border-box;
