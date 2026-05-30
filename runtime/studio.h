@@ -159,6 +159,7 @@ void oval(int x, int y, int rx, int ry, int color);     // ellipse border (rx,ry
 void ovalfill(int x, int y, int rx, int ry, int color); // filled ellipse — squashed circles, eyes, shadows
 void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color);     // triangle border
 void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color); // filled triangle (any winding)
+void tritex(int x1, int y1, float u1, float v1, int x2, int y2, float u2, float v2, int x3, int y3, float u3, float v3); // texture-mapped triangle: each corner maps a screen point to a sprite-sheet pixel (u,v). affine (PS1-style). the textured-3D primitive
 int  pget(int x, int y);                                // palette index at (x,y), or 0 if no match
 void camera(int x, int y);                              // shifts all subsequent drawing by (-x,-y). camera(0,0) resets
 void follow(int tx, int ty, int world_w, int world_h); // center camera on (tx,ty), clamped so world edges don't show

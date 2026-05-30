@@ -1,6 +1,7 @@
 #define STUDIO_INTERNAL          // suppress studio.h's KEY_* macros — raylib.h provides those names
 #include "studio.h"
 #include "raylib.h"
+#include "rlgl.h"      // immediate-mode triangles for tritex()
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -825,6 +826,38 @@ void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
     float cross = (v2.x-v1.x)*(v3.y-v1.y) - (v2.y-v1.y)*(v3.x-v1.x);
     if (cross > 0) DrawTriangle(v1, v3, v2, c);
     else           DrawTriangle(v1, v2, v3, c);
+}
+
+// affine texture-mapped triangle — the PS1 workhorse. Each corner carries a
+// screen position (x,y) AND a spot on the sprite sheet (u,v, in sheet pixels).
+// The GPU interpolates the texture across the triangle in SCREEN space with no
+// perspective correction — that's the authentic "swimmy"/warping PS1 look. For
+// 3D, project your model to 2D yourself (see the textured-cube cart) then feed
+// the screen coords here. Sampling is nearest-neighbour; sheet-alpha shows through.
+void tritex(int x1, int y1, float u1, float v1,
+            int x2, int y2, float u2, float v2,
+            int x3, int y3, float u3, float v3) {
+    if (spritesheet.width == 0) return;
+    float tw = (float)spritesheet.width, th = (float)spritesheet.height;
+    typedef struct { float x, y, u, v; } TV;
+    TV a = { x1 - cam_x, y1 - cam_y, u1, v1 };
+    TV b = { x2 - cam_x, y2 - cam_y, u2, v2 };
+    TV c = { x3 - cam_x, y3 - cam_y, u3, v3 };
+    // raylib batches want CCW winding in Y-down screen space; swap if clockwise
+    float cross = (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
+    if (cross > 0) { TV t = b; b = c; c = t; }
+    // emit as a degenerate QUAD (4th vertex repeats the 3rd) — this mirrors the
+    // proven DrawTexturePro path; texturing via RL_TRIANGLES doesn't sample in
+    // raylib's default batch.
+    rlSetTexture(spritesheet.id);
+    rlBegin(RL_QUADS);
+        rlColor4ub(255, 255, 255, 255);
+        rlTexCoord2f(a.u / tw, a.v / th); rlVertex2f(a.x, a.y);
+        rlTexCoord2f(b.u / tw, b.v / th); rlVertex2f(b.x, b.y);
+        rlTexCoord2f(c.u / tw, c.v / th); rlVertex2f(c.x, c.y);
+        rlTexCoord2f(c.u / tw, c.v / th); rlVertex2f(c.x, c.y);
+    rlEnd();
+    rlSetTexture(0);
 }
 
 void line(int x1, int y1, int x2, int y2, int color) {
