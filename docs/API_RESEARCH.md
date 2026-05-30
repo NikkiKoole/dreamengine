@@ -38,7 +38,7 @@ For reference, the current API (all of `studio.h`) groups into:
 | **Debug** | `watch`, `watch_visible`, `printh` |
 | **Palette** | 32 `CLR_*` constants |
 
-Roughly ~100 functions / constants. Strong across the board now. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, pause/fps debug, and `spr_ext` rotation.**
+Roughly ~100 functions / constants. Strong across the board now. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, and pause/fps debug.** (Sprite rotation/scale landed as `spr_rot`/`spr_ex` — see §18.)
 
 ---
 
@@ -876,12 +876,19 @@ calls `print` with the right offset. Useful for titles, scores,
 floating damage numbers, anything where you don't want to measure
 strings yourself.
 
-### 18. Convenient sprite drawing
+### 18. Convenient sprite drawing — ✓ shipped (pivot-based)
 
-If we ever want rotation: `spr_ext(idx, x, y, xscale, yscale,
-angle_deg, flip_x, flip_y)`. Pure raylib `DrawTexturePro` under
-the hood. Big jump in expressiveness but also in API complexity.
-Probably defer until someone actually asks.
+> **✓ Shipped (in working tree, pending commit).** Landed as two functions, pivot-based
+> rather than the proposed scale-x/scale-y form:
+> ```c
+> void spr_rot(int index, int x, int y, float deg, int ox, int oy);  // rotate around local pivot (ox,oy); (x,y) = top-left like spr(). center of a 16×16 = (8,8)
+> void spr_ex (int index, int x, int y, float deg, float scale, bool flip_x, bool flip_y, int ox, int oy); // rotate + scale + flip around pivot
+> ```
+> Pure raylib `DrawTexturePro` under the hood. `spr_rot` is the common case (just an
+> angle); `spr_ex` is the works. We chose a single uniform `scale` + a pivot over
+> separate x/y scales — flips are explicit bools, which reads clearer than negative
+> scale for beginners. Unblocks asteroids, racer, lander, sopwith, paratrooper,
+> galaga, xevious, which all faked rotation with triangles.
 
 ---
 
@@ -923,6 +930,55 @@ void printh(const char *fmt, ...);                   // printf to the editor's r
 ```
 
 `watch` is the fast path for debugging: call it every frame and the value updates live in the corner of the game window without polluting the canvas. `printh` sends output to the editor's build log — useful for one-shot diagnostics. Together these replace printf-debugging with something more ergonomic.
+
+#### Juice + polish batch — `pal` / `fade` / `shake` / `print_scaled` / `text_width`
+
+> In working tree, pending commit.
+
+```c
+void  pal(int c0, int c1);    // remap: draw color c0 as c1 (hit-flash, recolor, fades). persists until pal_reset()
+void  pal_reset(void);        // undo all pal() swaps
+void  fade(float amount);     // darken the whole screen toward black: 0 = normal, 1 = black. for transitions
+void  shake(float amount);    // kick the screen by `amount` pixels; decays on its own. call on impacts
+void  print_scaled(const char *text, int x, int y, int color, int scale); // bigger text for titles/menus
+int   text_width(const char *text);  // pixel width of text at normal size (chars × 8) — for centering in your own boxes
+```
+
+The classic juice primitives, finally first-class: `pal(c, CLR_WHITE)` for the
+flash-on-hit, `fade()` for state transitions and pause-dim, `shake()` replaces the
+hand-rolled screenshake in `juice.c`. `print_scaled` + `text_width` cover big
+titles/scores and custom HUD layout.
+
+#### Shapes — `oval` / `ovalfill`
+
+```c
+void oval(int x, int y, int rx, int ry, int color);     // ellipse border (rx,ry = half-width/height)
+void ovalfill(int x, int y, int rx, int ry, int color); // filled ellipse — squashed circles, eyes, shadows
+```
+
+#### Keyboard + text entry — `key` / `keyp` / `text_input`
+
+```c
+bool key(int k);                // true while key k is held. letters/digits: key('A'), key('5'); specials: KEY_SPACE, KEY_LEFT...
+bool keyp(int k);               // true only on the frame key k was pressed
+const char *text_input(void);   // characters typed this frame (for name entry / word games); "" if none
+```
+
+Raw keyboard beyond the 6-button `btn()` model, plus typed-character capture — opens
+up name entry, word games, and keyboard-heavy carts. (Was not in any prior proposal.)
+
+#### Time + persistence — `dt` / `save_bytes` / `load_bytes`
+
+```c
+float dt(void);                               // seconds since the last frame (clamped for hitches). framerate-independent motion
+void  save_bytes(const void *data, int len);  // save a whole block of bytes (a struct/array) — for state the 64 int slots can't hold
+int   load_bytes(void *out, int max);         // read it back into `out` (up to max bytes); returns bytes read, 0 if never saved
+```
+
+`save_bytes`/`load_bytes` generalise persistence beyond the 64 int slots — hi-score
+*tables*, names, full save states. This subsumes the `save_str`/`load_str` idea that
+came up while polishing carts (just `save_bytes` a struct that contains the strings).
+`dt()` gives framerate-independent movement without hand-tracking `now()` deltas.
 
 ---
 
@@ -986,13 +1042,14 @@ sprites, bouncing balls, timed rounds.
 
 ### Third pass (own projects)
 
-> **Partially shipped.** Turtle and print helpers are done. Gamepad, pause/debug, and spr_ext remain open.
+> **Mostly shipped.** Turtle, print helpers, and sprite rotation/scale are done.
+> Gamepad and pause/debug remain open.
 
 - ✓ **Turtle graphics** — `turtle_home/move/turn/face/at`, `pen_down/up/color`, `pen_size`.
-- ✓ **Print alignment**: `print_centered`, `print_right`.
+- ✓ **Print alignment**: `print_centered`, `print_right`. Plus ✓ `print_scaled` (bigger text for titles/menus).
+- ✓ **Sprite rotation + scale** — shipped as `spr_rot` / `spr_ex` (pivot-based — see §18).
 - **Gamepad support** — `gp_axis(slot, axis)`, `gp_present(slot)`, internal augment of `btn()`/`btnp()`.
 - **Pause + debug**: `pause(bool)`, `paused()`, `fps()`, `voices_active()`.
-- **`spr_ext`** with rotation + scale — opens up effects.
 - **Sound tracker UI** — if the code-first sound path turns out not to be enough.
 
 ---
@@ -1131,7 +1188,8 @@ doc, so you can ctrl-F. Constants are grouped at the bottom.
 | `sign(n)` | function | math (alias for `sgn`) | review |
 | `sin_deg(degrees)` | function | math | 1 |
 | `sometimes()` | function | sound (Strudel) | 13 |
-| `spr_ext(idx, x, y, xs, ys, deg, fx, fy)` | function | graphics | 18 |
+| `spr_rot(idx, x, y, deg, ox, oy)` ✓ | function | graphics | 18 |
+| `spr_ex(idx, x, y, deg, scale, fx, fy, ox, oy)` ✓ | function | graphics | 18 |
 | `str(fmt, ...)` | function | strings | 7 |
 | `stutter(midi, instr, vol, times)` | function | sound (Strudel) | 13 |
 | `tick()` | function | time | 14 |

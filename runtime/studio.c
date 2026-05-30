@@ -714,6 +714,41 @@ void bar(int x, int y, int w, int h, float pct, int fill, int bg) {
     if (fw > 0) rectfill(x, y, fw, h, fill);
 }
 
+// patterned fill: each (pattern,c1,c0) bakes a tiny 4×4 POT texture, tiled in one
+// draw via REPEAT wrap. We CACHE textures (never unload one mid-frame) so multiple
+// different patterns in the same frame don't corrupt raylib's draw batch.
+#define FP_CACHE 32
+static struct { int pat, c1, c0; Texture2D tex; bool used; } fp_cache[FP_CACHE];
+static int fp_round = 0;
+
+static Texture2D fp_texture(int pat, int c1, int c0) {
+    for (int i = 0; i < FP_CACHE; i++)
+        if (fp_cache[i].used && fp_cache[i].pat == pat && fp_cache[i].c1 == c1 && fp_cache[i].c0 == c0)
+            return fp_cache[i].tex;
+    Color px[16];
+    for (int i = 0; i < 16; i++) {
+        int on = (pat >> (15 - i)) & 1;                       // bit 15 = top-left, row-major
+        px[i] = on ? palette[c1 % PALETTE_SIZE]
+                   : (c0 < 0 ? (Color){ 0, 0, 0, 0 } : palette[c0 % PALETTE_SIZE]);
+    }
+    Image img = { px, 4, 4, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+    Texture2D t = LoadTextureFromImage(img);
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
+    SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
+    int slot = fp_round++ % FP_CACHE;
+    if (fp_cache[slot].used) UnloadTexture(fp_cache[slot].tex);   // safe: prior frames already flushed
+    fp_cache[slot].pat = pat; fp_cache[slot].c1 = c1; fp_cache[slot].c0 = c0;
+    fp_cache[slot].tex = t;   fp_cache[slot].used = true;
+    return t;
+}
+void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0) {
+    if (w <= 0 || h <= 0) return;
+    Texture2D t = fp_texture(pattern, c1, c0);
+    Rectangle src = { 0, 0, (float)w, (float)h };             // REPEAT wrap tiles the 4×4 across the rect
+    Rectangle dst = { (float)(x - cam_x), (float)(y - cam_y), (float)w, (float)h };
+    DrawTexturePro(t, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
+}
+
 void circ(int x, int y, int radius, int color) {
     DrawCircleLines(x - cam_x, y - cam_y, (float)radius, palette[color % PALETTE_SIZE]);
 }

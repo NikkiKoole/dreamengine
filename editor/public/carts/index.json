@@ -110,6 +110,11 @@
     "file": "typesave.cart.png"
   },
   {
+    "title": "22. fill patterns",
+    "description": "PICO-8-style fillp: rectfill_pat() tiles a 4x4 bitmask across a rect so two colors make a texture. Shows a dither GRADIENT background, the named patterns (FILL_CHECKER/DOTS/HLINES/VLINES/DIAG/GRID), and a panel that re-rolls a RANDOM 16-bit pattern every second (any value is valid). A: change the color pair.",
+    "file": "patterns.cart.png"
+  },
+  {
     "title": "raycaster",
     "description": "A Wolfenstein-style first-person maze with no 3D and no sprites — one DDA ray per screen column, drawn as a vertical wall strip with fisheye correction. Walk through a colored grid world with a live minimap. WASD to move and turn, B toggles the map.",
     "file": "raycaster.cart.png"

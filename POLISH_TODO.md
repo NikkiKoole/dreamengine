@@ -41,7 +41,7 @@ All the 🟡 rows are in the working tree (uncommitted; HEAD still `06694cb`).
 | In-code sfx/music definition | 🔴 open question | API_RESEARCH (code-first vs. tracker UI) |
 | Gamepad axes (`gp_axis`) | 🔴 open | API_RESEARCH §15 |
 | Strudel extras / Dilla groove timing | 🔴 open | API_RESEARCH §13–14 |
-| **Resolved tile collision** (`move_and_collide`) | 🔴 open — **not in either doc** | platform/alleycat/pitfall/burgertime each re-derive wall push-out |
+| Resolved tile collision (`move_and_collide`) | 🔴 open — **low demand** | only `platform.c` does the full tile push-out; `zelda`/`gta` do a related 4-corner test against their own data, not `mget` — a single map-based helper wouldn't serve them. Low priority. |
 | Gradient / dither fill | 🔴 open — **not in either doc** | flat skies in gorillas/racer/sopwith/lander |
 | Looping ambience (`drone`) / `volume` / mute | 🔴 open — **not in either doc** | sustained pads for sims; player mute |
 
