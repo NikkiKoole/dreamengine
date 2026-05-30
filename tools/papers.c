@@ -143,12 +143,12 @@ void update() {
 // ====================================================================
 
 static void draw_applicant(int x, int y) {
-    int blink = (frame() / 50) % 12 == 0;
+    int blnk = (frame() / 50) % 12 == 0;
     rectfill(x - 12, y + 10, 24, 16, CLR_DARK_GREY);     // shoulders
     circfill(x, y, 9, SKIN[a_nation]);                    // head
     rectfill(x - 10, y - 9, 20, 4, HAT[a_nation]);        // hat
     rectfill(x - 7, y - 12, 14, 4, HAT[a_nation]);
-    if (!blink) { pset(x - 3, y - 1, CLR_BLACK); pset(x + 3, y - 1, CLR_BLACK); }
+    if (!blnk) { pset(x - 3, y - 1, CLR_BLACK); pset(x + 3, y - 1, CLR_BLACK); }
     line(x - 3, y + 4, x + 3, y + 4, CLR_DARK_BROWN);     // mouth
 }
 

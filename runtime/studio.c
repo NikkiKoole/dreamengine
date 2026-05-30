@@ -665,6 +665,14 @@ void rectfill(int x, int y, int w, int h, int color) {
     DrawRectangle(x - cam_x, y - cam_y, w, h, palette[color % PALETTE_SIZE]);
 }
 
+void bar(int x, int y, int w, int h, float pct, int fill, int bg) {
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 1.0f) pct = 1.0f;
+    rectfill(x, y, w, h, bg);
+    int fw = (int)(w * pct + 0.5f);
+    if (fw > 0) rectfill(x, y, fw, h, fill);
+}
+
 void circ(int x, int y, int radius, int color) {
     DrawCircleLines(x - cam_x, y - cam_y, (float)radius, palette[color % PALETTE_SIZE]);
 }
@@ -821,6 +829,10 @@ float length(int x, int y) {
     return sqrtf(fx*fx + fy*fy);
 }
 
+float fsqrt(float v) {
+    return v <= 0.0f ? 0.0f : sqrtf(v);
+}
+
 float angle_to(int x1, int y1, int x2, int y2) {
     return atan2f((float)(y2 - y1), (float)(x2 - x1)) * RAD2DEG;
 }
@@ -908,6 +920,11 @@ int anim_once(int n_frames, float fps, float start_t) {
     if (f < 0) f = 0;
     if (f >= n_frames) f = n_frames - 1;
     return f;
+}
+
+bool blink(int period) {
+    if (period < 1) return true;
+    return (frame_count / period) % 2 == 0;
 }
 
 // ------------------------------------------------------------

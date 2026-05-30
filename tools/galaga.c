@@ -38,7 +38,6 @@ static float invuln, respawnT, diveT, prevT;
 static int   challenge, chHits, chSpawned, chTotal, nextExtend, rHits, rBonus;
 static float chSpawnT, banner, resultT, extraT;
 
-static float fsqrt(float v){ if(v<=0)return 0; float g=v; for(int i=0;i<6;i++) g=0.5f*(g+v/g); return g; }
 static float sway(void){ return sin_deg(now() * 42) * 12; }
 static float slotx(int col){ return SCREEN_W/2 + sway() + (col - (COLS-1)/2.0f) * SPX; }
 static float sloty(int row){ return TOPY + row * SPY; }

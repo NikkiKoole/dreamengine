@@ -355,7 +355,7 @@ static void draw_hulk(int x, int y) {
 }
 
 static void draw_electrode(int x, int y) {
-    int c = (frame()/5)%2 ? CLR_YELLOW : CLR_ORANGE;
+    int c = blink(5) ? CLR_ORANGE : CLR_YELLOW;
     line(x-4, y,   x+4, y,   c);
     line(x,   y-4, x,   y+4, c);
     line(x-3, y-3, x+3, y+3, c);
@@ -372,7 +372,7 @@ static void draw_civilian(float cx, float cy, bool zombie) {
     line(x,   y-1, x+3, y+1, bc);
     line(x,   y+2, x-2, y+5, bc);
     line(x,   y+2, x+2, y+5, bc);
-    if (zombie && (frame()/8)%2 == 0) circ(x, y-5, 3, CLR_RED);
+    if (zombie && blink(8)) circ(x, y-5, 3, CLR_RED);
 }
 
 static void draw_player_shape(int x, int y, int col) {

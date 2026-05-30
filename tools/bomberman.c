@@ -306,7 +306,7 @@ void draw() {
         for (int x = 0; x < GW; x++)
             if (flame[y][x] > 0) {
                 int sx = OX + x * TILE, sy = OY + y * TILE;
-                rectfill(sx + 1, sy + 1, TILE - 2, TILE - 2, (frame() / 3) % 2 ? CLR_ORANGE : CLR_YELLOW);
+                rectfill(sx + 1, sy + 1, TILE - 2, TILE - 2, blink(3) ? CLR_YELLOW : CLR_ORANGE);
             }
 
     for (int i = 0; i < NB; i++) draw_bomber(&bm[i]);

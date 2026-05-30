@@ -31,8 +31,6 @@ static bool  juice_on = true;
 typedef struct { float x, y, vx, vy, life; int col; } Dust;
 static Dust dust[60];
 
-// self-contained sqrt (no libm) so we can draw a squashed ellipse
-static float fsqrt(float v) { if (v <= 0) return 0; float g = v; for (int i = 0; i < 8; i++) g = 0.5f * (g + v / g); return g; }
 
 static void ellipsefill(int cx, int cy, float rx, float ry, int col) {
     if (rx < 1) rx = 1; if (ry < 1) ry = 1;

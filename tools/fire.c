@@ -189,7 +189,7 @@ void draw() {
     // ambulance
     int ax = AMB_X;
     rectfill(ax, GROUND - 18, SCREEN_W - ax, 18, CLR_WHITE);
-    rectfill(ax, GROUND - 18, SCREEN_W - ax, 4, ((frame() / 8) % 2) ? CLR_RED : CLR_BLUE); // light bar
+    rectfill(ax, GROUND - 18, SCREEN_W - ax, 4, blink(8) ? CLR_BLUE : CLR_RED); // light bar
     rectfill(ax + 6, GROUND - 12, 8, 2, CLR_RED);          // red cross
     rectfill(ax + 9, GROUND - 15, 2, 8, CLR_RED);
     circfill(ax + 4, GROUND, 3, CLR_BLACK);

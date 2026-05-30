@@ -253,7 +253,7 @@ void draw(void) {
     }
 
     // Bub (flashes while invulnerable)
-    if (!(inv > 0 && (frame() / 4) % 2)) draw_bub((int)px, (int)py, pface, CLR_GREEN);
+    if (inv <= 0 || blink(4)) draw_bub((int)px, (int)py, pface, CLR_GREEN);
 
     // HUD
     rectfill(0, 0, SCREEN_W, HUD_H, CLR_BLACK);

@@ -225,7 +225,7 @@ void draw(void) {
     // eggs
     for (int i = 0; i < MAXG; i++) if (egg[i].on) {
         int x = (int)egg[i].x, y = (int)egg[i].y;
-        bool soon = egg[i].timer < 90 && (frame() / 6) % 2;            // wobble before hatching
+        bool soon = egg[i].timer < 90 && !blink(6);            // wobble before hatching
         circfill(x + (soon ? 1 : 0), y - 3, 3, CLR_LIGHT_PEACH);
         pset(x - 1, y - 4, CLR_WHITE);
     }
@@ -233,7 +233,7 @@ void draw(void) {
     // enemies + player
     for (int e = 0; e < MAXE; e++)
         if (mon[e].on) draw_rider((int)mon[e].x, (int)mon[e].y, sgn(mon[e].vx) ? sgn(mon[e].vx) : 1, CLR_DARK_GREY, mon[e].col);
-    if (!(inv > 0 && (frame() / 4) % 2)) draw_rider((int)px, (int)py, pface, CLR_LIGHT_YELLOW, CLR_BLUE);
+    if (inv <= 0 || blink(4)) draw_rider((int)px, (int)py, pface, CLR_LIGHT_YELLOW, CLR_BLUE);
 
     // HUD
     rectfill(0, 0, SCREEN_W, HUD_H, CLR_BLACK);

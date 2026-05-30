@@ -34,7 +34,6 @@ static int   score, lives, state, invuln, nextAndor;
 // expanding blasts (visual + ground damage)
 static struct { float x, y, t; int alive; } blast[8];
 
-static float fsqrt(float v){ if(v<=0)return 0; float g=v; for(int i=0;i<6;i++) g=0.5f*(g+v/g); return g; }
 
 static void add_pb(float x,float y){ for(int i=0;i<NB;i++) if(!pb[i].alive){ pb[i]=(Shot){x,y,0,-260,1}; return; } }
 static void add_eb(float x,float y,float tx,float ty){ float a=angle_to((int)x,(int)y,(int)tx,(int)ty);

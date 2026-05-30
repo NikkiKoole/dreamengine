@@ -220,7 +220,7 @@ void draw(void) {
         int gy = GROUND_Y - 6, gx = 250;
         rectfill(gx - 6, gy - 3, 12, 6, CLR_YELLOW);
         rect(gx - 6, gy - 3, 12, 6, CLR_ORANGE);
-        if ((frame() / 8) % 2) pset(gx - 3, gy - 1, CLR_WHITE);
+        if (!blink(8)) pset(gx - 3, gy - 1, CLR_WHITE);
     }
 
     draw_harry();

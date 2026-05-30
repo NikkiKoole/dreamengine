@@ -275,7 +275,7 @@ void draw(void) {
         if (enemies[e].alive) draw_plane(enemies[e].x, enemies[e].y, enemies[e].pa, CLR_DARK_RED, CLR_RED);
 
     // player — solid on spawn, then blink out the rest of the invuln window
-    if (gstate != GAMEOVER && !(invuln > 0 && invuln < 60 && (frame() / 3) % 2))
+    if (gstate != GAMEOVER && !(invuln > 0 && invuln < 60 && !blink(3)))
         draw_plane(px, py, pa, CLR_BROWN, CLR_LIGHT_PEACH);
 
     // explosions

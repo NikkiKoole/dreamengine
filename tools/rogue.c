@@ -283,7 +283,7 @@ void draw() {
         if (!item[i].active || !visible[item[i].y][item[i].x]) continue;
         if (item[i].type == IT_GOLD)        glyph('$', item[i].x, item[i].y, CLR_YELLOW);
         else if (item[i].type == IT_POTION) glyph('!', item[i].x, item[i].y, CLR_PINK);
-        else                                glyph('&', item[i].x, item[i].y, (frame() / 8) % 2 ? CLR_YELLOW : CLR_WHITE);
+        else                                glyph('&', item[i].x, item[i].y, blink(8) ? CLR_WHITE : CLR_YELLOW);
     }
     // monsters
     for (int i = 0; i < MAXM; i++) {

@@ -21,7 +21,6 @@ static int   ndec, count;
 static float t_end;
 static bool  over;
 
-static float fsqrt(float v) { if (v <= 0) return 0; float g = v; for (int i = 0; i < 8; i++) g = 0.5f * (g + v / g); return g; }
 
 static int item_color(void) {
     int c[] = { CLR_RED, CLR_ORANGE, CLR_YELLOW, CLR_GREEN, CLR_BLUE, CLR_PINK,

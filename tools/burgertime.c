@@ -338,7 +338,7 @@ static void draw_segment(int sx, int sy, int type) {
 }
 
 static void draw_chef(int x, int y, int f, bool flash) {
-    if (flash && (frame() / 3) % 2 == 0) return;
+    if (flash && blink(3)) return;
     rectfill(x - 3, y - 9, 6, 6, CLR_BLUE);        // torso
     rectfill(x - 3, y - 3, 6, 3, CLR_WHITE);       // apron
     rectfill(x - 2, y, 2, 2, CLR_DARK_BLUE);       // legs

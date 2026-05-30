@@ -52,7 +52,6 @@ static float transT;
 
 static const int GOAL_RX = 1, GOAL_RY = 0, START_RX = 1, START_RY = 2;
 
-static float fsqrt(float v) { if (v <= 0) return 0; float g = v; for (int i = 0; i < 6; i++) g = 0.5f * (g + v / g); return g; }
 static int   exists(int x, int y) { return x >= 0 && y >= 0 && x < RX && y < RY; }
 
 // is the in-bounds tile here a wall? (out of bounds is NOT a wall, so the hero can step off through a gap)

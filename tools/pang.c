@@ -136,7 +136,7 @@ void update() {
 // ====================================================================
 
 static void draw_player(int x, int y, bool flash) {
-    if (flash && (frame() / 3) % 2 == 0) return;
+    if (flash && blink(3)) return;
     rectfill(x - 4, y - 8, 8, 8, CLR_BLUE);          // body
     circfill(x, y - 11, 3, CLR_LIGHT_PEACH);          // head
     rectfill(x - 4, y - 14, 8, 2, CLR_RED);           // cap

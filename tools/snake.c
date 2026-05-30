@@ -105,7 +105,7 @@ void draw() {
     cls(CLR_BLACK);
 
     // food — pulses between two colors
-    int fc = (frame()/10)%2==0 ? CLR_RED : CLR_ORANGE;
+    int fc = blink(10) ? CLR_RED : CLR_ORANGE;
     rectfill(fx*CELL+1, fy*CELL+1, CELL-2, CELL-2, fc);
 
     // snake body — draw tail to head so head renders on top

@@ -241,11 +241,10 @@ static void draw_pet(int cx, int cy, int stage, int expr) {
     else if (expr != E_SLEEP) mouth(cx, my,     3,  0, CLR_BLACK);
 }
 
-static void bar(int x, int y, const char *lbl, float v) {
+static void statbar(int x, int y, const char *lbl, float v) {
     int c = v > 50 ? CLR_GREEN : v > 25 ? CLR_YELLOW : CLR_RED;
     print(lbl, x, y, CLR_LIGHT_GREY);
-    rectfill(x, y + 9, 60, 5, CLR_DARKER_GREY);
-    rectfill(x, y + 9, (int)(60 * v / 100), 5, c);
+    bar(x, y + 9, 60, 5, v / 100.0f, c, CLR_DARKER_GREY);
 }
 
 void draw(void) {
@@ -275,10 +274,10 @@ void draw(void) {
         if (fx[i].life > 0) circfill((int)fx[i].x, (int)fx[i].y, 1, fx[i].col);
 
     // meters
-    bar(8,   6, "FOOD", hunger);
-    bar(86,  6, "FUN",  happy);
-    bar(164, 6, "NRG",  energy);
-    bar(242, 6, "WASH", clean);
+    statbar(8,   6, "FOOD", hunger);
+    statbar(86,  6, "FUN",  happy);
+    statbar(164, 6, "NRG",  energy);
+    statbar(242, 6, "WASH", clean);
 
     // name / age / health
     print(str("%s  age %d", STAGE[stage], (int)lived), 8, 28, CLR_WHITE);

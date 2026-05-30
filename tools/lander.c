@@ -184,7 +184,7 @@ void draw() {
     }
 
     // pad beacon lights (blinking)
-    if ((frame()/12)%2 == 0) {
+    if (blink(12)) {
         circfill(pad_l*SEG_W, pad_y-3, 2, CLR_GREEN);
         circfill(pad_r*SEG_W, pad_y-3, 2, CLR_GREEN);
     }

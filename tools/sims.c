@@ -38,7 +38,6 @@ static int   mode, tool, curx, cury;   // mode 0=LIVE 1=BUILD
 // path
 static int pathx[N], pathy[N], pn, pi;
 
-static float fsqrt(float v) { if (v <= 0) return 0; float g = v; for (int i = 0; i < 6; i++) g = 0.5f * (g + v / g); return g; }
 static int   walkable(int x, int y) { return x >= 0 && y >= 0 && x < GW && y < GH && cell[y][x] == EMPTY; }
 static int   stx(void) { return (int)(simx / TS); }
 static int   sty(void) { return (int)((simy - OY) / TS); }
@@ -193,11 +192,10 @@ static void draw_sim(int x, int y) {
     if (state == USE) { print("z", x + 4, y - 9, CLR_WHITE); }   // little activity puff
 }
 
-static void bar(int x, const char *lbl, float v) {
+static void statbar(int x, const char *lbl, float v) {
     int c = v > 50 ? CLR_GREEN : v > 25 ? CLR_YELLOW : CLR_RED;
     print(lbl, x, 2, CLR_LIGHT_GREY);
-    rectfill(x, 12, 44, 5, CLR_DARKER_GREY);
-    rectfill(x, 12, (int)(44 * v / 100), 5, c);
+    bar(x, 12, 44, 5, v / 100.0f, c, CLR_DARKER_GREY);
 }
 
 void draw(void) {
@@ -215,7 +213,7 @@ void draw(void) {
 
     // needs bars
     rectfill(0, 0, SCREEN_W, OY - 2, CLR_BLACK);
-    for (int i = 0; i < NEEDS; i++) bar(4 + i * 50, needName[i], need[i]);
+    for (int i = 0; i < NEEDS; i++) statbar(4 + i * 50, needName[i], need[i]);
 
     int avg = 0; for (int i = 0; i < NEEDS; i++) avg += (int)need[i]; avg /= NEEDS;
 

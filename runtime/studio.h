@@ -117,6 +117,7 @@ void line(int x1, int y1, int x2, int y2, int color);
 void pset(int x, int y, int color);                     // set a single pixel (pairs with pget)
 void rect(int x, int y, int w, int h, int color);       // rectangle border
 void rectfill(int x, int y, int w, int h, int color);   // filled rectangle
+void bar(int x, int y, int w, int h, float pct, int fill, int bg); // progress/health bar: bg box + left-to-right fill, pct 0..1 (clamped)
 void circ(int x, int y, int radius, int color);         // circle border
 void circfill(int x, int y, int radius, int color);     // filled circle
 void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color);     // triangle border
@@ -229,6 +230,7 @@ float remap(float v, float a, float b, float c, float d);  // remap v from range
 
 float distance(int x1, int y1, int x2, int y2);            // distance between two points (pixels)
 float length(int x, int y);                                // length of vector (x,y)
+float fsqrt(float v);                                      // square root; returns 0 for v<=0 (no need to include math.h)
 float angle_to(int x1, int y1, int x2, int y2);            // direction in degrees from point 1 to point 2
 float dx(float steps, float degrees);                      // x movement of `steps` pixels in `degrees` direction (keep position in a float)
 float dy(float steps, float degrees);                      // y movement of `steps` pixels in `degrees` direction (keep position in a float)
@@ -262,6 +264,7 @@ void bounce_at_edges(int *x, int *y, int *vx, int *vy, int w, int h);  // flip v
 
 int anim(int n_frames, float fps, float phase);        // current frame 0..n_frames-1, looping forever. phase 0..1 offsets the cycle start — use (float)i/count to stagger multiple entities
 int anim_once(int n_frames, float fps, float start_t); // frame of an animation started at start_t; stays on the last frame
+bool blink(int period);                                // true for `period` frames, then false for `period` frames — flashing/blinking via frame(). blink(3) ~ a fast flash
 
 // ------------------------------------------------------------
 // strings

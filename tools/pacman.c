@@ -277,8 +277,8 @@ static void draw_ghost(int i) {
     if (g->state != EYES) {
         int col = GCOL[i];
         if (frightened) {
-            bool blink = (fright_until - now() < 2.0f) && ((frame() / 6) % 2);
-            col = blink ? CLR_WHITE : CLR_DARK_BLUE;
+            bool blnk = (fright_until - now() < 2.0f) && !blink(6);
+            col = blnk ? CLR_WHITE : CLR_DARK_BLUE;
         }
         circfill(x, y - 1, 4, col);
         rectfill(x - 4, y - 1, 8, 5, col);
@@ -312,7 +312,7 @@ void draw() {
             } else if (c == '.') {
                 rectfill(sx + TILE / 2 - 1, sy + TILE / 2 - 1, 2, 2, CLR_PEACH);
             } else if (c == 'o') {
-                if ((frame() / 8) % 2) circfill(sx + TILE / 2, sy + TILE / 2, 3, CLR_LIGHT_PEACH);
+                if (!blink(8)) circfill(sx + TILE / 2, sy + TILE / 2, 3, CLR_LIGHT_PEACH);
             }
         }
     // ghost-house door

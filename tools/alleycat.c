@@ -282,7 +282,7 @@ void update() {
 // ====================================================================
 
 static void draw_cat(int x, int y, int f, bool flash) {
-    if (flash && (frame() / 3) % 2 == 0) return;   // blink while invincible
+    if (flash && blink(3)) return;   // blink while invincible
     int hx = (f > 0) ? x + 11 : x + 3;             // head (front)
     // tail
     int tx = (f > 0) ? x + 1 : x + 13;
@@ -319,7 +319,7 @@ static void draw_climb() {
                 rectfill(x, y, WIN_W, WIN_H, CLR_LIGHT_YELLOW);             // lit interior
                 rectfill(x, y, 5, WIN_H, CLR_RED);                          // curtains
                 rectfill(x + WIN_W - 5, y, 5, WIN_H, CLR_RED);
-                if ((frame() / 20) % 2) print("in!", x + WIN_W / 2 - 6, y + 8, CLR_DARK_BROWN);
+                if (!blink(20)) print("in!", x + WIN_W / 2 - 6, y + 8, CLR_DARK_BROWN);
             } else {
                 rectfill(x, y, WIN_W, WIN_H, CLR_DARKER_BLUE);              // dark glass
                 line(x + WIN_W / 2, y, x + WIN_W / 2, y + WIN_H, CLR_DARK_BLUE);
@@ -348,7 +348,7 @@ static void draw_climb() {
     for (int i = 0; i < MAX_BIRDS; i++) {
         if (!birds[i].on) continue;
         int bx = (int)birds[i].x, by = (int)birds[i].y;
-        int flap = ((frame() / 5) % 2) ? 3 : 0;
+        int flap = blink(5) ? 0 : 3;
         line(bx, by, bx + 5, by - 3 + flap, CLR_DARKER_PURPLE);
         line(bx + 5, by - 3 + flap, bx + 10, by, CLR_DARKER_PURPLE);
         line(bx + 4, by, bx + 6, by, CLR_DARK_PURPLE);

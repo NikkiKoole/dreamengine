@@ -213,7 +213,7 @@ static void draw_player_car() {
     // small lean with steering
     int lean = (btn(0, BTN_LEFT) ? -2 : 0) + (btn(0, BTN_RIGHT) ? 2 : 0);
     cx += lean;
-    int bounce = (speed > 0 && (frame() / 3) % 2) ? 1 : 0;
+    int bounce = (speed > 0 && !blink(3)) ? 1 : 0;
     cy += bounce;
 
     // shadow
