@@ -82,10 +82,45 @@ CLR_BLACK, CLR_DARK_BLUE, ... CLR_PEACH  // all 32 PICO-8 palette colors (0-31),
 
 ## Adding a new API function
 
-1. Declare in `runtime/studio.h`
-2. Implement in `runtime/studio.c` using Raylib
-3. Add to `editor/src/studioDocs.js` — this automatically populates autocomplete, hover tooltips, and the help tab
-4. Add the key to the right section in the `sections` array in `editor/src/shell.js`
+A new function (or constant) has to land in **four** places to be fully wired up.
+Miss one and it either won't compile, won't autocomplete, or won't show in the help
+tab. Do all four in the same change:
+
+1. **Declare in `runtime/studio.h`** — with a trailing `//` comment. That comment is
+   the human-facing one-liner; keep it tight and beginner-readable (it's the house
+   style — look at the neighbours).
+2. **Implement in `runtime/studio.c`** using Raylib. Respect `camera()`/`clip()` and
+   the palette-index convention (colors are `0–31`, not RGB) like the existing calls.
+3. **Document in `editor/src/studioDocs.js`** — this single source drives autocomplete,
+   hover tooltips, *and* the help tab. Each entry is keyed by the bare name and needs
+   **three** fields — `sig`, English `doc`, **and a Dutch `docNL`** (every entry is
+   bilingual — don't skip the translation):
+   ```js
+   shake: { sig: 'void shake(float amount)',
+            doc:   'Kick the screen by `amount` pixels; decays on its own. Call on impacts.\nshake(4);',
+            docNL: 'Schud het scherm met `amount` pixels; dooft vanzelf uit. Roep aan bij klappen.\nshake(4);' },
+   ```
+   - `sig` must match the `studio.h` declaration exactly.
+   - Use `\n` for line breaks; end the `doc` with a tiny one-line usage example.
+   - **Constants get entries too** — `sig` is the `#define` line, e.g.
+     `KEY_SPACE: { sig: '#define KEY_SPACE 32', doc: '…', docNL: '…' }`.
+4. **List the key in `editor/src/shell.js`** — add the name to the `keys` array of the
+   right section in the `sections` array (this controls grouping + display order in
+   the help tab). Add constants here too (e.g. the `KEY_*`, `FILL_*`, `CLR_*` keys). If
+   it's a genuinely new category, add a new `{ title, titleNL, keys }` section — note
+   `titleNL` is the Dutch section title.
+
+**Then usually: ship a cart that exercises it, with a screenshot.** Most new API
+should come with either a numbered **tutorial cart** (if it teaches a concept) or an
+**example cart** (if it shows off a feature) — and bake a real screenshot thumbnail
+for it. See "Tutorial carts" below; the short version is `tools/<name>.c` →
+`node tools/make-cart.js …` → `node tools/make-cart.js --run …` (bakes the screenshot)
+→ register in `editor/public/carts/index.json`. A new primitive without a cart
+demonstrating it tends to go unnoticed and undertested.
+
+> Note: API signatures churn while a feature is being designed — if you're editing
+> `studio.h`, re-read the *current* declaration before updating `studioDocs.js`/`shell.js`
+> rather than trusting an earlier draft, and keep all four places in sync.
 
 ## Sprite editor
 

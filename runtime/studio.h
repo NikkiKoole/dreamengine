@@ -138,8 +138,8 @@ void pset(int x, int y, int color);                     // set a single pixel (p
 void rect(int x, int y, int w, int h, int color);       // rectangle border
 void rectfill(int x, int y, int w, int h, int color);   // filled rectangle
 void bar(int x, int y, int w, int h, float pct, int fill, int bg); // progress/health bar: bg box + left-to-right fill, pct 0..1 (clamped)
-// fill patterns — a 4×4 bitmask tiled across a rect. bits read top-left→bottom-right (bit 15 = top-left).
-// set bit → c1, clear bit → c0 (pass c0 = -1 for transparent). great for textured backgrounds, dither gradients, panels.
+// fill patterns — 16-bit 4×4 bitmasks for fillp(). bits read top-left→bottom-right (bit 15 = top-left).
+// 0-bits take the draw color, 1-bits take fillp's hole_color. compatible with PICO-8 fillp hex values.
 #define FILL_SOLID    0xFFFF
 #define FILL_CHECKER  0xA5A5   // 50% checkerboard
 #define FILL_DOTS     0x8020   // sparse dots
@@ -147,7 +147,12 @@ void bar(int x, int y, int w, int h, float pct, int fill, int bg); // progress/h
 #define FILL_VLINES   0xAAAA   // vertical stripes
 #define FILL_DIAG     0x8421   // diagonal lines
 #define FILL_GRID     0xF888   // grid / brick lines
-void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0); // fill a rect with a tiled 4×4 pattern. cheap even full-screen. pass any 16-bit value for custom patterns
+// global fill pattern (PICO-8 fillp style): once set, the normal fills — rectfill, circfill,
+// ovalfill, trifill — draw the 4×4 pattern. the draw COLOR fills the 0-bits; the 1-bits use
+// `hole_color` (pass -1 to make them transparent so the background shows through).
+// pass any 16-bit pattern (FILL_CHECKER etc, or your own). fillp_reset() goes back to solid.
+void fillp(int pattern, int hole_color);
+void fillp_reset(void);
 void circ(int x, int y, int radius, int color);         // circle border
 void circfill(int x, int y, int radius, int color);     // filled circle
 void oval(int x, int y, int rx, int ry, int color);     // ellipse border (rx,ry = half-width/height)

@@ -2,6 +2,14 @@
 
 Notes from analysing the tutorial and game cart sources. Things to keep in mind as the cart collection grows.
 
+> **Status (2026-05-30).** The juice/graphics primitives have landed (in working
+> tree): `pal`/`fade`/`shake`, `print_scaled`, `text_width`, `spr_rot`/`spr_ex`,
+> `oval`/`ovalfill`, `key`/`keyp`/`text_input`, `dt`, `save_bytes`/`load_bytes`
+> (see API_RESEARCH §18–19). That clears the graphics gaps. The remaining
+> **cart-pattern** helpers below — `hud()`, `game_over_screen()`, `explode()` — are
+> now the top unmet items, since they recur across 11–12 carts each and aren't
+> covered by anything that landed.
+
 ## What's already well-abstracted (don't touch)
 
 `near()`, `boxes_touch()`, `touching_map()`, `angle_to()`, `dx()`, `dy()`, `lerp()`, `ease_*()`, `clamp()`, `anim()`, `follow()`, `camera()`, `rnd()`, `rnd_between()`, `note()`, `hit()`, `schedule()` — all solid, used consistently. No changes needed.
@@ -56,6 +64,26 @@ Every game reinvents the same pattern: array of structs, `bool on`, loop skips i
 Candidate: a `POOL_FOREACH(pool, n, var)` macro that expands to the skip-if-not-on loop. Low priority — the pattern is simple and readable as-is.
 
 Files: 18-invaders, asteroids, frogger, platform, robotron + others.
+
+---
+
+### 5. Tile-collision push-out — surveyed, low demand
+
+A `move_and_collide(&x, &y, w, h, vx, vy)` that moves an entity and resolves it out
+of solid map tiles came up while polishing platformers. A cart survey (2026-05-30)
+found the demand is thin:
+
+- Only **`platform.c`** does the full pattern — `mget` → 4-corner `solid_at` test →
+  axis-separated move-then-push-out → `on_ground`.
+- `zelda.c` and `gta.c` do a related 4-corner solid test, but top-down (no gravity)
+  and against their *own* world data, not `mget` — a single map-based helper
+  wouldn't serve them cleanly.
+- alleycat / pitfall / burgertime / sokoban don't use the map-collision API at all
+  (hardcoded ledges, fixed floors, custom struct grids, or grid-snapped movement).
+
+Verdict: **not worth a built-in yet.** If anything, the reusable nugget is the
+4-corner "is this box solid?" predicate, not the full move-resolve — but even that
+varies by data source. Revisit if more tile-based platformers appear.
 
 ---
 

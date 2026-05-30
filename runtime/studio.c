@@ -43,6 +43,14 @@ static float           shake_amt  = 0.0f;            // shake() — pixels, self
 static float           frame_dt   = 0.0f;            // dt()    — seconds since last frame
 static double          last_time  = 0.0;
 static char            text_buf[32] = {0};           // text_input() — chars typed this frame
+static bool            fp_on      = false;            // fillp() global pattern active?
+static int             fp_global  = 0;                // current fillp() pattern
+static int             fp_hole    = -1;               // fillp() 1-bit color (-1 = transparent)
+// internal patterned-fill helpers — the public fills call these when fillp() is on
+static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0);
+static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
+static void ovalfill_pat(int cx, int cy, int rx, int ry, int pattern, int c1, int c0);
+static void trifill_pat(int x1, int y1, int x2, int y2, int x3, int y3, int pattern, int c1, int c0);
 
 #define BTN_COUNT 6
 static bool            btn_curr[2][BTN_COUNT];
@@ -703,6 +711,7 @@ void rect(int x, int y, int w, int h, int color) {
 }
 
 void rectfill(int x, int y, int w, int h, int color) {
+    if (fp_on) { rectfill_pat(x, y, w, h, fp_global, fp_hole, color); return; }   // 1-bits = holes, 0-bits = color
     DrawRectangle(x - cam_x, y - cam_y, w, h, palette[color % PALETTE_SIZE]);
 }
 
@@ -728,7 +737,7 @@ static Texture2D fp_texture(int pat, int c1, int c0) {
     Color px[16];
     for (int i = 0; i < 16; i++) {
         int on = (pat >> (15 - i)) & 1;                       // bit 15 = top-left, row-major
-        px[i] = on ? palette[c1 % PALETTE_SIZE]
+        px[i] = on ? (c1 < 0 ? (Color){ 0, 0, 0, 0 } : palette[c1 % PALETTE_SIZE])
                    : (c0 < 0 ? (Color){ 0, 0, 0, 0 } : palette[c0 % PALETTE_SIZE]);
     }
     Image img = { px, 4, 4, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
@@ -741,19 +750,60 @@ static Texture2D fp_texture(int pat, int c1, int c0) {
     fp_cache[slot].tex = t;   fp_cache[slot].used = true;
     return t;
 }
-void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0) {
+static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0) {
     if (w <= 0 || h <= 0) return;
     Texture2D t = fp_texture(pattern, c1, c0);
-    Rectangle src = { 0, 0, (float)w, (float)h };             // REPEAT wrap tiles the 4×4 across the rect
+    // src origin = screen pos, so the 4×4 lattice is screen-aligned and seamless
+    // with the circ/tri pattern fills below (which tile from the screen origin too)
+    Rectangle src = { (float)(x - cam_x), (float)(y - cam_y), (float)w, (float)h };
     Rectangle dst = { (float)(x - cam_x), (float)(y - cam_y), (float)w, (float)h };
     DrawTexturePro(t, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
 }
+
+// circles/triangles are filled as horizontal scanlines of rectfill_pat — reusing
+// the proven (and screen-aligned) rect path, so the lattice stays seamless.
+static void ovalfill_pat(int cx, int cy, int rx, int ry, int pattern, int c1, int c0) {
+    if (rx <= 0 || ry <= 0) return;
+    for (int dy = -ry; dy <= ry; dy++) {
+        float f = 1.0f - (float)(dy * dy) / (float)(ry * ry);
+        if (f < 0) f = 0;
+        int hw = (int)(rx * sqrtf(f) + 0.5f);
+        rectfill_pat(cx - hw, cy + dy, hw * 2 + 1, 1, pattern, c1, c0);
+    }
+}
+
+static void circfill_pat(int cx, int cy, int r, int pattern, int c1, int c0) {
+    ovalfill_pat(cx, cy, r, r, pattern, c1, c0);
+}
+
+static void trifill_pat(int x1, int y1, int x2, int y2, int x3, int y3, int pattern, int c1, int c0) {
+    int t;                                            // sort vertices by y ascending
+    if (y1 > y2) { t=x1;x1=x2;x2=t; t=y1;y1=y2;y2=t; }
+    if (y1 > y3) { t=x1;x1=x3;x3=t; t=y1;y1=y3;y3=t; }
+    if (y2 > y3) { t=x2;x2=x3;x3=t; t=y2;y2=y3;y3=t; }
+    if (y3 == y1) return;
+    for (int y = y1; y <= y3; y++) {
+        float xa = x1 + (float)(x3 - x1) * (y - y1) / (float)(y3 - y1);          // long edge
+        float xb = (y < y2 && y2 != y1) ? x1 + (float)(x2 - x1) * (y - y1) / (float)(y2 - y1)
+                 : (y2 != y3)           ? x2 + (float)(x3 - x2) * (y - y2) / (float)(y3 - y2)
+                                        : (float)x2;
+        int xl = (int)(xa < xb ? xa : xb), xr = (int)(xa < xb ? xb : xa);
+        rectfill_pat(xl, y, xr - xl + 1, 1, pattern, c1, c0);
+    }
+}
+
+// ── global fill pattern (PICO-8 fillp style) ──────────────────────────────
+// when on, the normal fills draw the pattern: the draw COLOR fills the 0-bits,
+// the 1-bits are transparent (holes) — exactly like PICO-8 fillp.
+void fillp(int pattern, int hole_color) { fp_on = true; fp_global = pattern; fp_hole = hole_color; }
+void fillp_reset(void)  { fp_on = false; }
 
 void circ(int x, int y, int radius, int color) {
     DrawCircleLines(x - cam_x, y - cam_y, (float)radius, palette[color % PALETTE_SIZE]);
 }
 
 void circfill(int x, int y, int radius, int color) {
+    if (fp_on) { circfill_pat(x, y, radius, fp_global, fp_hole, color); return; }
     DrawCircle(x - cam_x, y - cam_y, radius, palette[color % PALETTE_SIZE]);
 }
 
@@ -765,6 +815,7 @@ void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
 }
 
 void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
+    if (fp_on) { trifill_pat(x1, y1, x2, y2, x3, y3, fp_global, fp_hole, color); return; }
     Color c = palette[color % PALETTE_SIZE];
     Vector2 v1 = {(float)(x1-cam_x), (float)(y1-cam_y)};
     Vector2 v2 = {(float)(x2-cam_x), (float)(y2-cam_y)};
@@ -1097,6 +1148,7 @@ void print_scaled(const char *t, int x, int y, int color, int scale) {
 
 void ovalfill(int cx, int cy, int rx, int ry, int color) {
     if (rx < 0) rx = -rx; if (ry < 0) ry = -ry; if (ry == 0) ry = 1;
+    if (fp_on) { ovalfill_pat(cx, cy, rx, ry, fp_global, fp_hole, color); return; }
     Color c = palette[color % PALETTE_SIZE];
     for (int yy = -ry; yy <= ry; yy++) {
         float f = 1.0f - (float)(yy * yy) / (float)(ry * ry);

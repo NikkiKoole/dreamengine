@@ -38,7 +38,7 @@ For reference, the current API (all of `studio.h`) groups into:
 | **Debug** | `watch`, `watch_visible`, `printh` |
 | **Palette** | 32 `CLR_*` constants |
 
-Roughly ~100 functions / constants. Strong across the board now. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, and pause/fps debug.** (Sprite rotation/scale landed as `spr_rot`/`spr_ex` — see §18.)
+Roughly ~100 functions / constants. Strong across the board now. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, and pause/fps debug.** (Sprite rotation/scale landed as `spr_rot`/`sspr_ex` — see §18.)
 
 ---
 
@@ -876,19 +876,19 @@ calls `print` with the right offset. Useful for titles, scores,
 floating damage numbers, anything where you don't want to measure
 strings yourself.
 
-### 18. Convenient sprite drawing — ✓ shipped (pivot-based)
+### 18. Convenient sprite drawing — ✓ shipped
 
-> **✓ Shipped (in working tree, pending commit).** Landed as two functions, pivot-based
-> rather than the proposed scale-x/scale-y form:
+> **✓ Shipped (in working tree, pending commit).** Landed as two functions — a simple
+> whole-sprite spin and a full source-rect transform:
 > ```c
-> void spr_rot(int index, int x, int y, float deg, int ox, int oy);  // rotate around local pivot (ox,oy); (x,y) = top-left like spr(). center of a 16×16 = (8,8)
-> void spr_ex (int index, int x, int y, float deg, float scale, bool flip_x, bool flip_y, int ox, int oy); // rotate + scale + flip around pivot
+> void spr_rot(int index, int x, int y, float deg);  // spin a whole sprite `deg` around its center. (x,y) = top-left like spr(). the everyday rotate
+> void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, float deg, int ox, int oy); // source sub-rect → dest rect (scale), rotated `deg` around pivot (ox,oy) in dest. flip with negative sw/sh
 > ```
-> Pure raylib `DrawTexturePro` under the hood. `spr_rot` is the common case (just an
-> angle); `spr_ex` is the works. We chose a single uniform `scale` + a pivot over
-> separate x/y scales — flips are explicit bools, which reads clearer than negative
-> scale for beginners. Unblocks asteroids, racer, lander, sopwith, paratrooper,
-> galaga, xevious, which all faked rotation with triangles.
+> Pure raylib `DrawTexturePro` under the hood. `spr_rot` is the everyday case — just an
+> angle, rotates around the sprite's own center. `sspr_ex` is the works: it extends
+> `sspr` (sub-rect → scaled dest rect) with rotation around an arbitrary pivot, and
+> flips by passing a negative `sw`/`sh`. Unblocks asteroids, racer, lander, sopwith,
+> paratrooper, galaga, xevious, which all faked rotation with triangles.
 
 ---
 
@@ -982,20 +982,109 @@ came up while polishing carts (just `save_bytes` a struct that contains the stri
 
 ---
 
+## External brainstorm review — DIV/MMF/sim ideas weighed against the carts (2026-05-30)
+
+> A long external brainstorm (≈58k tokens; another LLM with no repo
+> access) proposed a large "pro engine" expansion: DIV-style processes,
+> memory arenas, an engine-owned entity system, MMF movement/qualifier
+> engines, a PS1 ordering-table + textured 3D, built-in
+> pathfinding/spatial-hash, generic data structures, and "tools-as-carts /
+> fantasy OS". Weighed against the actual ~95 carts, almost all of it
+> collides with two facts about how we already work: (1) every cart is
+> **stateless immediate-mode** over its own **typed static pools**
+> (`Enemy enes[64]; bool on;` in `robotron.c`, `Enemy en[140]` in
+> `vampire.c`), and (2) this is a **learn-C** console where the algorithm
+> *is* the content — `astar.c` (102 lines), `boids.c` (85), `sims.c` (232,
+> a needs-driven Sims that pathfinds around player-built walls) are all
+> cart-space and all teaching artifacts. Burying those in a kernel deletes
+> the lesson. What actually survived:
+
+**Keepers (engine):**
+
+1. **`fget` / `fset` — per-sprite flags (PICO-8).** The one good idea in
+   the whole "smart map" arc, and not yet anywhere else in this doc.
+
+   ```c
+   bool fget(int spr, int flag);            // is flag bit set on sprite? flag 0..7
+   void fset(int spr, int flag, bool on);   // set/clear a flag bit on a sprite
+   ```
+
+   256 sprites × 8 bits = **256 bytes** of state. A map cell already
+   stores a sprite index, so per-tile properties ride on the sprite:
+   `platform.c`'s `solid_tile()` collapses from
+   `t == TILE_BRICK || t == TILE_GRASS` to `fget(mget(cx,cy), F_SOLID)`,
+   and the same 8 flags do double duty for "is tree / water / hazard /
+   pickup". Pairs with a small **sprite-editor** addition: an 8-checkbox
+   flag row per slot. Note this is the **per-sprite** PICO-8 model, *not*
+   the per-cell "flag bank / data bank" the brainstorm pushed — `sims.c`
+   shows that a game wanting genuine per-cell data just declares its own
+   `cell[][]`, which is clearer than a hidden engine layer. Medium value:
+   shines once a game has many distinct solid/interactive tile types;
+   `touching_map`'s nonzero=solid already covers the simplest case.
+
+2. **`broadcast` / `received`** — already specced in §11, still open. The
+   brainstorm's "signal bus" independently lands on the same primitive, so
+   treat it as confirmed demand. The tiny global bitset is the right
+   altitude — it gives the DIV "signal" feel with **none** of the process
+   model (§124).
+
+3. **`trifill_tex` — affine textured triangle.** The one graphics
+   primitive worth it. There's tension with "3D anything" in *defer* below,
+   but that entry rejects a 3D *engine* — a single textured-triangle
+   primitive is the same class as the flat `tri`/`trifill` we already ship
+   (§19), and it's exactly what `mode7`, `raycaster`, `cube3d`, and `elite`
+   already hand-roll around. Optional "make it dreamier" splurge for the
+   pseudo-3D crowd, not a blocker. The PS1 trimmings the brainstorm bundled
+   with it (ordering table, vertex jitter, z-buffer toggle) stay cut.
+
+**Route to library carts, not the engine** — this is how to get the
+"Settlers/Sims power" the brainstorm chased without breaking the stateless
+core or hiding the lesson. Seeds already exist:
+- pathfinding header ← `astar.c`
+- entity-pool + tag helpers ← `robotron.c` / `vampire.c`
+- flocking / state-machine patterns ← `boids.c`
+
+> **Priority note.** All three keepers rank *below* the cart-derived
+> roadmap in `API_IDEAS.md` (`hud()`, `game_over_screen()`, `explode()`,
+> `pause()`), which came from real cart-frequency analysis (appearing in
+> 11–12+ files each). Finish that first; these are additive.
+
+---
+
 ## What to defer or skip
 
 - **Particle systems** — fun but a lot of state. Carts can write
   their own with arrays + `for` loops.
-- **Pathfinding (mp_grid)** — too narrow.
+- **Pathfinding (mp_grid)** — too narrow. Ship as a library cart
+  (seed: `astar.c`), not engine surface — see the 2026-05-30 review above.
 - **Tweens** — `lerp` + `now()` covers 90% of cases. Real tween
   libraries are nice but big.
 - **Vector struct (Vec2)** — without operator overloading the
   ergonomics aren't there; spelling out `vx, vy` is fine.
 - **DS structures (lists/maps/grids)** — C arrays are the lesson.
-- **Process model** — out of scope here; lives in `VISION.md`.
+  (The brainstorm's hashmap/dllist/spatial-hash push: same verdict. Our
+  typed static pools already *are* the data-structure layer, indices are
+  the "handles", and naive nearest-loops are fine at our entity counts —
+  `boids.c` proves it.)
+- **Engine-owned entity system** — God-struct / `SELF` global / `val[16]`
+  "alterable values" / ECS / union-entity. The big rabbit hole of the
+  2026-05-30 review. Per-game typed pools with *named* fields beat all of
+  them for a learn-C console; `e->val[0]` is strictly worse than `e->hp`.
+- **MMF movement/qualifier engines** (`move_platform`, `move_8dir`,
+  `overlap_tag`) — removes the lesson; `platform.c`'s manual physics is the
+  point. Cf. API_IDEAS §5 ("tile push-out — low demand").
+- **Memory arenas** (frame/level/proc) — no cart `malloc`s; `str()` already
+  gives the reusable scratch buffer arenas are pitched for.
+- **PS1 ordering table / z-sort / sim-tick** — z-sort breaks immediate-mode
+  draw-order; sim-tick is just `frame() % n`.
+- **Tools-as-carts / VFS / fantasy-OS / peek-poke** — a different product.
+  The editor is JS/Electron and carts are compiled binaries; there's no
+  shared-RAM model to build on.
+- **Process model** — out of scope here; lives in `VISION.md`. (See §124.)
 - **Pixel-perfect sprite collision** — needs to walk the sprite's
   alpha. Worth doing eventually; AABB covers 95% of cases first.
-- **3D anything** — fantasy console, not a 3D engine.
+- **3D anything** — fantasy console, not a 3D engine. (Exception: the
+  contained `trifill_tex` primitive — see the 2026-05-30 review.)
 
 ---
 
@@ -1047,7 +1136,7 @@ sprites, bouncing balls, timed rounds.
 
 - ✓ **Turtle graphics** — `turtle_home/move/turn/face/at`, `pen_down/up/color`, `pen_size`.
 - ✓ **Print alignment**: `print_centered`, `print_right`. Plus ✓ `print_scaled` (bigger text for titles/menus).
-- ✓ **Sprite rotation + scale** — shipped as `spr_rot` / `spr_ex` (pivot-based — see §18).
+- ✓ **Sprite rotation + scale** — shipped as `spr_rot` / `sspr_ex` (see §18).
 - **Gamepad support** — `gp_axis(slot, axis)`, `gp_present(slot)`, internal augment of `btn()`/`btnp()`.
 - **Pause + debug**: `pause(bool)`, `paused()`, `fps()`, `voices_active()`.
 - **Sound tracker UI** — if the code-first sound path turns out not to be enough.
@@ -1147,7 +1236,9 @@ doc, so you can ctrl-F. Constants are grouped at the bottom.
 | `ease_in(t)` | function | easing | 4 |
 | `ease_in_out(t)` | function | easing | 4 |
 | `ease_out(t)` | function | easing | 4 |
+| `fget(spr, flag)` | function | sprite flags | review (2026-05-30) |
 | `follow(target_x, target_y, world_w, world_h)` | function | camera | 8 |
+| `fset(spr, flag, on)` | function | sprite flags | review (2026-05-30) |
 | `fps()` | function | debug | 16 |
 | `frame()` | function | time | 9 |
 | `gp_axis(slot, axis)` | function | input | 15 |
@@ -1188,8 +1279,8 @@ doc, so you can ctrl-F. Constants are grouped at the bottom.
 | `sign(n)` | function | math (alias for `sgn`) | review |
 | `sin_deg(degrees)` | function | math | 1 |
 | `sometimes()` | function | sound (Strudel) | 13 |
-| `spr_rot(idx, x, y, deg, ox, oy)` ✓ | function | graphics | 18 |
-| `spr_ex(idx, x, y, deg, scale, fx, fy, ox, oy)` ✓ | function | graphics | 18 |
+| `spr_rot(idx, x, y, deg)` ✓ | function | graphics | 18 |
+| `sspr_ex(sx, sy, sw, sh, dx, dy, dw, dh, deg, ox, oy)` ✓ | function | graphics | 18 |
 | `str(fmt, ...)` | function | strings | 7 |
 | `stutter(midi, instr, vol, times)` | function | sound (Strudel) | 13 |
 | `tick()` | function | time | 14 |
@@ -1199,6 +1290,7 @@ doc, so you can ctrl-F. Constants are grouped at the bottom.
 | `timer_reset()` | function | time | 9 |
 | `touching_color(x, y, w, h, color)` | function | collision (Scratch) | 2 |
 | `touching_map(x, y, w, h)` | function | collision | 2 |
+| `trifill_tex(x1,y1,u1,v1, x2,y2,u2,v2, x3,y3,u3,v3)` | function | graphics | review (2026-05-30) |
 | `turtle_at(x, y)` | function | turtle | 12 |
 | `turtle_face(degrees)` | function | turtle | 12 |
 | `turtle_home()` | function | turtle | 12 |

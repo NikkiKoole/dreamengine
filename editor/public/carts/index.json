@@ -115,6 +115,11 @@
     "file": "patterns.cart.png"
   },
   {
+    "title": "23. holes & colors",
+    "description": "The two sides of fillp(): pass -1 as the hole color and the 1-bits are TRANSPARENT (the scene shows through); pass a palette color and you get an opaque two-tone fill. Same pattern, side by side, over a rainbow so the difference is obvious. Works on rects and circles. A: change pattern.",
+    "file": "holes.cart.png"
+  },
+  {
     "title": "raycaster",
     "description": "A Wolfenstein-style first-person maze with no 3D and no sprites — one DDA ray per screen column, drawn as a vertical wall strip with fisheye correction. Walk through a colored grid world with a live minimap. WASD to move and turn, B toggles the map.",
     "file": "raycaster.cart.png"
