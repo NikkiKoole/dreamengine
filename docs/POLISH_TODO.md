@@ -1,56 +1,23 @@
 # Polish & Toolbox TODO
 
-A working list for raising the quality bar across the ~85 carts in `tools/`.
+A working list for raising the quality bar across the ~90 carts in `tools/carts/`.
 
-> **Scope note (reconciliation).** API/engine design is already tracked in
-> [`docs/API_RESEARCH.md`](docs/API_RESEARCH.md) (deep survey + proposed signatures,
-> shipped/open markers) and [`docs/API_IDEAS.md`](docs/API_IDEAS.md) (cart-source
-> pattern analysis → `hud()`, `game_over_screen()`, `explode()`). Another agent is
-> **actively adding functions to `runtime/studio.{h,c}` right now** — do not edit
-> those files from here. So this doc defers API design to those two and focuses on
-> **Part B — per-game polish**, which neither covers. Part A below is just a
-> *status snapshot* of the gaps that block polish, so the per-game work knows what
-> it can lean on.
+> **Scope note.** This doc is **Part B — per-game polish** only. What's shipped vs.
+> open across the engine/API now lives in one ledger, [`STATUS.md`](STATUS.md); the
+> design rationale (classics survey, proposed signatures, and the cart-frequency
+> analysis behind `hud()`/`game_over_screen()`/`explode()`) is in
+> [`design/api-notes.md`](design/api-notes.md). Don't track API status here — it drifts.
 
----
+**What a juice pass can rely on today:** nothing graphics-side is blocking — sprite
+rotation (`spr_rot`/`sspr_ex`), text scaling (`print_scaled`/`text_width`), the
+`pal`/`fade`/`shake` juice batch, ellipses, `dt()`, and string/struct persistence
+(`save_bytes`/`load_bytes`) have all landed. The still-open convenience helpers
+(`explode`/`hud`/`game_over_screen`, `pause`, events) don't block starting Part B —
+see [`STATUS.md`](STATUS.md) for the full open list.
 
-## Part A — API gaps that block polish (status snapshot, not a work list)
-
-Don't implement these here — they belong to the API docs + the in-flight agent.
-This is just "what can a juice pass rely on yet?"
-
-All the 🟡 rows are in the working tree (uncommitted; HEAD still `06694cb`).
-
-| Primitive | Status | Notes / source |
-|---|---|---|
-| **`spr_rot` + `spr_ex`** — sprite rotation/scale/flip around a pivot | 🟡 landed (wt) | the highest-value gap — now closed. API_RESEARCH §18. Unblocks asteroids, racer, lander, sopwith, paratrooper, galaga, xevious. |
-| `print_scaled(text,x,y,color,scale)` — big titles/scores | 🟡 landed (wt) | closes the text-scaling gap |
-| `save_bytes` / `load_bytes` — block/struct persistence | 🟡 landed (wt) | closes the string-persistence gap (hi-score tables, names) more generally than `save_str` |
-| `key` / `keyp` / `text_input()` — raw keyboard + typed chars | 🟡 landed (wt) | bonus — name entry, word games. Not on any prior list |
-| `oval` / `ovalfill` — ellipses | 🟡 landed (wt) | bonus — eyes, shadows, squashed circles |
-| `dt()` — delta time | 🟡 landed (wt) | bonus — framerate-independent movement/decay |
-| `pal` / `pal_reset` — recolor & hit-flash | 🟡 landed (wt) | white-flash-on-hit primitive |
-| `fade(amount)` — darken screen for transitions | 🟡 landed (wt) | state fades, pause dim |
-| `shake(amount)` — self-decaying screenshake | 🟡 landed (wt) | replaces hand-rolled shake in `juice.c` |
-| `text_width(text)` — measure for layout | 🟡 landed (wt) | custom HUD boxes / menus |
-| `bar` / `blink` / `fsqrt` | ✅ committed | `06694cb` |
-| Particle/explosion helper (`explode()`) | 🔴 open (proposed) | API_IDEAS §3 — or ship a `particles` library cart |
-| `hud()` / `game_over_screen()` | 🔴 open (proposed) | API_IDEAS §1–2 — appears in 11+ / 12+ carts |
-| `pause()` / `paused()`, `fps()`, `voices_active()` | 🔴 open | API_RESEARCH §16 |
-| Events: `broadcast()` / `received()` | 🔴 open | API_RESEARCH §11 |
-| In-code sfx/music definition | 🔴 open question | API_RESEARCH (code-first vs. tracker UI) |
-| Gamepad axes (`gp_axis`) | 🔴 open | API_RESEARCH §15 |
-| Strudel extras / Dilla groove timing | 🔴 open | API_RESEARCH §13–14 |
-| Resolved tile collision (`move_and_collide`) | 🔴 open — **low demand** | only `platform.c` does the full tile push-out; `zelda`/`gta` do a related 4-corner test against their own data, not `mget` — a single map-based helper wouldn't serve them. Low priority. |
-| Gradient / dither fill | 🔴 open — **not in either doc** | flat skies in gorillas/racer/sopwith/lander |
-| Looping ambience (`drone`) / `volume` / mute | 🔴 open — **not in either doc** | sustained pads for sims; player mute |
-
-Net: the three gaps I'd flagged as blockers — **sprite rotation, text scaling, and
-string/struct persistence — have all landed** (plus keyboard input, ellipses, and
-`dt()` as bonuses). Nothing graphics-side is blocking a juice pass anymore. The
-remaining 🔴 rows are convenience helpers (`hud`/`explode`/`game_over`), structure
-(`pause`/events), audio polish, and `move_and_collide` — none of which block
-starting Part B.
+Two polish-specific gaps not yet in any design doc, noted here so they aren't lost:
+gradient/dither fill (flat skies in gorillas/racer/sopwith/lander) and looping
+ambience (`drone`)/`volume`/mute (sustained pads for sims; player mute).
 
 ---
 
@@ -126,16 +93,10 @@ Cross-cutting checklist to apply per game (the "juice pass"):
 
 ## Suggested sequencing
 
-1. **Let the in-flight API work land first** (flash/fade/shake/text_width are in the
-   working tree). Don't start a juice sweep mid-edit — wait for it to commit.
-2. **One reference "juice pass"** on a single small game (breakout or asteroids) using
-   the freshly-landed `pal`/`fade`/`shake` to establish the pattern and prove the API.
-   This is also the best way to *discover* whether sprite rotation is the blocker it
-   looks like — feed that back to the API work.
-3. **Roll the pattern across arcade classics**, then sims, then demos.
-4. **Tutorial audit** last — cheap, and benefits from the API being settled.
+The API work this doc was waiting on has landed and committed (juice batch,
+`spr_rot`/`sspr_ex`, `fillp`, etc. — `c4f2801`), so the tree is a clean base.
 
-> Note: `studio.c/.h`, `shell.js`, `studioDocs.js`, and several carts (galaga,
-> juice, katamari, pet, sims, xevious, zelda) currently have uncommitted changes
-> (some from the in-flight API agent). Coordinate / wait for that commit before a
-> polish sweep so this builds on a clean base.
+1. **One reference "juice pass"** on a single small game (breakout or asteroids) using
+   the landed `pal`/`fade`/`shake`/`spr_rot` to establish the pattern and prove the API.
+2. **Roll the pattern across arcade classics**, then sims, then demos.
+3. **Tutorial audit** last — cheap, and benefits from the API being settled.

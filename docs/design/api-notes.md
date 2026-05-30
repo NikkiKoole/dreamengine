@@ -1,14 +1,15 @@
-# API Research — what to steal from the classics
+# API design notes — what to steal from the classics
 
-> **Purpose:** before we keep growing `studio.h`, look hard at what
-> PICO-8, GameMaker, BlitzMax, DIV Game Studio, p5.js
-> (Dan Shiffman / Processing) and Scratch offer for game-making,
-> decide which of those abstractions actually earn their keep in a
-> dreamengine cart, and produce a concrete list of candidate
-> additions with proposed signatures.
-
-This is a scratchpad, not a spec. Nothing in here is committed to
-yet — call out which buckets you'd like me to ship first.
+> **Genre: design exploration (scratchpad).** This is a *design-reference* doc: rationale
+> and proposed signatures for the engine API, surveying what PICO-8, GameMaker, BlitzMax,
+> DIV, p5.js, and Scratch offer and which abstractions earn their keep in a dreamengine
+> cart. It is allowed to be messy and exploratory.
+>
+> It is **not** the status ledger and **not** the decision log:
+> - "What's shipped / open / cut?" → [`../STATUS.md`](../STATUS.md).
+> - "Why did we (not) do X?" once settled → [`../decisions/`](../decisions/README.md).
+>
+> The ✓ markers below are design-time notes; STATUS is authoritative for state.
 
 ---
 
@@ -21,16 +22,17 @@ For reference, the current API (all of `studio.h`) groups into:
 | **Callbacks** | `update`, `draw`, `init` |
 | **Input — buttons** | `btn`, `btnp`, `BTN_*` |
 | **Input — touch** | `touch_count`, `touch_x`, `touch_y`, `tap`, `stick_x/y`, `touch_controls` |
-| **Graphics** | `cls`, `spr`, `sprf`, `sspr`, `pset`, `pget`, `print`, `print_centered`, `print_right`, `line`, `rect`, `rectfill`, `circ`, `circfill`, `tri`, `trifill`, `camera`, `clip`, `colorkey`, `map_scale` |
+| **Input — mouse + keyboard** | `mouse_x`, `mouse_y`, `mouse_down`, `mouse_pressed`, `mouse_released`, `mouse_wheel`, `key`, `keyp`, `text_input`, `KEY_*` |
+| **Graphics** | `cls`, `spr`, `sprf`, `sspr`, `sspr_ex`, `spr_rot`, `pset`, `pget`, `print`, `print_centered`, `print_right`, `print_scaled`, `text_width`, `line`, `rect`, `rectfill`, `circ`, `circfill`, `oval`, `ovalfill`, `tri`, `trifill`, `bar`, `camera`, `clip`, `colorkey`, `map_scale`, `fillp`, `fillp_reset`, `pal`, `pal_reset`, `fade`, `shake`, `FILL_*` |
 | **Map** | `mget`, `mset`, `map`, `MAP_W`, `MAP_H` |
 | **Sound** | `sfx`, `music`, `note`, `hit`, `tone`, `chord`, `strum`, `schedule`, `bpm`, `beat`, `beat_pos`, `every`, `euclid`, `chance`, `degree` |
-| **Math** | `abs`, `min`, `max`, `clamp`, `mid`, `sgn`, `lerp`, `remap`, `distance`, `length`, `angle_to`, `dx`, `dy`, `sin_deg`, `cos_deg` |
+| **Math** | `abs`, `min`, `max`, `clamp`, `mid`, `sgn`, `lerp`, `remap`, `distance`, `length`, `angle_to`, `dx`, `dy`, `sin_deg`, `cos_deg`, `fsqrt` |
 | **Collision** | `boxes_touch`, `circles_touch`, `near`, `point_in_box`, `touching_map`, `tile_at`, `touching_color`, `bounce_at_edges` |
-| **Animation** | `anim`, `anim_once` |
+| **Animation** | `anim`, `anim_once`, `blink` |
 | **Easing** | `ease_in`, `ease_out`, `ease_in_out` |
 | **Noise** | `noise`, `noise2`, `noise3` |
-| **Persistence** | `save`, `load` |
-| **Time** | `now`, `frame`, `timer`, `timer_reset` |
+| **Persistence** | `save`, `load`, `save_bytes`, `load_bytes` |
+| **Time** | `now`, `frame`, `dt`, `timer`, `timer_reset`, `epoch` |
 | **Strings** | `str` |
 | **Random** | `rnd`, `rnd_between`, `rnd_float`, `rnd_float_between` |
 | **Camera** | `camera`, `follow` |
@@ -38,7 +40,7 @@ For reference, the current API (all of `studio.h`) groups into:
 | **Debug** | `watch`, `watch_visible`, `printh` |
 | **Palette** | 32 `CLR_*` constants |
 
-Roughly ~100 functions / constants. Strong across the board now. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, and pause/fps debug.** (Sprite rotation/scale landed as `spr_rot`/`sspr_ex` — see §18.)
+Roughly **~120 functions + ~80 constants** in `studio.h` today. Strong across the board. **Still missing: events, Strudel extras, Dilla groove timing, gamepad, and pause/fps debug.** (Sprite rotation/scale landed as `spr_rot`/`sspr_ex` — see §18; the juice batch `pal`/`fade`/`shake`/`print_scaled` and `fillp` patterns also landed since this table was first written — see §19.)
 
 ---
 
@@ -121,26 +123,25 @@ vibe. Notable API choices:
 - File I/O was straightforward (`OpenFile`, `ReadLine`). Probably
   out of scope.
 
-### DIV Game Studio — the process model
+### DIV Game Studio — what's worth borrowing
 
-The most distinctive thing in DIV is the **process** primitive: each
-game object is a coroutine with its own local state and its own
-`loop … frame;` body. This is in our `VISION.md` as the Level-2
-learning model and is the biggest open vision item; it's an
-architectural undertaking, not just an API addition. Out of scope
-for this doc.
-
-What's worth borrowing from DIV's *API* (separate from the process
-model):
+DIV's most distinctive feature is its **process** primitive — each game
+object as a coroutine with its own `loop … frame;` body. We considered
+adopting it as a "Level-2" learning model and **decided against it**: the
+~90 shipped carts all work cleanly with plain typed static pools, so it's
+weeks of coroutine/transformer machinery for a model the cart corpus shows
+we don't need. (Decision recorded in [`../decisions/0001-cut-coroutine-process-model.md`](../decisions/0001-cut-coroutine-process-model.md); see the 2026-05-30 review below and [`../VISION.md`](../VISION.md).) That leaves
+DIV's flatter *API* ideas, most of which only make sense once you *have*
+per-instance state — so most are moot for us too, but noted for the record:
 
 - **`collision(type)`** — returns the id of a colliding process
-  (or 0). Tied to the process model.
+  (or 0). Tied to the process model — not applicable without instances.
 - **`get_dist(id)`**, **`get_angle(id)`**, **`get_signed_angle(id)`**
-  — these are just `point_distance` and `point_direction` from
-  GameMaker but anchored to the process's own coords.
+  — just `point_distance` / `point_direction` from GameMaker anchored to a
+  process's own coords. We cover the math with `distance` / `angle_to`.
 - **`advance(speed)`** — "move forward at my current angle by N
-  pixels". Equivalent to `x += lengthdir_x(speed, angle); y +=
-  lengthdir_y(speed, angle);`.
+  pixels". Equivalent to `x += dx(speed, angle); y += dy(speed, angle);`
+  with our existing helpers.
 - **`region`** — per-process scissor rectangle. We already have
   `clip()`; same idea, just not per-instance since we don't have
   instances.
@@ -193,11 +194,13 @@ Beyond `touching color`, the Scratch blocks worth pulling in:
   lightweight global event bus. Pedagogically lovely: decouple
   "the ball was eaten" from "play the eat sound" from "increment
   score". Proposed below as `broadcast()` + `received()`.
-- **`wait N seconds`** — points straight at the process /
-  coroutine model. You can't pause inside a function without
-  yielding control. Lives in the Level-2 learning gap from VISION.
-- **`create clone of [sprite]`** — same; the process model gives
-  you cloned actors with their own state.
+- **`wait N seconds`** — would need a coroutine to pause inside a
+  function without yielding control. That's the process model, which
+  we cut (see DIV section). In our model you wait by checking `timer()`
+  / `frame()` in `update()`, so we skip this.
+- **`create clone of [sprite]`** — same: it wants per-instance actors
+  with their own state, which the process model would have given. Carts
+  do this with a typed static pool + `on` flag instead. Skip.
 - **Looks effects: `ghost`, `pixelate`, `brightness`** —
   post-render filters. The `ghost` (alpha) one is genuinely
   beautiful for fade-in/out, cheap to add via a global tint. The
@@ -982,6 +985,74 @@ came up while polishing carts (just `save_bytes` a struct that contains the stri
 
 ---
 
+## Cart-pattern analysis — what the carts keep re-implementing (bottom-up)
+
+The sections above are *top-down* — what the classics offer. This one is *bottom-up*:
+patterns that recur across the actual cart sources, which is the strongest signal for
+the next convenience helpers. (Priorities now live in [`STATUS.md`](../STATUS.md); this is
+the evidence behind them.)
+
+**Already well-abstracted — don't touch.** `near`, `boxes_touch`, `touching_map`,
+`angle_to`, `dx`/`dy`, `lerp`, `ease_*`, `clamp`, `anim`, `follow`, `camera`, `rnd`,
+`rnd_between`, `note`, `hit`, `schedule` — all solid and used consistently.
+
+### A. HUD header bar — ~11 files
+
+Every game draws its own version of:
+```c
+rectfill(0, 0, SCREEN_W, 18, CLR_DARKER_BLUE);
+print("GAME", 4, 5, CLR_LIGHT_GREY);
+print(str("best: %d", hi), 240, 5, CLR_YELLOW);
+```
+Candidate: `hud(label, score, best, lives)` — draws the standard header bar.
+Files: 07-score, 12-hiscore, 14-hud, 18-invaders, 19-breakout, asteroids, frogger,
+lander, platform, pong, robotron.
+
+### B. Game over / press A to restart — ~12 files
+
+Everyone writes their own "darken screen, print GAME OVER, wait for `btnp(A)`" block.
+Varies per game (some show score, some best, some delay before accepting input).
+Candidate: `game_over_screen(score, best)` returning `true` on A. Probably too rigid
+given the variation — watch for a pattern to settle before committing to an interface.
+Files: 09-enemies, 18-invaders, 19-breakout, asteroids, frogger, lander, platform,
+pong, robotron, snake + others.
+
+### C. Particle / explosion burst — lander, asteroids, robotron
+
+Radial debris on death, reimplemented each time:
+```c
+for (int i = 0; i < 8; i++) {
+    float a = i * 45.0f;
+    pset((int)(x + dx(age * 0.6f, a)), (int)(y + dy(age * 0.6f, a)), CLR_ORANGE);
+}
+```
+Candidate: `explode(x, y, age, color)` — stateless radial burst driven by a
+caller-owned age value. Fits the engine's no-hidden-state style. **Top pick** — pure
+visual, easy, immediately useful.
+
+### D. Entity pool with `.on` flag — 6+ files
+
+Array of structs + `bool on` + a loop that skips inactive slots. Hard to abstract
+cleanly in C without macros. Candidate: a `POOL_FOREACH(pool, n, var)` macro. Low
+priority — the pattern is simple and readable as-is, and the explicit loop *is* the
+learn-C lesson. Files: 18-invaders, asteroids, frogger, platform, robotron + others.
+
+### E. Tile-collision push-out — surveyed, low demand
+
+A `move_and_collide(&x, &y, w, h, vx, vy)` that resolves an entity out of solid map
+tiles came up while polishing platformers. A cart survey (2026-05-30) found thin demand:
+- Only **`platform.c`** does the full pattern — `mget` → 4-corner `solid_at` test →
+  axis-separated move-then-push-out → `on_ground`.
+- `zelda.c`/`gta.c` do a related 4-corner test, but top-down and against their *own*
+  world data, not `mget` — a single map-based helper wouldn't serve them cleanly.
+- alleycat / pitfall / burgertime / sokoban don't use map-collision at all.
+
+Verdict: **not worth a built-in yet.** The reusable nugget is the 4-corner "is this box
+solid?" predicate, not the full move-resolve — and even that varies by data source.
+Revisit if more tile-based platformers appear.
+
+---
+
 ## External brainstorm review — DIV/MMF/sim ideas weighed against the carts (2026-05-30)
 
 > A long external brainstorm (≈58k tokens; another LLM with no repo
@@ -989,7 +1060,7 @@ came up while polishing carts (just `save_bytes` a struct that contains the stri
 > memory arenas, an engine-owned entity system, MMF movement/qualifier
 > engines, a PS1 ordering-table + textured 3D, built-in
 > pathfinding/spatial-hash, generic data structures, and "tools-as-carts /
-> fantasy OS". Weighed against the actual ~95 carts, almost all of it
+> fantasy OS". Weighed against the actual ~90 carts, almost all of it
 > collides with two facts about how we already work: (1) every cart is
 > **stateless immediate-mode** over its own **typed static pools**
 > (`Enemy enes[64]; bool on;` in `robotron.c`, `Enemy en[140]` in
@@ -1026,16 +1097,31 @@ came up while polishing carts (just `save_bytes` a struct that contains the stri
    brainstorm's "signal bus" independently lands on the same primitive, so
    treat it as confirmed demand. The tiny global bitset is the right
    altitude — it gives the DIV "signal" feel with **none** of the process
-   model (§124).
+   model (which we cut — see the DIV section).
 
-3. **`trifill_tex` — affine textured triangle.** The one graphics
-   primitive worth it. There's tension with "3D anything" in *defer* below,
-   but that entry rejects a 3D *engine* — a single textured-triangle
-   primitive is the same class as the flat `tri`/`trifill` we already ship
-   (§19), and it's exactly what `mode7`, `raycaster`, `cube3d`, and `elite`
-   already hand-roll around. Optional "make it dreamier" splurge for the
-   pseudo-3D crowd, not a blocker. The PS1 trimmings the brainstorm bundled
-   with it (ordering table, vertex jitter, z-buffer toggle) stay cut.
+3. **Pattern fill across all primitives** *(chosen over `trifill_tex`)*.
+   The brainstorm pushed an affine textured triangle (`trifill_tex`) as the
+   one 3D-ish splurge. Decision: go the dreamengine-native route instead —
+   generalize the 4×4 tiled-pattern fill we already ship as `rectfill_pat`
+   (§19 / studio.h) so **every** fill primitive honours a pattern:
+   `circfill`, `ovalfill`, `trifill`, and the `map` fill path. This is the
+   `fillp` PICO-8 already has and we don't (noted in §47).
+
+   Two ways to expose it, pick one:
+   - **PICO-8 `fillp()` model (preferred):** a single global fill-pattern
+     state — `fillp(pattern)` once, all `*fill` calls respect it until
+     reset. Matches the PICO-8 vocabulary this console already leans on and
+     keeps every existing fill signature unchanged. (`FILL_*` pattern
+     constants would slot into `shell.js` like the other constant groups.)
+   - **Per-call `_pat` variants:** `circfill_pat`, `trifill_pat`, … —
+     consistent with the existing `rectfill_pat`, but multiplies the
+     surface.
+
+   Gives dithered gradients, retro shading, and cheap "texture" without a
+   3D pipeline, an ordering table, or UV math — and it composes with `pal`
+   for recolour. **`trifill_tex` is parked** (still under "3D anything" in
+   *defer*); revisit only if the pseudo-3D carts (`mode7`, `raycaster`,
+   `cube3d`, `elite`) actually demand real texture mapping.
 
 **Route to library carts, not the engine** — this is how to get the
 "Settlers/Sims power" the brainstorm chased without breaking the stateless
@@ -1045,9 +1131,9 @@ core or hiding the lesson. Seeds already exist:
 - flocking / state-machine patterns ← `boids.c`
 
 > **Priority note.** All three keepers rank *below* the cart-derived
-> roadmap in `API_IDEAS.md` (`hud()`, `game_over_screen()`, `explode()`,
-> `pause()`), which came from real cart-frequency analysis (appearing in
-> 11–12+ files each). Finish that first; these are additive.
+> helpers (`hud()`, `game_over_screen()`, `explode()`, `pause()`) from the
+> "Cart-pattern analysis" section above, which came from real cart-frequency
+> analysis (appearing in 11–12+ files each). Finish that first; these are additive.
 
 ---
 
@@ -1072,7 +1158,7 @@ core or hiding the lesson. Seeds already exist:
   them for a learn-C console; `e->val[0]` is strictly worse than `e->hp`.
 - **MMF movement/qualifier engines** (`move_platform`, `move_8dir`,
   `overlap_tag`) — removes the lesson; `platform.c`'s manual physics is the
-  point. Cf. API_IDEAS §5 ("tile push-out — low demand").
+  point. Cf. the "Cart-pattern analysis" §E above ("tile push-out — low demand").
 - **Memory arenas** (frame/level/proc) — no cart `malloc`s; `str()` already
   gives the reusable scratch buffer arenas are pitched for.
 - **PS1 ordering table / z-sort / sim-tick** — z-sort breaks immediate-mode
@@ -1080,11 +1166,14 @@ core or hiding the lesson. Seeds already exist:
 - **Tools-as-carts / VFS / fantasy-OS / peek-poke** — a different product.
   The editor is JS/Electron and carts are compiled binaries; there's no
   shared-RAM model to build on.
-- **Process model** — out of scope here; lives in `VISION.md`. (See §124.)
+- **Process / coroutine model** — cut entirely. The ~90 shipped carts work
+  cleanly with plain typed static pools, so the DIV-style coroutine model
+  isn't worth its weeks of machinery. See [`../decisions/0001-cut-coroutine-process-model.md`](../decisions/0001-cut-coroutine-process-model.md).
 - **Pixel-perfect sprite collision** — needs to walk the sprite's
   alpha. Worth doing eventually; AABB covers 95% of cases first.
-- **3D anything** — fantasy console, not a 3D engine. (Exception: the
-  contained `trifill_tex` primitive — see the 2026-05-30 review.)
+- **3D anything** — fantasy console, not a 3D engine. (`trifill_tex` was
+  considered as the one exception, then parked in favour of pattern fill —
+  see keeper 3 in the 2026-05-30 review.)
 
 ---
 
@@ -1290,7 +1379,7 @@ doc, so you can ctrl-F. Constants are grouped at the bottom.
 | `timer_reset()` | function | time | 9 |
 | `touching_color(x, y, w, h, color)` | function | collision (Scratch) | 2 |
 | `touching_map(x, y, w, h)` | function | collision | 2 |
-| `trifill_tex(x1,y1,u1,v1, x2,y2,u2,v2, x3,y3,u3,v3)` | function | graphics | review (2026-05-30) |
+| `fillp(pattern)` | function | graphics | review (2026-05-30) |
 | `turtle_at(x, y)` | function | turtle | 12 |
 | `turtle_face(degrees)` | function | turtle | 12 |
 | `turtle_home()` | function | turtle | 12 |

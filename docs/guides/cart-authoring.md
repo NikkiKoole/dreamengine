@@ -46,10 +46,10 @@ Useful if the user ran the cart themselves and you want to pull in `build/screen
 
 ```bash
 # 1. write the source
-# (edit tools/XX-name.c and optionally tools/XX-name.cart.js)
+# (edit tools/carts/XX-name.c and optionally tools/carts/XX-name.cart.js)
 
 # 2. generate the cart with sprites + map baked in
-node tools/make-cart.js tools/XX-name.c editor/public/carts/XX-name.cart.png
+node tools/make-cart.js tools/carts/XX-name.c editor/public/carts/XX-name.cart.png
 
 # 3. compile, run 3 frames, bake real screenshot
 node tools/make-cart.js --run editor/public/carts/XX-name.cart.png
@@ -154,6 +154,12 @@ sprites: {
 
 Add your own via `charMap: { 'X': 8 }` in the config.
 
+> **Extended palette (indices 16–31):** the default char map only reaches index
+> 15. To use the extended `CLR_DARKER_*` / `CLR_TRUE_BLUE` / etc. colors in a
+> sprite, either use the **flat array** form (palette indices go straight in,
+> 0–31) or add the colors to `charMap` yourself. ASCII art alone can't reach
+> them. See `tools/carts/textured3d.cart.js` for generated textures via arrays.
+
 ---
 
 ## Map format
@@ -186,8 +192,8 @@ Rows shorter than `MAP_W` are zero-padded. Rows beyond `MAP_H` are ignored.
 
 | Path | Purpose |
 |------|---------|
-| `tools/XX-name.c` | cart source code |
-| `tools/XX-name.cart.js` | optional sprites + map config |
+| `tools/carts/XX-name.c` | cart source code |
+| `tools/carts/XX-name.cart.js` | optional sprites + map config |
 | `editor/public/carts/XX-name.cart.png` | finished cart (served to the tutorials page) |
 | `editor/public/carts/index.json` | metadata list for the tutorials panel |
 | `build/screenshot.png` | last screenshot from `--run` or from the editor |
@@ -196,7 +202,7 @@ Rows shorter than `MAP_W` are zero-padded. Rows beyond `MAP_H` are ignored.
 
 ## Adding a tutorial to the editor
 
-1. Create `tools/XX-name.c` (and optionally `tools/XX-name.cart.js`)
+1. Create `tools/carts/XX-name.c` (and optionally `tools/carts/XX-name.cart.js`)
 2. Run the two-step build above
 3. Add an entry to `editor/public/carts/index.json`:
 

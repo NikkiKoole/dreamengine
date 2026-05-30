@@ -3,8 +3,11 @@
 > Portable context for picking dreamengine up on another machine or in a fresh
 > session. This is the stuff that isn't obvious from the code or git log. Keep it
 > short; prune what goes stale.
+>
+> **For "what's shipped vs. open vs. cut" see [`STATUS.md`](STATUS.md)** — the single
+> status ledger. This file is the running narrative + environment gotchas.
 
-_Last updated: 2026-05-29 (session 6)_
+_Last updated: 2026-05-30 (session 7 — docs cleanup)_
 
 ---
 
@@ -13,13 +16,13 @@ _Last updated: 2026-05-29 (session 6)_
 - **Debug tools shipped** (`printh` / `watch` / `watch_visible` / crash capture).
   Design notes archived at [`docs/archive/debug-printh-watch.md`](./archive/debug-printh-watch.md).
 - **API expansion pass 1 shipped** — math, collision, animation, strings, timer.
-  See [`docs/API_RESEARCH.md`](./API_RESEARCH.md) for what's done and what's still open (passes 2–3).
+  See [`design/api-notes.md`](design/api-notes.md) for what's done and what's still open (passes 2–3).
 - **Cart format shipped** — `.cart.png` files embed source + sprites + map as `zTXt`
   PNG chunks. The visible image is a screenshot of the game (saved automatically on
   exit). See below for full details.
 - **Tutorials page shipped** — 15 tutorial carts in `editor/public/carts/`, a gallery
   panel in the editor, and a cart authoring toolchain in `tools/`. See
-  [`docs/TOOLS.md`](./TOOLS.md) for the full workflow.
+  [`guides/cart-authoring.md`](guides/cart-authoring.md) for the full workflow.
 - **API pass 2 shipped** — `follow()`, `save()`/`load()`, `noise()`/`noise2()`/`noise3()`,
   inline error markers in the CodeMirror editor.
 - **API pass 3 shipped** — `ease_in/out/in_out`, `rnd_between`/`rnd_float`/`rnd_float_between`,
@@ -40,14 +43,15 @@ _Last updated: 2026-05-29 (session 6)_
    (touches main-loop drain semantics — small but architectural). Strudel extras:
    `pitch("c4")`, `sometimes`/`often`/`rarely`, `arp`, `stutter`, `palindrome`,
    `off_beat`. Dilla timing: `groove` + `groove_swing/jitter/push`.
-2. **Process/coroutine model** — the Level-2 differentiator from VISION.md. Weeks of
-   architectural work. `wait N seconds` / `loop … frame;` inside a process.
-3. **Browser sharing / hosting** — web build exists; next step is a URL you can send
+2. **Browser sharing / hosting** — web build exists; next step is a URL you can send
    someone (itch.io upload, or a hosted service that stores the wasm).
-4. **Sound tracker UI** — the sound tab is disabled; code-first sound works but a
+3. **Sound tracker UI** — the sound tab is disabled; code-first sound works but a
    tracker would let you design sfx/music in the editor.
-5. **Pixel-perfect sprite collision** — walk the sprite alpha; AABB covers 95% of cases
+4. **Pixel-perfect sprite collision** — walk the sprite alpha; AABB covers 95% of cases
    but this would be the next collision improvement.
+
+> The DIV-style **process/coroutine model** was cut from the roadmap — the cart
+> corpus shows the plain typed-pool style is enough; see VISION.md for the rationale.
 
 ---
 
@@ -157,11 +161,11 @@ corrected) on every clean exit. The save-cart handler in `main.cjs` prefers
 
 ## Tutorial cart toolchain
 
-Full docs in [`docs/TOOLS.md`](./TOOLS.md). Quick reference:
+Full docs in [`guides/cart-authoring.md`](guides/cart-authoring.md). Quick reference:
 
 ```bash
 # create cart (with optional sprites/map from XX-name.cart.js config)
-node tools/make-cart.js tools/XX-name.c editor/public/carts/XX-name.cart.png
+node tools/make-cart.js tools/carts/XX-name.c editor/public/carts/XX-name.cart.png
 
 # compile + run 3 frames + bake screenshot into cart
 node tools/make-cart.js --run editor/public/carts/XX-name.cart.png
@@ -170,15 +174,18 @@ node tools/make-cart.js --run editor/public/carts/XX-name.cart.png
 node tools/make-cart.js --update <cart.png> <screenshot.png>
 ```
 
-Cart sources live in `tools/XX-name.c`. Config files (sprites + map) live in
-`tools/XX-name.cart.js`. Finished carts go in `editor/public/carts/`.
+Cart sources live in `tools/carts/XX-name.c`. Config files (sprites + map) live in
+`tools/carts/XX-name.cart.js`. Finished carts go in `editor/public/carts/`.
 `editor/public/carts/index.json` is the metadata list the tutorials panel reads.
 
-12 tutorial carts are shipped (01-hello through 12-hiscore).
+20 numbered tutorial carts are shipped (01-hello through 19-breakout, plus
+05b-colorkey), alongside dozens of example game carts (~90 carts total).
 - 11-noise: two-layer scrolling terrain + twinkling stars via `noise2()`
 - 12-hiscore: button-mashing game with `save()`/`load()` high score persistence
 - 13-easing: four dots on tracks showing all three easing curves vs linear
 - 14-hud: catch-the-shrinking-star game using `print_centered`, `print_right`, `rnd_between`
+- 15-anim → 19-breakout: walk-cycle animation, turtle-graphics spirograph/hypotrochoid,
+  and the first two arcade ports (invaders, breakout)
 
 ---
 

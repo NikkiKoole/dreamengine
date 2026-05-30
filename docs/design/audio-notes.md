@@ -4,9 +4,11 @@ A living document for the sound system: what exists in code today, where it sits
 relative to the chips it evokes, the ideas on the table, and a guiding rule —
 **get as much expressivity as possible from as few primitives as possible.**
 
-Companion to `VISION.md`. Implementation lives in `runtime/sound.h` (header-only,
-included once from `runtime/studio.c`); the public surface is the `sound` section
-of `runtime/studio.h`.
+Companion to [`../VISION.md`](../VISION.md). Implementation lives in `runtime/sound.h`
+(header-only, included once from `runtime/studio.c`); the public surface is the `sound`
+section of `runtime/studio.h`. **Genre: design exploration** — rationale + roadmap for the
+sound subsystem; status lives in [`../STATUS.md`](../STATUS.md), settled choices in
+[`../decisions/`](../decisions/README.md) (e.g. [0003 code-first sound](../decisions/0003-code-first-sound.md)).
 
 ---
 
@@ -456,3 +458,125 @@ phase independently shippable:
   the headline for the audience — sounding great out of the box, or authoring your own?
 - **One filter primitive, two uses:** commit to a single state-variable filter that serves
   both the SID-style `filter()` sweep (§5.5) and the vowel formant bank (§8.3)?
+
+---
+
+## 10. Proposed API — the four axes, one container
+
+A concrete API sketch for the whole expressive space. The realization that drives it: the
+range we want isn't a *list* of features — it's **four orthogonal axes that multiply**, and
+an **instrument is just the container that bundles them**. It is not a fifth axis.
+
+```
+instrument (slot) = timbre × envelope × LFO × filter
+       └─ played by → note() / chord() / ch_play()
+```
+
+| Axis | What it controls | Lives on |
+|---|---|---|
+| **Timbre** | which oscillator/engine (raw wave → pulse → §8 modeled) | instrument `wave` field |
+| **Envelope** | amplitude shape over time (ADSR, or the engine's baked default) | instrument |
+| **LFO / modulation** | motion over time — *one routable LFO* | instrument |
+| **Filter** | resonant SVF (subtractive **+** formant) | instrument (or global — see open Q) |
+
+8 timbres × a few envelopes × a few LFO routings × a few filter modes is enormous range from
+~4 small concepts — exactly the §1 thesis. Crucially, the four axes don't all *compose*: duty
+is pulse-only (a no-op on organ/piano), and a user ADSR layered on a §8 modeled instrument
+tends to flatten the very motion that makes it sound expensive. So the modeled engines treat
+ADSR as optional override, never replacement (see below).
+
+### 10.1 The easy path stays zero-setup
+
+`instr` becomes a **slot id**, not a waveform id. Slots 0–4 are pre-filled with today's waves
++ the declick envelope; presets we ship (`INSTR_PLUCK`, `INSTR_PAD`, `INSTR_ORGAN`, …) are just
+pre-baked slots. Every existing cart keeps working unchanged, and most carts never define an
+instrument at all.
+
+```c
+note(60, INSTR_SAW, 5);                      // raw wave — unchanged
+note(60, INSTR_PLUCK, 5);                    // a baked preset, zero setup
+chord(48, CHORD_MAJ7, INSTR_ORGAN, 5);       // a §8 modeled engine, same call shape
+```
+
+### 10.2 Defining an instrument — base call + one modifier per axis
+
+```c
+// axis 1+2: timbre (which engine) + ADSR envelope.  a/d/r in ms, sustain 0..7
+void instrument(int slot, int wave, int attack_ms, int decay_ms, int sustain, int release_ms);
+
+// axis 1 detail: pulse width (only meaningful for pulse/square timbres; no-op otherwise)
+void instrument_duty(int slot, float duty);                 // 0..1
+
+// axis 3: ONE routable LFO — this single call IS vibrato / tremolo / PWM / wah
+void instrument_lfo(int slot, int dest, float rate_hz, float depth);
+//   LFO_PITCH    depth = semitones   → vibrato
+//   LFO_DUTY     depth = 0..1        → PWM / duty sweep
+//   LFO_VOLUME   depth = 0..1        → tremolo
+//   LFO_CUTOFF   depth = Hz          → filter wah
+
+// axis 4: resonant state-variable filter (the §5.5 SID filter AND the §8.3 formant)
+void instrument_filter(int slot, int mode, int cutoff_hz, int resonance);   // res 0..15
+//   FILTER_OFF / LOW / HIGH / BAND / NOTCH / FORMANT
+```
+
+Four functions define *any* instrument. Each call is short, maps to exactly one axis, and is
+optional. The LFO destination-dependent `depth` units are a small wart — named sugar wrappers
+(`instrument_vibrato`, `instrument_tremolo`, …) are an option if it bites, at the cost of more
+surface.
+
+```c
+void init(void) {
+    instrument(5, INSTR_PULSE_25, 2, 80, 4, 120);   // timbre + ADSR
+    instrument_duty(5, 0.25f);                       // thin pulse
+    instrument_lfo (5, LFO_DUTY, 4.0f, 0.15f);       // ...that shimmers (PWM)
+    instrument_lfo (5, LFO_PITCH, 6.0f, 0.2f);       // ...with a touch of vibrato
+    instrument_filter(5, FILTER_LOW, 1800, 9);       // ...rounded off
+}
+void draw(void) { if (every(60)) note(60, 5, 6); }
+```
+
+One timbre × ADSR × two LFO routings × a filter, from four lines — the multiply in action.
+
+### 10.3 Real-time control — held channels play an instrument live (§6)
+
+The instrument is the *template*; a channel is a held voice you write to per-frame. Same four
+axes — the difference is the *game* is the modulator instead of the LFO.
+
+```c
+void ch_play  (int ch, int midi, int instr, int vol);   // start held (vol 0 = silent)
+void ch_pitch (int ch, float midi);                      // float → glides (slewed, §6.2)
+void ch_vol   (int ch, int vol);                         // 0 gates off, keeps the channel
+void ch_duty  (int ch, float duty);
+void ch_cutoff(int ch, int hz);
+void ch_stop  (int ch);
+```
+
+```c
+void init(void)  { ch_play(0, 40, INSTR_SAW, 0); }                  // start silent
+void update(void){ ch_pitch(0, 36 + speed*0.6f);                    // engine rev
+                   ch_vol  (0, speed > 0.1f ? 5 : 0); }             // fade at a stop
+```
+
+### 10.4 How the §8 engines slot in
+
+`INSTR_ORGAN`/`INSTR_EPIANO`/… are just more `wave` values — no new API, no new concept:
+
+```c
+instrument(6, INSTR_ORGAN, 0, 0, 7, 80);    // instant attack, sustain, fast release
+```
+
+Rule that resolves the ADSR-vs-baked-envelope conflict: **all-zero ADSR = use the engine's
+baked default.** A non-zero user ADSR overrides *amplitude only*, never the internal timbral
+motion (key-click, pickup growl, dispersion). `instrument_duty` is a no-op on non-pulse engines.
+
+### 10.5 Surface count and the one open decision
+
+The entire grid costs: **4 define-calls + 6 channel-calls + a handful of `INSTR_*` / `LFO_*` /
+`FILTER_*` constants.** Tiny, for the whole space.
+
+The one real decision baked into this sketch: **filter scope — per-instrument (as above) or one
+global master bus?** Per-instrument composes cleanly and gives formant vowels for free, but costs
+8 SVFs instead of 1; global is cheaper and more SID-authentic but can't differ per voice. On
+desktop 8 SVFs is negligible, so this sketch leans per-instrument — but it's the live question
+from §9 ("filter scope", "one filter primitive, two uses") and wants a deliberate call before
+building.

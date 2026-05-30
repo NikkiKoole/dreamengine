@@ -15,7 +15,7 @@ The north star: a teenager picks this up, makes something that moves on screen i
 ## References
 
 - **PICO-8** — fantasy console constraints, all tools in one window, cartridge format, charming aesthetic
-- **DIV Game Studio** — integrated sprite editor, the process/coroutine model for game objects, 320×200 feel
+- **DIV Game Studio** — integrated sprite editor, game-object-per-entity feel, 320×200 resolution
 - **BlitzMax** — approachable language, game-focused stdlib, not condescending
 
 ---
@@ -32,7 +32,7 @@ The north star: a teenager picks this up, makes something that moves on screen i
 
 Real C, or very close to it. Not a toy dialect — skills should transfer. A curated `studio.h` provides the game API. The learner never calls `malloc`. Stack and globals only to start.
 
-The API has grown past the original "~20 functions" sketch — currently ~70, organised into sections (graphics, input, touch, sound, map, utility, palette, screen). Help-tab grouping, hover tooltips, autocomplete, and Cmd-click-to-help compensate for the size, but it's worth pruning later if it starts to feel overwhelming.
+The API has grown well past the original "~20 functions" sketch — currently ~120 functions plus ~80 constants, organised into sections (graphics, input, touch, sound, map, utility, palette, screen). Help-tab grouping, hover tooltips, autocomplete, and Cmd-click-to-help compensate for the size, but it's worth pruning later if it starts to feel overwhelming.
 
 ### Open questions
 - Whether to allow `#include` of other files
@@ -43,7 +43,7 @@ The API has grown past the original "~20 functions" sketch — currently ~70, or
 
 ## The Learning Model
 
-Three levels of scaffolding, all running on the same runtime underneath:
+Two levels of scaffolding, both running on the same runtime underneath:
 
 **Level 1 — Beginner (shielded loop)** ✓ This is what the editor currently produces.
 ```c
@@ -54,22 +54,12 @@ void draw() {
     spr(1, x, y);
 }
 ```
-No visible loop. Just fill in the blanks.
+No visible loop. Just fill in the blanks. Game objects are plain C — a typed
+static array with an `on` flag (`Enemy enemies[64]; bool on;`) and a `for` loop
+that skips inactive slots. Across ~90 carts this immediate-mode-over-static-pools
+style has proven to be enough; the algorithm and the data layout *are* the lesson.
 
-**Level 2 — Intermediate (process model, DIV-style)** — Not built yet. Biggest open vision item. Needs C-side coroutines (longjmp / ucontext / protothreads) plus a small parser/transformer for the `process … loop … frame;` syntax.
-```c
-process player() {
-    x = 100; y = 100;
-    loop {
-        if (btn(RIGHT)) x += 2;
-        spr(1, x, y);
-        frame;
-    }
-}
-```
-Each game object is a coroutine. `frame;` yields to the next tick. Write each thing's behavior as its own story.
-
-**Level 3 — Advanced (raw loop)** — Not done. Currently `studio.c` owns `main()` and the user fills in `update()` / `draw()`. To unlock Level 3 we'd need to make `main()` opt-out (e.g., a `#define STUDIO_NO_MAIN` or a separate header that exposes `studio_init/frame/running`).
+**Level 2 — Advanced (raw loop)** — Not done. Currently `studio.c` owns `main()` and the user fills in `update()` / `draw()`. To unlock this we'd need to make `main()` opt-out (e.g., a `#define STUDIO_NO_MAIN` or a separate header that exposes `studio_init/frame/running`).
 ```c
 int main() {
     studio_init();
@@ -80,10 +70,18 @@ int main() {
 ```
 The curtain drops. Full control.
 
+> **Dropped: the DIV-style process/coroutine model.** Earlier drafts had a middle
+> "process" level — each game object as a coroutine with its own `loop … frame;`
+> body, needing C-side coroutines (longjmp/ucontext/protothreads) plus a syntax
+> transformer. It was once billed as the headline differentiator, but the ~90
+> shipped carts are the counter-evidence: they all work cleanly with plain typed
+> pools, and `broadcast`/`received`-style events cover the "objects talking to each
+> other" need with none of the machinery. Weeks of architectural work for a model
+> the cart corpus shows we don't need — cut. (Recorded in [`decisions/0001-cut-coroutine-process-model.md`](decisions/0001-cut-coroutine-process-model.md).)
+
 ### Open questions
-- Can a single cartridge mix levels 1 and 2, or do you pick one per project?
-- Exact shape of the process model — how do processes communicate?
-- Whether level 2 requires actual coroutine/fiber support in C, and how to implement that
+- Whether Level 2 (raw-loop opt-out) is worth building, or whether the shielded
+  loop is the only level this console ever needs.
 
 ---
 
@@ -150,9 +148,9 @@ The sprite editor lets you flip between N "frames" with `[1]/[2]`, where each fr
 - Stamp hover preview shows where the next paste will land
 
 ### Sound Tool — diverged from original vision
-The original plan was a 4-channel tracker/sequencer UI. What got built instead is a **code-first sound API**: an 8-voice synth (square / saw / tri / noise / sine) with sfx, music, note, hit (variable duration), chord (9 types), strum (with delay), tone (random in scale), schedule, bpm, beat, beat_pos, every, euclid (Bjorklund rhythms), chance, degree. Strudel-inspired — making music **is** programming, which fits the learn-to-code mission.
+The original plan was a 4-channel tracker/sequencer UI. What got built instead is a **code-first sound API** — an 8-voice synth where making music **is** programming, which fits the learn-to-code mission. Strudel-inspired (`every`, `euclid`, `chance`, `degree`), with chords, strum, schedule, and a bpm/beat clock.
 
-Whether to *also* build a tracker UI later is still genuinely open. The code-first approach may be enough, or some users may want the visual tool. We'll see.
+The full sound design — current engine, where it sits vs. the SID/NES chips, and the expansion roadmap (instruments, filter, held channels, the navkit instrument port) — lives in **[`design/audio-notes.md`](design/audio-notes.md)**. Whether to *also* build a tracker UI later is still genuinely open.
 
 ---
 
@@ -171,15 +169,11 @@ Whether to *also* build a tracker UI later is still genuinely open. The code-fir
 
 ## What We're Building First
 
-The first arc — getting a usable PICO-8-style fantasy console with a code editor, sprite editor, map editor, and code-driven sound — is done. A teen can write a cart with movement, sprites, a tile map, and a music loop in one sitting.
+The first arc — getting a usable PICO-8-style fantasy console with a code editor, sprite editor, map editor, and code-driven sound — is done. A teen can write a cart with movement, sprites, a tile map, and a music loop in one sitting. Cartridge save/load (`.cart.png`), the tutorial gallery (~90 carts), inline error markers, and the emscripten web build all ship.
 
-### Biggest open items, ordered by impact
-1. **Cartridge save/load format** ✓ — code + sprites + map bundled into a `.cart.png` (valid PNG with embedded zTXt chunks: `de:source`, `de:sprites`, `de:map`). Save via the cart tab; load via button or drag-drop anywhere. Unlocks the "show your friend" loop.
-2. **Process / coroutine model (Level 2 learning)** — the most ambitious vision item; what differentiates dreamengine from PICO-8 and from generic raylib templates. Weeks.
-3. **Tutorial carts** ✓ — 17 progressive example carts (01-hello → 15-anim + pong) in `editor/public/carts/`, browsable via a "tutorials" tab with thumbnail grid; one-click loads code + sprites + map into the editor.
-4. **Inline error markers** ✓ — clang output parsed for `cart.c:LINE:` patterns; error gutter dots + line decorations rendered in the editor.
-5. **Browser sharing target** — emscripten or a pure-JS runtime, so finished carts can be sent as a URL.
-6. **iPad runtime** — touch is already wired in the runtime; needs a build path.
+**Roadmap lives in [`STATUS.md`](STATUS.md)** — the single ledger of what's shipped, open, and cut. This file stays about the *why*, not the *what's-next*. The vision-level questions still genuinely open are below; everything else is tracked there.
 
-### Open question still genuinely open
-Whether `sound` becomes a code-only story or also gains a tracker UI. The code-as-music primitives are working; whether visual editing is ever needed depends on who ends up using this.
+### Vision-level open questions
+- **Sharing the work** — the web build ships, but the "send your friend a URL" loop needs a host. What's the right shape — itch.io, a one-click publish, or a dreamengine-hosted gallery? (See [`guides/sharing.md`](guides/sharing.md).)
+- **Sound: code-only or also a tracker?** The code-as-music primitives work; whether visual editing is ever needed depends on who ends up using this. (Design in [`design/audio-notes.md`](design/audio-notes.md).)
+- **The sprite-editor "frames" question** (above) — still the central unresolved design tension in the tools.
