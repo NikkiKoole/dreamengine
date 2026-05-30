@@ -461,7 +461,16 @@ phase independently shippable:
 
 ---
 
-## 10. Proposed API — the four axes, one container
+## 10. The four axes, one container — SHIPPED
+
+> **Status: shipped** (HEAD `141a0a7`). All four axes below are live on the raw waveforms,
+> bundled per instrument slot: `instrument()` (ADSR), `instrument_duty()`, `instrument_lfo()`,
+> `instrument_filter()`. Deltas from the original sketch: **3 LFOs per slot**, so
+> `instrument_lfo()` takes a `which` (0–2) index; **held channels (§6) are NOT built**, so
+> `ch_*` doesn't exist yet — `LFO_CUTOFF` is the filter-sweep/wah path for now, and the
+> `dream synth` cart fakes hold-to-sustain with a fixed note gate. Carts: `instruments`,
+> `lfo`, `filter`, `dream synth`. §2's "where we are now" predates this and is superseded
+> for the instrument model. (The original proposal text is kept below as the rationale.)
 
 A concrete API sketch for the whole expressive space. The realization that drives it: the
 range we want isn't a *list* of features — it's **four orthogonal axes that multiply**, and

@@ -7,7 +7,7 @@
 > **here**, then fix the prose in the relevant design doc. If a design doc and this file
 > disagree, this file wins.
 
-_Last updated: 2026-05-30 (session 7 — docs cleanup). HEAD: `c4f2801`._
+_Last updated: 2026-05-30 (session 8 — instrument synth). HEAD: `141a0a7`._
 
 ---
 
@@ -37,6 +37,13 @@ Recently landed and worth calling out:
 **Code-first sound** — 8-voice synth; `note`/`hit`/`chord`/`strum`/`tone`/`degree`,
 `bpm`/`beat`, `every`/`euclid`/`chance`, `schedule`. (Banks `sfx`/`music` play built-in
 demo data only — see "Open" below.)
+- **Instrument synth** — `instr` is now an instrument slot (0–4 = the raw waves,
+  unchanged; 5–15 cart-defined). Four expressive axes bundled per slot, all on the raw
+  waveforms: `instrument()` (per-voice **ADSR**), `instrument_duty()` (pulse width),
+  `instrument_lfo()` (**3 LFOs**/slot → vibrato/PWM/tremolo/wah), `instrument_filter()`
+  (resonant SVF: low/high/band/notch). Demo carts: `instruments`, `lfo`, `filter`, and
+  `dream synth` (a playable Moog-style patch panel + keyboard). See
+  [`design/audio-notes.md`](design/audio-notes.md) §10.
 
 ---
 
@@ -52,10 +59,13 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
    [`design/api-notes.md`](design/api-notes.md) §11.
 3. **Pause + debug** — `pause()`/`paused()`, `fps()`, `voices_active()`.
    [`design/api-notes.md`](design/api-notes.md) §16.
-4. **Sound expansion** — pulse duties → `slide()` → preset instruments → held channels
-   + per-param slew → instrument bank (ADSR/vibrato/duty) → master `filter()`; plus the
-   navkit rich-instrument port (organ/Rhodes/piano as `INSTR_*` presets). Also: cart-side
-   SFX/pattern authoring (banks are hardcoded today). [`design/audio-notes.md`](design/audio-notes.md) §5–8.
+4. **Sound expansion** — _instrument bank (ADSR/duty/LFO/filter) now SHIPPED, see above._
+   Still open: `slide()` (portamento); zero-setup **preset instruments** (`INSTR_PLUCK`/
+   `PAD`/…); **held channels + per-param slew** (sustained, game-driven voices — the only
+   way to get hold-to-sustain, which the synth cart currently fakes with a fixed gate);
+   the **navkit rich-instrument port** (organ/Rhodes/piano as `INSTR_*` presets — drops
+   into the timbre slot with no API change); and cart-side **SFX/pattern authoring**
+   (banks are hardcoded today). [`design/audio-notes.md`](design/audio-notes.md) §5–8.
 5. **Sprite flags** — `fget`/`fset` (per-sprite 8-bit flags; 256 bytes). Pairs with an
    8-checkbox row in the sprite editor. [`design/api-notes.md`](design/api-notes.md) 2026-05-30 review.
 6. **Gamepad** — `gp_axis(slot, axis)`, `gp_present(slot)`, internal `btn()` augment.
