@@ -853,3 +853,15 @@ if (window.studio?.onLog) {
   window.studio.onExit(rlogExit)
 }
 
+// ── welcome cart ──────────────────────────────────────────────
+// On startup, greet with the pixel-zoo cart — loaded exactly like the Load Cart
+// button, so the cart PNG (editor/public/carts/zoo.cart.png) is the single source
+// of truth for its code + sprites + settings. Electron-only: a browser tab can't
+// parse or run carts anyway, so it just starts on the empty startDoc.
+if (window.studio) {
+  window.addEventListener('load', () => {
+    currentCartName = 'pixel zoo'
+    loadCartFromUrl('/carts/zoo.cart.png').catch(() => {})
+  })
+}
+
