@@ -21,8 +21,9 @@ docs/
 ├── decisions/         frozen, dated decisions (ADR-lite) — the "why we (didn't) do X"
 ├── design/            exploratory design notes (scratchpads) — rationale + proposals
 │   ├── api-notes.md     engine API: classics survey, signatures, naming, cart-patterns
-│   └── audio-notes.md   sound: current engine, chip comparison, expansion roadmap
-│   └── cart-survey-api-priorities.md   cart-evidence-first memo: what real carts prove, filtered through existing decisions
+│   ├── audio-notes.md   sound: current engine, chip comparison, expansion roadmap
+│   ├── cart-survey-api-priorities.md   cart-evidence-first memo: what real carts prove, filtered through existing decisions
+│   └── baked-rotation-atlas.md   pre-rotated sprite/shape atlas: fast blitted bodies, the centerline model, offscreen canvases
 ├── guides/            how-to
 │   ├── cart-authoring.md         the make-cart.js / tools/carts toolchain
 │   ├── cart-authoring-prompt.md  reusable AI prompt for designing a new cart

@@ -86,6 +86,13 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
     sufficient. Prereq is cart-side SFX authoring (the instrument bank itself shipped).
     [`VISION.md`](VISION.md), [`design/audio-notes.md`](design/audio-notes.md) §5.6.
 
+12. **Baked rotation atlas** *(exploratory — full design note, not yet started)* — an
+    offscreen-canvas primitive (`make_canvas`/`target`/`blit`) plus pre-rotated sprite/shape
+    "stamps" so bodies are fast translate-blits instead of per-frame rasterization (for
+    crowds, rich shapes, low-end). Centerline/pivot model, `pal()` recolor for free color
+    variety, parts capped at 16px (native slot size). The path to scaling the `bones`
+    animator past realtime drawing. [`design/baked-rotation-atlas.md`](design/baked-rotation-atlas.md).
+
 > `tritex` (affine textured triangle) shipped in session 8 — it was Open here; now in the API.
 
 **Smaller open items (no design doc yet):** gradient/dither fill; looping ambience
