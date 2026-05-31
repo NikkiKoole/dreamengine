@@ -85,6 +85,13 @@ static void shape_at(int x, int y, int s, int shape, int col) {
     else            rectfill(x - s, y - s, s * 2, s * 2, col);
 }
 
+// a 1px outline that matches the item's shape (circle ring / square border),
+// hugging the fill — for marking items too big to roll up.
+static void outline_at(int x, int y, int s, int shape, int col) {
+    if (shape == 0) circ(x, y, s + 1, col);
+    else            rect(x - s - 1, y - s - 1, s * 2 + 2, s * 2 + 2, col);
+}
+
 void draw(void) {
     cls(CLR_DARK_GREEN);
     follow((int)px, (int)py, KW, KH);
@@ -99,7 +106,7 @@ void draw(void) {
         if (!items[i].alive) continue;
         shape_at((int)items[i].x, (int)items[i].y, items[i].size, items[i].shape, items[i].col);
         if (items[i].size > r * 0.9f)                          // mark the ones too big to eat
-            circ((int)items[i].x, (int)items[i].y, items[i].size + 2, CLR_DARK_GREY);
+            outline_at((int)items[i].x, (int)items[i].y, items[i].size, items[i].shape, CLR_DARK_GREY);
     }
 
     // the katamari: dirt ball + everything stuck to it
