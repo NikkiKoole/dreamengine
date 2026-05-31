@@ -197,6 +197,40 @@ Rows shorter than `MAP_W` are zero-padded. Rows beyond `MAP_H` are ignored.
 | `editor/public/carts/XX-name.cart.png` | finished cart (served to the tutorials page) |
 | `editor/public/carts/index.json` | metadata list for the tutorials panel |
 | `build/screenshot.png` | last screenshot from `--run` or from the editor |
+| `tools/carts/compile_flags.txt` | clangd flags so the editor lints cart `.c` files correctly |
+
+---
+
+## Editor linting (clangd)
+
+A cart `.c` includes only `studio.h`, with no build flags — so a stock clangd/clang
+check can't find the header (`'studio.h' file not found`), and because `studio.h` is
+where `<stdbool.h>` gets pulled in, that one miss cascades into a wall of bogus
+`unknown type name 'bool'` errors on every `typedef struct { bool … }`. It's all
+noise: the real builds (`make-cart.js`, the editor's ▶ run) pass `-I runtime` and
+compile fine.
+
+The fix is checked in: **`tools/carts/compile_flags.txt`**.
+
+```
+-I../../runtime
+-std=c11
+```
+
+clangd applies the nearest-ancestor `compile_flags.txt` to each file and resolves
+relative `-I` paths from *that file's* directory, so `../../runtime` (from
+`tools/carts/`) points at the repo's `runtime/`. Header found → `bool` resolves → the
+noise is gone for every cart, present and future. No per-cart pragmas or disclaimers
+needed.
+
+> **Why scoped to `tools/carts/`, not a root `compile_flags.txt`.** `runtime/studio.c`
+> needs different flags — the Homebrew raylib include path (machine-specific:
+> `/opt/homebrew/...` on Apple Silicon vs `/usr/local/...` on Intel) and the
+> `build/*.h` headers generated only after a build. A root `-Iruntime` would quiet the
+> carts but leave `studio.c` noisy-or-wrong, and hard-coding a raylib path isn't
+> portable. If you ever want one central config, a root **`.clangd`** with a
+> `tools/carts/**` match block is the cleaner home — but `studio.c` will still lint
+> dirty on a fresh clone until `build/` exists, so it's not worth chasing.
 
 ---
 

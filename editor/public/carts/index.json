@@ -503,5 +503,145 @@
     "title": "the crowd",
     "description": "A plaza full of little 16×32 people walking, colliding and bouncing off each other and the screen edges — a stress test of the sprite system. The headline trick is pal()-recolored \"magic\" clothes: everyone shares just three sprite bodies, but each person's shirt (drawn in palette index 28) and pants (index 29) are swapped to random colors with pal() before drawing, so one tiny sprite set yields a whole varied crowd. Legs animate a 4-frame front-view march, agents are depth-sorted by their feet, and the ground is a real tile map() — grass, a cobbled crossroads, and scattered flowers. Z scatters everyone, X adds another person.",
     "file": "crowd.cart.png"
+  },
+  {
+    "title": "sensible soccer",
+    "description": "Top-down arcade footy down a vertically-scrolling pitch, 6-a-side. The headline is AFTER-TOUCH: kick the ball, then HOLD a direction while it's in flight and it bends in the air — banana shots that curl round the keeper, just like the Amiga classic. You always control the team-mate nearest the ball (it auto-switches, with a ring to show who); the CPU steers your other five plus the whole opposing team. The mow-striped pitch is a real tile map() with primitive markings and goals, the camera follows the ball, and both kits + keepers come from ONE tiny player sprite recoloured per-team with pal() (the crowd-cart magic-colour trick). Ball shadow that lifts on lobs, net-ripple + screen-shake + a crowd roar on goals, a ref whistle, and a crowd bed that swells as play nears a goal. Two 90s halves with a half-time end-swap, win/lose/draw, best result saved. D-pad run, Z kick/tackle, then hold to bend.",
+    "file": "sensi.cart.png"
+  },
+  {
+    "title": "druglord",
+    "description": "A Drugwars-style economy game. You have 30 DAYS to flip a small stake — and a loan-shark debt that grows 10%/day — into a fortune, trading six substances across six city districts whose prices swing daily. Buy where a good is cheap, haul it to where it sells dear, stash cash in the bank away from muggers, and pay the debt down before day 30. Travelling to a district costs a day, re-rolls every price, and can trigger an event card: a crackdown that makes a price SOAR, a glut that CRASHES it, a mugging, a cop bust (siren + flashing lights, you ditch your stash), a lucky dumpster find or a bigger coat. Each district is a living tile-map scene — glass-tower downtown, the crate-stacked docks, leafy suburbs, grimy tower blocks, neon Chinatown, the park — with pal()-recolored pedestrians and a day/night sky that re-lights the windows as the days pass. The money counter rolls, prices show green/red arrows and blinking HOT tags, and each place has its own ambient sound bed. Mouse: click a good to buy 1 (right-click sell 1); the bottom bar is BUY/SELL/QTY/BANK/LOAN/TRAVEL; on the city map click a district to travel. Keys: up/down pick a good, Z buy, X sell, Q cycle quantity, M map, ENTER confirm.",
+    "file": "druglord.cart.png"
+  },
+  {
+    "title": "neon rain",
+    "description": "A noir point-and-click murder case. Work one rain-soaked night across five hand-painted scenes - flat, bar, alley, office - hunting the killer of singer Mara Vance. Hover hotspots to LOOK/TAKE/TALK/GO, collect evidence, grill two suspects through branching dialogue, fill your case notebook, then name the killer. Heavy pal() neon lighting, fillp() fog + wet-street reflections, a rain particle pool, and a slow synth bed (lowpass pad, vibrato sax, a sting on the reveal). MOUSE: act / click a held item onto a hotspot. RIGHT-CLICK: drop item. N: notebook. Z or click: advance text.",
+    "file": "neonrain.cart.png"
+  },
+  {
+    "title": "turf war",
+    "description": "Top-down gang-turf takeover: lead your green crew block by block, out-number the rivals holding a district and the whole zone flips to your color with a wash and a chime. Three AI gangs expand into neutral blocks and counter-attack your borders — capture is paper.io/splatoon \"presence\" applied to a city grid, the crew is the crowd.c pal()-recolor trick (one sprite, four gang colors via a magic shirt index), and a 92 BPM boom-bap bed (filtered bass + euclid hats) rolls under brawl dust, screen shake, a pulsing share-bar and a district mini-map. Own 8 of 12 districts to win; lose your last block and you're wiped out. WASD lead your crew (they follow and break off to brawl), Z for a gang-up melee burst, Z to run it back.",
+    "file": "turfwar.cart.png"
+  },
+  {
+    "title": "final fight",
+    "description": "A belt-scroll beat-'em-up — and a reusable brawler engine. Walk a chunky 16×32 hero right through a city; the camera LOCKS into scroll arenas of thugs and a GO arrow releases you on clear, street giving way to a warehouse and a boss. Fighters have x, depth (y) and jump height (z) with y-sort overlap. Tap Z for a 3-hit combo (the third launches a knockdown), X to jump, Z in the air to jump-kick; walk into a thug to grab him then push a direction to THROW him into the others, Z+X for a spin special. Break barrels for food, grab dropped pipes & knives. Enemy variety is all pal() shirt/skin recolors of one sprite set (grunt, knife, bruiser, boss). Hit-stop, shake, white flash, POW stars, slow-mo boss kill, combo counter, and a reactive synth groove. WASD move, Z attack, X jump, Z+X special.",
+    "file": "finalfight.cart.png"
+  },
+  {
+    "title": "river city",
+    "description": "A procedural belt-scroll brawler-RPG. Fight your way through four re-rolled gangs across downtown, the park, the mall and the docks, scoop the coins they drop, and spend them at the diner on stats (HP/STR/DEF/STAMINA), a heal, and new moves — a spin special and a dash. The whole cast is one 16x32 sprite set recolored per-gang with pal(); floors are tile maps rebuilt per zone; combat has hitstop, shake, flash, combos and a depth-based hit rule. Beat the docks boss to clear the city. Arrows move (up/down = depth), Z attack (tap x3 combo / air = jump kick), X jump, down+Z spin special, double-tap to dash. Diner: up/down pick, Z buy, X leave.",
+    "file": "rivercity.cart.png"
+  },
+  {
+    "title": "doom",
+    "description": "A Doom-style first-person shooter on the raycaster — stalk a base of corridors blasting charging imps and shooting gunners, drawn as distance-scaled billboard sprites that hide behind walls via a depth buffer. Two weapons (pistol / shotgun), pickups, a red keycard that unlocks the exit, muzzle-flash room lighting and gore. WASD/arrows move + turn, Q/E strafe, Z fire, X (or 1/2) switch weapon, SPACE open doors / hit the exit switch.",
+    "file": "doom.cart.png"
+  },
+  {
+    "title": "xcom (enemy unknown)",
+    "description": "Turn-based squad tactics against the alien threat. Move 4 soldiers across a procedurally scattered cover map, take percentage-chance shots with a live hit/crit forecast, duck behind half/full cover (shown as shields), and set OVERWATCH to snap-fire at anything that moves. Fog-of-war hides the battlefield until your soldiers see it; alien pods activate and scatter to cover with an alarm when spotted. Soldiers you name, keep and promote between missions in a light barracks screen — and lose for good if they fall (the roster persists). Mouse: click a soldier, click a tile to move (range shown) or an enemy to open the shot, then FIRE; buttons for OVERWATCH / HUNKER / RELOAD / END TURN. Keyboard: arrows move the cursor, Z act, X cancel, O/H/R actions, E end turn, TAB next soldier. Wipe out every alien to win.",
+    "file": "xcom.cart.png"
+  },
+  {
+    "title": "pizza tycoon",
+    "description": "Build a pizza empire across six districts with their own foot-traffic, rent and TASTE — each loves one topping and loathes another. Tune each shop's recipe on a live pizza you top slice-by-slice, set the price to the volume-vs-margin sweet spot, then hit NEXT DAY and read the ledger. A rival magnate keeps buying shops and undercutting you; shady MAFIA JOBS offer fast cash for rising HEAT (skip the protection money and a shop gets torched). pal()-recolored crowds, a day/night tint sweep, a jaunty cafe bed and an ominous mafia sting. Out-earn the rival by day 20. MOUSE: click a district (yours opens MANAGE, a free one shows BUY); toggle toppings, [-]/[+] or wheel for price, NEXT DAY to advance, ACCEPT/DECLINE the cards. KEYS: arrows pick, Z buy/manage, ENTER next day, 1-6 toppings, M back.",
+    "file": "pizzatycoon.cart.png"
+  },
+  {
+    "title": "Arrakis",
+    "description": "Dune base-builder: harvesters A*-mine spice for credits, build refineries/power/factories/turrets, queue trikes & tanks vs a CPU faction. Mouse: click/drag select, click to move/attack, BUILD then click to place (1-4 hotkeys). Wipe out the red base to win.",
+    "file": "dune.cart.png"
+  },
+  {
+    "title": "cannon fodder",
+    "description": "Top-down run-and-gun squad tactics, mouse-commanded. Lead up to five tiny soldiers across three scrolling battlefields — LEFT-CLICK ground to send the squad there in a loose trailing formation; they AUTO-FIRE their rifles at any enemy in range and line of sight; RIGHT-CLICK lobs an arcing grenade with a big AoE to level the huts and gun-nests that are your objectives. The bittersweet hook: soldiers die PERMANENTLY in a single hit, and the survivors carry between missions and earn promotions (more HP, range and accuracy) — a fallen name goes on the casualty ticker for good. One soldier sprite is pal()-recolored into green squad vs red enemies, and one green tileset is pal()-swapped per biome (jungle, desert, snow). Big fillp+circfill+shake explosions, blood and dirt particles, a grim man-down sting, and a sparse euclid snare bed. Roster persists between runs via save_bytes. LEFT-click move, RIGHT-click grenade, SPACE halt, R restart.",
+    "file": "cannonfodder.cart.png"
+  },
+  {
+    "title": "trade winds",
+    "description": "Age-of-sail spice trading across a six-port archipelago. Buy spice, silk, tea, rum, cotton and ivory cheap at their source islands and sell them dear at the home market as prices drift and spike. Sail the sea chart yourself — every voyage costs days and may pitch you into a STORM (steer the wheel to meet the swell or lose cargo and hull) or a PIRATE (a broadside gunnery duel, or gamble a flee on your speed). Spend your gold at the shipyard on a bigger hold, faster hull, more cannons and hull repairs. Build the greatest fortune before the season's 60 days run out — best run is saved. Click a good to buy (right-click sell), the bottom bar for shipyard / set sail, a port on the chart to weigh anchor; keys: arrows pick a good, Z buy / X sell, Q qty, S shipyard, M chart, and in fights Z fires / X flees.",
+    "file": "tradewinds.cart.png"
+  },
+  {
+    "title": "outrun",
+    "description": "A sun-drenched pseudo-3D arcade racer with BRANCHING roads. Blast down a curving, hilly highway faked from projected triangles, weave through traffic (each car packed with little passengers), and beat each checkpoint before the clock runs out. The twist: at every checkpoint the road SPLITS into two diverging ribbons with a grass island between them — steer onto the left or right fork to choose your next biome, and the scenery ahead recolours to the road you're leaning toward. Five biomes (coast, desert, city, forest, alpine) share one procedural road via pal() recolour; the stages are a binary TREE generated on the fly, so no two runs take the same path. Clip a car and you spin out for a time-costing tumble; off-road bogs you down in a cloud of dust. Engine pitch tracks your speed, tyres screech through hard corners, speed-lines streak past flat out. Reach the goal stage to win. Z / Up: gas — X / Down: brake — Left/Right: steer (and pick a fork).",
+    "file": "outrun.cart.png"
+  },
+  {
+    "title": "operation wolf",
+    "description": "An on-rails light-gun shooter, mouse to the core. The world scrolls past on a rail — one tile map() recolored per stage with pal() (jungle, enemy camp, airfield) — while soldiers rise from the treeline, telegraph with a raised rifle, then loose bullets and lobbed grenades that come AT the screen; shoot them out of the air. LEFT mouse is the magazine machine gun, RIGHT is the scarce rocket, and you RELOAD by shooting the drifting supply crates. Don't gun down the hands-up civilians — it costs health and score. Wave-based across three stages with a health bar (no lives), best score saved. Muzzle flash, recoil, brass casings, tracer, white hit-flash, fillp explosion rings, screen shake, a damage flash and a low-health alarm. Move mouse to aim, LEFT shoot, RIGHT rocket, shoot a crate to reload.",
+    "file": "opwolf.cart.png"
+  },
+  {
+    "title": "pod racer",
+    "description": "Twin-engine pods screaming through a textured rock chasm — and NOT a flat scanline road. It clads the whole canyon in real tritex geometry: the ground is a tech-floor that stretches to the horizon and the walls are rock strata rising on both sides, drawn far→near as a painter's pass (short segments keep the affine warp small, like textured3d's subdivision). The one deep mechanic is BOOST/HEAT — hold A for massive speed while engine heat climbs to a blowout stall; vents cool you off-boost, so it's pure risk/reward. Scrape a wall and you shed speed in a shower of sparks. A layered detuned engine drone pitches with speed, the boost adds a filter-swept roar (FILTER_LOW + LFO_CUTOFF) and a rising overheat alarm, with an FOV-pulse, speed lines, screen-shake and a sonic-boom flash at top speed. Race 3 laps against 4 CPU pods, best lap saved. Up/Z throttle, Down/X air-brake, Left/Right steer, hold A (or Shift) to BOOST.",
+    "file": "podracer.cart.png"
+  },
+  {
+    "title": "excitebike",
+    "description": "Side-view NES motocross with the famous landing-angle skill, an overheat meter, and a track editor. Hit a ramp and you launch into the air with the nose drifting down on its own — hold Up/Down to control the tilt and touch down within a hair of LEVEL to keep your speed; nose-down or tail-down and you wipe out. Hold turbo for more top speed but the temp gauge climbs to a flashing-red redline and a stall, so mud (slow but cooling) becomes a real choice. Race one track against three pal()-recolored CPU rivals you bump past, chasing your best lap (saved). Then switch to BUILD: a mouse editor paints ramps, jumps, whoops and mud onto the lane grid, persisted with save_bytes — save it and test-ride instantly. RACE: Right/Z throttle, X turbo, Up/Down tilt in the air, Left brake. BUILD: 1-5 or click the palette, left-click paint / right-click erase, arrows scroll, S save, Z ride, B title.",
+    "file": "excitebike.cart.png"
+  },
+  {
+    "title": "advance wars",
+    "description": "A bright turn-based tactics game (an Advance Wars demake), you RED vs the CPU BLUE on one hand-made tile map. The crunch is three systems working together: a unit-vs-unit DAMAGE MATRIX (mechs wreck tanks up close, recon mauls infantry, artillery hits at range 2-3 but can't be countered or move-and-fire), TERRAIN DEFENSE STARS that scale how much a defender soaks (forests and mountains save lives), and CAPTURE — march infantry onto a building to flip it over two turns for income, or take the enemy HQ to win instantly. Factories build new units from your funds, a forecast shows damage before you commit, and every clash kicks a screen-shake, flash, sparks and HP pops. Mouse-primary: click a unit, click a reachable tile (it traces a move arrow over the highlighted range), then pick ATTACK / CAPTURE / WAIT. Keyboard: WASD or arrows move the cursor, Z confirm, X cancel/undo, SPACE ends turn. Win by capturing the enemy HQ or destroying every enemy unit.",
+    "file": "advancewars.cart.png"
+  },
+  {
+    "title": "mass effect",
+    "description": "A space opera distilled to its loop. Command the SSV Normandy from the bridge: chat with your crew through a paragon/renegade DIALOGUE WHEEL, chart a course on the GALAXY MAP, then drop into a top-down cover-shooter. Move and aim twin-stick while two AI squadmates flank and fire; duck beside crates and walls that genuinely block bullets AND line-of-sight (real cover), regen your shield between firefights, and unleash a biotic blast that slows time and flings the swarm. Clear the husk waves, then break the Reaper Core. The crowd-cart trick runs the whole cast — ONE fighter sprite, recoloured with pal() into the hero, both squadmates and every enemy — and each planet is its own tile theme. A final wheel choice (spare / disable / execute), weighed against the morality you built on the bridge, forks the ending. HUB/MAP/DIALOGUE: mouse + Z (X backs out of the map). MISSION: WASD move, mouse aim, Z or left-click fire, X biotic blast.",
+    "file": "masseffect.cart.png"
+  },
+  {
+    "title": "composer (mario paint sound)",
+    "description": "A melodic music toy in the spirit of Mario Paint's Sound mode. Stamp six cute critters — cat, star, mushroom, note, heart, flower, each its own synth voice (custom ADSR/filter/duty/LFO on slots 5-10) - onto an 11-row x 16-step pitch grid, then hit PLAY and a glowing playhead sweeps the bar singing your tune. Every row snaps to a scale (toggle PENTA/MAJOR) so it always sounds nice; notes squash-pop and flash white as the playhead strikes them. The transport rides the synth's own beat() clock, and your whole song persists between runs via save_bytes(). Mouse: click the grid to stamp the selected critter, click again or right-click to erase, click a critter to pick it; buttons for PLAY/STOP, -/+ tempo, SCALE, CLEAR, SAVE, LOAD. Keys: SPACE play/stop, 1-6 pick critter, C clear, M scale, S save, L load, arrows tempo.",
+    "file": "mariopaint.cart.png"
+  },
+  {
+    "title": "hotline",
+    "description": "Top-down, one-hit-kill, instant-retry neon carnage — a Hotline Miami tribute. Storm three building floors of rooms (a real tile map() of walls and kickable doors) and clear every guard: you and every thug die in ONE hit, so it's pure twitch and instant R restarts. Start with a bat, pry pistols/shotguns/uzis off the corpses, and when you run dry THROW the gun to knock a guard down for a free melee finish. Burst a door with SPACE and the guard behind it goes down. Enemies patrol with LOS vision cones, hear your gunshots and come investigate, and telegraph before they fire. Chain kills fast for a popping score multiplier. The juice is the game: hot neon palette (pal()-tinted per floor), screen-shake + white flash + hit-stop on every kill, slow-mo on a room's last kill, blood pools that stain the floor, brass casings and gibs - over a driving synthwave bed (LFO-swept filtered saw bass, square arp, four-on-the-floor drums, bass-drop sting on clear). One body sprite recolored into player/thug/guard via the crowd.c pal() trick. WASD move, mouse aim, LEFT-CLICK attack/fire, RIGHT-CLICK or Q throw your gun, SPACE kick a door, walk over a dropped weapon to grab it, R restart.",
+    "file": "hotline.cart.png"
+  },
+  {
+    "title": "dungeon keeper",
+    "description": "Be the evil Keeper: carve a dungeon out of solid rock, claim the floor, and fend off the heroes who march in to smash your Dungeon Heart. LEFT-DRAG over rock to designate it for DIGGING - imps A*-path in, mine it out (lifting the fog and exposing buried gold seams), then auto-CLAIM the dug floor and HAUL gold back to the treasury. Spend that gold on three rooms built by dragging on claimed floor: a TREASURY to store gold and pay wages, a LAIR that attracts monsters (and where they sleep to heal), and a TRAINING room where they level up. Unpaid monsters sour and leave. The signature is the SLAP-HAND: click-hold any imp or monster to pick it up and release to slap it down somewhere - rush a digger to a fresh seam or hurl a fighter onto an invader. Five escalating hero waves tunnel in from the gate toward your Heart; your monsters auto-fight and you slap in reinforcements or hit RALLY to call them all home. Torch-lit pal()/fillp dungeon mood, a creepy minor-organ bed with euclidean pick-axe taps, dig-dust, gold sparkle + rollup, combat sparks and a red heart-alarm pulse. Survive all 5 waves to win; lose the Heart and the do-gooders take the land. MOUSE: left-drag dig / build / grab+slap, buttons 1-3 pick a room, 4 or CREATE IMP makes a digger, SPACE/RALLY summons the monsters, right-click cancels.",
+    "file": "dungeonkeeper.cart.png"
+  },
+  {
+    "title": "Deluxe Paint",
+    "description": "A full pixel-paint program - pencil/line/rect/oval/fill/airbrush/eyedropper/custom-brush/mirror/undo, plus dither PATTERN fills, a Bayer GRADIENT tool, and live COLOR CYCLING (fire/water/rainbow ramps that flow via pal()). Mouse: left=FG, right=BG, click toolbar/palette/patterns, drag for shapes. Keys: b/l/r/o/f/s/i/c/d tools, [ ] size, x swap, m mirror, h hole, u undo.",
+    "file": "dpaint.cart.png"
+  },
+  {
+    "title": "heroes of might & magic",
+    "description": "A pocket Heroes of Might & Magic with the whole loop: explore, recruit, build, then DO BATTLE. On the ADVENTURE map your hero spends MOVEMENT POINTS to roam a small continent (terrain costs MP) - click a tile to walk there, scooping gold, ore and treasure chests, flagging the ore MINE for daily income, ducking into YOUR TOWN, or charging the rival. END DAY refreshes movement and advances the enemy hero, who marches on your town - so build an army before he arrives. In TOWN you build up to three creature dwellings (gold + ore) and recruit Pikemen, Archers, Griffins and Ogres into your army, with a fresh batch each new week. The climax is the STACK BATTLE: a unit is one icon labelled with a count (x22) and damage removes whole creatures from it; initiative runs by speed, melee attacks draw RETALIATION, archers shoot at range with no counter, and the hero casts BOLT (damage) or BLESS (buff) - a live damage forecast shows before you commit, with lunges, count pops, sparks and screen-shake. Win the battle or seize the enemy town to win the war; lose your army or your town and it's over. Mouse-primary: click to move/attack, click buttons to build/recruit/cast. Keys: SPACE end day, B leave town, Z confirm.",
+    "file": "heroes.cart.png"
+  },
+  {
+    "title": "world pointer",
+    "description": "Demonstrates the camera + world-space mouse combo. Plant flags in a world 3 screens wide, then SCROLL, ZOOM (mouse wheel) and ROTATE (Q/E) the whole view with camera_ex(x,y,zoom,angle) - and mouse_world_x/y() still lands your clicks exactly on the world, doing the full inverse of scroll+zoom+rotation in one line (a nasty matrix you'd otherwise hand-roll). save_int(\"most_flags\", ...) / load_int() remember your best count by name across runs - no magic slot numbers. Click: plant. Arrows: scroll. Wheel: zoom. Q/E: rotate. X: clear (best stays saved).",
+    "file": "worldpointer.cart.png"
+  },
+  {
+    "title": "sky strike",
+    "description": "A vertical-scrolling shoot-em-up (Raiden / 1943 / Tyrian), built around its weapon-upgrade loop. Your fighter hugs the bottom while a tile map() of sea, islands and an airbase scrolls down past you and waves of enemy craft pour in from the top. Shoot down P pods to climb your main gun L1->L5 (single -> twin -> 3-way -> 4-way -> 5-way spread), then keep grabbing them to bolt on side OPTION wingmen that mirror your fire; B pods stock a screen-clearing bomb that wipes every bullet in a white flash. Six foes off a scripted, escalating timeline — sine-weaving popcorn flyers, poppers and gunships that aim shots at you, ground turrets riding the scroll — all one sprite each, pal()-recolored into whole squadrons and flashed white when hit, capped by a 3-phase WARLORD boss with a health bar. A tight 1-pixel-core hitbox, X focus mode to thread bullet curtains, particle explosions with screen-shake, hit-stop on the boss kill, a driving chiptune bed and a last-life red alarm. Death drops you one weapon tier, never to zero; hi-score saved. Arrows/WASD fly (8-way), Z bomb (gun autofires), X focus/slow, SPACE or ENTER to start / restart.",
+    "file": "skystrike.cart.png"
+  },
+  {
+    "title": "pinball",
+    "description": "A hand-built physical pinball table — gravity, a steel ball that reflects off line-segment walls, swinging flippers with real tip-snap, pop bumpers, slingshots, a DREAM drop-target bank that arms MULTIBALL, a spinner and an orbit multiplier. Z/←/A = left flipper, X/→/D = right, hold ↓ or SPACE to charge the plunger then release to launch, ↑ to nudge (careful — TILT!), SPACE to play/retry.",
+    "file": "pinball.cart.png"
+  },
+  {
+    "title": "smooch lounge",
+    "description": "A saucy cabaret rhythm game, all cheeky tone and winks. A pixel-art chanteuse works a velvet speakeasy while hearts and lips fall down four lanes to a sultry lounge groove (walking bass, brushed swing hats, a vibrato-LFO 'voice', a bandpass sax stab) — tap the lane key as each note crosses the hit line for a SMOOCH / SMOOTH / CLUMSY rating, or a wrong-time WHIFF. The clock IS the music: every note rides the beat()/beat_pos() playhead like the drum machine. Good kisses grow a combo multiplier and fill the TEASE meter; fill it for a BIG FINISH where bonus off-beat notes appear, points double, the dancer struts and the pal()-recolored crowd cheers in confetti. 'Blow a kiss' hold notes you keep down for a bonus, lip-print stamps + heart bursts, a buzzing neon marquee, dithered velvet curtains and a swaying spotlight, then a flirty letter grade (STAR OF THE SHOW down to STAGE FRIGHT) with a saved hi-score. Tasteful innuendo, never explicit. A S K L tap the lanes (arrow keys for a gamepad), hold for a long kiss, SPACE to start / encore.",
+    "file": "smooch.cart.png"
+  },
+  {
+    "title": "bones",
+    "description": "A pixel-man skeleton animator — pose an 18-bone stick figure and flip-book him to life. Each bone is a 1px line set to one of 16 rotations; you author motion in a sequencer grid (bones down the rows, 16 frames across, every cell a hex digit 0-f for that bone's angle) while a live forward-kinematic preview shows the assembled figure — turn the torso and the whole body swings with it. A playhead loops the frames at an adjustable FPS with eased in-betweens, so it moves smoothly despite the 16-step quantization; the whole animation persists via save_bytes, and it opens on a friendly default wave. Arrows move the cell marker, Z/X turn the selected bone, C copies the previous frame, SPACE plays/stops, [ ] set FPS, - = set the loop length, S/L save/load — or click a cell and mouse-wheel to turn it, or just drag a limb in the preview to pose it directly (snaps to the nearest of 16).",
+    "file": "bones.cart.png"
   }
 ]
