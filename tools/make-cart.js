@@ -124,9 +124,12 @@ function buildSpriteSheet(sprites, charMap) {
   // sprites: { slotIndex: pixelArrayOrString, ... }
   const COLS = 8, SIZE = 16, SHEET = 128
   const pixels = new Array(SHEET * SHEET).fill(0)
+  // a cart's charMap EXTENDS the defaults (so it only needs to declare the extra
+  // chars it uses, e.g. {M:28}); it does not replace them. Cart entries win on conflict.
+  const map = charMap ? { ...DEFAULT_CHAR_MAP, ...charMap } : DEFAULT_CHAR_MAP
   for (const [slot, src] of Object.entries(sprites)) {
     const idx    = parseInt(slot)
-    const parsed = parseSprite(src, charMap || DEFAULT_CHAR_MAP)
+    const parsed = parseSprite(src, map)
     const ox     = (idx % COLS) * SIZE
     const oy     = Math.floor(idx / COLS) * SIZE
     for (let py = 0; py < SIZE; py++) {

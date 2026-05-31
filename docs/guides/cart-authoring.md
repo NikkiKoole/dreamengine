@@ -164,7 +164,20 @@ sprites: {
 | `k` | pinK | 14 |
 | `p` | Peach | 15 |
 
-Add your own via `charMap: { 'X': 8 }` in the config.
+Add your own via `charMap: { 'X': 8 }` in the config. **A cart's `charMap`
+*extends* this default table — you only declare the extra characters you need**
+(e.g. `charMap: { 'M': 28 }` to add one extended-palette colour); the standard
+letters above keep working in the same sprites. Your entries win on a conflict, so
+you can also remap a default letter.
+
+> **Gotcha (fixed Jun 2026):** `charMap` used to *replace* the default table, not
+> extend it. A cart that declared `charMap: { 'M': 28 }` silently lost `R`/`W`/`P`/…
+> — every sprite using them rendered transparent, so note heads / characters
+> vanished while primitive-drawn UI (rects, lines, text) still showed. Symptom:
+> "I only see the things drawn with shapes, not the sprites." If you see that on an
+> old `.cart.png`, just **rebake it** (`make-cart.js <name>.c …` then `--run`) to
+> pick up the merge. `buildSpriteSheet` in `tools/make-cart.js` now does
+> `{ ...DEFAULT_CHAR_MAP, ...cartCharMap }`.
 
 > **Extended palette (indices 16–31):** the default char map only reaches index
 > 15. To use the extended `CLR_DARKER_*` / `CLR_TRUE_BLUE` / etc. colors in a
