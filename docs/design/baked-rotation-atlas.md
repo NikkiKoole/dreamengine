@@ -240,8 +240,8 @@ for each bone b:
 ## Open questions
 
 - **`N` default** — `16` (matches the tool, tiny) vs `32` (smoother crowds). Per-bake or global?
-- **Half-circle primitive** — add a real `arc`/`semicircle` to `studio.h`, or compose from
-  `circfill` + `clip()` inside `shape_bake`?
+- ~~**Half-circle primitive**~~ — *resolved:* `arc`/`arcfill`/`ring` shipped, so
+  `shape_bake` draws the half-circle directly with `arcfill(x, y, r, 0, 180, col)`.
 - **Fill+outline bake** — fixed two-index scheme for `pal()` recolor, or single-color
   silhouettes only?
 - **`target` naming** — `target` vs `set_target` (shadowing footprint).
