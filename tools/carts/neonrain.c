@@ -681,8 +681,7 @@ static void draw_apt(void) {
     }
 
     // exit arrow
-    rectfill(2, 150, 30, 30, CLR_BLACK); rect(2, 150, 30, 30, CLR_DARK_GREY);
-    print("<<", 8, 160, CLR_LIGHT_GREY);
+    // (exit arrow is drawn in draw_hud, on top of the fog/vignette so it's visible)
 }
 
 static void draw_bar(void) {
@@ -708,8 +707,7 @@ static void draw_bar(void) {
     rectfill(0, 138, SCREEN_W, SCREEN_H - 138, CLR_BROWNISH_BLACK);
     fillp(FILL_VLINES, -1); rectfill(0, 138, SCREEN_W, 30, ACCENT[SC_BAR]); fillp_reset();
 
-    rectfill(2, 150, 30, 30, CLR_BLACK); rect(2, 150, 30, 30, CLR_DARK_GREY);
-    print("<<", 8, 160, CLR_LIGHT_GREY);
+    // (exit arrow is drawn in draw_hud, on top of the fog/vignette so it's visible)
 }
 
 static void draw_alley(void) {
@@ -744,8 +742,7 @@ static void draw_alley(void) {
     draw_bust(238, 96, CLR_BROWNISH_BLACK, CLR_DARKER_GREY, ACCENT[SC_ALLEY], true);
     if (blink(40)) circfill(228, 104, 1, CLR_ORANGE);      // cigarette glow
 
-    rectfill(2, 150, 30, 30, CLR_BLACK); rect(2, 150, 30, 30, CLR_DARK_GREY);
-    print("<<", 8, 160, CLR_LIGHT_GREY);
+    // (exit arrow is drawn in draw_hud, on top of the fog/vignette so it's visible)
 }
 
 static void draw_office(void) {
@@ -787,8 +784,7 @@ static void draw_office(void) {
     rectfill(112, 136, 8, 26, CLR_DARK_ORANGE); rect(112, 136, 8, 26, CLR_BROWNISH_BLACK);
     rectfill(114, 132, 4, 6, CLR_DARK_GREY);
 
-    rectfill(2, 150, 30, 30, CLR_BLACK); rect(2, 150, 30, 30, CLR_DARK_GREY);
-    print("<<", 8, 160, CLR_LIGHT_GREY);
+    // (exit arrow is drawn in draw_hud, on top of the fog/vignette so it's visible)
 }
 
 // ── overlays / HUD ───────────────────────────────────────────────────────────
@@ -822,6 +818,18 @@ static void draw_hud(void) {
     if (has(F_MATCH)) { if (held == HELD_MATCH) rect(2, 186, 18, 12, CLR_YELLOW); draw_item_icon(HELD_MATCH, 4, 187); }
     if (has(F_KEY))   { if (held == HELD_KEY)   rect(22, 186, 18, 12, CLR_YELLOW); draw_item_icon(HELD_KEY, 24, 187); }
     print_right("[N] notes", SCREEN_W - 4, 188, CLR_DARK_GREY);
+
+    // exit-to-street arrow — every scene but the street hub. Drawn here in the HUD
+    // (after the scene's fog + vignette) so it's never buried, with a bright neon
+    // border + glow so it clearly reads as the way out. Hotspot: (2,150,30,30).
+    if (g_scene != SC_STREET) {
+        bool lit = point_in_box(mouse_x(), mouse_y(), 2, 150, 30, 30);
+        int  ac  = ACCENT[g_scene];
+        rectfill(2, 150, 30, 30, CLR_BLACK);
+        rect(2, 150, 30, 30, lit ? CLR_WHITE : ac);
+        print("<<", 9, 156, lit ? CLR_WHITE : CLR_LIGHT_PEACH);
+        print("OUT", 6, 168, lit ? CLR_WHITE : ac);
+    }
 
     // toast
     if (now() < toast_until) print_centered(toast, 176, CLR_LIGHT_YELLOW);
