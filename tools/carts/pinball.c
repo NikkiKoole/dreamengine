@@ -44,6 +44,7 @@ static bool  prevPlunger;
 static float tiltMeter;
 static bool  tilted;
 static float drainFlash, multiballFlash, tiltFlash, orbitCD;
+static float leftKickCD, rightKickCD, leftKickFlash, rightKickFlash;
 static float spinnerAngle, spinnerSpin;
 static int   chordIdx;
 
@@ -303,6 +304,31 @@ static void step_ball(Ball *b, float sdt, bool phys) {
         for (int k = 0; k < 4; k++) schedule(k * 55, degree(SCALE_PENTA, 4, k * 2), 9, 4);
     }
 
+    // ---- outlane kickbacks: a ball collected in a side pocket is fired back
+    // up the playfield instead of draining (the "reshoot"). Always available,
+    // with a short cooldown so it can't double-fire on the same ball.
+    if (b->x < 32 && b->y > 296 && leftKickCD <= 0) {
+        b->vx = 135; b->vy = -400;
+        leftKickCD = 0.4f; leftKickFlash = 0.5f;
+        score += 50 * mult;
+        shake(4);
+        note(36, 10, 6);                       // solenoid thunk
+        for (int p = 0; p < 8; p++)
+            spawn_part(b->x, b->y, rnd_float_between(-40, 90),
+                       rnd_float_between(-200, -60), 300, 0.45f, 2, CLR_LIME_GREEN);
+    }
+    // (x < 207 keeps this off the plunger lane, which sits right of the divider)
+    if (b->x > 186 && b->x < 207 && b->y > 296 && rightKickCD <= 0) {
+        b->vx = -135; b->vy = -400;
+        rightKickCD = 0.4f; rightKickFlash = 0.5f;
+        score += 50 * mult;
+        shake(4);
+        note(36, 10, 6);
+        for (int p = 0; p < 8; p++)
+            spawn_part(b->x, b->y, rnd_float_between(-90, 40),
+                       rnd_float_between(-200, -60), 300, 0.45f, 2, CLR_LIME_GREEN);
+    }
+
     // drain
     if (b->y > 318) {
         b->alive = false;
@@ -348,12 +374,15 @@ void init(void) {
         }
     }
     // outer walls down from the dome ends (10,146) and (230,146)
-    addseg(10, 146, 10, 300, K_WALL);     // left
+    addseg(10, 146, 10, 314, K_WALL);     // left (down into the kickback pocket)
     addseg(230, 146, 230, 304, K_WALL);   // right (outer edge of plunger lane)
-    addseg(208, 108, 208, 304, K_WALL);   // plunger-lane divider (gap above y108)
-    // bottom funnel -> center drain gap (x 92..126)
-    addseg(10, 300, 92, 320, K_WALL);
-    addseg(208, 304, 126, 320, K_WALL);
+    addseg(208, 108, 208, 314, K_WALL);   // plunger-lane divider (gap above y108)
+    // bottom: each side funnels into its OWN narrow kickback pocket (a corner
+    // against the outer wall); the only true drain is the center gap between the
+    // flipper tips. A ball that slips past a flipper rolls into the pocket and
+    // the kicker fires it back up the playfield -- the "reshoot", see step_ball().
+    addseg(60, 300, 12, 314, K_WALL);     // left funnel floor -> bottom-left pocket
+    addseg(158, 300, 206, 314, K_WALL);   // right funnel floor -> bottom-right pocket
     // slingshots (kick the ball back into play)
     addseg(40, 248, 58, 286, K_SLING);    // left
     addseg(168, 248, 150, 286, K_SLING);  // right
@@ -379,6 +408,10 @@ void update(void) {
     if (multiballFlash > 0) multiballFlash -= d;
     if (tiltFlash > 0)      tiltFlash     -= d;
     if (orbitCD > 0)        orbitCD       -= d;
+    if (leftKickCD > 0)     leftKickCD    -= d;
+    if (rightKickCD > 0)    rightKickCD   -= d;
+    if (leftKickFlash > 0)  leftKickFlash -= d;
+    if (rightKickFlash > 0) rightKickFlash -= d;
     spinnerSpin *= 0.92f;
     if (tiltMeter > 0) { tiltMeter -= d * 0.6f; if (tiltMeter < 0) tiltMeter = 0; }
     for (int i = 0; i < nseg; i++) if (segs[i].lit > 0) segs[i].lit -= d * 3.0f;
@@ -434,7 +467,10 @@ void update(void) {
             hit(52, 7, 4, 90);
         }
         prevPlunger = pl;
-        balls[0].x = 219; balls[0].y = 290; balls[0].vx = 0; balls[0].vy = 0;
+        // pin the ball in the plunger lane WHILE charging — but not on the
+        // frame we launch (the launch branch above flips gstate to 2, so this
+        // re-check skips the reset that would otherwise zero the kick velocity)
+        if (gstate == 1) { balls[0].x = 219; balls[0].y = 290; balls[0].vx = 0; balls[0].vy = 0; }
     }
 
     // physics substeps
@@ -503,6 +539,15 @@ void draw(void) {
     // orbit chevron
     line(ORBIT_X1 + 6, ORBIT_Y + 6, (ORBIT_X1 + ORBIT_X2) / 2, ORBIT_Y, CLR_LIME_GREEN);
     line(ORBIT_X2 - 6, ORBIT_Y + 6, (ORBIT_X1 + ORBIT_X2) / 2, ORBIT_Y, CLR_LIME_GREEN);
+
+    // outlane kickers (the reshoot) — an up-arrow in each corner pocket;
+    // glows lime, flashes white the moment it fires the ball back up
+    {
+        int lc = leftKickFlash  > 0 ? CLR_WHITE : CLR_LIME_GREEN;
+        int rc = rightKickFlash > 0 ? CLR_WHITE : CLR_LIME_GREEN;
+        line(14, 308, 20, 299, lc); line(20, 299, 26, 308, lc); line(20, 299, 20, 311, lc);
+        line(194, 308, 200, 299, rc); line(200, 299, 206, 308, rc); line(200, 299, 200, 311, rc);
+    }
 
     // drop targets
     for (int i = 0; i < 5; i++) {
