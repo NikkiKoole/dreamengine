@@ -159,6 +159,9 @@ void circ(int x, int y, int radius, int color);         // circle border
 void circfill(int x, int y, int radius, int color);     // filled circle
 void oval(int x, int y, int rx, int ry, int color);     // ellipse border (rx,ry = half-width/height)
 void ovalfill(int x, int y, int rx, int ry, int color); // filled ellipse — squashed circles, eyes, shadows
+void arc(int x, int y, int radius, float start_deg, float end_deg, int color);           // arc outline — part of a circle's rim (degrees, 0=right 90=down, like dx/dy)
+void arcfill(int x, int y, int radius, float start_deg, float end_deg, int color);       // filled pie wedge (sector) — cooldown sweeps, pie slices, half-circles
+void ring(int x, int y, int r_in, int r_out, float start_deg, float end_deg, int color); // filled thick arc (ring sector) — gauges, radial bars, dials
 void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color);     // triangle border
 void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color); // filled triangle (any winding)
 void tritex(int x1, int y1, float u1, float v1, int x2, int y2, float u2, float v2, int x3, int y3, float u3, float v3); // texture-mapped triangle: each corner maps a screen point to a sprite-sheet pixel (u,v). affine (PS1-style). the textured-3D primitive

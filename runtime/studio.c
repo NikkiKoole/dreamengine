@@ -80,6 +80,57 @@ static bool            web_started      = false;  // true after the user clicks 
 #endif
 
 // ------------------------------------------------------------
+// debug harness — deterministic clock + input record/replay + trace.
+// Off by default and entirely native: a normal run touches none of this.
+// Enabled by CLI flags parsed in main(): --det, --record, --replay,
+// --script, --trace, --frames, --dump/--dump-every. See loop_step().
+// ------------------------------------------------------------
+#ifndef PLATFORM_WEB
+#define DET_DT      (1.0 / 60.0)         // fixed timestep when det_mode is on
+#define KEYSTATE_N  512                  // raylib MAX_KEYBOARD_KEYS
+
+static bool    det_mode      = false;    // fixed dt + seeded RNG -> reproducible runs
+static double  det_clock     = 0.0;      // synthetic now() seconds, advances DET_DT/frame
+
+static bool    inject_input  = false;    // drive input from replay_ev instead of the keyboard
+static unsigned char key_inject[KEYSTATE_N];       // 1 = key down this frame
+static unsigned char key_inject_prev[KEYSTATE_N];  // previous frame (for press edges)
+
+static FILE   *rec_file       = NULL;    // --record: "<frame> <key> <down>" per change
+static unsigned char key_rec_prev[KEYSTATE_N];     // last recorded down-state per key
+
+typedef struct { int frame; int key; int down; } InputEvent;
+static InputEvent *replay_ev  = NULL;    // sorted by frame
+static int         replay_n   = 0;
+static int         replay_i   = 0;       // next event to apply
+
+static FILE   *trace_file     = NULL;    // --trace: one JSONL line of watch() state per frame
+static int     dump_every     = 0;       // --dump-every: 0 = off, else export every Nth frame
+static char    dump_dir[256]  = {0};     // --dump: directory for filmstrip PNGs
+static int     max_frames     = 0;       // --frames: stop after N frames (0 = run until close)
+
+// synthetic clock: deterministic runs read frame-derived time, not the wall clock
+static double clk(void) { return det_mode ? det_clock : GetTime(); }
+
+// input indirection — every key()/keyp()/btn() read funnels through these so a
+// replay/script can inject state and a recorder can observe it.
+static bool inp_down(int k) {
+    if (inject_input) return (k >= 0 && k < KEYSTATE_N) ? key_inject[k] != 0 : false;
+    return IsKeyDown(k);
+}
+static bool inp_pressed(int k) {
+    if (inject_input)
+        return (k >= 0 && k < KEYSTATE_N) ? (key_inject[k] && !key_inject_prev[k]) : false;
+    return IsKeyPressed(k);
+}
+#else
+// web build: harness is a no-op, input goes straight to raylib
+static double clk(void) { return GetTime(); }
+static bool inp_down(int k)    { return IsKeyDown(k); }
+static bool inp_pressed(int k) { return IsKeyPressed(k); }
+#endif
+
+// ------------------------------------------------------------
 // touch state (all coordinates in window pixels unless noted)
 // ------------------------------------------------------------
 
@@ -383,6 +434,70 @@ __attribute__((weak)) void update(void) {}
 // main + runtime loop
 // ------------------------------------------------------------
 
+#ifndef PLATFORM_WEB
+// per-frame harness work. fno is the 0-based index of the frame about to run
+// (== frame_count before its end-of-frame increment), so it lines up between a
+// --record run and the --replay that feeds the events back.
+static void harness_input(int fno) {
+    if (inject_input) {                                  // replay/script drives the keys
+        memcpy(key_inject_prev, key_inject, sizeof key_inject);
+        while (replay_i < replay_n && replay_ev[replay_i].frame <= fno) {
+            InputEvent e = replay_ev[replay_i++];
+            if (e.key >= 0 && e.key < KEYSTATE_N) key_inject[e.key] = (unsigned char)(e.down ? 1 : 0);
+        }
+    }
+    if (rec_file) {                                      // log live key changes for later replay
+        for (int k = 0; k < KEYSTATE_N; k++) {
+            unsigned char d = IsKeyDown(k) ? 1 : 0;
+            if (d != key_rec_prev[k]) {
+                fprintf(rec_file, "%d %d %d\n", fno, k, d);
+                key_rec_prev[k] = d;
+            }
+        }
+        fflush(rec_file);                                // per-frame flush so a live tail sees it
+    }
+}
+
+static void json_str(FILE *f, const char *s) {
+    fputc('"', f);
+    for (; *s; s++) {
+        if (*s == '"' || *s == '\\') { fputc('\\', f); fputc(*s, f); }
+        else if (*s == '\n')         { fputs("\\n", f); }
+        else                           fputc(*s, f);
+    }
+    fputc('"', f);
+}
+
+// one JSONL line per frame: the auto fields plus every watch() value set this
+// frame (age 0 — age_watches() runs after us). Reading a session = reading this.
+static void harness_trace(int fno) {
+    if (!trace_file) return;
+    fprintf(trace_file, "{\"f\":%d,\"t\":%.4f,\"beat\":%d,\"bpos\":%.4f,\"w\":{",
+            fno, clk(), beat(), beat_pos());
+    int first = 1;
+    for (int i = 0; i < watch_count; i++) {
+        if (watches[i].age != 0) continue;
+        if (!first) fputc(',', trace_file);
+        first = 0;
+        json_str(trace_file, watches[i].name);
+        fputc(':', trace_file);
+        json_str(trace_file, watches[i].value);
+    }
+    fputs("}}\n", trace_file);
+    fflush(trace_file);
+}
+
+static void harness_dump(int fno) {
+    if (dump_every <= 0 || (fno % dump_every) != 0) return;
+    Image shot = LoadImageFromTexture(canvas.texture);
+    ImageFlipVertical(&shot);
+    char path[320];
+    snprintf(path, sizeof path, "%s/frame_%05d.png", dump_dir[0] ? dump_dir : ".", fno);
+    ExportImage(shot, path);
+    UnloadImage(shot);
+}
+#endif
+
 static void loop_step(void) {
 #ifdef PLATFORM_WEB
     if (!web_started) {
@@ -411,9 +526,21 @@ static void loop_step(void) {
         EndDrawing();
         return;
     }
-    sound_tick(GetFrameTime());
+    frame_dt = GetFrameTime();
+    sound_tick(frame_dt);
 #else
-    sound_tick(GetFrameTime());
+    // delta time for dt()/the musical clock. det_mode pins it to a fixed step so
+    // the beat, the falling notes and the judge windows replay identically; a live
+    // run uses the wall clock, clamped so a stalled frame can't teleport things.
+    if (det_mode) {
+        frame_dt = (float)DET_DT;
+    } else {
+        double tn = GetTime(); frame_dt = (float)(tn - last_time); last_time = tn;
+        if (frame_dt > 0.1f) frame_dt = 0.1f; if (frame_dt < 0) frame_dt = 0;
+    }
+    sound_tick(frame_dt);
+    int fno = frame_count;                 // 0-based index of the frame we're about to run
+    harness_input(fno);                    // apply replay/script keys + record live keys
 #endif
     poll_virtual_touches();
     update_stick();
@@ -432,9 +559,6 @@ static void loop_step(void) {
             btn_prev[p][b] = btn_curr[p][b];
             btn_curr[p][b] = btn(p, b);
         }
-    // delta time for dt() — clamped so a stalled frame can't teleport things
-    { double tn = GetTime(); frame_dt = (float)(tn - last_time); last_time = tn;
-      if (frame_dt > 0.1f) frame_dt = 0.1f; if (frame_dt < 0) frame_dt = 0; }
     // characters typed this frame for text_input()
     { int n = 0, ch; while ((ch = GetCharPressed()) != 0 && n < 31) text_buf[n++] = (char)ch; text_buf[n] = 0; }
     update();
@@ -475,18 +599,113 @@ static void loop_step(void) {
     EndDrawing();
     if (shake_amt > 0) { shake_amt *= 0.85f; if (shake_amt < 0.2f) shake_amt = 0; }
 
+#ifndef PLATFORM_WEB
+    harness_trace(fno);                    // structured state for this frame (before aging)
+    harness_dump(fno);                     // filmstrip PNG every Nth frame
+    if (det_mode) det_clock += DET_DT;     // advance the synthetic clock for now()/timer()
+#endif
     age_watches();   // frame-end: expire watches whose branch stopped firing
 }
+
+#ifndef PLATFORM_WEB
+// resolve a script token to a raylib key code: a single char is its uppercased
+// ASCII value (letters/digits/punctuation line up with raylib's codes), or a few
+// named keys for the ones with no obvious glyph.
+static int key_code(const char *tok) {
+    if (!tok || !tok[0]) return -1;
+    if (!tok[1]) {                                   // single character
+        int c = (unsigned char)tok[0];
+        if (c >= 'a' && c <= 'z') c -= 32;           // raylib letter codes are uppercase
+        return c;
+    }
+    if (!strcmp(tok, "SPACE")) return KEY_SPACE;
+    if (!strcmp(tok, "ENTER")) return KEY_ENTER;
+    if (!strcmp(tok, "LEFT"))  return KEY_LEFT;
+    if (!strcmp(tok, "RIGHT")) return KEY_RIGHT;
+    if (!strcmp(tok, "UP"))    return KEY_UP;
+    if (!strcmp(tok, "DOWN"))  return KEY_DOWN;
+    if (!strcmp(tok, "COMMA")) return KEY_COMMA;
+    if (!strcmp(tok, "PERIOD"))return KEY_PERIOD;
+    return -1;
+}
+
+static void ev_push(int frame, int key, int down) {
+    if (key < 0) return;
+    static int cap = 0;
+    if (replay_n >= cap) {
+        cap = cap ? cap * 2 : 256;
+        replay_ev = realloc(replay_ev, (size_t)cap * sizeof(InputEvent));
+    }
+    replay_ev[replay_n++] = (InputEvent){ frame, key, down };
+}
+
+static int ev_cmp(const void *a, const void *b) {
+    return ((const InputEvent *)a)->frame - ((const InputEvent *)b)->frame;
+}
+
+// --replay: the raw recorder format, "<frame> <keycode> <down>" per line.
+static void load_replay(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) { fprintf(stderr, "harness: cannot open replay %s\n", path); return; }
+    int frame, key, down;
+    while (fscanf(f, "%d %d %d", &frame, &key, &down) == 3) ev_push(frame, key, down);
+    fclose(f);
+    qsort(replay_ev, replay_n, sizeof(InputEvent), ev_cmp);
+}
+
+// --script: a human-authored input plan. One directive per line:
+//   down <frame> <key>          press
+//   up   <frame> <key>          release
+//   tap  <frame> <key> [dur]    press then release dur frames later (default 6)
+//   # ... and blank lines are ignored
+// <key> is a single char (a,s,k,l,space-as-' ') or a name (SPACE, LEFT, ...).
+static void load_script(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) { fprintf(stderr, "harness: cannot open script %s\n", path); return; }
+    char line[256];
+    while (fgets(line, sizeof line, f)) {
+        char cmd[32], key[32]; int frame, dur = 6;
+        if (line[0] == '#' || line[0] == '\n') continue;
+        int got = sscanf(line, "%31s %d %31s %d", cmd, &frame, key, &dur);
+        if (got < 3) continue;
+        int kc = key_code(key);
+        if      (!strcmp(cmd, "down")) ev_push(frame, kc, 1);
+        else if (!strcmp(cmd, "up"))   ev_push(frame, kc, 0);
+        else if (!strcmp(cmd, "tap"))  { ev_push(frame, kc, 1); ev_push(frame + dur, kc, 0); }
+    }
+    fclose(f);
+    qsort(replay_ev, replay_n, sizeof(InputEvent), ev_cmp);
+}
+#endif
 
 int main(int argc, char **argv) {
     const char *window_title           = "dreamengine";
 #ifndef PLATFORM_WEB
     int         screenshot_mode        = 0;
     int         screenshot_frames_done = 0;
+    int         hide_window            = 0;
+    unsigned    seed                   = 1;
+    const char *rec_path = NULL, *replay_path = NULL, *script_path = NULL, *trace_path = NULL;
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--screenshot") == 0) screenshot_mode = 1;
-        else if (strcmp(argv[i], "--title") == 0 && i + 1 < argc) window_title = argv[++i];
+        if      (strcmp(argv[i], "--screenshot") == 0) screenshot_mode = 1;
+        else if (strcmp(argv[i], "--title")  == 0 && i + 1 < argc) window_title = argv[++i];
+        else if (strcmp(argv[i], "--det")    == 0) det_mode = true;
+        else if (strcmp(argv[i], "--headless") == 0) hide_window = 1;
+        else if (strcmp(argv[i], "--seed")   == 0 && i + 1 < argc) seed = (unsigned)atoi(argv[++i]);
+        else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) rec_path = argv[++i];
+        else if (strcmp(argv[i], "--replay") == 0 && i + 1 < argc) replay_path = argv[++i];
+        else if (strcmp(argv[i], "--script") == 0 && i + 1 < argc) script_path = argv[++i];
+        else if (strcmp(argv[i], "--trace")  == 0 && i + 1 < argc) trace_path = argv[++i];
+        else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) max_frames = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--dump")   == 0 && i + 1 < argc) { snprintf(dump_dir, sizeof dump_dir, "%s", argv[++i]); if (dump_every <= 0) dump_every = 1; }
+        else if (strcmp(argv[i], "--dump-every") == 0 && i + 1 < argc) dump_every = atoi(argv[++i]);
     }
+    // replay/script drive input deterministically; both imply --det
+    if (replay_path) { load_replay(replay_path); inject_input = true; det_mode = true; }
+    if (script_path) { load_script(script_path); inject_input = true; det_mode = true; }
+    if (rec_path)    rec_file   = fopen(rec_path,  "w");
+    if (trace_path)  trace_file = fopen(trace_path, "w");
+    if (screenshot_mode) hide_window = 1;
     signal(SIGSEGV, crash_handler);   // bad/null pointer
     signal(SIGFPE,  crash_handler);   // divide by zero, etc.
     signal(SIGABRT, crash_handler);   // abort()/assert
@@ -498,9 +717,12 @@ int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);   // keep raylib's INFO chatter out of the runtime log panel
 #endif
 #ifndef PLATFORM_WEB
-    if (screenshot_mode) SetWindowState(FLAG_WINDOW_HIDDEN);
+    if (hide_window) SetWindowState(FLAG_WINDOW_HIDDEN);
 #endif
     InitWindow(SCREEN_W * SCALE, SCREEN_H * SCALE, window_title);
+#ifndef PLATFORM_WEB
+    if (det_mode) { SetRandomSeed(seed); srand(seed); }   // reproducible rnd()/rnd_float()/shake
+#endif
 #ifndef PLATFORM_WEB
     InitAudioDevice();
     sound_init();
@@ -550,6 +772,7 @@ int main(int argc, char **argv) {
     while (!WindowShouldClose()) {
         loop_step();
         if (screenshot_mode && ++screenshot_frames_done >= 3) break;
+        if (max_frames > 0 && frame_count >= max_frames) break;   // bounded harness run
     }
 
     // save last frame as screenshot.png so the cart PNG thumbnail shows the game
@@ -557,6 +780,10 @@ int main(int argc, char **argv) {
     ImageFlipVertical(&screenshot);
     ExportImage(screenshot, "screenshot.png");
     UnloadImage(screenshot);
+
+    if (rec_file)   { fclose(rec_file);   rec_file   = NULL; }
+    if (trace_file) { fclose(trace_file); trace_file = NULL; }
+    free(replay_ev); replay_ev = NULL;
 
     if (custom_font) UnloadFont(game_font);
     if (pal_shader_ok) UnloadShader(pal_shader);
@@ -589,21 +816,21 @@ bool btn(int player, int button) {
             }
         }
         switch (button) {
-            case BTN_UP:    return IsKeyDown(KEY_W);
-            case BTN_DOWN:  return IsKeyDown(KEY_S);
-            case BTN_LEFT:  return IsKeyDown(KEY_A);
-            case BTN_RIGHT: return IsKeyDown(KEY_D);
-            case BTN_A:     return IsKeyDown(KEY_Z);
-            case BTN_B:     return IsKeyDown(KEY_X);
+            case BTN_UP:    return inp_down(KEY_W);
+            case BTN_DOWN:  return inp_down(KEY_S);
+            case BTN_LEFT:  return inp_down(KEY_A);
+            case BTN_RIGHT: return inp_down(KEY_D);
+            case BTN_A:     return inp_down(KEY_Z);
+            case BTN_B:     return inp_down(KEY_X);
         }
     } else if (player == 1) {
         switch (button) {
-            case BTN_UP:    return IsKeyDown(KEY_UP);
-            case BTN_DOWN:  return IsKeyDown(KEY_DOWN);
-            case BTN_LEFT:  return IsKeyDown(KEY_LEFT);
-            case BTN_RIGHT: return IsKeyDown(KEY_RIGHT);
-            case BTN_A:     return IsKeyDown(KEY_COMMA);
-            case BTN_B:     return IsKeyDown(KEY_PERIOD);
+            case BTN_UP:    return inp_down(KEY_UP);
+            case BTN_DOWN:  return inp_down(KEY_DOWN);
+            case BTN_LEFT:  return inp_down(KEY_LEFT);
+            case BTN_RIGHT: return inp_down(KEY_RIGHT);
+            case BTN_A:     return inp_down(KEY_COMMA);
+            case BTN_B:     return inp_down(KEY_PERIOD);
         }
     }
     return false;
@@ -968,6 +1195,55 @@ void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
     else           DrawTriangle(v1, v2, v3, c);
 }
 
+// ── arcs / sectors ── angles in degrees, 0 = right, 90 = down (same as dx/dy).
+// built from line()/trifill() so they inherit palette, fillp, camera and clip.
+static int arc_segments(float a0, float a1, int r) {
+    float span = a1 - a0; if (span < 0) span = -span;
+    int per = (r > 40) ? 3 : 6;              // finer steps for big radii
+    int n = (int)(span / per) + 1;
+    if (n < 1)   n = 1;
+    if (n > 160) n = 160;
+    return n;
+}
+
+void arc(int x, int y, int radius, float start_deg, float end_deg, int color) {
+    int n = arc_segments(start_deg, end_deg, radius);
+    float px = x + radius * cosf(start_deg * DEG2RAD), py = y + radius * sinf(start_deg * DEG2RAD);
+    for (int i = 1; i <= n; i++) {
+        float a  = start_deg + (end_deg - start_deg) * (float)i / n;
+        float nx = x + radius * cosf(a * DEG2RAD), ny = y + radius * sinf(a * DEG2RAD);
+        line((int)px, (int)py, (int)nx, (int)ny, color);
+        px = nx; py = ny;
+    }
+}
+
+void arcfill(int x, int y, int radius, float start_deg, float end_deg, int color) {
+    int n = arc_segments(start_deg, end_deg, radius);
+    float px = x + radius * cosf(start_deg * DEG2RAD), py = y + radius * sinf(start_deg * DEG2RAD);
+    for (int i = 1; i <= n; i++) {                       // triangle fan from the center
+        float a  = start_deg + (end_deg - start_deg) * (float)i / n;
+        float nx = x + radius * cosf(a * DEG2RAD), ny = y + radius * sinf(a * DEG2RAD);
+        trifill(x, y, (int)px, (int)py, (int)nx, (int)ny, color);
+        px = nx; py = ny;
+    }
+}
+
+void ring(int x, int y, int r_in, int r_out, float start_deg, float end_deg, int color) {
+    int n = arc_segments(start_deg, end_deg, r_out);
+    for (int i = 0; i < n; i++) {                        // quads between inner & outer rim
+        float a  = start_deg + (end_deg - start_deg) * (float)i / n;
+        float a2 = start_deg + (end_deg - start_deg) * (float)(i + 1) / n;
+        float ca = cosf(a * DEG2RAD), sa = sinf(a * DEG2RAD);
+        float cb = cosf(a2 * DEG2RAD), sb = sinf(a2 * DEG2RAD);
+        int ix0 = (int)(x + r_in * ca),  iy0 = (int)(y + r_in * sa);
+        int ox0 = (int)(x + r_out * ca), oy0 = (int)(y + r_out * sa);
+        int ix1 = (int)(x + r_in * cb),  iy1 = (int)(y + r_in * sb);
+        int ox1 = (int)(x + r_out * cb), oy1 = (int)(y + r_out * sb);
+        trifill(ix0, iy0, ox0, oy0, ox1, oy1, color);
+        trifill(ix0, iy0, ox1, oy1, ix1, iy1, color);
+    }
+}
+
 // affine texture-mapped triangle — the PS1 workhorse. Each corner carries a
 // screen position (x,y) AND a spot on the sprite sheet (u,v, in sheet pixels).
 // The GPU interpolates the texture across the triangle in SCREEN space with no
@@ -1093,7 +1369,7 @@ int rnd(int n) {
 }
 
 float now(void) {
-    return (float)GetTime();
+    return (float)clk();
 }
 
 int epoch(void) {
@@ -1116,8 +1392,8 @@ int mid(int a, int b, int c) {
 
 static double timer_base = 0.0;
 
-float timer(void)       { return (float)(GetTime() - timer_base); }
-void  timer_reset(void) { timer_base = GetTime(); }
+float timer(void)       { return (float)(clk() - timer_base); }
+void  timer_reset(void) { timer_base = clk(); }
 
 // ------------------------------------------------------------
 // math — angles in degrees (0 = right, 90 = down)
@@ -1375,8 +1651,8 @@ int load_int(const char *key, int def) {
 float dt(void) { return frame_dt; }
 
 const char *text_input(void) { return text_buf; }
-bool key(int k)  { return IsKeyDown(k); }
-bool keyp(int k) { return IsKeyPressed(k); }
+bool key(int k)  { return inp_down(k); }
+bool keyp(int k) { return inp_pressed(k); }
 
 void pal(int c0, int c1)  { if (c0 >= 0 && c0 < PALETTE_SIZE && c1 >= 0 && c1 < PALETTE_SIZE) { palette[c0] = base_palette[c1]; pal_recompute(); } }
 void pal_reset(void)      { for (int i = 0; i < PALETTE_SIZE; i++) palette[i] = base_palette[i]; pal_recompute(); }
