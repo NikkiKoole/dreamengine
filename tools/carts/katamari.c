@@ -11,8 +11,8 @@
 #define NITEMS 170
 #define NDEC   72              // how many absorbed bits we draw stuck on the ball
 
-typedef struct { float x, y; int size, col, shape; bool alive; } Item;
-typedef struct { float ang, frac; int size, col, shape; } Dec;
+typedef struct { float x, y; int size, col, shape, pat, hole; bool alive; } Item;
+typedef struct { float ang, frac; int size, col, shape, pat, hole; } Dec;
 
 static float px, py, r;
 static Item  items[NITEMS];
@@ -28,6 +28,16 @@ static int item_color(void) {
     return c[rnd(10)];
 }
 
+// a random fill pattern (sometimes a fully random 16-bit one) for variety
+static int item_pattern(void) {
+    int p[] = { FILL_SOLID, FILL_CHECKER, FILL_DOTS, FILL_HLINES, FILL_VLINES, FILL_DIAG, FILL_GRID };
+    return rnd(10) < 7 ? p[rnd(7)] : rnd(0x10000);
+}
+// the pattern's 1-bit color — usually a 2nd item color, sometimes see-through
+static int item_hole(void) {
+    return rnd(8) == 0 ? -1 : item_color();
+}
+
 static void scatter(void) {
     for (int i = 0; i < NITEMS; i++) {
         int tier = rnd(10);
@@ -35,7 +45,7 @@ static void scatter(void) {
                : tier < 9 ? rnd_between(8, 16)      // some medium
                           : rnd_between(20, 40);    // a few big
         items[i] = (Item){ rnd_between(16, KW - 16), rnd_between(16, KH - 16),
-                           sz, item_color(), rnd(2), true };
+                           sz, item_color(), rnd(2), item_pattern(), item_hole(), true };
     }
 }
 
@@ -67,7 +77,8 @@ void update(void) {
             items[i].alive = false;
             count++;
             decs[ndec % NDEC] = (Dec){ rnd(360), rnd_float_between(0.45f, 0.9f),
-                                       min(items[i].size, 7), items[i].col, items[i].shape };
+                                       min(items[i].size, 7), items[i].col, items[i].shape,
+                                       items[i].pat, items[i].hole };
             ndec++;
             note(44 + (count % 14), INSTR_SQUARE, 3);
         } else if (items[i].size > r * 0.9f && d < r + items[i].size) {
@@ -80,16 +91,18 @@ void update(void) {
     }
 }
 
-static void shape_at(int x, int y, int s, int shape, int col) {
+static void shape_at(int x, int y, int s, int shape, int col, int pat, int hole) {
+    if (pat != FILL_SOLID) fillp(pat, hole);
     if (shape == 0) circfill(x, y, s, col);
     else            rectfill(x - s, y - s, s * 2, s * 2, col);
+    if (pat != FILL_SOLID) fillp_reset();
 }
 
 // a 1px outline that matches the item's shape (circle ring / square border),
 // hugging the fill — for marking items too big to roll up.
 static void outline_at(int x, int y, int s, int shape, int col) {
-    if (shape == 0) circ(x, y, s + 1, col);
-    else            rect(x - s - 1, y - s - 1, s * 2 + 2, s * 2 + 2, col);
+    if (shape == 0) circ(x, y, s, col);
+    else            rect(x - s, y - s, s * 2, s * 2, col);
 }
 
 void draw(void) {
@@ -104,7 +117,7 @@ void draw(void) {
     // items
     for (int i = 0; i < NITEMS; i++) {
         if (!items[i].alive) continue;
-        shape_at((int)items[i].x, (int)items[i].y, items[i].size, items[i].shape, items[i].col);
+        shape_at((int)items[i].x, (int)items[i].y, items[i].size, items[i].shape, items[i].col, items[i].pat, items[i].hole);
         if (items[i].size > r * 0.9f)                          // mark the ones too big to eat
             outline_at((int)items[i].x, (int)items[i].y, items[i].size, items[i].shape, CLR_DARK_GREY);
     }
@@ -116,7 +129,7 @@ void draw(void) {
     for (int i = 0; i < n; i++) {
         int dx = (int)(px + cos_deg(decs[i].ang) * decs[i].frac * r);
         int dy = (int)(py + sin_deg(decs[i].ang) * decs[i].frac * r);
-        shape_at(dx, dy, decs[i].size, decs[i].shape, decs[i].col);
+        shape_at(dx, dy, decs[i].size, decs[i].shape, decs[i].col, decs[i].pat, decs[i].hole);
     }
 
     camera(0, 0);
