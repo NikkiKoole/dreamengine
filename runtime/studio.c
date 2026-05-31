@@ -1196,52 +1196,52 @@ void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
 }
 
 // ── arcs / sectors ── angles in degrees, 0 = right, 90 = down (same as dx/dy).
-// built from line()/trifill() so they inherit palette, fillp, camera and clip.
-static int arc_segments(float a0, float a1, int r) {
-    float span = a1 - a0; if (span < 0) span = -span;
-    int per = (r > 40) ? 3 : 6;              // finer steps for big radii
-    int n = (int)(span / per) + 1;
-    if (n < 1)   n = 1;
-    if (n > 160) n = 160;
-    return n;
-}
+// all per-pixel off one circle definition, so the outline (arc) exactly caps
+// the fills (arcfill/ring) — draw the fill, then arc() on top, no gap.
+static void sector_fill(int cx, int cy, int r_in, int r_out, float s, float e, int color);  // fwd
 
 void arc(int x, int y, int radius, float start_deg, float end_deg, int color) {
-    int n = arc_segments(start_deg, end_deg, radius);
-    float px = x + radius * cosf(start_deg * DEG2RAD), py = y + radius * sinf(start_deg * DEG2RAD);
-    for (int i = 1; i <= n; i++) {
-        float a  = start_deg + (end_deg - start_deg) * (float)i / n;
-        float nx = x + radius * cosf(a * DEG2RAD), ny = y + radius * sinf(a * DEG2RAD);
-        line((int)px, (int)py, (int)nx, (int)ny, color);
-        px = nx; py = ny;
+    sector_fill(x, y, radius > 1 ? radius - 1 : 0, radius, start_deg, end_deg, color);  // 1px-thick rim
+}
+
+// fill one pixel honoring the active fillp() pattern (palette/camera/clip come
+// from pset). 0-bits take the draw color, 1-bits the hole color (skip if < 0).
+static void plot_pat(int x, int y, int color) {
+    if (!fp_on) { pset(x, y, color); return; }
+    int bit = (fp_global >> (15 - (((y & 3) * 4) + (x & 3)))) & 1;
+    if (bit) { if (fp_hole >= 0) pset(x, y, fp_hole); }
+    else     pset(x, y, color);
+}
+
+// exact per-pixel sector/ring fill: a pixel is in iff its distance is within
+// [r_in, r_out] AND its angle is in the swept range. No triangle seams, never
+// overshoots the radius, and renders the same every frame as the angle moves.
+static void sector_fill(int cx, int cy, int r_in, int r_out, float s, float e, int color) {
+    float lo = s < e ? s : e, hi = s < e ? e : s;
+    int full = (hi - lo) >= 360.0f;
+    float ri2 = (float)r_in * r_in, ro2 = (float)r_out * r_out;
+    for (int yy = cy - r_out; yy <= cy + r_out; yy++) {
+        float dyp = yy + 0.5f - cy;                                    // pixel-center distance,
+        for (int xx = cx - r_out; xx <= cx + r_out; xx++) {            // matching circ()/circfill()
+            float dxp = xx + 0.5f - cx, d2 = dxp * dxp + dyp * dyp;
+            if (d2 > ro2 || d2 < ri2) continue;
+            if (!full) {
+                float pa = atan2f(dyp, dxp) * RAD2DEG;                  // 0=right, 90=down
+                while (pa < lo)           pa += 360.0f;
+                while (pa >= lo + 360.0f) pa -= 360.0f;
+                if (pa > hi) continue;
+            }
+            plot_pat(xx, yy, color);
+        }
     }
 }
 
 void arcfill(int x, int y, int radius, float start_deg, float end_deg, int color) {
-    int n = arc_segments(start_deg, end_deg, radius);
-    float px = x + radius * cosf(start_deg * DEG2RAD), py = y + radius * sinf(start_deg * DEG2RAD);
-    for (int i = 1; i <= n; i++) {                       // triangle fan from the center
-        float a  = start_deg + (end_deg - start_deg) * (float)i / n;
-        float nx = x + radius * cosf(a * DEG2RAD), ny = y + radius * sinf(a * DEG2RAD);
-        trifill(x, y, (int)px, (int)py, (int)nx, (int)ny, color);
-        px = nx; py = ny;
-    }
+    sector_fill(x, y, 0, radius, start_deg, end_deg, color);
 }
 
 void ring(int x, int y, int r_in, int r_out, float start_deg, float end_deg, int color) {
-    int n = arc_segments(start_deg, end_deg, r_out);
-    for (int i = 0; i < n; i++) {                        // quads between inner & outer rim
-        float a  = start_deg + (end_deg - start_deg) * (float)i / n;
-        float a2 = start_deg + (end_deg - start_deg) * (float)(i + 1) / n;
-        float ca = cosf(a * DEG2RAD), sa = sinf(a * DEG2RAD);
-        float cb = cosf(a2 * DEG2RAD), sb = sinf(a2 * DEG2RAD);
-        int ix0 = (int)(x + r_in * ca),  iy0 = (int)(y + r_in * sa);
-        int ox0 = (int)(x + r_out * ca), oy0 = (int)(y + r_out * sa);
-        int ix1 = (int)(x + r_in * cb),  iy1 = (int)(y + r_in * sb);
-        int ox1 = (int)(x + r_out * cb), oy1 = (int)(y + r_out * sb);
-        trifill(ix0, iy0, ox0, oy0, ox1, oy1, color);
-        trifill(ix0, iy0, ox1, oy1, ix1, iy1, color);
-    }
+    sector_fill(x, y, r_in, r_out, start_deg, end_deg, color);
 }
 
 // affine texture-mapped triangle — the PS1 workhorse. Each corner carries a

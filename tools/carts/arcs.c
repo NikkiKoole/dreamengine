@@ -47,7 +47,8 @@ void draw(void) {
     circfill(gx, gy, 2, CLR_WHITE);
     print("gauge", gx - 19, gy + 30, CLR_LIGHT_GREY);
 
-    // 5) HALF-CIRCLE — a top dome, drawn with a fillp() dither to prove fills work
+    // 5) HALF-CIRCLE — a fillp-dithered dome; arc() draws the white rim and caps
+    //    the fill exactly (same circle math), so no green pokes past the border.
     int hx = 160, hy = 150;
     fillp(FILL_CHECKER, CLR_DARK_GREEN);
     arcfill(hx, hy, 22, 180, 360, CLR_LIME_GREEN);
