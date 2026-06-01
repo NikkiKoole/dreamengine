@@ -451,25 +451,27 @@ void draw(void) {
         texquad(xR1, y1, ROCK_U1, ROCK_V1,  xR2, y2, ROCK_U0, ROCK_V1,
                 xR2, yT2, ROCK_U0, ROCK_V0, xR1, yT1, ROCK_U1, ROCK_V0);
 
-        // glowing edge strips at the foot of each wall (lane guides)
+        // glowing edge strips at the foot of each wall (lane guides). GPU line(),
+        // NOT trifill — trifill is a software per-pixel fill (see the haze note).
         bool bright = ((base_i + n) / 3) % 2 == 0;
         int edge = bright ? CLR_BLUE : CLR_TRUE_BLUE;
-        trifill(xL1, y1, xL2, y2, xL2 + 1, y2, edge);
-        trifill(xR1, y1, xR2, y2, xR2 - 1, y2, edge);
-
-        // distance haze: dither the far third toward the dark sky
-        if (n > DRAW_DIST * 0.55f) {
-            int pat = n > (int)(DRAW_DIST * 0.82f) ? FILL_CHECKER : 0x7BDE;
-            fillp(pat, -1);
-            trifill(xL1, y1, xL2, y2, xL2, yT2, CLR_DARKER_PURPLE);
-            trifill(xL1, y1, xL2, yT2, xL1, yT1, CLR_DARKER_PURPLE);
-            trifill(xR1, y1, xR2, y2, xR2, yT2, CLR_DARKER_PURPLE);
-            trifill(xR1, y1, xR2, yT2, xR1, yT1, CLR_DARKER_PURPLE);
-            trifill(xL1, y1, xL2, y2, xR2, y2, CLR_DARKER_PURPLE);
-            trifill(xL1, y1, xR2, y2, xR1, y1, CLR_DARKER_PURPLE);
-            fillp_reset();
-        }
+        line(xL1, y1, xL2, y2, edge);
+        line(xR1, y1, xR2, y2, edge);
     }
+
+    // ---- distance haze ----
+    // NB: trifill() is a SOFTWARE per-pixel rasterizer (poly_fill_cov in studio.c).
+    // The old haze dithered the far third with 6 big trifills PER far segment —
+    // ~190 large software-filled triangles a frame, covering the tall canyon walls.
+    // THAT (not the tritex geometry, which is GPU) is what made this cart chug.
+    // Two dithered bands near the horizon give the same fade for a fraction of the
+    // cost: each is one GPU textured-quad (fillp + rectfill), holes transparent so
+    // the canyon shows through the dither.
+    fillp(0x7BDE, -1);
+    rectfill(0, HORIZON - 8, SCREEN_W, 30, CLR_DARKER_PURPLE);
+    fillp(FILL_CHECKER, -1);
+    rectfill(0, HORIZON - 4, SCREEN_W, 12, CLR_DARKER_PURPLE);
+    fillp_reset();
 
     // ---- screen shake wraps the world layer (pods + sparks) ----
     int ox = (int)rnd_float_between(-shx, shx), oy = (int)rnd_float_between(-shy, shy);
