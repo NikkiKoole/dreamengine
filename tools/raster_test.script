@@ -1,20 +1,20 @@
-# Raster accuracy harness script
-# Drives the freeze/analyse state machine through all 4 states and lets the
-# trace report the mismatch count (the cart watch()es "mismatches" + "state"
-# under DE_TRACE). Each SPACE/Z/X press re-enters analyse; the count for that
-# state lands on the NEXT frame (SETUP→ANALYSE), so read frames 3/7/11/15.
+# Raster accuracy harness — walks BOTH pages through all 4 states.
+# The cart watch()es "mismatches" + "state" (pg/out/dith/fs) under DE_TRACE;
+# every analysed frame is fs=2. Verification: every fs=2 frame must report 0.
 #
 # Run with:
 #   node tools/play.js raster_test script tools/raster_test.script \
-#        --headless --trace build/raster_trace.jsonl --frames 18
-#   grep mismatches build/raster_trace.jsonl   # every state should report 0
+#        --headless --trace build/raster_trace.jsonl --frames 33
+#   grep '"fs=2"' build/raster_trace.jsonl   # or just: grep mismatches ...
+#   # every fs=2 line should show mismatches:"0"
 #
-# frame 2  SPACE → analyse  → f3  count: solid + outline   (out=1 dith=0)
-# frame 6  Z (outline off)  → f7  count: solid, no outline  (out=0 dith=0)
-# frame 10 X (dither on)    → f11 count: dither, no outline (out=0 dith=1)
-# frame 14 Z (outline on)   → f15 count: dither + outline   (out=1 dith=1)
-
-tap  2  SPACE
-tap  6  Z
-tap 10  X
-tap 14  Z
+# page 1 (curved: circ/oval/rrect)
+tap  2  SPACE   # f3  analyse: solid + outline
+tap  6  Z       # f7  solid, no outline
+tap 10  X       # f11 dither, no outline
+tap 14  Z       # f15 dither + outline
+# page 2 (polygons: tri/ngon/star/poly via coverage)
+tap 18  C       # f19 dither + outline
+tap 22  X       # f23 solid + outline
+tap 26  Z       # f27 solid, no outline
+tap 30  X       # f31 dither, no outline

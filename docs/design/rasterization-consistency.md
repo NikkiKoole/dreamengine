@@ -140,10 +140,47 @@ SPACE → Z → X → Z through all four states; counts land on frames 3/7/11/15
 > "agree to within 1px," not "bit-identical." Good enough for the seam-crack class of bug;
 > note it if a sub-pixel guarantee is ever needed.
 
-**Still open:** `trifill` (GPU, conservative-span fix handles dither cracks), and the new
-geometry helpers (`ngon`/`ngonfill`, `star`/`starfill`, `poly`/`polyfill`, `thickline`) —
-all need the same outline=boundary-ring treatment before they can be considered
-pixel-perfect.
+## Shipped (2026-06-01, session 14)
+
+The whole polygon family unified on **one even-odd point-in-polygon coverage** —
+`poly_inside(fx,fy,xy,n)` measured from the pixel centre, same convention as the
+disc/rrect tests. `poly_fill_cov` plots every inside pixel (`plot_pat` → solid + dither
+one path); `poly_stroke_cov` is the boundary ring (inside with ≥1 outside 4-neighbour).
+Rewritten onto it: `ngon`/`ngonfill`, `star`/`starfill`, `poly`/`polyfill`, **and
+`tri`/`trifill`** (a triangle is just a 3-vertex polygon). Wins:
+- outline is exactly the boundary of the fill for every one of them — no more GPU
+  line-vs-fill drift (the "triangles differ slightly" bug);
+- even-odd handles **concave** `poly` and the star's reflex points (the old fan filled
+  them wrong); winding-independent, so 3D back/front faces both fill;
+- `trifill_pat` (the CPU dither-scanline special case) deleted — `plot_pat` covers dither.
+
+`trifill` is now CPU per-pixel (the 3D carts — `solid3d`/`cube3d`/`flyover` via `quadfill`
+— go through it). Smoke-tested: `solid3d` renders filled+dithered with no face cracks,
+no hang. **Perf vs the old GPU `DrawTriangle` is not yet measured** — deferred by choice
+("get it correct first"); revisit if a triangle-spamming cart feels slow, and clamp the
+fill bbox to the screen if huge off-screen tris ever bite.
+
+**Detector rewritten (same session).** The old marker test was a local adjacency guess and
+had two failure modes: it tolerated ≤1px drift, and once the pink rule was relaxed to stop
+false-flagging sharp tips it went blind to connected offsets. Replaced with a **global
+invariant**: reconstruct the fill region from the single render (`fill ∪ outline`) and
+require the outline to be *exactly its boundary* — a FILL pixel that itself touches
+background = an uncovered edge (yellow); an OUTLINE pixel with no background neighbour =
+buried inside the fill (pink). This catches a 1px offset at any angle yet never flags a
+correct tip (a tip pixel is on the boundary). Verified it now catches what it used to miss
+(GPU triangles → 282 mismatches before conversion; 0 after).
+
+> **Residual blind spot (known):** a single combined render still can't distinguish a
+> uniformly-**1px-proud** outline (drawn just outside the fill but still touching it) from
+> a correct boundary — both read as a boundary pixel with fill on one side, bg on the other.
+> Closing that needs a **two-pass** test (render fill-only → set F, outline-only → set O,
+> assert O == boundary(F)). Not needed today: every primitive is now coverage-based, so the
+> outline *is* boundary(F) by construction and the bug class can't arise. The two-pass test
+> is the upgrade if a future GPU/stroke primitive is reintroduced.
+
+**Still open:** `thickline` (a filled stroke with no outline pair — different shape of
+problem: verify its silhouette has no stray pixels and self-overlaps cleanly, rather than
+outline=fill).
 
 ## When this advances
 

@@ -107,19 +107,24 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
     crowds, rich shapes, low-end). Centerline/pivot model, `pal()` recolor for free color
     variety, parts capped at 16px (native slot size). The path to scaling the `bones`
     animator past realtime drawing. [`design/baked-rotation-atlas.md`](design/baked-rotation-atlas.md).
-14. **Rasterization consistency** *(partially shipped — circ/oval/rrect done, others open)* —
-    `circ`/`circfill`, `oval`/`ovalfill` and `rrect`/`rrectfill` now share a single
-    pixel-center coverage function (`disc_inside` / `ellipse_inside` / `rrect_inside`);
-    outline is the boundary ring of the fill, never a pixel outside it. `rrect` no longer
-    stacks shapes (was 3 rectfills + 4 circfills) — fill, outline, dither all from one
-    definition. Verified by harness: all four states = 0 mismatches.
-    Still open: `trifill` (stays GPU for now), new geometry helpers (`ngon`, `star`,
-    `poly`, `thickline`) — all need the same treatment.
+14. **Rasterization consistency** *(near-complete — all filled shapes done; `thickline` open)* —
+    every filled+outlined primitive now shares one pixel-center coverage definition, so the
+    outline is exactly the boundary of the fill (no rasterizer drift, dither = solid path):
+    `circ`/`oval`/`rrect` via `disc_inside`/`ellipse_inside`/`rrect_inside`; `ngon`/`star`/
+    `poly` **and `tri`/`trifill`** via even-odd `poly_inside` (concave-safe, winding-independent;
+    `trifill_pat` deleted). `trifill` is now CPU per-pixel — 3D carts (`solid3d`/`cube3d`/
+    `flyover`) smoke-tested OK; **GPU-vs-CPU perf not yet measured** (deferred on purpose).
+    Detector rewritten to a global invariant (outline == boundary of `fill ∪ outline`):
+    catches a 1px offset at any angle, never false-flags sharp tips. Residual blind spot: a
+    uniformly-1px-proud outline (would need a two-pass set-equality test — moot while
+    everything is coverage-based). Verified: all 8 states (2 pages × 4) = 0 mismatches.
+    Still open: `thickline` (filled stroke, no outline pair — needs a stray-pixel check, not
+    outline=fill).
     **Regression test:** `tools/carts/raster_test.c` + `tools/raster_test.script` —
     drag `editor/public/carts/raster_test.cart.png` into the editor (Z outline, X dither,
-    SPACE freeze+analyse), or run headless and read the trace:
-    `node tools/play.js raster_test script tools/raster_test.script --headless --trace build/raster_trace.jsonl --frames 18 && grep mismatches build/raster_trace.jsonl`
-    (the cart `watch()`es the count under `DE_TRACE`; detector catches ≥2px gaps, tolerates 1px).
+    C cycle page 1↔2, SPACE freeze+analyse), or run headless:
+    `node tools/play.js raster_test script tools/raster_test.script --headless --trace build/raster_trace.jsonl --frames 33 && grep mismatches build/raster_trace.jsonl`
+    (cart `watch()`es count + state under `DE_TRACE`; every `fs=2` frame must report 0).
     [`design/rasterization-consistency.md`](design/rasterization-consistency.md).
 15. ~~**Tiny fonts**~~ — **SHIPPED** as `font(FONT_SMALL/FONT_TINY)`. See Shipped above.
 

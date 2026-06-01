@@ -69,7 +69,8 @@ static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0
 static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
 static void ovalfill_pat(int cx, int cy, int rx, int ry, int pattern, int c1, int c0);
 static void plot_pat(int x, int y, int color);
-static void trifill_pat(int x1, int y1, int x2, int y2, int x3, int y3, int pattern, int c1, int c0);
+static void poly_fill_cov(const int *xy, int n, int color);
+static void poly_stroke_cov(const int *xy, int n, int color);
 // pal()-on-sprites helpers (defined in the graphics section, used earlier in main/pal)
 static void pal_shader_init(void);
 static void pal_recompute(void);
@@ -1277,23 +1278,6 @@ static void circfill_pat(int cx, int cy, int r, int pattern, int c1, int c0) {
     ovalfill_pat(cx, cy, r, r, pattern, c1, c0);
 }
 
-static void trifill_pat(int x1, int y1, int x2, int y2, int x3, int y3, int pattern, int c1, int c0) {
-    int t;                                            // sort vertices by y ascending
-    if (y1 > y2) { t=x1;x1=x2;x2=t; t=y1;y1=y2;y2=t; }
-    if (y1 > y3) { t=x1;x1=x3;x3=t; t=y1;y1=y3;y3=t; }
-    if (y2 > y3) { t=x2;x2=x3;x3=t; t=y2;y2=y3;y3=t; }
-    if (y3 == y1) return;
-    for (int y = y1; y <= y3; y++) {
-        float xa = x1 + (float)(x3 - x1) * (y - y1) / (float)(y3 - y1);          // long edge
-        float xb = (y < y2 && y2 != y1) ? x1 + (float)(x2 - x1) * (y - y1) / (float)(y2 - y1)
-                 : (y2 != y3)           ? x2 + (float)(x3 - x2) * (y - y2) / (float)(y3 - y2)
-                                        : (float)x2;
-        float lf = xa < xb ? xa : xb, rf = xa < xb ? xb : xa;     // conservative span: floor the
-        int xl = (int)floorf(lf), xr = (int)ceilf(rf);            // left, ceil the right, so adjacent
-        rectfill_pat(xl, y, xr - xl + 1, 1, pattern, c1, c0);     // faces meet (no black seam crack)
-    }
-}
-
 // ── global fill pattern (PICO-8 fillp style) ──────────────────────────────
 // when on, the normal fills draw the pattern: the draw COLOR fills the 0-bits,
 // the 1-bits are transparent (holes) — exactly like PICO-8 fillp.
@@ -1340,24 +1324,18 @@ void circfill(int cx, int cy, int r, int color) {
             if (disc_inside(x, y, cx, cy, r)) plot_pat(x, y, color);
 }
 
+// A triangle is just a 3-vertex polygon, so tri/trifill share the same
+// pixel-center coverage as ngon/star/poly — fill, dither and outline all agree,
+// and the outline is exactly the boundary of the fill (no GPU line-vs-fill drift).
+// Winding-independent: poly_inside is even-odd, so either vertex order fills.
 void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
-    Color c = palette[color % PALETTE_SIZE];
-    DrawLine(x1, y1, x2, y2, c);
-    DrawLine(x2, y2, x3, y3, c);
-    DrawLine(x3, y3, x1, y1, c);
+    int pts[6] = {x1,y1, x2,y2, x3,y3};
+    poly_stroke_cov(pts, 3, color);
 }
 
 void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
-    if (fp_on) { trifill_pat(x1, y1, x2, y2, x3, y3, fp_global, fp_hole, color); return; }
-    Color c = palette[color % PALETTE_SIZE];
-    Vector2 v1 = {(float)x1, (float)y1};
-    Vector2 v2 = {(float)x2, (float)y2};
-    Vector2 v3 = {(float)x3, (float)y3};
-    // Raylib needs counter-clockwise winding in Y-down screen coords.
-    // In Y-down space, cross > 0 means clockwise visually → swap to fix.
-    float cross = (v2.x-v1.x)*(v3.y-v1.y) - (v2.y-v1.y)*(v3.x-v1.x);
-    if (cross > 0) DrawTriangle(v1, v3, v2, c);
-    else           DrawTriangle(v1, v2, v3, c);
+    int pts[6] = {x1,y1, x2,y2, x3,y3};
+    poly_fill_cov(pts, 3, color);
 }
 
 // ── arcs / sectors ── angles in degrees, 0 = right, 90 = down (same as dx/dy).
@@ -1652,75 +1630,104 @@ void quadfill(int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, in
 // geometry helpers — ngon, star, poly, thickline, rrect, gradient
 // ------------------------------------------------------------
 
+// ── polygon coverage — one definition for ngon/star/poly fill + outline ──
+// Even-odd crossing test from the pixel centre (matches the disc/rrect
+// convention). Handles convex AND concave (star points, arbitrary poly);
+// fill, dither and outline all read from it, so the outline is always the
+// boundary ring of the fill — never the lines-meet-fill disagreement the old
+// fan + line() versions had. trifill stays GPU (the 3D hot path).
+static bool poly_inside(float fx, float fy, const int *xy, int n) {
+    bool in = false;
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        float yi = xy[i*2+1], yj = xy[j*2+1];
+        if ((yi > fy) != (yj > fy)) {
+            float xi = xy[i*2], xj = xy[j*2];
+            if (fx < (xj - xi) * (fy - yi) / (yj - yi) + xi) in = !in;
+        }
+    }
+    return in;
+}
+static void poly_bbox(const int *xy, int n, int *minx, int *miny, int *maxx, int *maxy) {
+    *minx = *maxx = xy[0]; *miny = *maxy = xy[1];
+    for (int i = 1; i < n; i++) {
+        int x = xy[i*2], y = xy[i*2+1];
+        if (x < *minx) *minx = x; if (x > *maxx) *maxx = x;
+        if (y < *miny) *miny = y; if (y > *maxy) *maxy = y;
+    }
+}
+static void poly_fill_cov(const int *xy, int n, int color) {
+    if (n < 3) return;
+    int x0, y0, x1, y1; poly_bbox(xy, n, &x0, &y0, &x1, &y1);
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++)
+            if (poly_inside(x + 0.5f, y + 0.5f, xy, n)) plot_pat(x, y, color);
+}
+static void poly_stroke_cov(const int *xy, int n, int color) {
+    if (n < 3) return;
+    int x0, y0, x1, y1; poly_bbox(xy, n, &x0, &y0, &x1, &y1);
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++)
+            if (poly_inside(x+0.5f,y+0.5f,xy,n) &&
+                (!poly_inside(x-0.5f,y+0.5f,xy,n) || !poly_inside(x+1.5f,y+0.5f,xy,n) ||
+                 !poly_inside(x+0.5f,y-0.5f,xy,n) || !poly_inside(x+0.5f,y+1.5f,xy,n)))
+                pset(x, y, color);
+}
+// build the vertex ring for an n-gon / star into pts (capacity >= 2*count)
+static int ngon_verts(int x, int y, int r, int sides, float rot, int *pts) {
+    if (sides > 64) sides = 64;
+    float step = 360.0f / sides;
+    for (int i = 0; i < sides; i++) {
+        float a = rot + step * i;
+        pts[i*2] = x + (int)(cos_deg(a) * r);
+        pts[i*2+1] = y + (int)(sin_deg(a) * r);
+    }
+    return sides;
+}
+static int star_verts(int x, int y, int r_out, int r_in, int points, float rot, int *pts) {
+    if (points > 64) points = 64;
+    int n = points * 2; float step = 180.0f / points;
+    for (int i = 0; i < n; i++) {
+        float a = rot + step * i;
+        int rad = (i & 1) ? r_in : r_out;
+        pts[i*2] = x + (int)(cos_deg(a) * rad);
+        pts[i*2+1] = y + (int)(sin_deg(a) * rad);
+    }
+    return n;
+}
+
 void ngon(int x, int y, int r, int sides, float rot, int color) {
     if (sides < 3) return;
-    float step = 360.0f / sides;
-    int px = x + (int)(cos_deg(rot) * r);
-    int py = y + (int)(sin_deg(rot) * r);
-    for (int i = 1; i <= sides; i++) {
-        float a = rot + step * i;
-        int nx = x + (int)(cos_deg(a) * r);
-        int ny = y + (int)(sin_deg(a) * r);
-        line(px, py, nx, ny, color);
-        px = nx; py = ny;
-    }
+    int pts[128]; int n = ngon_verts(x, y, r, sides, rot, pts);
+    poly_stroke_cov(pts, n, color);
 }
 
 void ngonfill(int x, int y, int r, int sides, float rot, int color) {
     if (sides < 3) return;
-    float step = 360.0f / sides;
-    for (int i = 0; i < sides; i++) {
-        float a0 = rot + step * i;
-        float a1 = rot + step * (i + 1);
-        trifill(x, y,
-                x + (int)(cos_deg(a0) * r), y + (int)(sin_deg(a0) * r),
-                x + (int)(cos_deg(a1) * r), y + (int)(sin_deg(a1) * r),
-                color);
-    }
+    int pts[128]; int n = ngon_verts(x, y, r, sides, rot, pts);
+    poly_fill_cov(pts, n, color);
 }
 
 void star(int x, int y, int r_out, int r_in, int points, float rot, int color) {
     if (points < 2) return;
-    float step = 180.0f / points;
-    int px = x + (int)(cos_deg(rot) * r_out);
-    int py = y + (int)(sin_deg(rot) * r_out);
-    for (int i = 1; i <= points * 2; i++) {
-        float a = rot + step * i;
-        int rad = (i & 1) ? r_in : r_out;
-        int nx = x + (int)(cos_deg(a) * rad);
-        int ny = y + (int)(sin_deg(a) * rad);
-        line(px, py, nx, ny, color);
-        px = nx; py = ny;
-    }
+    int pts[256]; int n = star_verts(x, y, r_out, r_in, points, rot, pts);
+    poly_stroke_cov(pts, n, color);
 }
 
 void starfill(int x, int y, int r_out, int r_in, int points, float rot, int color) {
     if (points < 2) return;
-    float step = 180.0f / points;
-    for (int i = 0; i < points * 2; i++) {
-        float a0 = rot + step * i;
-        float a1 = rot + step * (i + 1);
-        int r0 = (i & 1) ? r_in : r_out;
-        int r1 = (i & 1) ? r_out : r_in;
-        trifill(x, y,
-                x + (int)(cos_deg(a0) * r0), y + (int)(sin_deg(a0) * r0),
-                x + (int)(cos_deg(a1) * r1), y + (int)(sin_deg(a1) * r1),
-                color);
-    }
+    int pts[256]; int n = star_verts(x, y, r_out, r_in, points, rot, pts);
+    poly_fill_cov(pts, n, color);
 }
 
 void poly(int *xy, int n, int color) {
     if (!xy || n < 2) return;
-    for (int i = 0; i < n; i++) {
-        int j = (i + 1) % n;
-        line(xy[i*2], xy[i*2+1], xy[j*2], xy[j*2+1], color);
-    }
+    if (n == 2) { line(xy[0], xy[1], xy[2], xy[3], color); return; }
+    poly_stroke_cov(xy, n, color);
 }
 
 void polyfill(int *xy, int n, int color) {
     if (!xy || n < 3) return;
-    for (int i = 1; i < n - 1; i++)
-        trifill(xy[0], xy[1], xy[i*2], xy[i*2+1], xy[(i+1)*2], xy[(i+1)*2+1], color);
+    poly_fill_cov(xy, n, color);
 }
 
 void thickline(int x1, int y1, int x2, int y2, int w, int color) {

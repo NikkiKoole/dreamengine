@@ -4,6 +4,7 @@
 //
 // Z     = toggle outline on/off
 // X     = toggle dithered fill on/off
+// C     = cycle page (1 = curved: circ/oval/rrect, 2 = poly: tri/ngon/star/poly)
 // SPACE = analyse (one-shot snapshot — press again to return to live)
 //
 // Live mode: clean shapes, no flicker
@@ -23,9 +24,11 @@
 #define M_FILL  CLR_YELLOW
 #define M_OUT   CLR_PINK
 #define HUD_H   16
+#define NPAGES  2
 
 static bool show_outline = true;
 static bool show_dither  = false;
+static int  page         = 0;
 
 // freeze state machine
 #define FS_LIVE     0   // drawing live
@@ -36,34 +39,39 @@ static int  fs          = FS_LIVE;
 static int  last_count  = 0;
 
 static bool is_fill(int c) { return c == FILL_A || c == FILL_B; }
+// the whole shape = fill ∪ outline ∪ already-painted markers (markers only ever
+// replace pixels that were solid, so counting them keeps the region intact and
+// stops the in-place painting from feeding back into later neighbour reads).
+static bool is_solid(int c) { return is_fill(c) || c == OUT_C || c == M_FILL || c == M_OUT; }
 
+// The invariant: the outline must be EXACTLY the boundary of the fill region.
+// Reconstruct the region from the single render (fill ∪ outline) and check:
+//   - any OUTLINE pixel with no background neighbour is buried inside the fill
+//     (the outline strayed off the true edge)            → pink
+//   - any FILL pixel that itself touches background was not covered by the
+//     outline (a gap / the outline pulled away from it)  → yellow
+// This is global, not a local guess, so it catches a 1px offset at any angle
+// yet never false-flags a sharp tip (a correct tip pixel IS on the boundary).
+static int n_pink = 0, n_yellow = 0;
 static int analyse(void) {
-    int n = 0;
+    int n = 0; n_pink = 0; n_yellow = 0;
     for (int y = 0; y < SCREEN_H - HUD_H; y++) {
         for (int x = 0; x < SCREEN_W; x++) {
             int c = pget(x, y);
+            bool touches_bg = !is_solid(pget(x-1,y)) || !is_solid(pget(x+1,y)) ||
+                              !is_solid(pget(x,y-1)) || !is_solid(pget(x,y+1));
             if (c == OUT_C) {
-                // outline pixel floating outside fill — always wrong
-                bool adj = is_fill(pget(x-1,y)) || is_fill(pget(x+1,y)) ||
-                           is_fill(pget(x,y-1)) || is_fill(pget(x,y+1));
-                if (!adj) { pset(x, y, M_OUT); n++; }
+                if (!touches_bg) { pset(x, y, M_OUT); n++; n_pink++; }       // buried outline
             } else if (show_outline && is_fill(c)) {
-                // fill edge with no outline — only meaningful when outline is expected
-                bool edge = !is_fill(pget(x-1,y)) || !is_fill(pget(x+1,y)) ||
-                            !is_fill(pget(x,y-1)) || !is_fill(pget(x,y+1));
-                if (edge) {
-                    bool has_out = pget(x-1,y)==OUT_C || pget(x+1,y)==OUT_C ||
-                                   pget(x,y-1)==OUT_C || pget(x,y+1)==OUT_C;
-                    if (!has_out) { pset(x, y, M_FILL); n++; }
-                }
+                if (touches_bg) { pset(x, y, M_FILL); n++; n_yellow++; }     // uncovered fill edge
             }
         }
     }
     return n;
 }
 
-static void draw_shapes(void) {
-    cls(BG);
+// page 1 — curved primitives (unified on pixel-center coverage)
+static void draw_page1(void) {
     int cxs[] = {16, 40, 74, 118};
     int crs[] = {6, 10, 16, 22};
     for (int i = 0; i < 4; i++) {
@@ -94,12 +102,62 @@ static void draw_shapes(void) {
     }
 }
 
+// page 2 — polygon primitives (still on the old GPU/fan paths — under test)
+static void draw_page2(void) {
+    // triangles — tri/trifill now share the polygon coverage path
+    int tris[][6] = {
+        { 15,28,  58,40,  30,76},
+        { 72,76, 118,28, 128,72},
+        {140,30, 195,34, 170,78},
+    };
+    for (int i = 0; i < 3; i++) {
+        int *t = tris[i];
+        if (show_dither) fillp(FILL_CHECKER, FILL_B);
+        trifill(t[0],t[1], t[2],t[3], t[4],t[5], FILL_A);
+        if (show_dither) fillp_reset();
+        if (show_outline) tri(t[0],t[1], t[2],t[3], t[4],t[5], OUT_C);
+    }
+    // regular polygons: pentagon, hexagon, octagon
+    int   gx[]   = {32, 85, 142};
+    int   gr[]   = {18, 20,  18};
+    int   gs[]   = { 5,  6,   8};
+    float grot[] = {-90, 0,  22};
+    for (int i = 0; i < 3; i++) {
+        if (show_dither) fillp(FILL_CHECKER, FILL_B);
+        ngonfill(gx[i], 122, gr[i], gs[i], grot[i], FILL_A);
+        if (show_dither) fillp_reset();
+        if (show_outline) ngon(gx[i], 122, gr[i], gs[i], grot[i], OUT_C);
+    }
+    // stars: 5-point (top right), 6-point (mid)
+    if (show_dither) fillp(FILL_CHECKER, FILL_B);
+    starfill(250,  52, 24, 10, 5, -90, FILL_A);
+    starfill(205, 122, 20,  9, 6,   0, FILL_A);
+    if (show_dither) fillp_reset();
+    if (show_outline) {
+        star(250,  52, 24, 10, 5, -90, OUT_C);
+        star(205, 122, 20,  9, 6,   0, OUT_C);
+    }
+    // convex polygon (quad)
+    int quad[] = {255,98, 305,108, 298,150, 258,142};
+    if (show_dither) fillp(FILL_CHECKER, FILL_B);
+    polyfill(quad, 4, FILL_A);
+    if (show_dither) fillp_reset();
+    if (show_outline) poly(quad, 4, OUT_C);
+}
+
+static void draw_shapes(void) {
+    cls(BG);
+    if (page == 0) draw_page1();
+    else           draw_page2();
+}
+
 static void draw_hud(void) {
     rectfill(0, SCREEN_H - HUD_H, SCREEN_W, HUD_H, CLR_BLACK);
     font(FONT_TINY);
-    print(str("Z outline:%s  X dither:%s  SPACE:analyse",
+    print(str("Z out:%s  X dith:%s  C page %d/%d  SPACE:analyse",
               show_outline ? "ON " : "OFF",
-              show_dither  ? "ON " : "OFF"),
+              show_dither  ? "ON " : "OFF",
+              page + 1, NPAGES),
           2, SCREEN_H - 14, CLR_LIGHT_GREY);
     if (fs == FS_FROZEN || fs == FS_ANALYSE) {
         int col = last_count == 0 ? CLR_LIME_GREEN : M_FILL;
@@ -109,15 +167,17 @@ static void draw_hud(void) {
     }
     font(FONT_NORMAL);
 #ifdef DE_TRACE
-    // make the harness legible: state + last analysis result, every frame
-    watch("state", "out=%d dith=%d fs=%d", show_outline, show_dither, fs);
+    // make the harness legible: page + state + last analysis result, every frame
+    watch("state", "pg=%d out=%d dith=%d fs=%d", page + 1, show_outline, show_dither, fs);
     watch("mismatches", "%d", last_count);
+    watch("split", "pink=%d yellow=%d", n_pink, n_yellow);
 #endif
 }
 
 void update(void) {
     if (btnp(0, BTN_A)) { show_outline = !show_outline; if (fs != FS_LIVE) fs = FS_SETUP; }
     if (btnp(0, BTN_B)) { show_dither  = !show_dither;  if (fs != FS_LIVE) fs = FS_SETUP; }
+    if (keyp('C'))      { page = (page + 1) % NPAGES;   if (fs != FS_LIVE) fs = FS_SETUP; }
     if (keyp(KEY_SPACE)) fs = (fs == FS_LIVE) ? FS_SETUP : FS_LIVE;
 }
 
