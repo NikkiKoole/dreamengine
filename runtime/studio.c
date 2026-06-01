@@ -13,6 +13,8 @@
 #include <math.h>
 #include <time.h>
 #include "dos_8x8_font.h"
+#include "font4x6_data.h"
+#include "font3x5_data.h"
 #include "sprites_data.h"
 #include "map_data.h"
 #include "sound.h"
@@ -36,6 +38,9 @@ static Texture2D       spritesheet;
 static Image           spritesheet_img = {0};
 static RenderTexture2D canvas;
 static Font            game_font;
+static Font            font_small = {0};
+static Font            font_tiny  = {0};
+static int             active_font_id = FONT_NORMAL;
 static bool            custom_font = false;
 static Color           palette[PALETTE_SIZE];
 static Color           base_palette[PALETTE_SIZE];   // pristine copy, for pal_reset()
@@ -823,6 +828,18 @@ int main(int argc, char **argv) {
         UnloadImage(fontImage);
         custom_font = true;
     }
+    {
+        Image img = LoadImageFromMemory(".png", FONT4X6_DATA, FONT4X6_DATA_LEN);
+        font_small = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 32);
+        SetTextureFilter(font_small.texture, TEXTURE_FILTER_POINT);
+        UnloadImage(img);
+    }
+    {
+        Image img = LoadImageFromMemory(".png", FONT3X5_DATA, FONT3X5_DATA_LEN);
+        font_tiny = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 32);
+        SetTextureFilter(font_tiny.texture, TEXTURE_FILTER_POINT);
+        UnloadImage(img);
+    }
 
     if (SPRITES_DATA_LEN > 0) {
         Image img = LoadImageFromMemory(".png", SPRITES_DATA, SPRITES_DATA_LEN);
@@ -859,6 +876,8 @@ int main(int argc, char **argv) {
     free(replay_ev); replay_ev = NULL;
 
     if (custom_font) UnloadFont(game_font);
+    if (font_small.texture.id > 0) UnloadFont(font_small);
+    if (font_tiny.texture.id  > 0) UnloadFont(font_tiny);
     if (pal_shader_ok) UnloadShader(pal_shader);
     if (spritesheet.width > 0) UnloadTexture(spritesheet);
     if (spritesheet_img.data) UnloadImage(spritesheet_img);
@@ -1130,8 +1149,49 @@ void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, flo
     pal_end();
 }
 
-void print(const char *text, int x, int y, int color) {
-    DrawTextEx(game_font, text, (Vector2){ x, y }, 8, 0, palette[color % PALETTE_SIZE]);
+// ------------------------------------------------------------
+// font state + print helpers
+// ------------------------------------------------------------
+
+void font(int f) { active_font_id = (f == FONT_SMALL || f == FONT_TINY) ? f : FONT_NORMAL; }
+
+static Font cur_font(void) {
+    if (active_font_id == FONT_SMALL) return font_small;
+    if (active_font_id == FONT_TINY)  return font_tiny;
+    return game_font;
+}
+
+static float cur_font_size(void) {
+    Font f = cur_font();
+    return (float)f.baseSize;
+}
+
+int text_width(const char *t) {
+    return (int)MeasureTextEx(cur_font(), t, cur_font_size(), 0).x;
+}
+
+int print(const char *text, int x, int y, int color) {
+    DrawTextEx(cur_font(), text, (Vector2){ (float)x, (float)y },
+               cur_font_size(), 0, palette[color % PALETTE_SIZE]);
+    return x + text_width(text);
+}
+
+int print_shadow(const char *text, int x, int y, int color, int shadow_color) {
+    DrawTextEx(cur_font(), text, (Vector2){ (float)(x+1), (float)(y+1) },
+               cur_font_size(), 0, palette[shadow_color % PALETTE_SIZE]);
+    return print(text, x, y, color);
+}
+
+int print_outline(const char *text, int x, int y, int color, int outline_color) {
+    Color oc = palette[outline_color % PALETTE_SIZE];
+    float sz = cur_font_size();
+    Font  f  = cur_font();
+    static const int offsets[8][2] = {{-1,-1},{0,-1},{1,-1},{-1,0},{1,0},{-1,1},{0,1},{1,1}};
+    for (int i = 0; i < 8; i++)
+        DrawTextEx(f, text,
+                   (Vector2){ (float)(x + offsets[i][0]), (float)(y + offsets[i][1]) },
+                   sz, 0, oc);
+    return print(text, x, y, color);
 }
 
 void rect(int x, int y, int w, int h, int color) {
@@ -1765,12 +1825,12 @@ void pal_reset(void)      { for (int i = 0; i < PALETTE_SIZE; i++) palette[i] = 
 void fade(float a)        { fade_amt  = a < 0 ? 0 : (a > 1 ? 1 : a); }
 void shake(float a)       { if (a > shake_amt) shake_amt = a; }
 
-int  text_width(const char *t) { return (int)strlen(t) * 8; }
-
-void print_scaled(const char *t, int x, int y, int color, int scale) {
+int print_scaled(const char *t, int x, int y, int color, int scale) {
     if (scale < 1) scale = 1;
-    DrawTextEx(game_font, t, (Vector2){ (float)x, (float)y },
-               8.0f * scale, 0, palette[color % PALETTE_SIZE]);
+    float sz = cur_font_size() * scale;
+    DrawTextEx(cur_font(), t, (Vector2){ (float)x, (float)y },
+               sz, 0, palette[color % PALETTE_SIZE]);
+    return x + (int)MeasureTextEx(cur_font(), t, sz, 0).x;
 }
 
 void ovalfill(int cx, int cy, int rx, int ry, int color) {
@@ -1872,13 +1932,12 @@ int frame(void) { return frame_count; }
 // print alignment
 // ------------------------------------------------------------
 
-void print_centered(const char *text, int y, int color) {
-    int w = (int)(strlen(text) * 8);
-    print(text, (SCREEN_W - w) / 2, y, color);
+int print_centered(const char *text, int y, int color) {
+    int w = text_width(text);
+    return print(text, (SCREEN_W - w) / 2, y, color);
 }
 
-void print_right(const char *text, int right_x, int y, int color) {
-    int w = (int)(strlen(text) * 8);
-    print(text, right_x - w, y, color);
+int print_right(const char *text, int right_x, int y, int color) {
+    return print(text, right_x - text_width(text), y, color);
 }
 

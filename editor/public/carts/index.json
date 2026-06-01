@@ -903,5 +903,15 @@
     "title": "Bloom",
     "description": "A calm L-system turtle garden at twilight: click the soil to plant a seed (cycles fern/bush/tree), then press space or X to advance a day and watch every plant rewrite its L-system one iteration further — sprouts branch into ferns, bushes, and trees that sway in the wind. Controls: click or Z to plant, space or X to advance the day.",
     "file": "bloom.cart.png"
+  },
+  {
+    "title": "Fonts",
+    "description": "Showcases the three built-in fonts (FONT_NORMAL 8×8, FONT_SMALL 4×6, FONT_TINY 3×5), print_shadow, print_outline, and the chained print return value.",
+    "file": "fonts.cart.png"
+  },
+  {
+    "title": "Ragdoll",
+    "description": "Three tiny Verlet-physics stick figures that struggle to stay upright — connected points, distance constraints, and gravity. Drag any limb or body part to grab and throw. Right-click to drop a rolling ball that knocks them around. R resets the scene.",
+    "file": "ragdoll.cart.png"
   }
 ]

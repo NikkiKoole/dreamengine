@@ -130,11 +130,18 @@ void sprf(int index, int x, int y, bool flip_x, bool flip_y);                  /
 void sspr(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh);     // sub-rect → dest rect (stretched)
 void spr_rot(int index, int x, int y, float deg);                             // spin a whole sprite `deg` degrees around its center. (x,y) = top-left like spr(). the everyday rotate
 void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, float deg, int ox, int oy); // the works: source sub-rect → dest rect (scale), rotated `deg` around pivot (ox,oy) in the dest. flip with negative sw/sh
-void print(const char *text, int x, int y, int color);
-void print_centered(const char *text, int y, int color);         // center text horizontally on screen
-void print_right(const char *text, int right_x, int y, int color); // right-align text at right_x
-void print_scaled(const char *text, int x, int y, int color, int scale); // bigger text for titles/menus (scale 2 = double size)
-int  text_width(const char *text);                                 // pixel width of text at normal size (chars × 8) — for centering in your own boxes
+// active font — set once, all print calls use it until you change it
+#define FONT_NORMAL  0   // default 8×8 DOS font
+#define FONT_SMALL   1   // 4×6 font — fits ~64 chars across 320px
+#define FONT_TINY    2   // 3×5 font — fits ~80 chars across 320px
+void font(int f);        // set active font for all print calls; font(FONT_NORMAL) resets to the default 8×8
+int  text_width(const char *text);                                 // pixel width using the active font — for centering in your own boxes
+int  print(const char *text, int x, int y, int color);             // returns x after the last char (so you can chain or check if text went offscreen)
+int  print_centered(const char *text, int y, int color);           // center text horizontally on screen; returns x after last char
+int  print_right(const char *text, int right_x, int y, int color); // right-align text at right_x; returns x after last char
+int  print_scaled(const char *text, int x, int y, int color, int scale); // bigger text for titles/menus (scale 2 = double size); returns x after last char
+int  print_shadow(const char *text, int x, int y, int color, int shadow_color);   // text with a drop shadow at (+1,+1); legible over busy backgrounds
+int  print_outline(const char *text, int x, int y, int color, int outline_color); // text with a 1px outline in all 8 directions; maximum legibility
 void line(int x1, int y1, int x2, int y2, int color);
 void pset(int x, int y, int color);                     // set a single pixel (pairs with pget)
 void rect(int x, int y, int w, int h, int color);       // rectangle border
