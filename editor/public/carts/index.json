@@ -905,6 +905,11 @@
     "file": "bloom.cart.png"
   },
   {
+    "title": "Shapes",
+    "description": "Showcases the geometry helpers: ngon/ngonfill (rotating polygons), star/starfill (badges and sparkles), poly/polyfill (custom outlines), thickline, rrect/rrectfill (panels and bubbles), vgradient/hgradient. Includes a fillp-dithered hexagon.",
+    "file": "shapes.cart.png"
+  },
+  {
     "title": "Fonts",
     "description": "Showcases the three built-in fonts (FONT_NORMAL 8×8, FONT_SMALL 4×6, FONT_TINY 3×5), print_shadow, print_outline, and the chained print return value.",
     "file": "fonts.cart.png"

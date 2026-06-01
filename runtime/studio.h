@@ -171,6 +171,17 @@ void arcfill(int x, int y, int radius, float start_deg, float end_deg, int color
 void ring(int x, int y, int r_in, int r_out, float start_deg, float end_deg, int color); // filled thick arc (ring sector) — gauges, radial bars, dials
 void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color);     // triangle border
 void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color); // filled triangle (any winding)
+void ngon(int x, int y, int r, int sides, float rot, int color);          // regular n-sided polygon outline. rot=0 → first point right, degrees
+void ngonfill(int x, int y, int r, int sides, float rot, int color);      // filled regular polygon — respects fillp(). ngonfill(x,y,r,6,0,c) = hexagon
+void star(int x, int y, int r_out, int r_in, int points, float rot, int color);     // star outline. r_out=tip radius, r_in=inner radius
+void starfill(int x, int y, int r_out, int r_in, int points, float rot, int color); // filled star — respects fillp()
+void poly(int *xy, int n, int color);      // polygon outline through n points; xy = {x0,y0, x1,y1, ...}, auto-closed
+void polyfill(int *xy, int n, int color);  // filled convex polygon (triangle fan) — convex only; respects fillp()
+void thickline(int x1, int y1, int x2, int y2, int w, int color); // line with pixel width w — wider strokes, drawings, cables
+void rrect(int x, int y, int w, int h, int r, int color);         // rounded rectangle outline. r = corner radius
+void rrectfill(int x, int y, int w, int h, int r, int color);     // filled rounded rectangle — panels, buttons, speech bubbles
+void vgradient(int x, int y, int w, int h, int c_top, int c_bot);    // vertical dithered gradient from c_top to c_bot — skies, backdrops
+void hgradient(int x, int y, int w, int h, int c_left, int c_right); // horizontal dithered gradient — side lighting, panels
 void tritex(int x1, int y1, float u1, float v1, int x2, int y2, float u2, float v2, int x3, int y3, float u3, float v3); // texture-mapped triangle: each corner maps a screen point to a sprite-sheet pixel (u,v). affine (PS1-style). the textured-3D primitive
 int  pget(int x, int y);                                // palette index at (x,y), or 0 if no match
 void camera(int x, int y);                              // plain camera: shifts all drawing by (-x,-y), no zoom/rotation. camera(0,0) resets

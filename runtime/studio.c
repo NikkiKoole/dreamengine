@@ -1612,6 +1612,153 @@ void quadfill(int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, in
 }
 
 // ------------------------------------------------------------
+// geometry helpers — ngon, star, poly, thickline, rrect, gradient
+// ------------------------------------------------------------
+
+void ngon(int x, int y, int r, int sides, float rot, int color) {
+    if (sides < 3) return;
+    float step = 360.0f / sides;
+    int px = x + (int)(cos_deg(rot) * r);
+    int py = y + (int)(sin_deg(rot) * r);
+    for (int i = 1; i <= sides; i++) {
+        float a = rot + step * i;
+        int nx = x + (int)(cos_deg(a) * r);
+        int ny = y + (int)(sin_deg(a) * r);
+        line(px, py, nx, ny, color);
+        px = nx; py = ny;
+    }
+}
+
+void ngonfill(int x, int y, int r, int sides, float rot, int color) {
+    if (sides < 3) return;
+    float step = 360.0f / sides;
+    for (int i = 0; i < sides; i++) {
+        float a0 = rot + step * i;
+        float a1 = rot + step * (i + 1);
+        trifill(x, y,
+                x + (int)(cos_deg(a0) * r), y + (int)(sin_deg(a0) * r),
+                x + (int)(cos_deg(a1) * r), y + (int)(sin_deg(a1) * r),
+                color);
+    }
+}
+
+void star(int x, int y, int r_out, int r_in, int points, float rot, int color) {
+    if (points < 2) return;
+    float step = 180.0f / points;
+    int px = x + (int)(cos_deg(rot) * r_out);
+    int py = y + (int)(sin_deg(rot) * r_out);
+    for (int i = 1; i <= points * 2; i++) {
+        float a = rot + step * i;
+        int rad = (i & 1) ? r_in : r_out;
+        int nx = x + (int)(cos_deg(a) * rad);
+        int ny = y + (int)(sin_deg(a) * rad);
+        line(px, py, nx, ny, color);
+        px = nx; py = ny;
+    }
+}
+
+void starfill(int x, int y, int r_out, int r_in, int points, float rot, int color) {
+    if (points < 2) return;
+    float step = 180.0f / points;
+    for (int i = 0; i < points * 2; i++) {
+        float a0 = rot + step * i;
+        float a1 = rot + step * (i + 1);
+        int r0 = (i & 1) ? r_in : r_out;
+        int r1 = (i & 1) ? r_out : r_in;
+        trifill(x, y,
+                x + (int)(cos_deg(a0) * r0), y + (int)(sin_deg(a0) * r0),
+                x + (int)(cos_deg(a1) * r1), y + (int)(sin_deg(a1) * r1),
+                color);
+    }
+}
+
+void poly(int *xy, int n, int color) {
+    if (!xy || n < 2) return;
+    for (int i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        line(xy[i*2], xy[i*2+1], xy[j*2], xy[j*2+1], color);
+    }
+}
+
+void polyfill(int *xy, int n, int color) {
+    if (!xy || n < 3) return;
+    for (int i = 1; i < n - 1; i++)
+        trifill(xy[0], xy[1], xy[i*2], xy[i*2+1], xy[(i+1)*2], xy[(i+1)*2+1], color);
+}
+
+void thickline(int x1, int y1, int x2, int y2, int w, int color) {
+    if (w <= 1) { line(x1, y1, x2, y2, color); return; }
+    float dx = (float)(x2 - x1), dy = (float)(y2 - y1);
+    float len = sqrtf(dx*dx + dy*dy);
+    if (len < 0.001f) { circfill(x1, y1, w/2, color); return; }
+    float nx = -dy / len * (w * 0.5f), ny = dx / len * (w * 0.5f);
+    int ax = (int)(x1 + nx), ay = (int)(y1 + ny);
+    int bx = (int)(x1 - nx), by = (int)(y1 - ny);
+    int cx = (int)(x2 + nx), cy = (int)(y2 + ny);
+    int ddx = (int)(x2 - nx), ddy = (int)(y2 - ny);
+    quadfill(ax, ay, bx, by, ddx, ddy, cx, cy, color);
+    circfill(x1, y1, w/2, color);
+    circfill(x2, y2, w/2, color);
+}
+
+void rrect(int x, int y, int w, int h, int r, int color) {
+    if (r <= 0) { rect(x, y, w, h, color); return; }
+    if (r > w/2) r = w/2;
+    if (r > h/2) r = h/2;
+    line(x+r,   y,       x+w-r-1, y,       color);  // top
+    line(x+r,   y+h-1,   x+w-r-1, y+h-1,   color);  // bottom
+    line(x,     y+r,     x,       y+h-r-1, color);  // left
+    line(x+w-1, y+r,     x+w-1,   y+h-r-1, color);  // right
+    arc(x+r,     y+r,     r, 180, 270, color);
+    arc(x+w-1-r, y+r,     r, 270, 360, color);
+    arc(x+w-1-r, y+h-1-r, r,   0,  90, color);
+    arc(x+r,     y+h-1-r, r,  90, 180, color);
+}
+
+void rrectfill(int x, int y, int w, int h, int r, int color) {
+    if (r <= 0) { rectfill(x, y, w, h, color); return; }
+    if (r > w/2) r = w/2;
+    if (r > h/2) r = h/2;
+    rectfill(x+r,   y,     w-r*2, h,     color);
+    rectfill(x,     y+r,   r,     h-r*2, color);
+    rectfill(x+w-r, y+r,   r,     h-r*2, color);
+    circfill(x+r,     y+r,     r, color);
+    circfill(x+w-1-r, y+r,     r, color);
+    circfill(x+w-1-r, y+h-1-r, r, color);
+    circfill(x+r,     y+h-1-r, r, color);
+}
+
+// dithered gradient: blend c_top→c_bot (or c_left→c_right) using fillp() checker.
+// at t=0 solid c_a, at t=1 solid c_b, in between a dithered mix — stays in palette.
+static void gradient_band(int bx, int by, int bw, int bh, int ca, int cb, float t) {
+    if (t <= 0.0f)      { rectfill(bx, by, bw, bh, ca); return; }
+    if (t >= 1.0f)      { rectfill(bx, by, bw, bh, cb); return; }
+    // encode t as a 4×4 dither threshold — scale 0..1 to 0..16 on-bits
+    static const int thresholds[17] = {
+        0x0000,0x8000,0x8020,0xA020,0xA0A0,0xA4A0,0xA4A4,0xA5A4,
+        0xA5A5,0xB5A5,0xB5B5,0xF5B5,0xF5F5,0xFDF5,0xFDFD,0xFFfd,0xFFFF
+    };
+    int bits = (int)(t * 16.0f + 0.5f);
+    if (bits < 0) bits = 0; if (bits > 16) bits = 16;
+    int pat = thresholds[bits];
+    fillp(pat, ca);
+    rectfill(bx, by, bw, bh, cb);
+    fillp_reset();
+}
+
+void vgradient(int x, int y, int w, int h, int c_top, int c_bot) {
+    if (h <= 0 || w <= 0) return;
+    for (int row = 0; row < h; row++)
+        gradient_band(x, y+row, w, 1, c_top, c_bot, (float)row / (h - 1 > 0 ? h-1 : 1));
+}
+
+void hgradient(int x, int y, int w, int h, int c_left, int c_right) {
+    if (h <= 0 || w <= 0) return;
+    for (int col = 0; col < w; col++)
+        gradient_band(x+col, y, 1, h, c_left, c_right, (float)col / (w - 1 > 0 ? w-1 : 1));
+}
+
+// ------------------------------------------------------------
 // collision
 // ------------------------------------------------------------
 

@@ -7,7 +7,7 @@
 > **here**, then fix the prose in the relevant design doc. If a design doc and this file
 > disagree, this file wins.
 
-_Last updated: 2026-06-01 (session 11 — font() state setter + FONT_SMALL/TINY, print_shadow/outline, print returns x). Prior: 2026-06-01 (session 10 — 3D leaf-helpers added, turtle API removed, euclid/chance documented as general-purpose)._
+_Last updated: 2026-06-01 (session 11 — geometry helpers: ngon/star/poly/thickline/rrect/gradients; font() + FONT_SMALL/TINY; print_shadow/outline; print returns x). Prior: 2026-06-01 (session 10 — 3D leaf-helpers, turtle removed)._
 
 ---
 
@@ -65,15 +65,8 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
    `explode()` risks making all carts look identical (same concern that killed `hud()`).
    Needs design work on color, shape, lifetime, and movement params first.
    See particle survey + open questions in [`design/api-notes.md`](design/api-notes.md) §C.
-2. **2D geometry helpers** — `ngon`/`star`, `poly`/`polyfill`, gradient (dithered),
-   rounded-rect, thick-line. Same flavor as the shipped `quadfill`, and evidence-strong like
-   #1: 80 carts hand-roll `cos_deg`/`sin_deg` + fill loops; 66 draw with triangles vs 31 with
-   sprites — the geometry-first style the engine actually runs on. Full reasoning + a graphics
-   taxonomy (which carts use which technique) in
-   [`design/geometry-helpers.md`](design/geometry-helpers.md).
-   - *Parked thought (not a build item):* true smooth color interpolation (`lerp_color`/`rgb`
-     true-color token) — splits the color model / erodes the palette identity; needs its own
-     ADR before any code. Default stays dithered gradients.
+2. ~~**2D geometry helpers**~~ — **SHIPPED** as `ngon`/`ngonfill`, `star`/`starfill`, `poly`/`polyfill`, `thickline`, `rrect`/`rrectfill`, `vgradient`/`hgradient`. Demo: `shapes.cart.png`. See [`design/geometry-helpers.md`](design/geometry-helpers.md).
+   - *Parked thought (not a build item):* true smooth color interpolation (`lerp_color`/`rgb`) — splits the color model; needs its own ADR. Gradients are dithered.
 3. **Events** — `broadcast(msg_id)` / `received(msg_id)`. Confirmed demand (independently
    surfaced by the brainstorm review). Touches main-loop drain semantics.
    [`design/api-notes.md`](design/api-notes.md) §11.
