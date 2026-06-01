@@ -120,6 +120,7 @@ static void start_run(void) {
     // guaranteed solid floor platform near the bottom
     plats[0] = (Plat){ SCREEN_W/2 - 28, SCREEN_H - 24, 56, P_NORMAL, 0, false, 0 };
     highest_spawn_y = plats[0].y;
+    last_spawn_cx = SCREEN_W / 2;   // start the ladder from the floor platform's center
     for (int i = 1; i < N_PLAT; i++) respawn_plat(i);
 
     // start standing on the floor
