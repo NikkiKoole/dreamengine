@@ -31,7 +31,11 @@ docs/
 ├── guides/            how-to
 │   ├── cart-authoring.md         the make-cart.js / tools/carts toolchain
 │   ├── cart-authoring-prompt.md  reusable AI prompt for designing a new cart
-│   ├── cart-specs/               per-game cart specs (paste under the prompt above); README = batch-1 index + assembly recipe, BATCH-2.md / BATCH-3.md = later-batch indexes, AGENT-MESSAGE.md = parallel-build add-on
+│   ├── AGENT-MESSAGE.md          parallel-build add-on: paste into each agent session alongside its brief + spec
+│   ├── BATCH-2.md                batch-2 cart index (16 games built via Workflow)
+│   ├── BATCH-3.md                batch-3 cart index
+│   ├── cart-specs-index.md       batch-1 spec index + assembly recipe + parallel-build workflow
+│   ├── cart-specs/               per-game cart specs (individual game files, not shown in sidebar)
 │   ├── sharing.md                ways to publish finished carts
 │   └── debug-harness.md          deterministic record/replay/script + trace (tools/play.js)
 └── archive/           superseded / done notes, kept for history

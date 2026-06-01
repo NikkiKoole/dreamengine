@@ -11,11 +11,13 @@ const DOCS = path.resolve(here, '../docs')   // repo docs/ lives one level up fr
 //   GET /docs-list.json   → recursive list of *.md paths (for the sidebar nav)
 //   GET /docs/<rel>.md    → the raw markdown
 function serveDocs() {
+  const EXCLUDE = new Set(['guides/cart-specs'])
   const listMarkdown = (dir, base = '') => {
     let out = []
     for (const name of fs.readdirSync(dir).sort()) {
       const abs = path.join(dir, name)
       const rel = base ? `${base}/${name}` : name
+      if (EXCLUDE.has(rel)) continue
       const stat = fs.statSync(abs)
       if (stat.isDirectory()) out = out.concat(listMarkdown(abs, rel))
       else if (name.endsWith('.md')) out.push(rel)
