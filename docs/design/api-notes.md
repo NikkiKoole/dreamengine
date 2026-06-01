@@ -1036,31 +1036,42 @@ rectfill(0, 0, SCREEN_W, 18, CLR_DARKER_BLUE);
 print("GAME", 4, 5, CLR_LIGHT_GREY);
 print(str("best: %d", hi), 240, 5, CLR_YELLOW);
 ```
-Candidate: `hud(label, score, best, lives)` — draws the standard header bar.
-Files: 07-score, 12-hiscore, 14-hud, 18-invaders, 19-breakout, asteroids, frogger,
-lander, platform, pong, robotron.
+~~Candidate: `hud(label, score, best, lives)`~~ — **decided against (2026-06-01).**
+High-level composition that imposes a look; every cart using it would feel identical.
+Antithetical to the learn-C / make-your-own-game philosophy. Carts should author their
+own HUD — that *is* the lesson.
 
 ### B. Game over / press A to restart — ~12 files
 
-Everyone writes their own "darken screen, print GAME OVER, wait for `btnp(A)`" block.
-Varies per game (some show score, some best, some delay before accepting input).
-Candidate: `game_over_screen(score, best)` returning `true` on A. Probably too rigid
-given the variation — watch for a pattern to settle before committing to an interface.
-Files: 09-enemies, 18-invaders, 19-breakout, asteroids, frogger, lander, platform,
-pong, robotron, snake + others.
+~~Candidate: `game_over_screen(score, best)`~~ — **decided against (2026-06-01).**
+Same reasoning as `hud()`: too prescriptive. The variation across carts (score display,
+delay, style) is a feature, not a bug. Carts write their own.
 
-### C. Particle / explosion burst — lander, asteroids, robotron
+### C. Particle / explosion burst — surveyed across 50+ carts (2026-06-01)
 
-Radial debris on death, reimplemented each time:
+Radial debris on death, reimplemented each time. Simple form:
 ```c
 for (int i = 0; i < 8; i++) {
     float a = i * 45.0f;
     pset((int)(x + dx(age * 0.6f, a)), (int)(y + dy(age * 0.6f, a)), CLR_ORANGE);
 }
 ```
-Candidate: `explode(x, y, age, color)` — stateless radial burst driven by a
-caller-owned age value. Fits the engine's no-hidden-state style. **Top pick** — pure
-visual, easy, immediately useful.
+
+**Cart survey findings:** Every cart with particles uses the same pattern — fixed pool
+of structs (`x, y, vx, vy, life, maxlife, color, size`, sometimes `kind`), linear-search
+spawn (first slot with `life <= 0`), skip-dead update, `t = life/maxlife` fade on draw.
+Pool sizes range 16–600. Carts: `particles.c`, `fire.c`, `hotline.c`, `skystrike.c`,
+`podracer.c`, `lander`, `asteroids`, `robotron`, `cannon-fodder`, and many more.
+
+**Design space:**
+- `explode(x, y, age, color)` — stateless radial burst, caller owns the age counter.
+  Fits the no-hidden-state style. **Lowest friction, highest value.**
+- A lightweight particle pool helper (spawn/update/draw as separate calls, cart owns
+  the pool array) would reduce the 40-line boilerplate every cart copies. But the pool
+  pattern *is* a good C lesson — worth considering whether to abstract it at all.
+- `print_wave` / slow-mo / hit-stop interact with particles; design those together.
+
+**Decision pending.** `explode()` stateless burst is the clear first step.
 
 ### D. Entity pool with `.on` flag — 6+ files
 
