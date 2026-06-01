@@ -1678,8 +1678,8 @@ static int ngon_verts(int x, int y, int r, int sides, float rot, int *pts) {
     float step = 360.0f / sides;
     for (int i = 0; i < sides; i++) {
         float a = rot + step * i;
-        pts[i*2] = x + (int)(cos_deg(a) * r);
-        pts[i*2+1] = y + (int)(sin_deg(a) * r);
+        pts[i*2] = x + (int)roundf(cos_deg(a) * r);
+        pts[i*2+1] = y + (int)roundf(sin_deg(a) * r);
     }
     return sides;
 }
@@ -1689,8 +1689,8 @@ static int star_verts(int x, int y, int r_out, int r_in, int points, float rot, 
     for (int i = 0; i < n; i++) {
         float a = rot + step * i;
         int rad = (i & 1) ? r_in : r_out;
-        pts[i*2] = x + (int)(cos_deg(a) * rad);
-        pts[i*2+1] = y + (int)(sin_deg(a) * rad);
+        pts[i*2] = x + (int)roundf(cos_deg(a) * rad);
+        pts[i*2+1] = y + (int)roundf(sin_deg(a) * rad);
     }
     return n;
 }
