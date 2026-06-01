@@ -1,5 +1,6 @@
 #include "studio.h"
 #include <math.h>
+#include <stdio.h>
 
 // FLYOVER — a third-person flight sim over a procedurally generated earth.
 //
@@ -15,37 +16,109 @@
 //      rotate every corner, sort faces, fillp-dither the in-between shades) pinned
 //      to the foreground. It banks when you turn and pitches when you climb/dive.
 //
-// Free-flight sandbox — just go look at the world.
-//   Left/Right  bank & turn     Up/Down  throttle     Z  climb     X  dive
+// The world is one VAST bounded continent — 8192×8192 flight units. Low-frequency
+// noise gives continents, coastlines and mountain ranges; a radial falloff sinks
+// the rim into open ocean. ~90 named towns dot the habitable coast. A scrolling,
+// player-centred MINIMAP shows the land around you, nearby town names, and your
+// heading so you can navigate the distances. Props are bucketed in a spatial grid
+// so only the handful near you are ever projected, however big the world gets.
+//
+// You can also LAND, TAKE OFF, and CRASH. Pitch is flight-stick style (PITCH_INVERT):
+// UP noses down/descends, DOWN noses up/climbs. Descend to the deck and hold UP over
+// open flat ground at low speed to touch down (approach drag helps bleed speed); taxi
+// with L/R, power up with Z, hold DOWN to lift off again. Fly into a tower, a peak,
+// water or rough terrain and the plane goes up in a fireball — press Z to restart.
+// Collisions reuse the same spatial grid the billboards do, so it stays cheap.
+//
+// Free-flight sandbox — go find the towns, buzz the rooftops, set her down in a field.
+//   Left/Right  bank & turn     UP  dive     DOWN  climb     Z  faster     X  slower
+//   (low + hold UP = land · on the ground: Z power up, DOWN take off · crashed: Z restart)
 
 // ── world ────────────────────────────────────────────────────────────────────
-#define TEX   256
-#define MASK  255
-#define HZ    78                 // horizon row on screen
-#define BS    2                  // ground block size (chunky = faster + retro)
-#define F     140.0f             // mode-7 focal length (ground + billboards share it)
+#define TEX    1024              // baked colour-grid resolution (the texture)
+#define WORLD  8192.0f           // world EXTENT in flight units — 16× the old 512
+#define T2W    (TEX / WORLD)     // texture texels per world unit (0.125)
+#define HZ     78                // horizon row on screen
+#define BS     2                 // ground block size (chunky = faster + retro)
+#define F      140.0f            // mode-7 focal length (ground + billboards share it)
 
-static unsigned char world[TEX * TEX];   // baked terrain colour per cell
+static unsigned char world[TEX * TEX];   // baked terrain colour per texel
+
+// sample the baked world at world-space (wx,wy) — off the edge reads as deep ocean
+static int sample_world(float wx, float wy) {
+    int tx = (int)(wx * T2W), ty = (int)(wy * T2W);
+    if (tx < 0 || tx >= TEX || ty < 0 || ty >= TEX) return CLR_DARK_BLUE;
+    return world[ty * TEX + tx];
+}
+
+// ── towns (named places, marked on the minimap) ───────────────────────────────
+#define MAXCITY 96
+static float cityx[MAXCITY], cityy[MAXCITY];
+static char  citynamebuf[MAXCITY][16];
+static const char *cityname[MAXCITY];
+static int ncity = 0;
+// names are built from a prefix × suffix grid → 24×15 = 360 distinct town names
+static const char *PREFIX[] = {
+    "NORTH","SALT","IRON","OAK","DUSK","FAIR","RIVER","GULL","STONE","PINE",
+    "RED","HIGH","LAKE","COLD","SUN","WIND","ASH","ELK","BLACK","GOLD",
+    "WEST","FROST","BRIAR","HOLLY",
+};
+static const char *SUFFIX[] = {
+    "GATE","REACH","HOLLOW","MOOR","MOUTH","HAVEN","VALE","FORD","DALE","BURG",
+    "PORT","CREST","FELL","WICK","BROOK",
+};
+#define NPREF (int)(sizeof(PREFIX) / sizeof(PREFIX[0]))
+#define NSUF  (int)(sizeof(SUFFIX) / sizeof(SUFFIX[0]))
+
+// ── minimap (player-centred, scrolls; sampled live from the world) ─────────────
+#define MINI     48              // minimap sample resolution
+#define MZOOM    2               // screen pixels per minimap cell → a 96×96 map
+#define MAPSPAN  2600.0f         // world units shown across the minimap
 
 // ── props (trees / buildings / mountains / clouds) ─────────────────────────────
 #define TREE     0
-#define BUILDING 1
+#define BUILDING 1               // downtown tower (windows, iso sides)
 #define MOUNTAIN 2
 #define CLOUD    3
-#define MAXP   1500
+#define HOUSE    4               // suburban house (pitched roof)
+#define FARM     5               // rural barn / farmhouse / silo
+#define MAXP   160000
 static float px_[MAXP], py_[MAXP], ph[MAXP];   // world x, world y, height/size/altitude
 static unsigned char ptype[MAXP], pv[MAXP];     // type, variant
 static int nprop = 0;
+static int nstatic = 0;          // props [0,nstatic) are fixed → spatial-gridded; the rest are clouds
 
 // camera / flight state
 static float cx, cy, ang, spd, H;       // world pos, heading, speed, altitude
 static float bank, pitch;               // visual roll & pitch of the plane model
+#define SPD_MAX 16.0f
 
-// layered noise → terrain height 0..1 (same field the ground is baked from)
+// flight mode — you can land, take off, and crash into terrain / buildings / mountains
+#define ST_FLYING   0
+#define ST_LANDED   1
+#define ST_CRASHED  2
+static int   fly_state = ST_FLYING;
+static float crash_t   = 0;             // now() at the moment of the crash (drives the explosion)
+#define PITCH_INVERT 1                  // 1: UP dives, DOWN climbs (flight-stick feel). 0: UP climbs.
+#define ALT_MAX     70.0f
+#define ALT_GROUND   5.0f               // altitude while sitting on the ground
+#define ALT_LOW      8.0f               // below this, the descend key commits to a touchdown
+#define LAND_SPD     3.5f               // touchdown must be at or under this speed
+#define TAKEOFF_SPD  2.6f               // ground speed needed to rotate & lift off
+
+// layered noise → terrain height 0..1 (same field the ground is baked from).
+// Frequencies are 16× lower than the old 512 world, so the continent scales up
+// instead of fragmenting into lakes-everywhere. A radial falloff sinks the rim
+// into deep ocean, so the land reads as one explorable place with edges.
 static float terrain(float x, float y) {
-    return 0.55f * noise2(x * 0.025f, y * 0.025f)
-         + 0.30f * noise2(x * 0.060f, y * 0.060f)
-         + 0.15f * noise2(x * 0.130f, y * 0.130f);
+    float h = 0.58f * noise2(x * 0.00034f, y * 0.00034f)   // continents      (period ~2900)
+            + 0.30f * noise2(x * 0.0010f,  y * 0.0010f)    // hills & regions (period ~1000)
+            + 0.12f * noise2(x * 0.0028f,  y * 0.0028f);   // coastline detail (period ~360)
+    float dx = (x - WORLD * 0.5f) / (WORLD * 0.5f);
+    float dy = (y - WORLD * 0.5f) / (WORLD * 0.5f);
+    float r  = sqrtf(dx * dx + dy * dy);                   // 0 centre … 1 edge … 1.41 corner
+    float coast = clamp(1.22f - r * 1.12f, 0.0f, 1.0f);    // 1 inland → 0 at the rim
+    return h * (0.34f + 0.66f * coast);                    // rim → deep sea, interior → full height
 }
 
 static void add_prop(float x, float y, int type, float h, int variant) {
@@ -54,16 +127,110 @@ static void add_prop(float x, float y, int type, float h, int variant) {
     nprop++;
 }
 
+// stamp a patchwork field over grass: subdivide a square into colour strips and
+// recolour only the texels that are currently grass (so coast/forest stay intact)
+static void paint_field(float wx, float wy, float size, unsigned int seed) {
+    int tx0 = (int)((wx - size * 0.5f) * T2W), ty0 = (int)((wy - size * 0.5f) * T2W);
+    int ts  = (int)(size * T2W); if (ts < 2) ts = 2;
+    int strips = 2 + (int)(seed % 3);                  // 2..4 furrow strips
+    int horiz  = seed & 1;
+    int cols[4] = { CLR_LIME_GREEN, CLR_MEDIUM_GREEN, CLR_BROWN, CLR_LIGHT_YELLOW };
+    for (int dy = 0; dy < ts; dy++)
+        for (int dx = 0; dx < ts; dx++) {
+            int tx = tx0 + dx, ty = ty0 + dy;
+            if (tx < 0 || tx >= TEX || ty < 0 || ty >= TEX) continue;
+            if (world[ty * TEX + tx] != CLR_DARK_GREEN) continue;   // grass only
+            int s = (horiz ? dy : dx) * strips / ts;
+            world[ty * TEX + tx] = cols[(s + (seed >> 4)) & 3];
+        }
+}
+
+// ── spatial grid — buckets the fixed props so a frame only touches nearby ones ──
+#define GRID 96                          // 96×96 buckets over the world (~85 units each)
+static int bstart[GRID * GRID + 1];      // prefix-sum bucket offsets into porder[]
+static int porder[MAXP];                 // prop indices grouped by bucket
+
+static int cell_of(float x, float y) {
+    int gx = (int)(x * (GRID / WORLD)), gy = (int)(y * (GRID / WORLD));
+    gx = (int)clamp(gx, 0, GRID - 1);
+    gy = (int)clamp(gy, 0, GRID - 1);
+    return gy * GRID + gx;
+}
+static void build_grid(int n) {          // counting-sort props [0,n) into buckets
+    static int cur[GRID * GRID];
+    for (int i = 0; i <= GRID * GRID; i++) bstart[i] = 0;
+    for (int i = 0; i < n; i++) bstart[cell_of(px_[i], py_[i]) + 1]++;
+    for (int i = 1; i <= GRID * GRID; i++) bstart[i] += bstart[i - 1];
+    for (int i = 0; i < GRID * GRID; i++) cur[i] = bstart[i];
+    for (int i = 0; i < n; i++) { int c = cell_of(px_[i], py_[i]); porder[cur[c]++] = i; }
+}
+
+// ── per-frame visible-prop list (projected billboards, painter-sorted) ─────────
+typedef struct { float d; int sx, gy; float sc; int idx; } Vis;
+#define VISMAX 4096
+static Vis  vis[VISMAX]; static int nvis;
+static float g_ca, g_sa, g_cxs; static int g_hz;   // mode-7 frame constants for project()
+
+// project one prop into vis[] (or drop it if behind, too far, or off-screen)
+static void project(int i) {
+    if (nvis >= VISMAX) return;
+    float dxx = px_[i] - cx, dyy = py_[i] - cy;
+    float fwd = dxx * g_ca + dyy * g_sa;
+    int type = ptype[i];
+    float md = type == TREE ? 80 : type == HOUSE ? 130 : type == BUILDING ? 180
+             : type == FARM ? 150 : type == MOUNTAIN ? 256 : 200;
+    float nd = type == CLOUD ? 42 : 4;
+    if (fwd < nd || fwd > md) return;
+    float sc = F / fwd;
+    int sx = (int)(g_cxs + (dxx * (-g_sa) + dyy * g_ca) * sc);
+    if (sx < -90 || sx > SCREEN_W + 90) return;
+    vis[nvis].d = fwd; vis[nvis].sx = sx; vis[nvis].sc = sc;
+    vis[nvis].gy = (int)(g_hz + H * sc); vis[nvis].idx = i; nvis++;
+}
+
+// is a building or mountain tall enough to hit us within arm's reach? (uses the grid)
+static int collide_check(void) {
+    int pgx = (int)(cx * (GRID / WORLD)), pgy = (int)(cy * (GRID / WORLD));
+    for (int gy = pgy - 1; gy <= pgy + 1; gy++) {
+        if (gy < 0 || gy >= GRID) continue;
+        for (int gx = pgx - 1; gx <= pgx + 1; gx++) {
+            if (gx < 0 || gx >= GRID) continue;
+            int b = gy * GRID + gx;
+            for (int k = bstart[b]; k < bstart[b + 1]; k++) {
+                int i = porder[k], t = ptype[i];
+                if (t != BUILDING && t != MOUNTAIN) continue;
+                float dx = px_[i] - cx, dy = py_[i] - cy;
+                float rad = (t == MOUNTAIN) ? 9.0f : 5.5f;
+                if (dx * dx + dy * dy < rad * rad && H < ph[i]) return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void do_crash(void) {
+    if (fly_state == ST_CRASHED) return;
+    fly_state = ST_CRASHED; crash_t = now();
+    shake(9); hit(30, 2, 6, 700);                 // a low boom + a screen kick
+}
+
+static void reset_flight(void) {                  // (re)start a flight near the first town
+    fly_state = ST_FLYING; ang = 0; spd = 1.6f; H = 30; bank = 0; pitch = 0;
+    if (ncity > 0) { cx = cityx[0] - 150; cy = cityy[0]; }
+    else           { cx = WORLD * 0.5f;   cy = WORLD * 0.5f; }
+}
+
 void init(void) {
-    // 1. bake the earth: noise → terrain colour bands
-    for (int y = 0; y < TEX; y++)
-        for (int x = 0; x < TEX; x++) {
-            // per-cell hash jitter dithers the band boundaries so the colour
+    // 1. bake the earth: noise → terrain colour bands (texel grid → world coords)
+    for (int ty = 0; ty < TEX; ty++)
+        for (int tx = 0; tx < TEX; tx++) {
+            float wx = tx / T2W, wy = ty / T2W;
+            // per-texel hash jitter dithers the band boundaries so the colour
             // thresholds stipple into each other instead of drawing hard contour lines
-            unsigned int hh = (unsigned int)(x * 374761393u + y * 668265263u);
+            unsigned int hh = (unsigned int)(tx * 374761393u + ty * 668265263u);
             hh = (hh ^ (hh >> 13)) * 1274126177u;
             float jitter = ((hh & 1023) / 1023.0f - 0.5f) * 0.05f;
-            float h = terrain(x, y) + jitter;
+            float h = terrain(wx, wy) + jitter;
             int c;
             if      (h < 0.30f) c = CLR_DARK_BLUE;     // deep sea
             else if (h < 0.42f) c = CLR_TRUE_BLUE;     // sea
@@ -74,94 +241,184 @@ void init(void) {
             else if (h < 0.82f) c = CLR_BROWN;         // rock
             else if (h < 0.90f) c = CLR_DARK_GREY;     // crag
             else                c = CLR_WHITE;         // snow
-            world[y * TEX + x] = c;
+            world[ty * TEX + tx] = c;
         }
 
-    nprop = 0;
+    // 1b. farmland — patchwork fields stamped over lowland grass, clustered into
+    //     agricultural regions by a slow noise mask so they read as real countryside
+    for (int i = 0; i < 9000; i++) {
+        float wx = rnd_float_between(0, WORLD), wy = rnd_float_between(0, WORLD);
+        float h = terrain(wx, wy);
+        if (h < 0.50f || h > 0.60f) continue;                        // lowland grass only
+        if (noise2(wx * 0.0018f, wy * 0.0018f) < 0.55f) continue;    // only in farming regions
+        unsigned int seed = (unsigned int)(wx * 7.0f + wy * 131.0f) + (unsigned int)i * 2654435761u;
+        paint_field(wx, wy, rnd_float_between(70, 170), seed);
+    }
 
-    // 2. forests — trees scattered through the forest band
-    for (int i = 0; i < 900; i++) {
-        float x = rnd(TEX), y = rnd(TEX);
+    nprop = 0;
+    ncity = 0;
+
+    // 2. forests — trees scattered through the forest band, all across the continent
+    for (int i = 0; i < 500000; i++) {
+        float x = rnd_float_between(0, WORLD), y = rnd_float_between(0, WORLD);
         float h = terrain(x, y);
         if (h > 0.58f && h < 0.74f && chance(70))
             add_prop(x, y, TREE, rnd_float_between(1.4f, 2.6f), rnd(2));   // round or pine
     }
 
     // 3. mountains — big peaks where the terrain is rock/snow
-    for (int i = 0; i < 400; i++) {
-        float x = rnd(TEX), y = rnd(TEX);
+    for (int i = 0; i < 250000; i++) {
+        float x = rnd_float_between(0, WORLD), y = rnd_float_between(0, WORLD);
         float h = terrain(x, y);
         if (h > 0.80f && chance(55))
             add_prop(x, y, MOUNTAIN, remap(h, 0.80f, 1.0f, 16, 42), h > 0.90f ? 1 : 0); // snowcap if high
     }
 
-    // 4. cities — a handful of building clusters on habitable land
-    int placed = 0;
-    for (int tries = 0; tries < 4000 && placed < 6; tries++) {
-        float cxx = rnd(TEX), cyy = rnd(TEX);
+    // 4. towns — building clusters on habitable coast, each given a unique name
+    int s0 = rnd(NPREF * NSUF);                                  // rotate the name grid each flight
+    for (int tries = 0; tries < 400000 && ncity < MAXCITY; tries++) {
+        float cxx = rnd_float_between(0, WORLD), cyy = rnd_float_between(0, WORLD);
         float h = terrain(cxx, cyy);
-        if (h < 0.50f || h > 0.62f) continue;                  // grass / coastal flats only
-        placed++;
-        int n = rnd_between(30, 60);
-        for (int b = 0; b < n; b++) {
-            // gaussian-ish cluster (sum of two uniforms), downtown = centre
-            float ox = (rnd_float() + rnd_float() - 1.0f) * 16;
-            float oy = (rnd_float() + rnd_float() - 1.0f) * 16;
+        if (h < 0.50f || h > 0.62f) continue;                    // grass / coastal flats only
+        int tooclose = 0;                                        // keep towns spread out
+        for (int c = 0; c < ncity; c++) {
+            float ddx = cityx[c] - cxx, ddy = cityy[c] - cyy;
+            if (ddx * ddx + ddy * ddy < 340.0f * 340.0f) { tooclose = 1; break; }
+        }
+        if (tooclose) continue;
+        int combo = (s0 + ncity * 7) % (NPREF * NSUF);           // step 7 is coprime to 360 → distinct
+        snprintf(citynamebuf[ncity], sizeof(citynamebuf[0]), "%s%s",
+                 PREFIX[combo / NSUF], SUFFIX[combo % NSUF]);
+        cityname[ncity] = citynamebuf[ncity];
+        cityx[ncity] = cxx; cityy[ncity] = cyy;
+        ncity++;
+
+        // downtown — tall towers, tight cluster, tallest dead centre
+        int core = rnd_between(18, 42);
+        for (int b = 0; b < core; b++) {
+            float ox = (rnd_float() + rnd_float() - 1.0f) * 13;  // tight gaussian
+            float oy = (rnd_float() + rnd_float() - 1.0f) * 13;
             float bx = cxx + ox, by = cyy + oy;
-            float bh = terrain(bx, by);
-            if (bh < 0.48f) continue;                          // don't build in the sea
+            if (terrain(bx, by) < 0.48f) continue;               // don't build in the sea
             float dist = length((int)ox, (int)oy);
-            float height = remap(clamp(dist, 0, 18), 0, 18, 24, 7) * rnd_float_between(0.7f, 1.2f);
-            add_prop(bx, by, BUILDING, clamp(height, 6, 28), rnd(3));
+            float height = remap(clamp(dist, 0, 16), 0, 16, 26, 11) * rnd_float_between(0.8f, 1.2f);
+            add_prop(bx, by, BUILDING, clamp(height, 8, 30), rnd(3));
+        }
+        // suburbs — low houses spread in a much wider ring, with the odd garden tree
+        int subs = rnd_between(80, 160);
+        for (int b = 0; b < subs; b++) {
+            float ox = (rnd_float() + rnd_float() - 1.0f) * 48;  // wide gaussian
+            float oy = (rnd_float() + rnd_float() - 1.0f) * 48;
+            float bx = cxx + ox, by = cyy + oy;
+            if (terrain(bx, by) < 0.49f) continue;
+            add_prop(bx, by, HOUSE, rnd_float_between(3.5f, 7.0f), rnd(4));
+            if (chance(22))
+                add_prop(bx + rnd_float_between(-3, 3), by + rnd_float_between(-3, 3),
+                         TREE, rnd_float_between(1.3f, 2.2f), rnd(2));
         }
     }
 
-    // 5. clouds — billboards lifted high into the sky, drifting on the wind
-    for (int i = 0; i < 50; i++)
-        add_prop(rnd(TEX), rnd(TEX), CLOUD, rnd_float_between(24, 64),  // altitude
-                 (int)rnd_float_between(5, 10));                         // puff size
+    // 4b. rural — scattered farmsteads (a farmhouse, often a barn & silo) out on the
+    //     lowland grass: the same agricultural land the fields are stamped onto
+    for (int i = 0; i < 200000; i++) {
+        float wx = rnd_float_between(0, WORLD), wy = rnd_float_between(0, WORLD);
+        float h = terrain(wx, wy);
+        if (h < 0.50f || h > 0.60f || !chance(6)) continue;
+        add_prop(wx, wy, FARM, rnd_float_between(5, 8), 1);                          // farmhouse
+        if (chance(60)) add_prop(wx + rnd_float_between(-9, 9), wy + rnd_float_between(-9, 9),
+                                 FARM, rnd_float_between(7, 11), 0);                 // barn
+        if (chance(30)) add_prop(wx + rnd_float_between(-7, 7), wy + rnd_float_between(-7, 7),
+                                 FARM, rnd_float_between(9, 14), 2);                 // silo
+    }
 
-    // flight start
-    cx = 128; cy = 128; ang = 0; spd = 1.6f; H = 30; bank = 0; pitch = 0;
+    // everything so far is fixed → bucket it for cheap per-frame culling
+    nstatic = nprop;
+    build_grid(nstatic);
+
+    // 5. clouds — billboards lifted high into the sky, drifting on the wind.
+    //    Clouds move, so they are NOT gridded; there are few enough to scan each frame.
+    for (int i = 0; i < 4000; i++)
+        add_prop(rnd_float_between(0, WORLD), rnd_float_between(0, WORLD), CLOUD,
+                 rnd_float_between(24, 64),                       // altitude
+                 (int)rnd_float_between(5, 10));                  // puff size
+
+    // flight start — approach the first town from the west so you open on a city,
+    // then fly out across the suburbs and farmland to explore (ang 0 heads +x/east)
+    reset_flight();
 
     // a soft engine drone
     instrument(5, INSTR_TRI, 120, 200, 5, 300);
     instrument_filter(5, FILTER_LOW, 600, 4);
 }
 
-// shortest wrapped delta (the world tiles every 256 units)
-static float wrapd(float d) { while (d > 128) d -= TEX; while (d < -128) d += TEX; return d; }
 
 void update(void) {
+    // drift the clouds on a steady wind (always — the sky lives even on the ground)
+    for (int i = nstatic; i < nprop; i++) {
+        px_[i] += 0.20f; py_[i] += 0.06f;
+        if (px_[i] >= WORLD) px_[i] -= WORLD;
+        if (py_[i] >= WORLD) py_[i] -= WORLD;
+    }
+
+#ifdef DE_TRACE
+    watch("st",   "%d",   fly_state);
+    watch("H",    "%.1f", H);
+    watch("spd",  "%.2f", spd);
+    watch("terr", "%.2f", terrain(cx, cy));
+#endif
+
+    // wrecked — wait for a restart
+    if (fly_state == ST_CRASHED) {
+        if (btnp(0, BTN_A) || btnp(1, BTN_A) || keyp(KEY_SPACE)) reset_flight();
+        return;
+    }
+
     float turn = 0;
     if (btn(0, BTN_LEFT)  || btn(1, BTN_LEFT))  { ang -= 1.9f; turn = -1; }
     if (btn(0, BTN_RIGHT) || btn(1, BTN_RIGHT)) { ang += 1.9f; turn =  1; }
 
-    float climb = 0;
-    if (btn(0, BTN_UP)   || btn(1, BTN_UP))   { H = clamp(H + 0.7f, 12, 70); climb = -1; } // steer nose up
-    if (btn(0, BTN_DOWN) || btn(1, BTN_DOWN)) { H = clamp(H - 0.7f, 12, 70); climb =  1; } // steer nose down
+    float spdmin = (fly_state == ST_LANDED) ? 0.0f : 0.5f;        // can roll to a stop on the ground
+    if (btn(0, BTN_A) || btn(1, BTN_A)) spd = clamp(spd + 0.15f, spdmin, SPD_MAX);  // Z throttle up
+    if (btn(0, BTN_B) || btn(1, BTN_B)) spd = clamp(spd - 0.15f, spdmin, SPD_MAX);  // X throttle down
 
-    if (btn(0, BTN_A) || btn(1, BTN_A)) spd = clamp(spd + 0.05f, 0.5f, 3.6f);  // Z throttle up
-    if (btn(0, BTN_B) || btn(1, BTN_B)) spd = clamp(spd - 0.05f, 0.5f, 3.6f);  // X throttle down
+    int upk = btn(0, BTN_UP)   || btn(1, BTN_UP);
+    int dnk = btn(0, BTN_DOWN) || btn(1, BTN_DOWN);
+    int kClimb   = PITCH_INVERT ? dnk : upk;                      // gain altitude / take off
+    int kDescend = PITCH_INVERT ? upk : dnk;                      // lose altitude / land
+    float climbDir = 0;
+
+    if (fly_state == ST_LANDED) {
+        // taxi on the ground; rotate & lift off once you have takeoff speed
+        if (kClimb && spd >= TAKEOFF_SPD) { fly_state = ST_FLYING; climbDir = -1; }
+    } else {                                                      // ST_FLYING
+        if (kClimb)   { H = clamp(H + 0.7f, ALT_GROUND, ALT_MAX); climbDir = -1; }
+        if (kDescend) {
+            if (H > ALT_LOW) { H -= 0.7f; climbDir = 1; }         // ordinary descent
+            else {                                                // low + holding descend → commit to land
+                float t = terrain(cx, cy);
+                int landable = (t >= 0.46f && t <= 0.64f);        // flat lowland / beach only
+                if (landable && spd <= LAND_SPD && !collide_check()) {
+                    H -= 0.5f; climbDir = 1;
+                    if (H <= ALT_GROUND) { H = ALT_GROUND; fly_state = ST_LANDED; }
+                } else {
+                    do_crash();                                   // too fast, or over water/forest/rock
+                }
+            }
+        }
+        if (H <= ALT_LOW) { float d = spd * 0.985f; spd = d < 0.5f ? 0.5f : d; }  // approach drag near the deck
+        if (fly_state == ST_FLYING && collide_check()) do_crash(); // flew into a tower or a peak
+    }
 
     // visual bank / pitch ease toward the input — a plane banks INTO the turn
-    bank  = lerp(bank,  turn  * -30, 0.12f);
-    pitch = lerp(pitch, climb *  16, 0.10f);
+    bank  = lerp(bank,  turn  * (fly_state == ST_LANDED ? -8 : -30), 0.12f);
+    pitch = lerp(pitch, climbDir *  16, 0.10f);
 
-    // fly forward
+    // move forward (fly, or taxi on the ground)
     cx += cos_deg(ang) * spd;
     cy += sin_deg(ang) * spd;
 
-    // drift the clouds on a steady wind
-    for (int i = 0; i < nprop; i++) {
-        if (ptype[i] != CLOUD) continue;
-        px_[i] += 0.20f; py_[i] += 0.06f;
-        if (px_[i] >= TEX) px_[i] -= TEX;
-        if (py_[i] >= TEX) py_[i] -= TEX;
-    }
-
-    // engine drone — pitch rises with throttle
-    if (frame() % 11 == 0) hit(36 + (int)(spd * 5), 5, 2, 240);
+    // engine drone — pitch rises with throttle (quieter idling on the ground)
+    if (frame() % 11 == 0) hit(36 + (int)(spd * 3), 5, fly_state == ST_LANDED ? 1 : 2, 240);
 }
 
 // ── billboard drawing — every prop rises from its ground point (sx,gy) and is
@@ -242,6 +499,54 @@ static void draw_cloud(int sx, int cloudy, float sc, float size) {
     ovalfill(sx, cloudy - (int)(s * 0.30f), (int)(s * 0.75f), (int)(s * 0.5f), CLR_WHITE);
 }
 
+// suburban house: a small body with a gable roof, a door, and a lit window
+static void draw_house(int sx, int gy, float sc, float height, int variant) {
+    int wall, roof;
+    if      (variant == 0) { wall = CLR_LIGHT_PEACH; roof = CLR_DARK_RED;   }
+    else if (variant == 1) { wall = CLR_WHITE;       roof = CLR_BROWN;      }
+    else if (variant == 2) { wall = CLR_LIGHT_GREY;  roof = CLR_DARK_GREY;  }
+    else                   { wall = CLR_PEACH;       roof = CLR_DARK_BROWN; }
+    float sw = 5.0f * sc, sh = height * sc;
+    if (sw < 1.5f) { pset(sx, gy - (int)max(1, (int)sh), wall); return; }
+    int w = max(2, (int)sw);
+    int x0 = sx - w / 2;
+    int bodyh = max(1, (int)(sh * 0.62f));
+    int y0 = gy - bodyh;
+    rectfill(x0, y0, w, bodyh, wall);                               // body
+    int roofh = max(1, (int)(sh * 0.5f));
+    trifill(x0 - 1, y0, sx, y0 - roofh, x0 + w + 1, y0, roof);      // gable roof
+    if (w >= 5 && bodyh >= 4) {
+        int dh = max(2, bodyh / 2);
+        rectfill(sx - 1, gy - dh, 2, dh, CLR_DARK_BROWN);           // door
+        pset(x0 + 1, y0 + 1, CLR_LIGHT_YELLOW);                     // lit window
+    }
+}
+
+// rural building: red barn (0), farmhouse (1), or grain silo (2)
+static void draw_farm(int sx, int gy, float sc, float height, int variant) {
+    float sh = height * sc;
+    if (variant == 2) {                                            // silo: thin cylinder + domed cap
+        float sw = 2.6f * sc; int w = max(1, (int)sw);
+        int x0 = sx - w / 2, y0 = gy - (int)sh;
+        rectfill(x0, y0, w, (int)sh, CLR_LIGHT_GREY);
+        circfill(sx, y0, max(1, w / 2), CLR_MEDIUM_GREY);
+        return;
+    }
+    int wall = variant == 0 ? CLR_DARK_RED       : CLR_LIGHT_PEACH;  // 0 red barn, 1 farmhouse
+    int roof = variant == 0 ? CLR_BROWNISH_BLACK : CLR_BROWN;
+    float sw = 6.5f * sc;
+    if (sw < 1.5f) { rectfill(sx, gy - (int)sh, 1, (int)sh, wall); return; }
+    int w = max(2, (int)sw);
+    int x0 = sx - w / 2;
+    int bodyh = max(1, (int)(sh * 0.62f));
+    int y0 = gy - bodyh;
+    rectfill(x0, y0, w, bodyh, wall);                              // body
+    int roofh = max(1, (int)(sh * 0.5f));
+    trifill(x0 - 1, y0, sx, y0 - roofh, x0 + w + 1, y0, roof);     // peaked roof
+    if (variant == 0 && w >= 6)                                    // big barn door
+        rectfill(sx - max(1, w / 6), gy - bodyh + 1, max(2, w / 3), bodyh - 1, CLR_BROWNISH_BLACK);
+}
+
 // ── the plane: a low-poly model, flat-shaded (solid3d technique) ────────────────
 // (V3 and zsort are engine helpers now; the plane keeps its own roll-order
 //  rotation + custom projection — see studio.h.)
@@ -250,7 +555,7 @@ static V3 PV[] = {
     /*4 L */{-0.5f,0.05f,0.3f}, /*5 R */{0.5f,0.05f,0.3f},
     /*6 */{-0.45f,0.05f,0.7f}, /*7 */{-0.45f,0.05f,-1.1f}, /*8 */{-3.3f,0.2f,-0.3f}, /*9 */{-3.3f,0.2f,-0.9f},   // L wing
     /*10*/{0.45f,0.05f,0.7f},  /*11*/{0.45f,0.05f,-1.1f},  /*12*/{3.3f,0.2f,-0.3f},  /*13*/{3.3f,0.2f,-0.9f},    // R wing
-    /*14*/{0,0.0f,-1.7f}, /*15*/{0,0.15f,-2.4f}, /*16*/{0,-1.1f,-2.4f},                                          // tail fin
+    /*14*/{0,0.0f,-1.7f}, /*15*/{0,0.15f,-2.4f}, /*16*/{0,1.1f,-2.4f},                                           // tail fin (points UP)
     /*17*/{-1.3f,0.05f,-2.2f}, /*18*/{1.3f,0.05f,-2.2f}, /*19*/{0,0.1f,-1.8f}, /*20*/{0,0.1f,-2.4f},             // tailplane
     /*21*/{-0.25f,0.5f,1.2f}, /*22*/{0.25f,0.5f,1.2f}, /*23*/{0.25f,0.55f,0.2f}, /*24*/{-0.25f,0.55f,0.2f},      // canopy
 };
@@ -282,7 +587,7 @@ static V3 plane_rot(V3 p, float roll, float ptch) {
 
 static void draw_plane(void) {
     float ptch = -22 + pitch;         // tilt so we see the plane's TOP, nose up toward the horizon
-    float bob  = sin_deg(now() * 90) * 1.5f;
+    float bob  = (fly_state == ST_FLYING) ? sin_deg(now() * 90) * 1.5f : 0;  // settle on the ground
     float pcx = SCREEN_W / 2.0f, pcy = 126 + bob;
 
     static int sx[32], sy[32]; static V3 rv[32];
@@ -325,6 +630,94 @@ static void draw_plane(void) {
     }
 }
 
+// crash: a fireball that expands & fades, then a rising dithered smoke column
+static void draw_wreck(void) {
+    float e = now() - crash_t;
+    int ex = SCREEN_W / 2, ey = 132;
+    fillp(FILL_CHECKER, -1);
+    for (int s = 0; s < 6; s++) {
+        int sy = ey - (int)(e * 26) - s * 9;
+        int r  = 9 - s; if (r < 2) r = 2;
+        circfill(ex + (int)(sin_deg(e * 90 + s * 50) * 7), sy, r, s < 2 ? CLR_DARK_GREY : CLR_LIGHT_GREY);
+    }
+    fillp_reset();
+    if (e < 0.7f) {                                       // the initial fireball
+        int r = (int)(6 + e * 70);
+        circfill(ex, ey, r, CLR_ORANGE);
+        circfill(ex, ey, (int)(r * 0.6f), CLR_YELLOW);
+        circfill(ex, ey, (int)(r * 0.3f), CLR_WHITE);
+    }
+}
+
+// ── scrolling, player-centred minimap: live-sampled land + nearby town labels ──
+static void draw_minimap(void) {
+    int mw  = MINI * MZOOM;                                       // 96
+    int mx0 = SCREEN_W - mw - 5, my0 = 6;
+    int mcx = mx0 + mw / 2, mcy = my0 + mw / 2;
+    float ustep = MAPSPAN / MINI;                                 // world units per minimap cell
+
+    rectfill(mx0 - 2, my0 - 2, mw + 4, mw + 4, CLR_DARKER_BLUE);   // backing
+    for (int my = 0; my < MINI; my++)
+        for (int mx = 0; mx < MINI; mx++) {
+            float wx = cx + (mx - MINI * 0.5f + 0.5f) * ustep;
+            float wy = cy + (my - MINI * 0.5f + 0.5f) * ustep;
+            rectfill(mx0 + mx * MZOOM, my0 + my * MZOOM, MZOOM, MZOOM, sample_world(wx, wy));
+        }
+    rect(mx0 - 2, my0 - 2, mw + 4, mw + 4, CLR_LIGHT_GREY);        // frame
+
+    // towns within the window: a dot for each, plus a label for the nearest few
+    // (placed nearest-first and skipped if it would collide with one already drawn).
+    int inwin[MAXCITY], nin = 0;
+    for (int i = 0; i < ncity; i++)
+        if (fabsf(cityx[i] - cx) < MAPSPAN * 0.5f && fabsf(cityy[i] - cy) < MAPSPAN * 0.5f)
+            inwin[nin++] = i;
+    for (int a = 0; a < nin; a++)                                  // selection-sort nearest-first
+        for (int b = a + 1; b < nin; b++) {
+            float da = length((int)(cityx[inwin[a]] - cx), (int)(cityy[inwin[a]] - cy));
+            float db = length((int)(cityx[inwin[b]] - cx), (int)(cityy[inwin[b]] - cy));
+            if (db < da) { int t = inwin[a]; inwin[a] = inwin[b]; inwin[b] = t; }
+        }
+
+    font(FONT_TINY);
+    int lx0[16], ly0[16], lx1[16], ly1[16], nlb = 0;              // placed-label boxes
+    for (int k = 0; k < nin; k++) {
+        int i = inwin[k];
+        int dxp = mcx + (int)((cityx[i] - cx) / MAPSPAN * mw);
+        int dyp = mcy + (int)((cityy[i] - cy) / MAPSPAN * mw);
+        rectfill(dxp - 1, dyp - 1, 3, 3, CLR_YELLOW);
+        pset(dxp, dyp, CLR_DARK_RED);
+        if (nlb >= 7) continue;                                   // cap labels so it stays readable
+        int tw = text_width(cityname[i]);
+        int tx = dxp + 3, ty = dyp - 2;
+        if (tx + tw > mx0 + mw) tx = dxp - 3 - tw;                 // flip inward at the right edge
+        if (tx < mx0) continue;                                   // no room → dot only
+        int bx0 = tx - 2, by0 = ty - 2, bx1 = tx + tw + 1, by1 = ty + 6;  // padded box → labels keep clear air
+        int hit = 0;                                              // skip if it overlaps a placed label
+        for (int j = 0; j < nlb; j++)
+            if (bx0 <= lx1[j] && bx1 >= lx0[j] && by0 <= ly1[j] && by1 >= ly0[j]) { hit = 1; break; }
+        if (hit) continue;
+        lx0[nlb] = bx0; ly0[nlb] = by0; lx1[nlb] = bx1; ly1[nlb] = by1; nlb++;
+        print(cityname[i], tx + 1, ty + 1, CLR_BLACK);            // shadow, then label
+        print(cityname[i], tx,     ty,     CLR_WHITE);
+    }
+    font(FONT_NORMAL);
+
+    // you-are-here: heading needle + a red dot, always at the centre of the map
+    line(mcx, mcy, mcx + (int)(cos_deg(ang) * 9), mcy + (int)(sin_deg(ang) * 9), CLR_WHITE);
+    circfill(mcx, mcy, 2, CLR_RED);
+    pset(mcx, mcy, CLR_WHITE);
+
+    // nearest-town callout under the map — where you're headed and how far
+    int best = -1; float bestd = 1e9f;
+    for (int i = 0; i < ncity; i++) {
+        float dd = length((int)(cityx[i] - cx), (int)(cityy[i] - cy));
+        if (dd < bestd) { bestd = dd; best = i; }
+    }
+    if (best >= 0)
+        print_right(str("nearest %s  %d", cityname[best], (int)bestd),
+                    mx0 + mw, my0 + mw + 5, CLR_LIGHT_YELLOW);
+}
+
 void draw(void) {
     // horizon drops as you climb — at altitude you look down, so the far (shimmery)
     // terrain band shrinks toward a lower horizon line.
@@ -344,14 +737,14 @@ void draw(void) {
     for (int sy = hz; sy < SCREEN_H; sy += BS) {
         int   dy = sy - hz + 1;
         float z  = (H * F) / dy;
-        if (z > 1700) z = 1700;
+        if (z > 3000) z = 3000;
         float stepx = -sa * (z / F) * BS;
         float stepy =  ca * (z / F) * BS;
         float lat0  = (0 - cxs) / F * z;
         float wx = cx + ca * z + (-sa) * lat0;
         float wy = cy + sa * z + ( ca) * lat0;
         for (int sx = 0; sx < SCREEN_W; sx += BS) {
-            rectfill(sx, sy, BS, BS, world[(((int)wy) & MASK) * TEX + (((int)wx) & MASK)]);
+            rectfill(sx, sy, BS, BS, sample_world(wx, wy));
             wx += stepx; wy += stepy;
         }
     }
@@ -361,33 +754,33 @@ void draw(void) {
     rectfill(0, hz + 4, SCREEN_W, 4, CLR_TRUE_BLUE);
     fillp_reset();
 
-    // --- BILLBOARDS: project every prop with the mode-7 math, collect, sort, draw ---
-    typedef struct { float d; int sx, gy; float sc; int idx; } Vis;
-    static Vis vis[MAXP]; int nv = 0;
-    for (int i = 0; i < nprop; i++) {
-        float dxx = wrapd(px_[i] - cx), dyy = wrapd(py_[i] - cy);
-        float fwd = dxx * ca + dyy * sa;
-        int type = ptype[i];
-        float md = type == TREE ? 70 : type == BUILDING ? 125 : type == MOUNTAIN ? 140 : 150;
-        float nd = type == CLOUD ? 42 : 4;
-        if (fwd < nd || fwd > md) continue;
-        float sc = F / fwd;
-        int sx = (int)(cxs + (dxx * (-sa) + dyy * ca) * sc);
-        if (sx < -90 || sx > SCREEN_W + 90) continue;
-        vis[nv].d = fwd; vis[nv].sx = sx; vis[nv].sc = sc;
-        vis[nv].gy = (int)(hz + H * sc); vis[nv].idx = i; nv++;
+    // --- BILLBOARDS: project only the props near you (spatial grid + clouds), sort, draw ---
+    g_ca = ca; g_sa = sa; g_cxs = cxs; g_hz = hz; nvis = 0;
+    int pgx = (int)(cx * (GRID / WORLD)), pgy = (int)(cy * (GRID / WORLD));
+    const int R = 4;                                   // bucket radius covering the farthest view (mountains)
+    for (int gy = pgy - R; gy <= pgy + R; gy++) {
+        if (gy < 0 || gy >= GRID) continue;
+        for (int gx = pgx - R; gx <= pgx + R; gx++) {
+            if (gx < 0 || gx >= GRID) continue;
+            int b = gy * GRID + gx;
+            for (int k = bstart[b]; k < bstart[b + 1]; k++) project(porder[k]);
+        }
     }
+    for (int i = nstatic; i < nprop; i++) project(i);  // clouds (drift → not gridded)
+
     // painter's sort: far first
-    static float vkey[MAXP]; static int vorder[MAXP];
-    for (int i = 0; i < nv; i++) vkey[i] = vis[i].d;
-    zsort(vkey, vorder, nv);
-    for (int k = 0; k < nv; k++) {
+    static float vkey[VISMAX]; static int vorder[VISMAX];
+    for (int i = 0; i < nvis; i++) vkey[i] = vis[i].d;
+    zsort(vkey, vorder, nvis);
+    for (int k = 0; k < nvis; k++) {
         Vis vv = vis[vorder[k]];
         int i = vv.idx;
         switch (ptype[i]) {
             case TREE:     draw_tree(vv.sx, vv.gy, vv.sc, ph[i], pv[i]); break;
             case MOUNTAIN: draw_mountain(vv.sx, vv.gy, vv.sc, ph[i], pv[i]); break;
             case BUILDING: draw_building(vv.sx, vv.gy, vv.sc, ph[i], pv[i]); break;
+            case HOUSE:    draw_house(vv.sx, vv.gy, vv.sc, ph[i], pv[i]); break;
+            case FARM:     draw_farm(vv.sx, vv.gy, vv.sc, ph[i], pv[i]); break;
             case CLOUD: {
                 int cloudy = vv.gy - (int)(ph[i] * vv.sc);
                 draw_cloud(vv.sx, cloudy, vv.sc, pv[i]);
@@ -397,22 +790,40 @@ void draw(void) {
     }
 
     // --- plane shadow on the ground (dithered ellipse, fades & shrinks with altitude) ---
-    float shs = clamp(remap(H, 12, 70, 16, 4), 4, 16);
-    int   shy = SCREEN_H - 14 - (int)((H - 12) * 0.35f);
-    fillp(FILL_CHECKER, -1);
-    ovalfill(SCREEN_W / 2 + (int)(bank * 0.4f), shy, (int)shs, (int)(shs * 0.4f), CLR_BLACK);
-    fillp_reset();
+    if (fly_state != ST_CRASHED) {
+        float shs = clamp(remap(H, 12, 70, 16, 4), 4, 16);
+        int   shy = SCREEN_H - 14 - (int)((H - 12) * 0.35f);
+        fillp(FILL_CHECKER, -1);
+        ovalfill(SCREEN_W / 2 + (int)(bank * 0.4f), shy, (int)shs, (int)(shs * 0.4f), CLR_BLACK);
+        fillp_reset();
+    }
 
-    // --- the plane ---
-    draw_plane();
+    // --- the plane (or the wreck) ---
+    if (fly_state == ST_CRASHED) draw_wreck();
+    else                         draw_plane();
 
-    // --- HUD ---
+    // --- HUD: flight readouts (top-left) ---
     print(str("ALT %d", (int)H), 6, 6, CLR_WHITE);
-    print(str("SPD %d%%", (int)(spd / 3.6f * 100)), 6, 16, CLR_LIGHT_GREY);
+    print(str("SPD %d%%", (int)(spd / SPD_MAX * 100)), 6, 16, CLR_LIGHT_GREY);
     int hdg = ((int)ang % 360 + 360) % 360;
     const char *dir[] = { "E", "SE", "S", "SW", "W", "NW", "N", "NE" };
-    print_right(str("HDG %03d %s", hdg, dir[((hdg + 22) / 45) % 8]), SCREEN_W - 6, 6, CLR_WHITE);
+    print(str("HDG %03d %s", hdg, dir[((hdg + 22) / 45) % 8]), 6, 26, CLR_LIGHT_GREY);
+    if (fly_state == ST_LANDED) print("LANDED", 6, 36, CLR_LIME_GREEN);
 
-    print_centered("L/R turn   UP/DN climb-dive   Z faster   X slower", SCREEN_H - 9, CLR_DARK_GREY);
+    draw_minimap();
+
+    // --- contextual flight prompt (centred) ---
+    const char *climbKey = PITCH_INVERT ? "DOWN" : "UP";          // key that gains altitude
+    const char *landKey  = PITCH_INVERT ? "UP"   : "DOWN";        // key that descends / lands
+    if (fly_state == ST_CRASHED) {
+        print_centered("CRASHED", SCREEN_H / 2 - 14, CLR_RED);
+        print_centered("press Z to restart", SCREEN_H / 2 - 4, CLR_WHITE);
+    } else if (fly_state == ST_LANDED) {
+        print_centered(str("Z power up   %s take off   L/R taxi", climbKey), SCREEN_H - 9, CLR_DARK_GREY);
+    } else if (H <= ALT_LOW) {
+        print_centered(str("hold %s to land  (slow, over open ground)", landKey), SCREEN_H - 9, CLR_LIGHT_YELLOW);
+    } else {
+        print_centered(str("L/R turn   %s climb / %s dive   Z/X throttle", climbKey, landKey),
+                       SCREEN_H - 9, CLR_DARK_GREY);
+    }
 }
-
