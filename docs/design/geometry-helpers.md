@@ -14,14 +14,17 @@ existing carts re-derive by hand (grepped across all 176 carts, 2026-06-01).
 
 ## Why: geometry-first is the identity, not a gap
 
-A survey of the corpus made this concrete:
+A survey of the corpus made this concrete (counts over all **183** carts, 2026-06-01):
 
-- **64 / 176 carts draw with triangles; only 31 touch `spr()`.** More than twice as many
-  games build their art from `trifill`/`oval`/`circ` than from pixel sprites.
-- **80 / 176 carts** contain a `cos_deg`/`sin_deg` loop feeding `trifill`/`line` — i.e. they
+- **66 carts draw with triangles; only 31 touch `spr()`.** More than twice as many games
+  build their art from `trifill`/`oval`/`circ` than from pixel sprites.
+- **136 carts use circles**, **45 use ovals** — the "soft body" base (heads, eyes, wheels,
+  shadows). The welcome scene (`zoo`) draws every animal from ovals + triangles; that's the
+  house dialect, not a one-off.
+- **80 carts** contain a `cos_deg`/`sin_deg` loop feeding `trifill`/`line` — i.e. they
   hand-roll polygons, gears, gems, sparkles, asteroids, hex tiles.
-- The welcome scene (`zoo`) draws every animal from ovals + triangles. That's the house
-  dialect, not a one-off.
+- **46 carts use `fillp`** to fake shades/textures, and dozens stack long runs of `rectfill`
+  to fake gradients (see the taxonomy below).
 
 This is the product's edge, and it's worth doubling down on rather than papering over with a
 sprite/asset pipeline:
@@ -37,6 +40,36 @@ So the design rule for everything below: **leaf primitives over the existing
 `trifill`/`line`/`circfill`, immediate-mode, palette indices (0–31), angles in degrees** —
 exactly the flavor of `quadfill` (decision 0009). None of these duplicate today's API
 (there is no poly / ngon / gradient / rounded-rect / thick-line / bezier in `studio.h`).
+
+---
+
+## Graphics taxonomy — what the carts actually draw with
+
+How the 183 carts get pixels on screen, by primary technique. Most carts mix several; this
+is "what dominates the look." Use it to see which proposed helper pays off where.
+
+| Technique | Carts | What it makes | Example carts |
+|---|---:|---|---|
+| **Circles / ovals — the soft-body base** | 136 circ / 45 oval | heads, eyes, wheels, balls, shadows, glows | `zoo`, `pool`, `rocketleague`, `marble`, nearly everything |
+| **Triangles — the polygon workhorse** | 66 | beaks, fins, roofs, ships, sparkles, all 3D faces | `asteroids`, `solid3d`, `flyover`, `zoo` |
+| **Trig + fill loops — hand-rolled radial polygons** | 80 | gears, gems, asteroids, badges, hex tiles, radial bursts | `asteroids`, `bejeweled`, `geometrydash`, `katamari` → **the `ngon`/`star` case** |
+| **Dither / `fillp` — fake shades & textures** | 46 | PS1 face shading, brick/grid textures, see-through fences, 50% shadows, haze | `solid3d`, `textured3d`, `zoo`, `patterns`, `holes` |
+| **Gradient-by-`rectfill` — stacked colour bands** | dozens | skies, backdrops, UI panels, energy fields | `neonrain` (72 rectfills), `zak` (48), `larry` (44), `monkey` (33), `tradewinds` (29) → **the gradient / `lerp_color` case** |
+| **Arc / ring — radial UI** | 9 | cooldown sweeps, gauges, pies, dials | `arcs`, `digdug`, `incmachine`, `minesweeper`, `summergames` |
+| **Sprites — pixel art (the minority)** | 31 | detailed characters & tilesets | `platform`, `hotline`, `finalfight`, `advancewars`, `xcom`, `heroes`, `frogger` |
+| **Tilemaps — `map()` worlds** | 35 | scrolling levels from a tile grid | `10-world`, `platform`, `zelda`, `boulderdash` |
+| **3D / pseudo-3D** | ~12 | true-3D (`rot3`/`project3` pipeline), scanline road/floor, raycast walls, voxels | `cube3d`/`solid3d`/`textured3d`/`flyover` (true), `raycaster`/`doom`/`mode7`/`outrun`/`racer`/`podracer` (pseudo), `infiniminer`/`elite` |
+| **Generative / cellular fields** | ~12 | cellular automata, flow fields, physics sims — often per-pixel `pset` or grid `rectfill` | `doomfire`, `fire`, `sand`, `ripple`, `rope`, `pendulum`, `boids`, `crowd`, `lsystem`, `particles`, `neonrain` |
+
+Two readings jump out:
+
+- **The fill techniques split into "shade" and "blend."** Carts fake extra shades two ways:
+  *dither* (`fillp` checker between two palette colours — 46 carts, crisp + retro) and
+  *banding* (stacking `rectfill`s of hand-picked palette colours — the skies). Dither is
+  well-served today; smooth blends are **not** (you can't get a colour between two palette
+  indices) — which is exactly what the `lerp_color` proposal below is about.
+- **The radial-loop carts (80) are the biggest un-helped group.** They're the clearest
+  evidence for `ngon`/`star`, and they span every genre — arcade, puzzle, action, demoscene.
 
 ---
 
@@ -77,14 +110,21 @@ larry 44, monkey 33, tradewinds 29** rectfills — plus every sky (`flyover`, `z
 void vgradient(int x, int y, int w, int h, int c_top, int c_bot);    // vertical
 void hgradient(int x, int y, int w, int h, int c_left, int c_right); // horizontal
 ```
-**Open design question (settle before building).** The palette is a fixed 32 colors, so a
-gradient between two indices can't be smooth RGB. Two honest options:
+**Open design question (settle before building).** The fixed 32-color palette has no color
+*between* two indices, so a gradient's smoothness depends on what colors it can draw. Three
+approaches, in increasing power:
 - **Stepped:** walk N equal bands through chosen palette entries. Easy, but it's basically
   the loop the carts already write — modest value.
 - **Dithered:** `fillp`-blend the two endpoint colors with the blend ratio shifting across
-  the span (the checker trick `solid3d` uses for its ground). Genuinely hard to hand-roll,
-  high value, and on-brand for the dither aesthetic. **Recommended**, possibly as the only
-  form. (A `colors[]`-array variant is the third option but leans toward "the loop again".)
+  the span (the checker trick `solid3d` uses for its ground). Hard to hand-roll, on-brand
+  for the dither aesthetic, works with *today's* palette model — the best **no-new-color**
+  option.
+- **Real RGB lerp:** if we add true-color interpolation (see the next section), `vgradient`
+  becomes a genuinely smooth blend — per row, draw in `lerp_color(c_top, c_bot, t)`. This is
+  what "smooth gradient" normally means, and it makes `vgradient` a thin wrapper.
+
+**Recommendation:** decide `lerp_color` first (next section). If we take it, the gradient
+helpers ride on it and are trivially "real"; if we don't, ship the **dithered** form.
 
 ### 4. Rounded rectangle — UI panels & speech bubbles
 **Evidence:** dialog/HUD boxes are assembled from `rect` + corner `circfill` across many
@@ -121,6 +161,84 @@ asks for it.
 
 ---
 
+## Smooth color interpolation — `lerp_color` / `rgb` (real lerping)
+
+Separate from the shape helpers, but the thing that makes gradients (and a lot more) *real*
+instead of faked. Today every draw call takes a palette **index** 0–31, so there is no value
+*between* two palette colors — every "blend" in the corpus is faked with dither or banding.
+A true `lerp_color(a, b, t)` unlocks genuine gradients, glows, heat/fire ramps, neon, and
+color fades (hit-flash toward white, fade toward a tint) — i.e. "real lerping and stuff,"
+general, not gradient-only.
+
+### The constraint it runs into
+The palette is a fixed 32-color array; `colorN` args index it, and `pal()` (remap),
+`colorkey` (sprite transparency), and `pget` (read a pixel back as an index) all assume the
+indexed model. There is no central color resolver today — **67 sites** index `palette[...]`
+directly (≈35 of them inside primitives as `palette[c % PALETTE_SIZE]`). So a real lerp has
+to produce a color the draw path can accept that *isn't* one of the 32.
+
+### Options
+- **A — nearest-index lerp.** `lerp_color` RGB-blends then returns the closest of the 32
+  indices. Zero renderer change, stays purely indexed — but it is **not smooth** (snaps,
+  bands hard). Useful as a building block; does not deliver what was asked.
+- **B — packed true-color token (recommended).** Color ints stay 0–31 for the palette, but a
+  high tag bit encodes a 24-bit RGB value directly. `rgb()`/`lerp_color()` return such tokens;
+  any primitive accepts them. Full smooth color, **backward compatible** (existing 0–31
+  untouched), immediate-mode, one change point.
+- **C — writable palette registers.** Grow the palette to e.g. 48 and let `set_color(i,r,g,b)`
+  fill slots 32–47. Stays "indexed" (so `pget`/`pal` could see them), but only N computed
+  colors exist at once — a 200-row smooth gradient can't have 200 registers, so it's awkward
+  exactly where you want it, and it's stateful.
+- **D — gradient-only internal lerp.** Make `vgradient` blend in true color internally and
+  expose nothing else. Minimal, but no reuse for glows/fades/particles — wastes the idea.
+
+### Recommended surface (option B)
+```c
+int rgb(int r, int g, int b);              // a true-color token (channels 0..255) usable anywhere a color arg is taken
+int lerp_color(int c0, int c1, float t);   // smooth RGB blend of two colors → a true-color token. c0/c1 may be palette indices OR tokens; t 0..1 (clamped)
+```
+```c
+// a real dawn sky — one smooth blend, no rectfill stacking, no dither:
+for (int y = 0; y < SCREEN_H; y++)
+    rectfill(0, y, SCREEN_W, 1, lerp_color(CLR_DARK_BLUE, CLR_LIGHT_PEACH, (float)y / SCREEN_H));
+// a heat glow, and a hit-flash that fades toward white:
+circfill(x, y, r, lerp_color(CLR_YELLOW, CLR_RED, heat));
+spr_or_shape_in( lerp_color(base, CLR_WHITE, flash) );
+```
+With this, `vgradient`/`hgradient` (#3) become thin wrappers, and `lerp` (which we already
+have for floats) gains a color sibling that reads the same way.
+
+### How it works + cost
+- **Encode:** `token = (1<<30) | (r<<16) | (g<<8) | b`. Indices 0–31 are tiny positives, so
+  the tag bit never collides; color args stay plain `int`.
+- **Resolve:** introduce a single `static Color resolve_color(int c)` — `if (c & (1<<30))`
+  unpack RGB, else `palette[c & 31]` (through the `pal()` swap). Replace the ≈35 inline
+  `palette[c % PALETTE_SIZE]` primitive sites with `resolve_color(c)`. Bounded refactor, and
+  it *also* centralizes palette/`pal()` handling that's currently copy-pasted — a cleanup in
+  its own right.
+
+### Caveats to reason about (the honest part)
+- **`pal()` and `colorkey` are index operations** — true-color tokens bypass them (a token is
+  not an index). Document it: `pal()` won't recolor a true-color draw. Fine — it's an opt-in
+  escape hatch, and sprite pixels stay fully indexed.
+- **`pget` reads a pixel back as an index** by matching palette RGB; a true-color pixel
+  matches nothing → returns 0/`CLR_BLACK`. Document: true-color is a *draw-time* color, not
+  part of the indexed framebuffer readback.
+- **Identity / teaching risk.** "Colors are 0–31, not RGB" is the lesson *and* the look.
+  Keep tutorials palette-first so learners don't default to `rgb()` and lose the palette
+  discipline that gives carts their coherence. Framing: the palette is the dialect;
+  `rgb`/`lerp_color` are for the few effects that genuinely need a blend. The studio.h
+  palette comment gets a footnote, not a rewrite.
+
+### Decision needed
+Trade a sliver of palette purity for real blends? **Recommended: yes**, gated behind explicit
+`rgb()`/`lerp_color()` calls so the default indexed model is completely untouched. If the team
+prefers strict purity, fall back to **dithered** gradients (#3) and ship `lerp_color` as
+nearest-index (option A) only. Either way this is **ADR-worthy** when decided (it touches the
+palette model — same weight class as decision 0007 "pal recolors sprites").
+
+---
+
 ## Recommended first batch
 
 **#1 (ngon/star) + #2 (poly/polyfill)** — highest leverage, most "geometry-first", cut the
@@ -128,8 +246,10 @@ most code, and compose cleanly on `trifill` exactly like `quadfill`. Ship them a
 with a demo/tutorial cart (a "shapes from code" gallery: rotating gears, a hex grid, a
 sparkle burst, a polygon blob) and a baked thumbnail, per the cart-authoring workflow.
 
-**#3 (gradient)** next, once the stepped-vs-dithered question is settled (recommend
-dithered).
+**Color: decide `lerp_color`/`rgb` (option B) around the same time** — it's a separate
+(ADR-worthy) call, but it changes #3: if it lands, `vgradient` is a thin real-color wrapper
+and we skip the dither workaround; if it doesn't, ship #3 dithered. So sequence it as:
+settle `lerp_color` → then gradient. #1/#2 don't depend on it and can go first regardless.
 
 ## What to leave out (for now)
 - **Concave/arbitrary polygon fill** — needs ear-clipping/scanline; a library cart, not a
