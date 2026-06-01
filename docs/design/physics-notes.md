@@ -163,3 +163,44 @@ churning, then promote the winning shape into **#2 / #3** once a few carts have 
 Prototype a `physics.h` (option 3) with the ~9-function PBD API **plus** a demo cart — a
 rope + a few bouncy balls + a draggable blob — so we can *feel* whether the vocabulary is
 right before deciding if any of it earns a place in the runtime.
+
+---
+
+## What building the playground cart taught us
+
+We did the no-regrets step as **option #1** — a readable starter cart,
+[`tools/carts/physics.c`](../../tools/carts/physics.c) (committed; in the tutorials list as
+"Physics playground"). The whole engine is three commented functions — `integrate`,
+`relax_stick`, `collide` — plus `collide_seg`. Findings, mapped onto the difficulty ladder:
+
+- **Soft bodies and cloth really are free.** A jelly blob is a ring of points + a hub
+  (spokes keep it round, it squashes and springs back); cloth is a grid of points each
+  linked to its right + down neighbour, pinned at the top corners. *Zero* new engine
+  code — same point+stick primitives, just arranged differently. This is the strongest
+  evidence yet that PBD is the right family for dreamengine.
+
+- **`collide_seg` (point-vs-segment) buys solid faces cheaply.** ~20 lines made balls
+  rest on box *faces* (not just corners) and let boxes stack. Confirms the "circles +
+  static segments" rung is both cheap and high-value.
+
+- **Tunnelling through thin surfaces → substeps, not more iterations.** A box's corner
+  (radius 3) is a *thin catch-band*; a fast/heavy corner leaps through it in one frame and
+  lodges in the interior (where deep overlap is invisible). Splitting the frame into a few
+  **substeps** (gravity divided across them, so net fall is unchanged) fixed it — verified
+  in the harness: the box-penetration `watch()` metric settled at exactly `0.0` (touching,
+  not sunk), deterministically. `ITERS` (re-relaxing the same positions) does **not** help
+  tunnelling — different knob. The cart exposes `substeps` live on `←/→` so you can feel it.
+  Cheap radius widening (fatter catch-band) is the other lever.
+
+- **Deep overlap / "point inside a shape" is the wall we did NOT climb.** Our thin-edge
+  collision can keep separated things apart and catch shallow contacts, but it cannot
+  *detect* a point buried well inside a polygon (it's > radius from every edge), so it
+  can't eject it. Substeps mostly prevent getting there in the first place; truly resolving
+  deep interpenetration needs point-in-polygon + minimum-translation ejection — i.e. SAT,
+  the top rung. We deliberately stopped below it.
+
+**Verdict so far:** the vocabulary (`pt` / `stick` / `collide` / step, with pinning and
+grabbing both expressed as inverse-mass `w = 0`) held up across rope, cloth, soft body, and
+pseudo-solids without churn. That's the signal to consider promoting it to option #2/#3 —
+*if* a second cart wants the same code. Still no reason to bake an opaque `world_step()`
+into the runtime.
