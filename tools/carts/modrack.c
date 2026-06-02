@@ -189,6 +189,9 @@ void eval_mod(int mi) {
             dbg_midi = (int)m->jackval[1];
             break; }
         case MOD_VOICE: {
+            if (cable_into(mi, 0) < 0) {   // gate input unpatched → release (no dangling drone)
+                int h = (int)m->state[1]; if (h > 0) { note_off(h); m->state[1] = 0; }
+            }
             float gate = read_in(mi, 0), pitch = read_in(mi, 1), fcv = read_in(mi, 2);
             if (gate > 0.5f && m->state[0] <= 0.5f) {
                 int mm = (int)pitch; if (mm < 1) mm = 48;
@@ -246,7 +249,7 @@ void eval_mod(int mi) {
 void update(void) {
     if (keyp('S')) save_patch();
     if (keyp('L')) load_patch();
-    if (keyp('R')) { nmod = 0; for (int i = 0; i < 8; i++) spawn(i, bayx(i), bayy(i)); wire_default(); }
+    if (keyp('R')) { note_off_all(); nmod = 0; for (int i = 0; i < 8; i++) spawn(i, bayx(i), bayy(i)); wire_default(); }
     if (msg_flash > 0) msg_flash--;
 
     int step8 = beat() * 2 + (int)(beat_pos() * 2.0f);
@@ -263,6 +266,7 @@ void update(void) {
     watch("zoom", "%d", (int)(zoom * 100));
     watch("lastx", "%d", nmod > 0 ? mod[nmod - 1].x : -1);
     watch("help", "%d", help_type);
+    watch("vh", "%d", nmod > 4 && mod[4].type == MOD_VOICE ? (int)mod[4].state[1] : -1);
 #endif
 }
 
@@ -318,6 +322,7 @@ int handle_at(int mx, int my) {  // the title-bar drag handle (top strip, minus 
     return -1;
 }
 void delete_mod(int mi) {
+    if (mod[mi].type == MOD_VOICE && (int)mod[mi].state[1] > 0) note_off((int)mod[mi].state[1]);   // don't leave a stuck note
     for (int c = ncable - 1; c >= 0; c--) if (cable[c].sm == mi || cable[c].dm == mi) remove_cable(c);
     for (int k = mi; k < nmod - 1; k++) mod[k] = mod[k + 1];
     nmod--;
