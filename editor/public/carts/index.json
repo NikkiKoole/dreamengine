@@ -170,9 +170,39 @@
     "file": "moog.cart.png"
   },
   {
+    "title": "modrack",
+    "description": "A tiny modular synth, built in steps. STEP 1: the generative Berlin-school chain is hardcoded in C — CLOCK ticks a SAMPLE & HOLD that freezes a wandering LFO, a QUANTIZER snaps it to a scale (always in key), and a VOICE plays it as a held note whose filter the same LFO sweeps live. Endless in-key melody, zero composition. Later steps draw editable module strips and patch cables. Built on the held-note API (note_on/note_pitch/note_cutoff).",
+    "file": "modrack.cart.png"
+  },
+  {
     "title": "held notes",
     "description": "A theremin built on the new HELD NOTE api. Press and HOLD anywhere on the pad — one sustained voice starts (note_on) and rings until you release (note_off). While you hold, the mouse drives it live: X slides the pitch (note_pitch), Y sweeps the filter cutoff (note_cutoff). This is the opposite of fire-and-forget note(): a voice you keep talking to. The building block behind engine revs, sirens, charging lasers, and real hold-to-sustain keyboards.",
     "file": "heldnotes.cart.png"
+  },
+  {
+    "title": "otamatone",
+    "description": "The little face-on-a-stem toy, built entirely from the HELD NOTE api. DRAG the vertical stem to play — one sustained voice (note_on) whose pitch chases your finger up and down the fretless ribbon (note_pitch + note_glide for the signature slurp). Hold SPACE (or right-click) to squeeze the mouth open: that sweeps a resonant lowpass from a muffled 'mm' to a bright 'aah' (note_cutoff), and the pixel mouth opens to match. Wiggle while you slide for hand vibrato. Q toggles fretless ↔ snap-to-pentatonic.",
+    "file": "otamatone.cart.png"
+  },
+  {
+    "title": "glass harmonica",
+    "description": "Ben Franklin's rubbed-wine-glass contraption, built on the HELD NOTE api. Seven nested glass rings each hold a sustained sine voice (note_on at vol 0 — alive but silent); you never trigger them, you RIDE their volume. HOLD the mouse and slide IN and OUT across the rings: whichever one your finger wets swells in with a slow attack (note_vol), neighbours bleed so sweeping between rings blooms a glassy chord, and it all fades slowly when you let go. Bigger ring = lower note; pitches are a major pentatonic so any combination stays consonant. Pure, ghostly, polyphonic — the opposite of a struck note.",
+    "file": "glassharmonica.cart.png"
+  },
+  {
+    "title": "hurdy-gurdy",
+    "description": "The cranked drone-fiddle, built on the HELD NOTE api around a mechanic nothing else uses: the crank IS the sound. HOLD the mouse and CIRCLE it around the wheel — TWO expressive axes from one gesture: how FAST your hand travels = loudness, how WIDE you circle = brightness (note_vol + note_cutoff across all three voices). Drone voices (tonic + fifth) only sing while the wheel turns. Press a tangent key (A S D F G H J K) to stop the melody string at a pitch (note_pitch), highest key wins; keys 1-5 switch the scale (major/minor/penta/p-min/blues). The 'chien': a sharp FLICK of the crank snaps the buzzing dog bridge for a percussive accent — toggle it with B. Watch the CRANK and TONE meters and the coloured contact ring.",
+    "file": "hurdygurdy.cart.png"
+  },
+  {
+    "title": "musical saw",
+    "description": "The theremin's spooky cousin, and the one cart that drives note_lfo LIVE — the vibrato is something you PLAY, not a fixed setting. One sustained sine voice (note_on) bowed and bent by hand. BOW it: hold the mouse and saw LEFT-RIGHT — your bow speed is the volume (note_vol), so it dies when you stop, like a real bow leaving the blade. BEND it: up/down flexes the steel blade into a deeper or shallower S-curve and the CURVATURE is the pitch (note_pitch + note_glide for the smear). SING it: wobble your hand vertically while bowing and that wrist-shake feeds a live note_lfo vibrato whose depth AND rate climb with how hard you shake — you hear it shiver and watch the blade shimmer. Ethereal, vocal, haunting.",
+    "file": "musicalsaw.cart.png"
+  },
+  {
+    "title": "stylophone deluxe",
+    "description": "The pocket stylus-synth, built to reach two corners of the audio engine no other instrument cart touches. LIVE PULSE-WIDTH: the TONE fader morphs the buzzy square's duty by hand (note_duty), thin/nasal to hollow/fat. THE TRANSPORT: the famous REITER (reiteration) switch retriggers the held note in time with the tempo (bpm + beat + beat_pos) — the cabinet's first tempo-synced instrument; crank RATE up and it machine-guns, flip ARP and the retrigger walks a major arpeggio. Play it with the STYLUS (the mouse): touch the metal keyboard and slide for the classic glissando (note_pitch stepping pad-to-pad). VIBRATO and SUB (sub-octave) are switches, like the real deluxe panel. Watch the BEAT lamp pulse with the transport.",
+    "file": "stylophone.cart.png"
   },
   {
     "title": "pong",
