@@ -148,7 +148,8 @@ void preset_acid(void) {         // euclid-gated squelch bass, slewed pitch + LF
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
     int lf = spawn(MOD_LFO, bayx(2), bayy(2)), sh = spawn(MOD_SH, bayx(3), bayy(3));
     int sl = spawn(MOD_SLEW, bayx(4), bayy(4)), qt = spawn(MOD_QUANT, bayx(5), bayy(5)), vo = spawn(MOD_VOICE, bayx(6), bayy(6));
-    mod[vo].param[0] = 420; mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[vo].param[0] = 420; mod[vo].param[1] = 11; mod[vo].param[3] = 1;   // low cutoff, squelchy res, square wave
+    mod[qt].param[0] = SCALE_PENTA_MIN;
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
     add_cable(ck, 0, sh, 1); add_cable(lf, 0, sh, 0);
     add_cable(sh, 2, sl, 0); add_cable(sl, 1, qt, 0); add_cable(qt, 1, vo, 1);
