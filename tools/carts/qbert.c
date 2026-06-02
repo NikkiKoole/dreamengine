@@ -382,23 +382,23 @@ void draw(void) {
     // paint progress
     bar(150, 4, 70, 5, total ? (float)painted / total : 0, CLR_YELLOW, CLR_DARK_GREY);
 
-    print_centered("Q E A D = diagonal hops   paint every cube", SCREEN_H - 9, CLR_DARK_GREY);
+    print_centered("Q E A D = diagonal hops   paint every cube", SCREEN_W/2, SCREEN_H - 9, CLR_DARK_GREY);
 
     if (won) {
         fade(0.35f);
         int w = 230, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 80, w, 34, CLR_DARK_GREEN);
         rect(bx, 80, w, 34, CLR_WHITE);
-        print_centered("BOARD CLEAR!", 88, CLR_YELLOW);
-        print_centered("press Z for the next pyramid", 100, CLR_WHITE);
+        print_centered("BOARD CLEAR!", SCREEN_W/2, 88, CLR_YELLOW);
+        print_centered("press Z for the next pyramid", SCREEN_W/2, 100, CLR_WHITE);
     }
     if (gameover) {
         fade(0.5f);
         int w = 230, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 78, w, 40, CLR_DARK_PURPLE);
         rect(bx, 78, w, 40, CLR_WHITE);
-        print_centered("GAME OVER", 86, CLR_RED);
-        print_centered(str("score %d   hi %d", score, hi), 98, CLR_WHITE);
-        print_centered("press Z to play again", 108, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, 86, CLR_RED);
+        print_centered(str("score %d   hi %d", score, hi), SCREEN_W/2, 98, CLR_WHITE);
+        print_centered("press Z to play again", SCREEN_W/2, 108, CLR_LIGHT_GREY);
     }
 }

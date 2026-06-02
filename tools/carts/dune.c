@@ -908,9 +908,8 @@ void draw(void) {
     if (over) {
         rectfill(SCREEN_W / 2 - 78, SCREEN_H / 2 - 24, 156, 48, CLR_BLACK);
         rect(SCREEN_W / 2 - 78, SCREEN_H / 2 - 24, 156, 48, over == 1 ? CLR_GREEN : CLR_RED);
-        print_centered(over == 1 ? "ARRAKIS IS YOURS" : "BASE DESTROYED",
-                       SCREEN_H / 2 - 14, over == 1 ? CLR_LIME_GREEN : CLR_RED);
-        print_centered(str("%02d:%02d on the clock", (int)game_t / 60, (int)game_t % 60), SCREEN_H / 2 - 1, CLR_YELLOW);
-        print_centered("Z or click for a new map", SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered(over == 1 ? "ARRAKIS IS YOURS" : "BASE DESTROYED", SCREEN_W/2, SCREEN_H / 2 - 14, over == 1 ? CLR_LIME_GREEN : CLR_RED);
+        print_centered(str("%02d:%02d on the clock", (int)game_t / 60, (int)game_t % 60), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_YELLOW);
+        print_centered("Z or click for a new map", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }

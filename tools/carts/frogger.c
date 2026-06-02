@@ -308,10 +308,10 @@ void draw() {
   if (gstate == 0) {
     rectfill(SCREEN_W/2-80, SCREEN_H/2-38, 160, 70, CLR_BLACK);
     rect    (SCREEN_W/2-80, SCREEN_H/2-38, 160, 70, CLR_GREEN);
-    print_centered("FROGGER",              SCREEN_H/2-28, CLR_GREEN);
-    print_centered("Hop to the lily pads", SCREEN_H/2-12, CLR_WHITE);
-    print_centered("Ride logs, dodge cars",SCREEN_H/2+2,  CLR_LIGHT_GREY);
-    print_centered("Press Z to start",     SCREEN_H/2+16, CLR_YELLOW);
+    print_centered("FROGGER", SCREEN_W/2, SCREEN_H/2-28, CLR_GREEN);
+    print_centered("Hop to the lily pads", SCREEN_W/2, SCREEN_H/2-12, CLR_WHITE);
+    print_centered("Ride logs, dodge cars", SCREEN_W/2, SCREEN_H/2+2, CLR_LIGHT_GREY);
+    print_centered("Press Z to start", SCREEN_W/2, SCREEN_H/2+16, CLR_YELLOW);
     return;
   }
 
@@ -319,7 +319,7 @@ void draw() {
   if (gstate == 3) {
     rectfill(SCREEN_W/2-64, SCREEN_H/2-22, 128, 48, CLR_BLACK);
     rect    (SCREEN_W/2-64, SCREEN_H/2-22, 128, 48, CLR_WHITE);
-    print_centered("GAME OVER",      SCREEN_H/2-12, CLR_RED);
-    print_centered("Z to try again", SCREEN_H/2+4,  CLR_LIGHT_GREY);
+    print_centered("GAME OVER", SCREEN_W/2, SCREEN_H/2-12, CLR_RED);
+    print_centered("Z to try again", SCREEN_W/2, SCREEN_H/2+4, CLR_LIGHT_GREY);
   }
 }

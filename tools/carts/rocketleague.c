@@ -281,7 +281,7 @@ void draw(void) {
     // kickoff countdown
     if (kickoff > 0 && !over) {
         int n = kickoff / 17 + 1;
-        print_centered(str("%d", n), 70, CLR_WHITE);
+        print_centered(str("%d", n), SCREEN_W/2, 70, CLR_WHITE);
     }
 
     // controls hint — first 5 seconds
@@ -294,8 +294,7 @@ void draw(void) {
     if (over) {
         rectfill(80, 80, 160, 40, CLR_BLACK);
         rect(80, 80, 160, 40, CLR_WHITE);
-        print_centered(score[0] >= WIN_SCORE ? "BLUE WINS!" : "ORANGE WINS!", 90,
-                       score[0] >= WIN_SCORE ? CLR_BLUE : CLR_ORANGE);
-        print_centered("Z / , to replay", 104, CLR_LIGHT_GREY);
+        print_centered(score[0] >= WIN_SCORE ? "BLUE WINS!" : "ORANGE WINS!", SCREEN_W/2, 90, score[0] >= WIN_SCORE ? CLR_BLUE : CLR_ORANGE);
+        print_centered("Z / , to replay", SCREEN_W/2, 104, CLR_LIGHT_GREY);
     }
 }

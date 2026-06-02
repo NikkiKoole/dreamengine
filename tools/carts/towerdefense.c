@@ -297,8 +297,8 @@ void draw() {
     if (state == WIN || state == LOSE) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 24, 140, 50, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 24, 140, 50, state == WIN ? CLR_GREEN : CLR_RED);
-        print_centered(state == WIN ? "VICTORY!" : "OVERRUN", SCREEN_H / 2 - 14, state == WIN ? CLR_GREEN : CLR_RED);
-        print_centered(str("reached wave %d", wave), SCREEN_H / 2 - 1, CLR_YELLOW);
-        print_centered("Z to play again", SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
+        print_centered(state == WIN ? "VICTORY!" : "OVERRUN", SCREEN_W/2, SCREEN_H / 2 - 14, state == WIN ? CLR_GREEN : CLR_RED);
+        print_centered(str("reached wave %d", wave), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
     }
 }

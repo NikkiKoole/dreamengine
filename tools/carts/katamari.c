@@ -165,8 +165,8 @@ void draw(void) {
     if (over) {
         rectfill(70, 76, 180, 48, CLR_BLACK);
         rect(70, 76, 180, 48, CLR_LIME_GREEN);
-        print_centered("TIME!", 84, CLR_YELLOW);
-        print_centered(str("size %d  -  %d things", (int)r, count), 98, CLR_WHITE);
-        print_centered("Z to replay", 110, CLR_LIGHT_GREY);
+        print_centered("TIME!", SCREEN_W/2, 84, CLR_YELLOW);
+        print_centered(str("size %d  -  %d things", (int)r, count), SCREEN_W/2, 98, CLR_WHITE);
+        print_centered("Z to replay", SCREEN_W/2, 110, CLR_LIGHT_GREY);
     }
 }

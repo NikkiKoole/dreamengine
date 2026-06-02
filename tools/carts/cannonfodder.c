@@ -820,8 +820,8 @@ static void draw_hud(void) {
         int w = 120;
         rectfill(SCREEN_W / 2 - w / 2, 30, w, 22, CLR_BLACK);
         rect(SCREEN_W / 2 - w / 2, 30, w, 22, CLR_RED);
-        print_centered("MAN DOWN", 34, CLR_RED);
-        print_centered(mandown_name, 43, CLR_WHITE);
+        print_centered("MAN DOWN", SCREEN_W/2, 34, CLR_RED);
+        print_centered(mandown_name, SCREEN_W/2, 43, CLR_WHITE);
     }
 }
 
@@ -830,10 +830,10 @@ static void panel(const char *title, int tcol, const char *l1, const char *l2, c
     int w = 220, h = 92, x = SCREEN_W / 2 - w / 2, y = SCREEN_H / 2 - h / 2;
     rectfill(x, y, w, h, CLR_BROWNISH_BLACK);
     rect(x, y, w, h, tcol);
-    print_centered(title, y + 8, tcol);
-    if (l1) print_centered(l1, y + 28, CLR_WHITE);
-    if (l2) print_centered(l2, y + 40, CLR_LIGHT_GREY);
-    if (l3) print_centered(l3, y + 70, blink(24) ? CLR_YELLOW : CLR_LIGHT_GREY);
+    print_centered(title, SCREEN_W/2, y + 8, tcol);
+    if (l1) print_centered(l1, SCREEN_W/2, y + 28, CLR_WHITE);
+    if (l2) print_centered(l2, SCREEN_W/2, y + 40, CLR_LIGHT_GREY);
+    if (l3) print_centered(l3, SCREEN_W/2, y + 70, blink(24) ? CLR_YELLOW : CLR_LIGHT_GREY);
 }
 
 void draw(void) {
@@ -850,7 +850,7 @@ void draw(void) {
     if (state == ST_BRIEF) {
         panel("CANNON FODDER", CLR_LIGHT_YELLOW, mission_name, mission_obj,
               "LEFT-click move  RIGHT grenade  -  click to deploy");
-        print_centered(str("SQUAD: %d   FALLEN: %d", alive_squad(), total_kia), SCREEN_H / 2 + 22, CLR_GREEN);
+        print_centered(str("SQUAD: %d   FALLEN: %d", alive_squad(), total_kia), SCREEN_W/2, SCREEN_H / 2 + 22, CLR_GREEN);
     } else if (state == ST_WIN) {
         panel("OBJECTIVE COMPLETE", CLR_GREEN, "The survivors are promoted.",
               str("%d made it out.", alive_squad()), "click to advance");

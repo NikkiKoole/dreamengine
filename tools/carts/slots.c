@@ -75,7 +75,7 @@ static void reel_window(int i, int cx) {
 
 void draw(void) {
     cls(CLR_DARK_PURPLE);
-    print_centered("ONE-ARMED BANDIT", 8, CLR_LIGHT_YELLOW);
+    print_centered("ONE-ARMED BANDIT", SCREEN_W/2, 8, CLR_LIGHT_YELLOW);
 
     reel_window(0, 96);
     reel_window(1, 160);
@@ -84,13 +84,13 @@ void draw(void) {
     print(str("CREDITS %d", credits), 8, 28, CLR_WHITE);
     int rtp = spins > 0 ? won * 100 / spins : 100;
     print_right(str("RTP %d%%", rtp), SCREEN_W - 8, 28, rtp < 100 ? CLR_RED : CLR_GREEN);
-    print_centered(str("spins %d", spins), 28, CLR_DARK_GREY);
+    print_centered(str("spins %d", spins), SCREEN_W/2, 28, CLR_DARK_GREY);
 
     const char *msg = any_spin() ? "..." :
                       credits <= 0 ? "BANKRUPT!  press X for a loan" :
                       lastpay > 0  ? str("WINNER!  +%d credits", lastpay) :
                       lastpay == 0 ? "no luck — spin again" : "press Z to pull the lever";
-    print_centered(msg, 134, lastpay > 0 ? CLR_YELLOW : CLR_LIGHT_GREY);
+    print_centered(msg, SCREEN_W/2, 134, lastpay > 0 ? CLR_YELLOW : CLR_LIGHT_GREY);
 
-    print_centered("the house always wins", SCREEN_H - 11, CLR_DARK_GREY);
+    print_centered("the house always wins", SCREEN_W/2, SCREEN_H - 11, CLR_DARK_GREY);
 }

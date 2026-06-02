@@ -219,8 +219,8 @@ void draw(void) {
 
     if (state == ST_PICK) {
         rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK);     // dim (opaque box behind cards)
-        print_centered("LEVEL UP!", 30, CLR_YELLOW);
-        print_centered("Left / Right, then Z", 44, CLR_LIGHT_GREY);
+        print_centered("LEVEL UP!", SCREEN_W/2, 30, CLR_YELLOW);
+        print_centered("Left / Right, then Z", SCREEN_W/2, 44, CLR_LIGHT_GREY);
         for (int i = 0; i < 3; i++) {
             int x = 14 + i * 100, y = 70, w = 92, h = 70;
             rectfill(x, y, w, h, CLR_DARKER_BLUE);
@@ -233,9 +233,9 @@ void draw(void) {
     if (state == ST_OVER) {
         rectfill(70, 74, 180, 52, CLR_BLACK);
         rect(70, 74, 180, 52, CLR_RED);
-        print_centered("YOU DIED", 82, CLR_RED);
-        print_centered(str("survived %d s", (int)survived()), 96, CLR_WHITE);
-        print_centered(str("lv %d   kills %d", level, kills), 106, CLR_LIGHT_GREY);
-        print_centered("Z to retry", 116, CLR_DARK_GREY);
+        print_centered("YOU DIED", SCREEN_W/2, 82, CLR_RED);
+        print_centered(str("survived %d s", (int)survived()), SCREEN_W/2, 96, CLR_WHITE);
+        print_centered(str("lv %d   kills %d", level, kills), SCREEN_W/2, 106, CLR_LIGHT_GREY);
+        print_centered("Z to retry", SCREEN_W/2, 116, CLR_DARK_GREY);
     }
 }

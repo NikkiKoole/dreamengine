@@ -295,18 +295,18 @@ void draw(void) {
 
     // ---- HUD / result banner ----
     if (buzz_t > 0 && phase == PH_PLAY) {
-        print_centered("not in word list", KB_Y - 14, CLR_RED);
+        print_centered("not in word list", SCREEN_W/2, KB_Y - 14, CLR_RED);
     } else if (phase == PH_PLAY) {
-        print_centered(str("streak %d", streak), KB_Y - 14, CLR_MEDIUM_GREY);
+        print_centered(str("streak %d", streak), SCREEN_W/2, KB_Y - 14, CLR_MEDIUM_GREY);
     }
 
     if (phase == PH_WIN || phase == PH_LOSE) {
         int by = KB_Y - 16;
         rectfill(0, by, SCREEN_W, 14, CLR_BLACK);
         if (phase == PH_WIN) {
-            print_centered(str("SOLVED!  streak %d  -  ENTER to play again", streak), by + 3, CLR_GREEN);
+            print_centered(str("SOLVED!  streak %d  -  ENTER to play again", streak), SCREEN_W/2, by + 3, CLR_GREEN);
         } else {
-            print_centered(str("answer: %s  -  ENTER to play again", answer), by + 3, CLR_ORANGE);
+            print_centered(str("answer: %s  -  ENTER to play again", answer), SCREEN_W/2, by + 3, CLR_ORANGE);
         }
     }
 }

@@ -141,9 +141,9 @@ static void draw_box(const char *l1, const char *l2, int col) {
     rectfill(bx, by, w, h, CLR_DARK_BLUE);
     rect(bx, by, w, h, CLR_WHITE);
     rect(bx + 2, by + 2, w - 4, h - 4, CLR_INDIGO);
-    print_centered(l1, by + 10, col);
-    if (l2) print_centered(l2, by + 22, col);
-    print_centered("- press A -", by + h - 12, CLR_LIGHT_GREY);
+    print_centered(l1, SCREEN_W/2, by + 10, col);
+    if (l2) print_centered(l2, SCREEN_W/2, by + 22, col);
+    print_centered("- press A -", SCREEN_W/2, by + h - 12, CLR_LIGHT_GREY);
 }
 
 void draw(void) {

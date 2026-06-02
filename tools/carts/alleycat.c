@@ -368,7 +368,7 @@ static void draw_climb() {
     }
 
     if (now() - level_start < 2.4f)
-        print_centered("REACH A LIT WINDOW!", SCREEN_H / 2, CLR_LIGHT_YELLOW);
+        print_centered("REACH A LIT WINDOW!", SCREEN_W/2, SCREEN_H / 2, CLR_LIGHT_YELLOW);
 }
 
 static void draw_room() {
@@ -404,7 +404,7 @@ static void draw_room() {
     // HUD + timer bar
     print(str("MICE %d", mice_left), 6, 4, CLR_WHITE);
     print_right(str("SCORE %d", score), SCREEN_W - 6, 4, CLR_WHITE);
-    print_centered("GOBBLE THE MICE!", 16, CLR_LIGHT_YELLOW);
+    print_centered("GOBBLE THE MICE!", SCREEN_W/2, 16, CLR_LIGHT_YELLOW);
     int barw = (int)((ROOM_TIME - timer()) / ROOM_TIME * (SCREEN_W - 12));
     if (barw < 0) barw = 0;
     rectfill(6, 26, barw, 2, barw < 60 ? CLR_RED : CLR_GREEN);
@@ -417,8 +417,8 @@ void draw() {
     if (state == GAMEOVER) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 56, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 56, CLR_ORANGE);
-        print_centered("OUT OF LIVES",          SCREEN_H / 2 - 16, CLR_RED);
-        print_centered(str("SCORE %d", score),  SCREEN_H / 2 - 2,  CLR_YELLOW);
-        print_centered("Z to prowl again",      SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
+        print_centered("OUT OF LIVES", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z to prowl again", SCREEN_W/2, SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
     }
 }

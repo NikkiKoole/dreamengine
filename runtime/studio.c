@@ -2356,10 +2356,9 @@ int frame(void) { return frame_count; }
 // print alignment
 // ------------------------------------------------------------
 
-int print_centered(const char *text, int y, int color) {
+int print_centered(const char *text, int x, int y, int color) {
     PROF("print_centered");
-    int w = text_width(text);
-    return print(text, (SCREEN_W - w) / 2, y, color);
+    return print(text, x - text_width(text) / 2, y, color);
 }
 
 int print_right(const char *text, int right_x, int y, int color) {

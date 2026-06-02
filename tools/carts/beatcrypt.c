@@ -375,15 +375,15 @@ void draw() {
     if (state == DEAD) {
         rectfill(SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 56, CLR_BLACK);
         rect    (SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 56, CLR_RED);
-        print_centered("THE BEAT GOES SILENT", SCREEN_H / 2 - 18, CLR_RED);
-        print_centered(str("kills %d   best combo x%d", kills, bestcombo), SCREEN_H / 2 - 4, CLR_YELLOW);
-        print_centered("Z / R to dance again", SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("THE BEAT GOES SILENT", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_RED);
+        print_centered(str("kills %d   best combo x%d", kills, bestcombo), SCREEN_W/2, SCREEN_H / 2 - 4, CLR_YELLOW);
+        print_centered("Z / R to dance again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
     if (state == WIN) {
         rectfill(SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 56, CLR_BLACK);
         rect    (SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 56, CLR_YELLOW);
-        print_centered("CRYPT CLEARED!", SCREEN_H / 2 - 18, CLR_YELLOW);
-        print_centered(str("best combo x%d", bestcombo), SCREEN_H / 2 - 4, CLR_LIGHT_PEACH);
-        print_centered("Z / R to play again", SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("CRYPT CLEARED!", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_YELLOW);
+        print_centered(str("best combo x%d", bestcombo), SCREEN_W/2, SCREEN_H / 2 - 4, CLR_LIGHT_PEACH);
+        print_centered("Z / R to play again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }

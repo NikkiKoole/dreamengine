@@ -726,7 +726,7 @@ static void draw_hud(void) {
         if (f[i].on && f[i].type == E_BOSS) {
             rectfill(70, 184, 182, 11, CLR_BLACK);
             bar(72, 186, 178, 7, (float)f[i].hp / f[i].maxhp, CLR_RED, CLR_DARKER_GREY);
-            print_centered("BIG BOSS", 174, CLR_RED);
+            print_centered("BIG BOSS", SCREEN_W/2, 174, CLR_RED);
         }
 
     if (combo > 1) print_scaled(str("%dx", combo), SCREEN_W / 2 - 14, 30, CLR_YELLOW, 2);
@@ -740,7 +740,7 @@ static void draw_hud(void) {
     if (bannerT > 0) {
         int a = (int)bannerT;
         rectfill(0, SCREEN_H / 2 - 12, SCREEN_W, 22, CLR_BLACK);
-        print_centered(bannerS, SCREEN_H / 2 - 5, (a / 4 % 2) ? CLR_RED : CLR_YELLOW);
+        print_centered(bannerS, SCREEN_W/2, SCREEN_H / 2 - 5, (a / 4 % 2) ? CLR_RED : CLR_YELLOW);
     }
 }
 
@@ -801,13 +801,13 @@ void draw(void) {
 
     if (gphase == G_OVER) {
         fade(0.6f);
-        print_centered("GAME OVER", SCREEN_H / 2 - 12, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 + 2, CLR_YELLOW);
-        print_centered("press Z to fight again", SCREEN_H / 2 + 16, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 12, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 + 2, CLR_YELLOW);
+        print_centered("press Z to fight again", SCREEN_W/2, SCREEN_H / 2 + 16, CLR_LIGHT_GREY);
     } else if (gphase == G_WIN) {
         fade(0.5f);
-        print_centered("YOU CLEANED UP THE CITY!", SCREEN_H / 2 - 12, CLR_YELLOW);
-        print_centered(str("FINAL SCORE %d", score), SCREEN_H / 2 + 2, CLR_WHITE);
-        print_centered("press Z to play again", SCREEN_H / 2 + 16, CLR_LIGHT_GREY);
+        print_centered("YOU CLEANED UP THE CITY!", SCREEN_W/2, SCREEN_H / 2 - 12, CLR_YELLOW);
+        print_centered(str("FINAL SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 + 2, CLR_WHITE);
+        print_centered("press Z to play again", SCREEN_W/2, SCREEN_H / 2 + 16, CLR_LIGHT_GREY);
     }
 }

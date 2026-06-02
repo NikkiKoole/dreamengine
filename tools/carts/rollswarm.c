@@ -222,7 +222,7 @@ void draw(void) {
     rectfill(0, 0, SCREEN_W, 11, CLR_DARKER_PURPLE);
     print(str("SIZE %d", (int)ballr), 6, 2, CLR_WHITE);
     print(str("/%d", GOAL), 6 + text_width(str("SIZE %d", (int)ballr)) + 1, 2, CLR_LIME_GREEN);
-    print_centered(str("ate %d", eaten), 2, CLR_LIGHT_GREY);
+    print_centered(str("ate %d", eaten), SCREEN_W/2, 2, CLR_LIGHT_GREY);
     print_right(str("%d", secs), SCREEN_W - 6, 2, secs <= 10 ? CLR_RED : CLR_WHITE);
 
     // a slim progress bar toward the goal
@@ -232,8 +232,8 @@ void draw(void) {
     if (over) {
         rectfill(60, 70, 200, 56, CLR_BLACK);
         rect(60, 70, 200, 56, won ? CLR_LIME_GREEN : CLR_RED);
-        print_centered(won ? "YOU SNOWBALLED!" : "TIME'S UP", 80, won ? CLR_YELLOW : CLR_RED);
-        print_centered(str("final size %d  -  ate %d", (int)ballr, eaten), 96, CLR_WHITE);
-        print_centered("Z to replay", 110, CLR_LIGHT_GREY);
+        print_centered(won ? "YOU SNOWBALLED!" : "TIME'S UP", SCREEN_W/2, 80, won ? CLR_YELLOW : CLR_RED);
+        print_centered(str("final size %d  -  ate %d", (int)ballr, eaten), SCREEN_W/2, 96, CLR_WHITE);
+        print_centered("Z to replay", SCREEN_W/2, 110, CLR_LIGHT_GREY);
     }
 }

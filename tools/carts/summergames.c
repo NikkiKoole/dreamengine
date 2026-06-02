@@ -489,18 +489,18 @@ static void draw_event(void) {
         int ncol = q > 75 ? CLR_GREEN : q > 40 ? CLR_YELLOW : CLR_RED;
         float na = -angle;   // up is negative y
         line(gx, gy, gx + (int)(cos_deg(na) * 24), gy + (int)(sin_deg(na) * 24), ncol);
-        print_centered(str("ANGLE %d", (int)angle), SCREEN_H - 6, ncol);
+        print_centered(str("ANGLE %d", (int)angle), SCREEN_W/2, SCREEN_H - 6, ncol);
     }
 
     // prompts
     if (phase == PH_RUN) {
         if (curEvent == EV_SPRINT) {
             if (leanOpen && !leaned)
-                print_centered("LEAN!  press UP", 22, blink(3) ? CLR_YELLOW : CLR_WHITE);
+                print_centered("LEAN!  press UP", SCREEN_W/2, 22, blink(3) ? CLR_YELLOW : CLR_WHITE);
             else
-                print_centered("mash Z / X", 22, CLR_LIGHT_GREY);
+                print_centered("mash Z / X", SCREEN_W/2, 22, CLR_LIGHT_GREY);
         } else if (jstate == JS_RUN) {
-            print_centered("mash Z / X   -   UP to JUMP", 22, CLR_LIGHT_GREY);
+            print_centered("mash Z / X   -   UP to JUMP", SCREEN_W/2, 22, CLR_LIGHT_GREY);
         }
     }
 
@@ -509,7 +509,7 @@ static void draw_event(void) {
         int n = (int)countT + 1;
         const char *t = n > 0 ? str("%d", n) : "GO!";
         print_scaled(t, (SCREEN_W - text_width(t) * 4) / 2, SCREEN_H / 2 - 18, CLR_YELLOW, 4);
-        print_centered("alternate Z and X to run", SCREEN_H - 24, CLR_LIGHT_GREY);
+        print_centered("alternate Z and X to run", SCREEN_W/2, SCREEN_H - 24, CLR_LIGHT_GREY);
     }
 
     // RESULT panel
@@ -520,26 +520,23 @@ static void draw_event(void) {
         rectfill(SCREEN_W / 2 - 78, py, 156, ph_h, CLR_BLACK);
         rect    (SCREEN_W / 2 - 78, py, 156, ph_h, newBest ? CLR_YELLOW : CLR_LIGHT_GREY);
         if (curEvent == EV_SPRINT) {
-            print_centered("FINISH", py + 6, CLR_GREEN);
-            print_centered(str("TIME  %s", fmt_time(resultSprintMs)), py + 20, CLR_WHITE);
-            if (leaned) print_centered("nice lean!", py + 32, CLR_GREEN);
-            print_centered(str("BEST  %s", sv.bestSprintMs ? fmt_time(sv.bestSprintMs) : "--"),
-                           py + 44, CLR_LIGHT_YELLOW);
+            print_centered("FINISH", SCREEN_W/2, py + 6, CLR_GREEN);
+            print_centered(str("TIME  %s", fmt_time(resultSprintMs)), SCREEN_W/2, py + 20, CLR_WHITE);
+            if (leaned) print_centered("nice lean!", SCREEN_W/2, py + 32, CLR_GREEN);
+            print_centered(str("BEST  %s", sv.bestSprintMs ? fmt_time(sv.bestSprintMs) : "--"), SCREEN_W/2, py + 44, CLR_LIGHT_YELLOW);
         } else {
             if (scratch) {
-                print_centered("SCRATCH!", py + 14, blink(4) ? CLR_RED : CLR_ORANGE);
-                print_centered("you overran the board", py + 30, CLR_LIGHT_GREY);
+                print_centered("SCRATCH!", SCREEN_W/2, py + 14, blink(4) ? CLR_RED : CLR_ORANGE);
+                print_centered("you overran the board", SCREEN_W/2, py + 30, CLR_LIGHT_GREY);
             } else {
-                print_centered("LANDED", py + 6, CLR_GREEN);
-                print_centered(str("%d.%02dm   +%d", resultJumpCm / 100, resultJumpCm % 100, resultJumpPts),
-                               py + 20, CLR_WHITE);
-                print_centered(str("BEST  %d.%02dm", sv.bestJumpCm / 100, sv.bestJumpCm % 100),
-                               py + 44, CLR_LIGHT_YELLOW);
+                print_centered("LANDED", SCREEN_W/2, py + 6, CLR_GREEN);
+                print_centered(str("%d.%02dm   +%d", resultJumpCm / 100, resultJumpCm % 100, resultJumpPts), SCREEN_W/2, py + 20, CLR_WHITE);
+                print_centered(str("BEST  %d.%02dm", sv.bestJumpCm / 100, sv.bestJumpCm % 100), SCREEN_W/2, py + 44, CLR_LIGHT_YELLOW);
             }
         }
         if (newBest && blink(5))
-            print_centered("NEW PERSONAL BEST!", py - 10, CLR_YELLOW);
-        print_centered("Z = continue", py + ph_h + 6, CLR_DARK_GREY);
+            print_centered("NEW PERSONAL BEST!", SCREEN_W/2, py - 10, CLR_YELLOW);
+        print_centered("Z = continue", SCREEN_W/2, py + ph_h + 6, CLR_DARK_GREY);
     }
 }
 
@@ -559,13 +556,13 @@ static void draw_menu(void) {
     draw_dust();
 
     print_scaled("SUMMER GAMES", (SCREEN_W - text_width("SUMMER GAMES") * 2) / 2, 14, CLR_LIGHT_YELLOW, 2);
-    print_centered("mash to run - one clutch press to win", 34, CLR_WHITE);
+    print_centered("mash to run - one clutch press to win", SCREEN_W/2, 34, CLR_WHITE);
 
     const char *names[EV_COUNT] = { "100M SPRINT", "LONG JUMP" };
     for (int i = 0; i < EV_COUNT; i++) {
         int y = 60 + i * 16;
         int on = (menuSel == i);
-        print_centered(names[i], y, on ? CLR_YELLOW : CLR_LIGHT_GREY);
+        print_centered(names[i], SCREEN_W/2, y, on ? CLR_YELLOW : CLR_LIGHT_GREY);
         if (on) {
             int w = text_width(names[i]);
             print(blink(15) ? ">" : " ", SCREEN_W / 2 - w / 2 - 14, y, CLR_YELLOW);
@@ -576,13 +573,13 @@ static void draw_menu(void) {
     int py = 96;
     rectfill(SCREEN_W / 2 - 70, py, 140, 36, CLR_BLACK);
     rect    (SCREEN_W / 2 - 70, py, 140, 36, CLR_DARK_GREY);
-    print_centered("- PERSONAL BESTS -", py + 4, CLR_GREEN);
+    print_centered("- PERSONAL BESTS -", SCREEN_W/2, py + 4, CLR_GREEN);
     print(str("100M  %s", sv.bestSprintMs ? fmt_time(sv.bestSprintMs) : "--"),
           SCREEN_W / 2 - 62, py + 15, CLR_WHITE);
     print(str("JUMP  %d.%02dm", sv.bestJumpCm / 100, sv.bestJumpCm % 100),
           SCREEN_W / 2 - 62, py + 25, CLR_WHITE);
 
-    print_centered("Up/Down choose   Z start", SCREEN_H - 12, CLR_DARK_GREY);
+    print_centered("Up/Down choose   Z start", SCREEN_W/2, SCREEN_H - 12, CLR_DARK_GREY);
 }
 
 void draw(void) {

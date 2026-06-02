@@ -859,7 +859,7 @@ static void draw_hud(void) {
         const char *t = cheat ? str("%s  INF", wn) : str("%s  %d", wn, pl.ammo);
         print(t, SCREEN_W / 2 - text_width(t) / 2, SCREEN_H - 10, pl.ammo > 0 ? CLR_YELLOW : CLR_RED);
     }
-    if (cheat) print_centered("CHEAT: UNLIMITED AMMO", 30, CLR_GREEN);
+    if (cheat) print_centered("CHEAT: UNLIMITED AMMO", SCREEN_W/2, 30, CLR_GREEN);
 
     // combo multiplier pop
     if (combo > 1) {
@@ -872,7 +872,7 @@ static void draw_hud(void) {
     print_right(str("LEFT %d", enemies_left()), SCREEN_W - 4, 13, enemies_left() ? CLR_RED : CLR_GREEN);
 
     if (cleared && pl.alive) {
-        if (blink(20)) print_centered("FLOOR CLEAR - REACH THE EXIT", 36, CLR_GREEN);
+        if (blink(20)) print_centered("FLOOR CLEAR - REACH THE EXIT", SCREEN_W/2, 36, CLR_GREEN);
     }
 
     // crosshair
@@ -887,9 +887,9 @@ static void panel(const char *title, int tcol, const char *l1, const char *l2, c
     rectfill(x, y, w, h, CLR_BROWNISH_BLACK);
     rect(x, y, w, h, tcol);
     print_scaled(title, SCREEN_W / 2 - text_width(title) * 2 / 2, y + 8, tcol, 2);
-    if (l1) print_centered(l1, y + 36, CLR_WHITE);
-    if (l2) print_centered(l2, y + 50, CLR_LIGHT_GREY);
-    if (l3) print_centered(l3, y + 76, blink(24) ? CLR_YELLOW : CLR_LIGHT_GREY);
+    if (l1) print_centered(l1, SCREEN_W/2, y + 36, CLR_WHITE);
+    if (l2) print_centered(l2, SCREEN_W/2, y + 50, CLR_LIGHT_GREY);
+    if (l3) print_centered(l3, SCREEN_W/2, y + 76, blink(24) ? CLR_YELLOW : CLR_LIGHT_GREY);
 }
 
 // the abstract neon space the room floats in — a slow two-colour dither field that
@@ -922,7 +922,7 @@ void draw(void) {
         panel("HOTLINE", CLR_PINK, "One hit kills. So do you.",
               "WASD move - mouse aim - click attack",
               "click / SPACE to begin");
-        print_centered("RIGHT-CLICK throw gun   SPACE kick door   R retry", SCREEN_H / 2 + 36, CLR_INDIGO);
+        print_centered("RIGHT-CLICK throw gun   SPACE kick door   R retry", SCREEN_W/2, SCREEN_H / 2 + 36, CLR_INDIGO);
     } else if (state == ST_DEAD) {
         panel("YOU DIED", CLR_RED, "Do not hesitate.",
               str("score %d", score), "R / click to retry");

@@ -357,18 +357,18 @@ void draw(void) {
     print(str("%dm", score), 4, 4, CLR_WHITE);
     print_right(str("BEST %d", best), SCREEN_W - 4, 4, CLR_LIGHT_YELLOW);
     if (star_bonus > 0)
-        print_centered(str("+%d *", star_bonus), 4, CLR_YELLOW);
+        print_centered(str("+%d *", star_bonus), SCREEN_W/2, 4, CLR_YELLOW);
 
     if (dead) {
         int total = score + star_bonus;
         int by = SCREEN_H/2 - 28;
         rectfill(SCREEN_W/2 - 70, by, 140, 60, CLR_BLACK);
         rect    (SCREEN_W/2 - 70, by, 140, 60, CLR_RED);
-        print_centered("GAME OVER", by + 8, CLR_RED);
-        print_centered(str("HEIGHT %dm", score), by + 22, CLR_WHITE);
-        print_centered(str("STARS  %d", star_bonus), by + 32, CLR_YELLOW);
-        print_centered(str("SCORE  %d", total), by + 42, CLR_LIGHT_YELLOW);
+        print_centered("GAME OVER", SCREEN_W/2, by + 8, CLR_RED);
+        print_centered(str("HEIGHT %dm", score), SCREEN_W/2, by + 22, CLR_WHITE);
+        print_centered(str("STARS  %d", star_bonus), SCREEN_W/2, by + 32, CLR_YELLOW);
+        print_centered(str("SCORE  %d", total), SCREEN_W/2, by + 42, CLR_LIGHT_YELLOW);
         if (blink(20))
-            print_centered("Z to jump again", by + 54, CLR_LIGHT_GREY);
+            print_centered("Z to jump again", SCREEN_W/2, by + 54, CLR_LIGHT_GREY);
     }
 }

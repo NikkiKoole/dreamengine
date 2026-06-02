@@ -245,8 +245,8 @@ void draw(void) {
             print(str("the word was %s", word), bx + 24, by + 30, CLR_LIGHT_PEACH);
         }
         if (state == ST_WIN)
-            print_centered("ENTER or click for a new word", by + 42, CLR_LIGHT_PEACH);
+            print_centered("ENTER or click for a new word", SCREEN_W/2, by + 42, CLR_LIGHT_PEACH);
         else
-            print_centered("ENTER or click to try again", by + 44, CLR_LIGHT_GREY);
+            print_centered("ENTER or click to try again", SCREEN_W/2, by + 44, CLR_LIGHT_GREY);
     }
 }

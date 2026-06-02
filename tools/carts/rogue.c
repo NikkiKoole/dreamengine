@@ -309,15 +309,15 @@ void draw() {
     if (state == DEAD) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 52, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 52, CLR_RED);
-        print_centered("YOU DIED",              SCREEN_H / 2 - 16, CLR_RED);
-        print_centered(str("floor %d  score %d", depth, score), SCREEN_H / 2 - 2, CLR_YELLOW);
-        print_centered("Z to descend again",    SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("YOU DIED", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_RED);
+        print_centered(str("floor %d  score %d", depth, score), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z to descend again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
     if (state == WIN) {
         rectfill(SCREEN_W / 2 - 74, SCREEN_H / 2 - 26, 148, 52, CLR_BLACK);
         rect    (SCREEN_W / 2 - 74, SCREEN_H / 2 - 26, 148, 52, CLR_YELLOW);
-        print_centered("YOU WIN!",              SCREEN_H / 2 - 16, CLR_YELLOW);
-        print_centered(str("escaped with the amulet! %d", score), SCREEN_H / 2 - 2, CLR_LIGHT_PEACH);
-        print_centered("Z to play again",       SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("YOU WIN!", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_YELLOW);
+        print_centered(str("escaped with the amulet! %d", score), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_LIGHT_PEACH);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }

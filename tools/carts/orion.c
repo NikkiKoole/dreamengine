@@ -218,8 +218,8 @@ void draw() {
     if (state != 0) {
         rectfill(SCREEN_W / 2 - 74, SCREEN_H / 2 - 22, 148, 46, CLR_BLACK);
         rect    (SCREEN_W / 2 - 74, SCREEN_H / 2 - 22, 148, 46, state == 1 ? CLR_GREEN : CLR_RED);
-        print_centered(state == 1 ? "GALAXY CONQUERED" : "YOUR EMPIRE FALLS", SCREEN_H / 2 - 12, state == 1 ? CLR_GREEN : CLR_RED);
-        print_centered(str("in %d turns", turn), SCREEN_H / 2, CLR_YELLOW);
-        print_centered("Z to play again", SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered(state == 1 ? "GALAXY CONQUERED" : "YOUR EMPIRE FALLS", SCREEN_W/2, SCREEN_H / 2 - 12, state == 1 ? CLR_GREEN : CLR_RED);
+        print_centered(str("in %d turns", turn), SCREEN_W/2, SCREEN_H / 2, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }

@@ -323,15 +323,15 @@ void draw(void) {
     rect(BX, BY, COLS * CELL, ROWS * CELL, CLR_DARK_BLUE);
 
     // title + tally
-    print_centered("CONNECT FOUR", 6, CLR_YELLOW);
+    print_centered("CONNECT FOUR", SCREEN_W/2, 6, CLR_YELLOW);
     print(str("W %d", wins),    6, SCREEN_H - 10, CLR_RED);
-    print_centered(str("D %d", draws), SCREEN_H - 10, CLR_LIGHT_GREY);
+    print_centered(str("D %d", draws), SCREEN_W/2, SCREEN_H - 10, CLR_LIGHT_GREY);
     print_right(str("L %d", losses), SCREEN_H - 6, SCREEN_H - 10, CLR_YELLOW);
 
     // turn indicator
     if (state == 0 && !falling) {
-        if (turn == HUMAN) print_centered("YOUR TURN", BY + ROWS * CELL + 4, CLR_RED);
-        else               print_centered("AI THINKING", BY + ROWS * CELL + 4, CLR_YELLOW);
+        if (turn == HUMAN) print_centered("YOUR TURN", SCREEN_W/2, BY + ROWS * CELL + 4, CLR_RED);
+        else               print_centered("AI THINKING", SCREEN_W/2, BY + ROWS * CELL + 4, CLR_YELLOW);
     }
 
     // result overlay
@@ -341,11 +341,11 @@ void draw(void) {
         rectfill(BX - 6, cy, COLS * CELL + 12, 44, CLR_BLACK);
         rect    (BX - 6, cy, COLS * CELL + 12, 44, CLR_WHITE);
         if (state == 2)
-            print_centered("DRAW", cy + 8, CLR_LIGHT_GREY);
+            print_centered("DRAW", SCREEN_W/2, cy + 8, CLR_LIGHT_GREY);
         else if (winner == HUMAN)
-            print_centered("YOU WIN!", cy + 8, CLR_RED);
+            print_centered("YOU WIN!", SCREEN_W/2, cy + 8, CLR_RED);
         else
-            print_centered("AI WINS", cy + 8, CLR_YELLOW);
-        print_centered("click / Z to play again", cy + 26, CLR_LIGHT_GREY);
+            print_centered("AI WINS", SCREEN_W/2, cy + 8, CLR_YELLOW);
+        print_centered("click / Z to play again", SCREEN_W/2, cy + 26, CLR_LIGHT_GREY);
     }
 }

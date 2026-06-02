@@ -459,16 +459,15 @@ void draw(void) {
         char w[20];
         for (int i = 0; i < chainLen; i++) w[i] = board[chain[i]/GRID][chain[i]%GRID] - 32;
         w[chainLen] = 0;
-        print_centered(w, wordY, chainLen >= 3 ? CLR_GREEN : CLR_LIGHT_GREY);
+        print_centered(w, SCREEN_W/2, wordY, chainLen >= 3 ? CLR_GREEN : CLR_LIGHT_GREY);
     } else if (lastGood >= 0 && lastWord[0]) {
         // feedback on the last submission
         char up[20]; int i;
         for (i = 0; lastWord[i]; i++) up[i] = lastWord[i] - 32; up[i] = 0;
         int col = lastGood == 1 ? CLR_GREEN : CLR_RED;
-        print_centered(str("%s %s", up, lastGood == 1 ? str("+%d", (int)strlen(lastWord)) : "X"),
-                       wordY, (flashT > 0) ? flashColor : col);
+        print_centered(str("%s %s", up, lastGood == 1 ? str("+%d", (int)strlen(lastWord)) : "X"), SCREEN_W/2, wordY, (flashT > 0) ? flashColor : col);
     } else {
-        print_centered("drag across adjacent letters", wordY, CLR_DARK_GREY);
+        print_centered("drag across adjacent letters", SCREEN_W/2, wordY, CLR_DARK_GREY);
     }
 
     // found-words count + recent ribbon
@@ -484,8 +483,7 @@ void draw(void) {
             rx += w + 8;
         }
     }
-    print_centered("hold + drag adjacent letters  -  release to submit  -  R reshuffle",
-                   SCREEN_H - 12, CLR_DARK_GREY);
+    print_centered("hold + drag adjacent letters  -  release to submit  -  R reshuffle", SCREEN_W/2, SCREEN_H - 12, CLR_DARK_GREY);
 
     // round over overlay
     if (over) {
@@ -494,12 +492,12 @@ void draw(void) {
         rectfill(bx, by, bw, bh, CLR_DARKER_PURPLE);
         rect(bx, by, bw, bh, CLR_LIGHT_YELLOW);
         print_scaled("ROUND OVER", bx + (bw - text_width("ROUND OVER")*2)/2, by + 10, CLR_LIGHT_YELLOW, 2);
-        print_centered(str("%d words   %d points", found, score), by + 40, CLR_WHITE);
+        print_centered(str("%d words   %d points", found, score), SCREEN_W/2, by + 40, CLR_WHITE);
         if (score >= best && score > 0)
-            print_centered("new best!", by + 54, CLR_GREEN);
+            print_centered("new best!", SCREEN_W/2, by + 54, CLR_GREEN);
         else
-            print_centered(str("best %d", best), by + 54, CLR_LIGHT_GREY);
+            print_centered(str("best %d", best), SCREEN_W/2, by + 54, CLR_LIGHT_GREY);
         if (blink(20))
-            print_centered("press R to play again", by + 74, CLR_YELLOW);
+            print_centered("press R to play again", SCREEN_W/2, by + 74, CLR_YELLOW);
     }
 }

@@ -620,14 +620,14 @@ static void draw_hud(void) {
     bar(SCREEN_W - 28, 13, 25, 4, pl.wlevel / 5.0f, CLR_BLUE, CLR_DARK_BLUE);
 
     if (boss.alive && boss.y > 0) {
-        print_centered("WARLORD", HUD_H + 2, CLR_RED);
+        print_centered("WARLORD", SCREEN_W/2, HUD_H + 2, CLR_RED);
         bar(20, HUD_H + 11, SCREEN_W - 40, 4, (float)boss.hp / boss.maxhp, CLR_RED, CLR_DARK_RED);
     }
     if (bstate == BS_WARN && blink(8))
-        print_centered("!! WARNING !!", SCREEN_H / 2 - 4, CLR_RED);
+        print_centered("!! WARNING !!", SCREEN_W/2, SCREEN_H / 2 - 4, CLR_RED);
     if (puT > 0) {
         int yy = SCREEN_H - 70 - (int)((1.2f - puT) * 30);
-        print_centered("POWER UP!", yy, blink(4) ? CLR_YELLOW : CLR_WHITE);
+        print_centered("POWER UP!", SCREEN_W/2, yy, blink(4) ? CLR_YELLOW : CLR_WHITE);
     }
     // last-life red alarm vignette
     if (pl.lives == 0 && state == ST_PLAY) {
@@ -649,8 +649,8 @@ void draw(void) {
         rectfill(0, SCREEN_H / 2 - 40, SCREEN_W, 80, CLR_BROWNISH_BLACK);
         print_scaled("SKY", SCREEN_W / 2 - 48, SCREEN_H / 2 - 34, CLR_LIGHT_YELLOW, 4);
         print_scaled("STRIKE", SCREEN_W / 2 - 96, SCREEN_H / 2 - 2, CLR_RED, 4);
-        if (blink(20)) print_centered("PRESS Z / ENTER", SCREEN_H / 2 + 34, CLR_WHITE);
-        print_centered("arrows/WASD fly  Z bomb  X focus", SCREEN_H - 14, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("PRESS Z / ENTER", SCREEN_W/2, SCREEN_H / 2 + 34, CLR_WHITE);
+        print_centered("arrows/WASD fly  Z bomb  X focus", SCREEN_W/2, SCREEN_H - 14, CLR_LIGHT_GREY);
         print_right(str("HI %06d", hiscore), SCREEN_W - 4, 4, CLR_LIGHT_YELLOW);
         return;
     }
@@ -697,13 +697,13 @@ void draw(void) {
     if (state == ST_OVER) {
         fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();
         print_scaled("GAME OVER", SCREEN_W / 2 - 71, SCREEN_H / 2 - 20, CLR_RED, 2);
-        print_centered(str("SCORE %06d", score), SCREEN_H / 2 + 4, CLR_WHITE);
-        if (score >= hiscore) print_centered("NEW HI-SCORE!", SCREEN_H / 2 + 16, CLR_LIGHT_YELLOW);
-        if (blink(20)) print_centered("PRESS Z / ENTER", SCREEN_H / 2 + 34, CLR_LIGHT_GREY);
+        print_centered(str("SCORE %06d", score), SCREEN_W/2, SCREEN_H / 2 + 4, CLR_WHITE);
+        if (score >= hiscore) print_centered("NEW HI-SCORE!", SCREEN_W/2, SCREEN_H / 2 + 16, CLR_LIGHT_YELLOW);
+        if (blink(20)) print_centered("PRESS Z / ENTER", SCREEN_W/2, SCREEN_H / 2 + 34, CLR_LIGHT_GREY);
     } else if (state == ST_WIN) {
         print_scaled("STAGE", SCREEN_W / 2 - 35, SCREEN_H / 2 - 26, CLR_LIGHT_YELLOW, 2);
         print_scaled("CLEAR!", SCREEN_W / 2 - 47, SCREEN_H / 2 - 6, CLR_GREEN, 2);
-        print_centered(str("SCORE %06d", score), SCREEN_H / 2 + 18, CLR_WHITE);
-        if (blink(20)) print_centered("PRESS Z / ENTER", SCREEN_H / 2 + 34, CLR_LIGHT_GREY);
+        print_centered(str("SCORE %06d", score), SCREEN_W/2, SCREEN_H / 2 + 18, CLR_WHITE);
+        if (blink(20)) print_centered("PRESS Z / ENTER", SCREEN_W/2, SCREEN_H / 2 + 34, CLR_LIGHT_GREY);
     }
 }

@@ -158,18 +158,18 @@ void draw() {
     // top bar
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("DAY %d", day), 4, 2, CLR_LIGHT_GREY);
-    print_centered("CHECKPOINT", 2, CLR_LIGHT_YELLOW);
+    print_centered("CHECKPOINT", SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     print_right(str("SCORE %d  X%d/%d", score, strikes, MAX_STRIKE), SCREEN_W - 4, 2, strikes >= 3 ? CLR_RED : CLR_LIGHT_GREY);
 
     if (state == DAYINTRO) {
-        print_centered(str("-- DAY %d --", day), 70, CLR_LIGHT_YELLOW);
-        print_centered(str("DATE %s", fmt_date(cur_date())), 84, CLR_WHITE);
-        if (day == 1)      print_centered("ENTRANTS NEED A PASSPORT", 100, CLR_LIGHT_GREY);
-        else if (day == 2) print_centered(str("NOW DENYING: %s", NATION[banned]), 100, CLR_RED);
-        else if (day == 3) print_centered("NOW: ENTRY PERMIT + NAMES MATCH", 100, CLR_RED);
-        else if (day == 4) print_centered("NOW: CHECK PERMIT EXPIRY", 100, CLR_RED);
-        else               print_centered(str("DENYING: %s", NATION[banned]), 100, CLR_RED);
-        print_centered("press A", 130, CLR_DARK_GREY);
+        print_centered(str("-- DAY %d --", day), SCREEN_W/2, 70, CLR_LIGHT_YELLOW);
+        print_centered(str("DATE %s", fmt_date(cur_date())), SCREEN_W/2, 84, CLR_WHITE);
+        if (day == 1)      print_centered("ENTRANTS NEED A PASSPORT", SCREEN_W/2, 100, CLR_LIGHT_GREY);
+        else if (day == 2) print_centered(str("NOW DENYING: %s", NATION[banned]), SCREEN_W/2, 100, CLR_RED);
+        else if (day == 3) print_centered("NOW: ENTRY PERMIT + NAMES MATCH", SCREEN_W/2, 100, CLR_RED);
+        else if (day == 4) print_centered("NOW: CHECK PERMIT EXPIRY", SCREEN_W/2, 100, CLR_RED);
+        else               print_centered(str("DENYING: %s", NATION[banned]), SCREEN_W/2, 100, CLR_RED);
+        print_centered("press A", SCREEN_W/2, 130, CLR_DARK_GREY);
         return;
     }
 
@@ -219,7 +219,7 @@ void draw() {
     if (r_pexp)   { print("- PERMIT VALID", rx + 4, ly, CLR_LIGHT_GREY); ly += 9; }
 
     // decision prompt / stamp
-    print_centered(str("APPLICANT %d/%d", processed + 1, QUOTA), 150, CLR_DARK_GREY);
+    print_centered(str("APPLICANT %d/%d", processed + 1, QUOTA), SCREEN_W/2, 150, CLR_DARK_GREY);
     print("A: APPROVE", 30, 165, CLR_GREEN);
     print_right("DENY :B", SCREEN_W - 30, 165, CLR_RED);
 
@@ -229,13 +229,13 @@ void draw() {
         print(stamp == 1 ? "APPROVED" : " DENIED", 104, 51, col);
     }
     if (state == RESULT)
-        print_centered(last_correct ? "CORRECT" : str("WRONG - %s", a_reason), 182, last_correct ? CLR_GREEN : CLR_RED);
+        print_centered(last_correct ? "CORRECT" : str("WRONG - %s", a_reason), SCREEN_W/2, 182, last_correct ? CLR_GREEN : CLR_RED);
 
     if (state == OVER) {
         rectfill(SCREEN_W / 2 - 74, SCREEN_H / 2 - 24, 148, 50, CLR_BLACK);
         rect    (SCREEN_W / 2 - 74, SCREEN_H / 2 - 24, 148, 50, CLR_RED);
-        print_centered("TERMINATED", SCREEN_H / 2 - 14, CLR_RED);
-        print_centered(str("processed %d  (day %d)", score, day), SCREEN_H / 2 - 1, CLR_YELLOW);
-        print_centered("Z to report for duty", SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
+        print_centered("TERMINATED", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_RED);
+        print_centered(str("processed %d  (day %d)", score, day), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_YELLOW);
+        print_centered("Z to report for duty", SCREEN_W/2, SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
     }
 }

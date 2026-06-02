@@ -546,7 +546,7 @@ static void draw_backdrop(void) {
     // marquee
     int f = frame();
     int neon = (f / 6) % 3 == 0 ? CLR_PINK : (f / 6) % 3 == 1 ? CLR_PEACH : CLR_RED;
-    print_centered("S T R I P   P O K E R", 4, neon);
+    print_centered("S T R I P   P O K E R", SCREEN_W/2, 4, neon);
 }
 
 static void draw_pot(void) {
@@ -557,7 +557,7 @@ static void draw_pot(void) {
         ovalfill(px, py - i * 2, 9, 3, cc);
         oval(px, py - i * 2, 9, 3, CLR_BLACK);
     }
-    if (pot > 0) print_centered(str("POT $%d", pot), 110, CLR_YELLOW);
+    if (pot > 0) print_centered(str("POT $%d", pot), SCREEN_W/2, 110, CLR_YELLOW);
 }
 
 // a button that centers its label within its own rect
@@ -583,10 +583,10 @@ void draw(void) {
         fillp(FILL_CHECKER, -1);
         rectfill(MY_X - 6, 70, HAND_W + 12, 34, CLR_BLACK);
         fillp_reset();
-        print_centered("STRIP POKER", 72, CLR_PINK);
-        print_centered("five-card draw with Sable", 84, CLR_LIGHT_PEACH);
+        print_centered("STRIP POKER", SCREEN_W/2, 72, CLR_PINK);
+        print_centered("five-card draw with Sable", SCREEN_W/2, 84, CLR_LIGHT_PEACH);
         if (best_tier > 0)
-            print_centered(str("best tease reached: %s", TIER_NAME[best_tier]), 94, CLR_LIGHT_YELLOW);
+            print_centered(str("best tease reached: %s", TIER_NAME[best_tier]), SCREEN_W/2, 94, CLR_LIGHT_YELLOW);
         btn_rect(MY_X + HAND_W / 2 - 40, MY_Y + CH + 6, 80, "DEAL", CLR_DARK_RED, true);
         return;
     }
@@ -599,10 +599,10 @@ void draw(void) {
         fillp_reset();
         rect(60, 70, SCREEN_W - 120, 60, CLR_DARK_RED);
         bool won = credits > oppcred;
-        print_centered(won ? "the night is YOURS" : "tapped out, lover", 80, won ? CLR_PINK : CLR_PEACH);
-        print_centered(str("you $%d   Sable $%d", credits, oppcred), 96, CLR_WHITE);
-        print_centered(str("reached: %s", TIER_NAME[tier]), 108, CLR_LIGHT_YELLOW);
-        if (blink(20)) print_centered("click to play again", 120, CLR_LIGHT_GREY);
+        print_centered(won ? "the night is YOURS" : "tapped out, lover", SCREEN_W/2, 80, won ? CLR_PINK : CLR_PEACH);
+        print_centered(str("you $%d   Sable $%d", credits, oppcred), SCREEN_W/2, 96, CLR_WHITE);
+        print_centered(str("reached: %s", TIER_NAME[tier]), SCREEN_W/2, 108, CLR_LIGHT_YELLOW);
+        if (blink(20)) print_centered("click to play again", SCREEN_W/2, 120, CLR_LIGHT_GREY);
         return;
     }
 
@@ -616,7 +616,7 @@ void draw(void) {
 
     // banter line above the felt
     if (banter_t > 0.05f)
-        print_centered(banter, 116, banter_col);
+        print_centered(banter, SCREEN_W/2, 116, banter_col);
 
     // action buttons
     int by = MY_Y + CH + 6;
@@ -631,9 +631,9 @@ void draw(void) {
         const char *res = outcome > 0 ? "YOU WIN" : outcome < 0 ? "SABLE WINS" : "PUSH";
         int rc = outcome > 0 ? CLR_PINK : outcome < 0 ? CLR_PEACH : CLR_LIGHT_GREY;
         if (show_opp) {
-            print_centered(str("%s  vs  %s", HNAME[you_cat], HNAME[opp_cat]), 6, CLR_LIGHT_GREY);
+            print_centered(str("%s  vs  %s", HNAME[you_cat], HNAME[opp_cat]), SCREEN_W/2, 6, CLR_LIGHT_GREY);
         }
-        print_centered(res, MY_Y - 24, rc);
+        print_centered(res, SCREEN_W/2, MY_Y - 24, rc);
         btn_rect(MY_X + HAND_W / 2 - 40, by, 80, "NEXT", CLR_DARK_RED, true);
     }
 

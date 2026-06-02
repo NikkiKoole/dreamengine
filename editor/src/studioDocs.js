@@ -84,7 +84,7 @@ export const studioDocs = {
   MAP_W:      { sig: '#define MAP_W 128',                                              doc: 'Map width in cells.' },
   MAP_H:      { sig: '#define MAP_H 64',                                               doc: 'Map height in cells.' },
   print:          { sig: 'int print(const char *text, int x, int y, int color)',          doc: 'Draw text at (x, y) using the active font. Returns x after the last char — use it to chain segments or detect overflow.\nint x2 = print("score ", 4, 4, CLR_WHITE); print(str("%d", score), x2, 4, CLR_YELLOW);' },
-  print_centered: { sig: 'int print_centered(const char *text, int y, int color)',        doc: 'Draw text centered horizontally on screen at height y. Returns x after the last char.' },
+  print_centered: { sig: 'int print_centered(const char *text, int x, int y, int color)', doc: 'Draw text centered on x. Pass SCREEN_W/2 to center on screen.\nprint_centered("score", SCREEN_W/2, 10, CLR_WHITE);' },
   print_right:    { sig: 'int print_right(const char *text, int right_x, int y, int color)', doc: 'Draw text right-aligned so its last character ends at right_x. Returns x after the last char.' },
   rect:       { sig: 'void rect(int x, int y, int w, int h, int color)',              doc: 'Draw a rectangle border.' },
   rectfill:   { sig: 'void rectfill(int x, int y, int w, int h, int color)',          doc: 'Draw a filled rectangle.' },

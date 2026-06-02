@@ -502,15 +502,15 @@ void draw(void) {
     }
     rectfill(0, 0, SCREEN_W, 10, CLR_BLACK);
     print(str("OUT %d", out), 4, 1, CLR_GREEN);
-    print_centered(str("SAVED %d / %d", saved, N_NEED), 1, CLR_LIGHT_YELLOW);
+    print_centered(str("SAVED %d / %d", saved, N_NEED), SCREEN_W/2, 1, CLR_LIGHT_YELLOW);
     print_right(str("LEFT %d  LOST %d", M_TOTAL - spawned, lost), SCREEN_W - 4, 1, CLR_PEACH);
 
     if (g_state != 0) {
         int w = 220, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 70, w, 44, g_state == 1 ? CLR_DARK_GREEN : CLR_DARK_PURPLE);
         rect(bx, 70, w, 44, CLR_WHITE);
-        print_centered(g_state == 1 ? "ALL RIGHT!" : "OH NO!", 78, g_state == 1 ? CLR_LIME_GREEN : CLR_RED);
-        print_centered(str("you saved %d of %d", saved, M_TOTAL), 92, CLR_LIGHT_YELLOW);
-        print_centered("- press R to try again -", 102, CLR_LIGHT_GREY);
+        print_centered(g_state == 1 ? "ALL RIGHT!" : "OH NO!", SCREEN_W/2, 78, g_state == 1 ? CLR_LIME_GREEN : CLR_RED);
+        print_centered(str("you saved %d of %d", saved, M_TOTAL), SCREEN_W/2, 92, CLR_LIGHT_YELLOW);
+        print_centered("- press R to try again -", SCREEN_W/2, 102, CLR_LIGHT_GREY);
     }
 }

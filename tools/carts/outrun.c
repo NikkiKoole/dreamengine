@@ -567,7 +567,7 @@ void draw() {
     // ====================== HUD ======================
     int kmh = (int)(spd_pct * 290);
     print(str("%3d KM/H", kmh), 4, 4, kmh > 220 ? CLR_YELLOW : CLR_WHITE);
-    print_centered(str("STAGE %d/%d", stage + 1, MAX_DEPTH), 4, CLR_LIGHT_GREY);
+    print_centered(str("STAGE %d/%d", stage + 1, MAX_DEPTH), SCREEN_W/2, 4, CLR_LIGHT_GREY);
     print(BIOME_NAME[cam_b], 4, 14, CLR_LIGHT_GREY);
 
     // big clock, flashing red when low
@@ -578,7 +578,7 @@ void draw() {
     Sample sp = sample_seg(pseg);
     if (sp.gap > 0.15f && mode == RACING && !is_leaf(cur_node)) {
         int lb = biome_of[2 * cur_node + 1], rb = biome_of[2 * cur_node + 2];
-        print_centered("PICK YOUR ROAD", 150, CLR_YELLOW);
+        print_centered("PICK YOUR ROAD", SCREEN_W/2, 150, CLR_YELLOW);
         print(str("< %s", BIOME_NAME[lb]), 14, 162, pworld < 0 ? CLR_WHITE : CLR_DARK_GREY);
         print_right(str("%s >", BIOME_NAME[rb]), SCREEN_W - 14, 162, pworld >= 0 ? CLR_WHITE : CLR_DARK_GREY);
     }
@@ -588,19 +588,19 @@ void draw() {
         float t = 1.0f - chk_flash / 2.2f;
         int yy = 40 + (int)(ease_out(clamp(t * 3, 0, 1)) * 10);
         print_scaled("CHECKPOINT!", SCREEN_W / 2 - 66, yy, blink(4) ? CLR_YELLOW : CLR_WHITE, 2);
-        print_centered(str("+%d SECONDS", chk_bonus), yy + 22, CLR_LIME_GREEN);
+        print_centered(str("+%d SECONDS", chk_bonus), SCREEN_W/2, yy + 22, CLR_LIME_GREEN);
     }
 
     if (mode == FINISHED) {
         fade(0.5f);
         print_scaled("YOU MADE IT!", SCREEN_W / 2 - 72, 70, CLR_YELLOW, 2);
-        print_centered(str("FINISHED IN %s", BIOME_NAME[cam_b]), 96, CLR_WHITE);
-        print_centered(str("%d CHECKPOINTS CLEARED", stage), 108, CLR_LIME_GREEN);
-        print_centered("PRESS Z TO DRIVE AGAIN", 130, blink(15) ? CLR_WHITE : CLR_LIGHT_GREY);
+        print_centered(str("FINISHED IN %s", BIOME_NAME[cam_b]), SCREEN_W/2, 96, CLR_WHITE);
+        print_centered(str("%d CHECKPOINTS CLEARED", stage), SCREEN_W/2, 108, CLR_LIME_GREEN);
+        print_centered("PRESS Z TO DRIVE AGAIN", SCREEN_W/2, 130, blink(15) ? CLR_WHITE : CLR_LIGHT_GREY);
     } else if (mode == DEAD) {
         fade(0.55f);
         print_scaled("OUT OF TIME", SCREEN_W / 2 - 66, 76, CLR_RED, 2);
-        print_centered(str("REACHED STAGE %d", stage + 1), 100, CLR_WHITE);
-        print_centered("PRESS Z TO RETRY", 124, blink(15) ? CLR_WHITE : CLR_LIGHT_GREY);
+        print_centered(str("REACHED STAGE %d", stage + 1), SCREEN_W/2, 100, CLR_WHITE);
+        print_centered("PRESS Z TO RETRY", SCREEN_W/2, 124, blink(15) ? CLR_WHITE : CLR_LIGHT_GREY);
     }
 }

@@ -137,7 +137,7 @@ void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, flo
 void font(int f);        // set active font for all print calls; font(FONT_NORMAL) resets to the default 8×8
 int  text_width(const char *text);                                 // pixel width using the active font — for centering in your own boxes
 int  print(const char *text, int x, int y, int color);             // returns x after the last char (so you can chain or check if text went offscreen)
-int  print_centered(const char *text, int y, int color);           // center text horizontally on screen; returns x after last char
+int  print_centered(const char *text, int x, int y, int color);    // draw text centered on x; returns x after last char
 int  print_right(const char *text, int right_x, int y, int color); // right-align text at right_x; returns x after last char
 int  print_scaled(const char *text, int x, int y, int color, int scale); // bigger text for titles/menus (scale 2 = double size); returns x after last char
 int  print_outline(const char *text, int x, int y, int color, int outline_color); // text with a 1px outline in all 8 directions; maximum legibility

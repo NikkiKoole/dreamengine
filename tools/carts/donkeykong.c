@@ -445,7 +445,7 @@ void draw(void) {
     // ---- HUD ----
     rectfill(0, 0, SCREEN_W, 9, CLR_DARK_BLUE);
     print(str("SCORE %d", score), 4, 1, CLR_WHITE);
-    print_centered(str("HI %d", hi), 1, CLR_LIGHT_YELLOW);
+    print_centered(str("HI %d", hi), SCREEN_W/2, 1, CLR_LIGHT_YELLOW);
     for (int i = 0; i < lives; i++) {
         int lx = SCREEN_W - 8 - i * 9;
         rectfill(lx - 2, 2, 5, 5, CLR_RED);
@@ -457,15 +457,15 @@ void draw(void) {
     if (state == 2) {
         rectfill(SCREEN_W/2 - 70, 80, 140, 44, CLR_BLACK);
         rect(SCREEN_W/2 - 70, 80, 140, 44, CLR_RED);
-        print_centered("GAME OVER", 88, CLR_RED);
-        print_centered(str("score %d", score), 100, CLR_YELLOW);
-        print_centered("press Z to retry", 112, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, 88, CLR_RED);
+        print_centered(str("score %d", score), SCREEN_W/2, 100, CLR_YELLOW);
+        print_centered("press Z to retry", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     } else if (state == 3) {
         rectfill(SCREEN_W/2 - 70, 80, 140, 44, CLR_BLACK);
         rect(SCREEN_W/2 - 70, 80, 140, 44, CLR_PINK);
-        print_centered("YOU SAVED HER!", 88, blink(8) ? CLR_PINK : CLR_WHITE);
-        print_centered(str("score %d", score), 100, CLR_YELLOW);
-        print_centered("press Z to play again", 112, CLR_LIGHT_GREY);
+        print_centered("YOU SAVED HER!", SCREEN_W/2, 88, blink(8) ? CLR_PINK : CLR_WHITE);
+        print_centered(str("score %d", score), SCREEN_W/2, 100, CLR_YELLOW);
+        print_centered("press Z to play again", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     }
 
     // red flash overlay drawn last so it covers everything

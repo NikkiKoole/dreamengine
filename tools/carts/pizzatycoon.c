@@ -430,7 +430,7 @@ static void draw_pizza(int cx, int cy, int r, int mask) {
 static void draw_hud(void) {
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("$%d", (int)showCash), 4, 2, CLR_YELLOW);
-    print_centered(str("DAY %d/20   you %d  rival %d", day, my_shops(), rival_shops()), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("DAY %d/20   you %d  rival %d", day, my_shops(), rival_shops()), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     int hc = heat > 55 ? (blink(20) ? CLR_WHITE : CLR_RED) : heat > 30 ? CLR_ORANGE : CLR_DARK_GREY;
     print_right(str("HEAT %d", heat), 316, 2, hc);
 }
@@ -459,7 +459,7 @@ static void draw_map(void) {
         else if (blink(24))     print("$", NX[d] - 3, NY[d] - 22, CLR_LIGHT_YELLOW);
         print(DSHORT[d], NX[d] - text_width(DSHORT[d]) / 2, NY[d] + 8, sel ? CLR_YELLOW : CLR_WHITE);
     }
-    if (rival_act == 1 && blink(18)) print_centered(str("RIVAL BOUGHT %s!", DSHORT[rival_d]), 150, CLR_RED);
+    if (rival_act == 1 && blink(18)) print_centered(str("RIVAL BOUGHT %s!", DSHORT[rival_d]), SCREEN_W/2, 150, CLR_RED);
 
     // detail strip + buttons
     rectfill(0, 158, 244, 42, CLR_BLACK); line(0, 158, 244, 158, CLR_DARK_GREY);
@@ -542,7 +542,7 @@ static void draw_ledger(void) {
     fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();
     int x = 40, y = 24, w = 240, h = 152;
     rectfill(x, y, w, h, CLR_BLACK); rect(x, y, w, h, CLR_LIGHT_YELLOW);
-    print_centered(str("DAY %d LEDGER", day - 1), y + 6, CLR_LIGHT_YELLOW);
+    print_centered(str("DAY %d LEDGER", day - 1), SCREEN_W/2, y + 6, CLR_LIGHT_YELLOW);
 
     int ry = y + 22, shown = 0;
     for (int d = 0; d < NDIST; d++) if (owner[d] == 0) {
@@ -551,7 +551,7 @@ static void draw_ledger(void) {
         print_right(str("$%d", led_profit[d]), x + w - 10, ry, led_profit[d] >= 0 ? CLR_LIME_GREEN : CLR_RED);
         ry += 12; shown++;
     }
-    if (shown == 0) print_centered("(no shops earning yet)", ry, CLR_DARK_GREY);
+    if (shown == 0) print_centered("(no shops earning yet)", SCREEN_W/2, ry, CLR_DARK_GREY);
 
     line(x + 8, ry + 2, x + w - 8, ry + 2, CLR_DARK_GREY);
     int tcol = day_total >= 0 ? CLR_YELLOW : CLR_RED;
@@ -559,10 +559,10 @@ static void draw_ledger(void) {
     print("DAY TOTAL", x + 10, ry + 8, CLR_WHITE);
     print_right(str("$%d", tally), x + w - 10, ry + 8, tcol);
 
-    if (rival_act == 1) print_centered(str("rival opened in %s!", DSHORT[rival_d]), y + h - 30, CLR_RED);
-    else if (rival_act == 2) print_centered(str("rival will undercut %s tomorrow!", DSHORT[rival_d]), y + h - 30, CLR_ORANGE);
+    if (rival_act == 1) print_centered(str("rival opened in %s!", DSHORT[rival_d]), SCREEN_W/2, y + h - 30, CLR_RED);
+    else if (rival_act == 2) print_centered(str("rival will undercut %s tomorrow!", DSHORT[rival_d]), SCREEN_W/2, y + h - 30, CLR_ORANGE);
 
-    if (ledger_t > 0.4f && blink(20)) print_centered("click / Z to continue", y + h - 16, CLR_LIGHT_GREY);
+    if (ledger_t > 0.4f && blink(20)) print_centered("click / Z to continue", SCREEN_W/2, y + h - 16, CLR_LIGHT_GREY);
 }
 
 // ---- mafia event card ------------------------------------------------------
@@ -582,9 +582,9 @@ static void draw_event(void) {
         case JOB_SABOTAGE: title = "A QUIET WORD";      l1 = "\"We can lean on your rival."; l2 = "Their newest shop... gone.\""; break;
         case JOB_LAUNDER:  title = "WASH IT CLEAN";     l1 = "\"We can make your record"; l2 = "disappear. For a price.\""; break;
     }
-    print_centered(title, yy + 8, ev_phase == 0 ? CLR_LIGHT_YELLOW : bad ? CLR_RED : CLR_LIME_GREEN);
-    print_centered(l1, yy + 26, CLR_WHITE);
-    print_centered(l2, yy + 38, CLR_LIGHT_GREY);
+    print_centered(title, SCREEN_W/2, yy + 8, ev_phase == 0 ? CLR_LIGHT_YELLOW : bad ? CLR_RED : CLR_LIME_GREEN);
+    print_centered(l1, SCREEN_W/2, yy + 26, CLR_WHITE);
+    print_centered(l2, SCREEN_W/2, yy + 38, CLR_LIGHT_GREY);
 
     if (ev_phase == 0) {
         const char *a = ev_kind == JOB_DELIVERY ? "ACCEPT" : ev_kind == JOB_PROTECT ? "PAY $250"
@@ -594,7 +594,7 @@ static void draw_event(void) {
         print(a, 56 + (90 - text_width(a)) / 2, 138, CLR_WHITE);
         rectfill(174, 132, 90, 20, hd ? CLR_DARK_RED : CLR_DARKER_GREY); rect(174, 132, 90, 20, CLR_RED);
         print("DECLINE", 174 + (90 - text_width("DECLINE")) / 2, 138, CLR_WHITE);
-        print_centered("Z accept   X decline", yy + h - 14, CLR_DARK_GREY);
+        print_centered("Z accept   X decline", SCREEN_W/2, yy + h - 14, CLR_DARK_GREY);
     } else {
         const char *o = "";
         switch (ev_out) {
@@ -609,8 +609,8 @@ static void draw_event(void) {
             case OUT_DECLINE: o = "You wave them off. For now."; break;
             case OUT_RAIDED:  o = str("Fined $%d. Heat cooled.", ev_cash); break;
         }
-        print_centered(o, yy + 62, bad ? CLR_RED : CLR_LIGHT_YELLOW);
-        if (ev_t > 0.35f && blink(20)) print_centered("click to continue", yy + h - 14, CLR_DARK_GREY);
+        print_centered(o, SCREEN_W/2, yy + 62, bad ? CLR_RED : CLR_LIGHT_YELLOW);
+        if (ev_t > 0.35f && blink(20)) print_centered("click to continue", SCREEN_W/2, yy + h - 14, CLR_DARK_GREY);
     }
 }
 
@@ -625,9 +625,9 @@ static void draw_title(void) {
     draw_pizza(160, 70, 38, (1 << PEP) | (1 << BASIL) | (1 << MUSH));
     print_scaled("PIZZA", (SCREEN_W - text_width("PIZZA") * 3) / 2, 118, CLR_LIGHT_YELLOW, 3);
     print_scaled("TYCOON", (SCREEN_W - text_width("TYCOON") * 2) / 2, 146, CLR_ORANGE, 2);
-    print_centered("buy shops - tune the recipe - out-earn the rival", 168, CLR_LIGHT_GREY);
-    print_centered(str("best empire: $%d", best), 180, CLR_YELLOW);
-    print_centered("click / Z to open for business", 190, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered("buy shops - tune the recipe - out-earn the rival", SCREEN_W/2, 168, CLR_LIGHT_GREY);
+    print_centered(str("best empire: $%d", best), SCREEN_W/2, 180, CLR_YELLOW);
+    print_centered("click / Z to open for business", SCREEN_W/2, 190, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_over(void) {
@@ -637,11 +637,11 @@ static void draw_over(void) {
     bool won = me >= rv;
     if (!over_saved) { if (me > best) { best = me; save(0, best); } over_saved = 1; }
     rectfill(50, 46, 220, 108, CLR_BLACK); rect(50, 46, 220, 108, won ? CLR_LIME_GREEN : CLR_RED);
-    print_centered(won ? "YOU RULE THE CITY!" : "THE RIVAL WINS", 56, won ? CLR_LIME_GREEN : CLR_RED);
-    print_centered(str("YOU    $%d  (%d shops)", me, my_shops()), 76, CLR_YELLOW);
-    print_centered(str("RIVAL  $%d  (%d shops)", rv, rival_shops()), 90, CLR_LIGHT_GREY);
-    print_centered(str("best empire: $%d", best), 112, CLR_GREEN);
-    print_centered("click / Z to play again", 138, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered(won ? "YOU RULE THE CITY!" : "THE RIVAL WINS", SCREEN_W/2, 56, won ? CLR_LIME_GREEN : CLR_RED);
+    print_centered(str("YOU    $%d  (%d shops)", me, my_shops()), SCREEN_W/2, 76, CLR_YELLOW);
+    print_centered(str("RIVAL  $%d  (%d shops)", rv, rival_shops()), SCREEN_W/2, 90, CLR_LIGHT_GREY);
+    print_centered(str("best empire: $%d", best), SCREEN_W/2, 112, CLR_GREEN);
+    print_centered("click / Z to play again", SCREEN_W/2, 138, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 // ===========================================================================

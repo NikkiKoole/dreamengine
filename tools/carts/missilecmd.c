@@ -496,25 +496,25 @@ void draw(void) {
     // ---- HUD ----
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
     print_right(str("WAVE %d", wave), SCREEN_W - 4, 3, CLR_YELLOW);
-    print_centered(str("CITIES %d", live_cities()), 3, CLR_LIGHT_PEACH);
+    print_centered(str("CITIES %d", live_cities()), SCREEN_W/2, 3, CLR_LIGHT_PEACH);
 
     // last-city warning
     if (gstate == G_PLAY && live_cities() == 1 && blink(16))
-        print_centered("LAST CITY!", 13, CLR_RED);
+        print_centered("LAST CITY!", SCREEN_W/2, 13, CLR_RED);
 
     // ---- banners ----
     if (gstate == G_WAVE) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 36, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 36, CLR_GREEN);
-        print_centered("WAVE CLEAR!", SCREEN_H / 2 - 10, CLR_GREEN);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 + 2, CLR_YELLOW);
+        print_centered("WAVE CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 10, CLR_GREEN);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 + 2, CLR_YELLOW);
     }
     if (gstate == G_OVER) {
         rectfill(SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 60, CLR_BLACK);
         rect    (SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 60, CLR_RED);
-        print_centered("THE END", SCREEN_H / 2 - 18, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 - 4, CLR_WHITE);
-        print_centered(str("BEST %d", best), SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
-        if (blink(20)) print_centered("CLICK TO DEFEND AGAIN", SCREEN_H / 2 + 18, CLR_GREEN);
+        print_centered("THE END", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 4, CLR_WHITE);
+        print_centered(str("BEST %d", best), SCREEN_W/2, SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("CLICK TO DEFEND AGAIN", SCREEN_W/2, SCREEN_H / 2 + 18, CLR_GREEN);
     }
 }

@@ -134,10 +134,9 @@ void draw(void) {
     cls(CLR_BLACK);
 
     if (game_over || won) {
-        print_centered(won ? "YOU WIN!" : "GAME OVER",
-                       SCREEN_H/2 - 10, won ? CLR_GREEN : CLR_RED);
-        print_centered(str("score: %d", score), SCREEN_H/2 + 4,  CLR_WHITE);
-        print_centered("press A to play again", SCREEN_H/2 + 18, CLR_DARK_GREY);
+        print_centered(won ? "YOU WIN!" : "GAME OVER", SCREEN_W/2, SCREEN_H/2 - 10, won ? CLR_GREEN : CLR_RED);
+        print_centered(str("score: %d", score), SCREEN_W/2, SCREEN_H/2 + 4, CLR_WHITE);
+        print_centered("press A to play again", SCREEN_W/2, SCREEN_H/2 + 18, CLR_DARK_GREY);
         return;
     }
 
@@ -165,5 +164,5 @@ void draw(void) {
         circfill(SCREEN_W - 7 - i * 10, 5, 3, CLR_LIGHT_GREY);
 
     if (!launched)
-        print_centered("press A to launch", SCREEN_H - 26, CLR_DARK_GREY);
+        print_centered("press A to launch", SCREEN_W/2, SCREEN_H - 26, CLR_DARK_GREY);
 }

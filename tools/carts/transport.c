@@ -369,8 +369,8 @@ void draw(void) {
         int w = 180, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 70, w, 40, CLR_DARK_GREEN);
         rect    (bx, 70, w, 40, CLR_YELLOW);
-        print_centered("TRANSPORT TYCOON!", 80, CLR_YELLOW);
-        print_centered(str("you banked $%d", cash), 92, CLR_WHITE);
-        print_centered("press R for a new map", 100, CLR_LIGHT_GREY);
+        print_centered("TRANSPORT TYCOON!", SCREEN_W/2, 80, CLR_YELLOW);
+        print_centered(str("you banked $%d", cash), SCREEN_W/2, 92, CLR_WHITE);
+        print_centered("press R for a new map", SCREEN_W/2, 100, CLR_LIGHT_GREY);
     }
 }

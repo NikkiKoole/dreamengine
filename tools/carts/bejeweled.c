@@ -478,9 +478,9 @@ void draw(void) {
         int bw = 160, bh = 64, bxp = SCREEN_W / 2 - bw / 2, byp = SCREEN_H / 2 - bh / 2;
         rectfill(bxp, byp, bw, bh, CLR_DARK_BLUE);
         rect(bxp, byp, bw, bh, CLR_PINK);
-        print_centered("GAME OVER", byp + 8, CLR_PINK);
-        print_centered(str("SCORE %d", score), byp + 24, CLR_WHITE);
-        print_centered(str("BEST %d", hiscore), byp + 36, CLR_YELLOW);
-        print_centered("click to play again", byp + 50, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, byp + 8, CLR_PINK);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, byp + 24, CLR_WHITE);
+        print_centered(str("BEST %d", hiscore), SCREEN_W/2, byp + 36, CLR_YELLOW);
+        print_centered("click to play again", SCREEN_W/2, byp + 50, CLR_LIGHT_GREY);
     }
 }

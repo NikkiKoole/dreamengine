@@ -807,7 +807,7 @@ static void draw_hud(void) {
         int x = (SCREEN_W - w) / 2;
         rectfill(x, 2, w, 11, CLR_BLACK);
         rect(x, 2, w, 11, ACCENT[g_scene]);
-        print_centered(lbl, 4, CLR_LIGHT_PEACH);
+        print_centered(lbl, SCREEN_W/2, 4, CLR_LIGHT_PEACH);
     }
     // scene name (top-right)
     print_right(SCENE_NAME[g_scene], SCREEN_W - 4, 4, CLR_DARK_GREY);
@@ -832,7 +832,7 @@ static void draw_hud(void) {
     }
 
     // toast
-    if (now() < toast_until) print_centered(toast, 176, CLR_LIGHT_YELLOW);
+    if (now() < toast_until) print_centered(toast, SCREEN_W/2, 176, CLR_LIGHT_YELLOW);
 }
 
 static void draw_cursor(void) {
@@ -849,9 +849,9 @@ static void draw_msgbox(void) {
     dither_panel(bx, by, w, h, msg_clr);
     int n  = (int)msg_rev;
     int l1 = slen(msg_a);
-    print_centered(clipn(msg_a, n), by + 10, msg_clr);
-    if (msg_b[0]) print_centered(clipn(msg_b, n - l1), by + 22, msg_clr);
-    if (n >= l1 + slen(msg_b) && blink(18)) print_centered("- click -", by + h - 11, CLR_DARK_GREY);
+    print_centered(clipn(msg_a, n), SCREEN_W/2, by + 10, msg_clr);
+    if (msg_b[0]) print_centered(clipn(msg_b, n - l1), SCREEN_W/2, by + 22, msg_clr);
+    if (n >= l1 + slen(msg_b) && blink(18)) print_centered("- click -", SCREEN_W/2, by + h - 11, CLR_DARK_GREY);
 }
 
 static void draw_dialogue(void) {
@@ -888,20 +888,20 @@ static void draw_dialogue(void) {
 static void draw_notebook(void) {
     int w = 240, h = 150, bx = (SCREEN_W - w) / 2, by = 24;
     dither_panel(bx, by, w, h, CLR_LIGHT_YELLOW);
-    print_centered("CASE NOTES - MARA VANCE", by + 8, CLR_LIGHT_YELLOW);
+    print_centered("CASE NOTES - MARA VANCE", SCREEN_W/2, by + 8, CLR_LIGHT_YELLOW);
     line(bx + 8, by + 18, bx + w - 8, by + 18, CLR_DARK_GREY);
-    if (clue_n == 0) print_centered("(nothing yet - go investigate)", by + 40, CLR_DARK_GREY);
+    if (clue_n == 0) print_centered("(nothing yet - go investigate)", SCREEN_W/2, by + 40, CLR_DARK_GREY);
     for (int i = 0; i < clue_n; i++) {
         print("-", bx + 10, by + 24 + i * 12, CLR_RED);
         print(clue_list[i], bx + 18, by + 24 + i * 12, CLR_LIGHT_PEACH);
     }
-    print_centered("click to close", by + h - 11, CLR_DARK_GREY);
+    print_centered("click to close", SCREEN_W/2, by + h - 11, CLR_DARK_GREY);
 }
 
 static void draw_accuse(void) {
     int w = 250, h = 130, bx = (SCREEN_W - w) / 2, by = 40;
     dither_panel(bx, by, w, h, CLR_RED);
-    print_centered("NAME THE KILLER", by + 6, CLR_RED);
+    print_centered("NAME THE KILLER", SCREEN_W/2, by + 6, CLR_RED);
 
     const char *opt[3] = { "SILAS  - the barman", "THE INFORMANT - the snitch", "NOBODY - close the case cold" };
     int mx = mouse_x(), my = mouse_y();
@@ -910,9 +910,9 @@ static void draw_accuse(void) {
         bool hot = (my >= ry && my < ry + 22);
         rectfill(bx + 16, ry, w - 32, 20, hot ? CLR_DARK_RED : CLR_BLACK);
         rect(bx + 16, ry, w - 32, 20, hot ? CLR_RED : CLR_DARK_GREY);
-        print_centered(opt[i], ry + 7, hot ? CLR_LIGHT_PEACH : CLR_LIGHT_GREY);
+        print_centered(opt[i], SCREEN_W/2, ry + 7, hot ? CLR_LIGHT_PEACH : CLR_LIGHT_GREY);
     }
-    print_centered("right-click to back out", by + h - 11, CLR_DARK_GREY);
+    print_centered("right-click to back out", SCREEN_W/2, by + h - 11, CLR_DARK_GREY);
 }
 
 static void draw_title(void) {
@@ -924,9 +924,9 @@ static void draw_title(void) {
     int bw = text_width(t) * 3;
     int c = blink(30) ? CLR_PINK : CLR_DARK_PURPLE;        // neon flicker
     print_scaled(t, (SCREEN_W - bw) / 2, 54, c, 3);
-    print_centered("a rain-soaked murder case", 90, CLR_TRUE_BLUE);
-    print_centered("- one night, one death -", 104, CLR_DARK_GREY);
-    if (blink(22)) print_centered("click to light a cigarette", 150, CLR_LIGHT_YELLOW);
+    print_centered("a rain-soaked murder case", SCREEN_W/2, 90, CLR_TRUE_BLUE);
+    print_centered("- one night, one death -", SCREEN_W/2, 104, CLR_DARK_GREY);
+    if (blink(22)) print_centered("click to light a cigarette", SCREEN_W/2, 150, CLR_LIGHT_YELLOW);
     vignette();
 }
 
@@ -937,13 +937,13 @@ static void draw_end(void) {
     vignette();
     int w = 270, h = 90, bx = (SCREEN_W - w) / 2, by = 40;
     dither_panel(bx, by, w, h, end_win ? CLR_GREEN : CLR_RED);
-    print_centered(end_win ? "CASE CLOSED" : "THE CASE GOES COLD", by + 10, end_win ? CLR_GREEN : CLR_RED);
+    print_centered(end_win ? "CASE CLOSED" : "THE CASE GOES COLD", SCREEN_W/2, by + 10, end_win ? CLR_GREEN : CLR_RED);
     // wrap the reason crudely onto two lines
     int half = slen(end_reason) / 2;
     while (half < slen(end_reason) && end_reason[half] != ' ') half++;
-    print_centered(clipn(end_reason, half), by + 30, CLR_LIGHT_PEACH);
-    print_centered(end_reason + (end_reason[half] ? half + 1 : half), by + 42, CLR_LIGHT_PEACH);
-    if (blink(20)) print_centered("click to work it again", by + h - 12, CLR_LIGHT_YELLOW);
+    print_centered(clipn(end_reason, half), SCREEN_W/2, by + 30, CLR_LIGHT_PEACH);
+    print_centered(end_reason + (end_reason[half] ? half + 1 : half), SCREEN_W/2, by + 42, CLR_LIGHT_PEACH);
+    if (blink(20)) print_centered("click to work it again", SCREEN_W/2, by + h - 12, CLR_LIGHT_YELLOW);
 }
 
 // ── the frame ──────────────────────────────────────────────────────────────────

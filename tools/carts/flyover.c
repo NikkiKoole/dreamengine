@@ -880,14 +880,13 @@ void draw(void) {
     const char *climbKey = PITCH_INVERT ? "DOWN" : "UP";          // key that gains altitude
     const char *landKey  = PITCH_INVERT ? "UP"   : "DOWN";        // key that descends / lands
     if (fly_state == ST_CRASHED) {
-        print_centered("CRASHED", SCREEN_H / 2 - 14, CLR_RED);
-        print_centered("press Z to restart", SCREEN_H / 2 - 4, CLR_WHITE);
+        print_centered("CRASHED", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_RED);
+        print_centered("press Z to restart", SCREEN_W/2, SCREEN_H / 2 - 4, CLR_WHITE);
     } else if (fly_state == ST_LANDED) {
-        print_centered(str("Z power up   %s take off   L/R taxi", climbKey), SCREEN_H - 9, CLR_DARK_GREY);
+        print_centered(str("Z power up   %s take off   L/R taxi", climbKey), SCREEN_W/2, SCREEN_H - 9, CLR_DARK_GREY);
     } else if (H - elev_at(cx, cy) < 8) {
-        print_centered(str("hold %s to land  (slow, over open ground)", landKey), SCREEN_H - 9, CLR_LIGHT_YELLOW);
+        print_centered(str("hold %s to land  (slow, over open ground)", landKey), SCREEN_W/2, SCREEN_H - 9, CLR_LIGHT_YELLOW);
     } else {
-        print_centered(str("L/R turn   %s climb / %s dive   Z/X throttle", climbKey, landKey),
-                       SCREEN_H - 9, CLR_DARK_GREY);
+        print_centered(str("L/R turn   %s climb / %s dive   Z/X throttle", climbKey, landKey), SCREEN_W/2, SCREEN_H - 9, CLR_DARK_GREY);
     }
 }

@@ -294,5 +294,5 @@ void draw(void) {
     if (ui_btn(242, 180, 34, 16, "SAVE", false, CLR_ORANGE)) save_song();
     if (ui_btn(278, 180, 36, 16, "LOAD", false, CLR_YELLOW)) { if (load_song()) { saveMsg = 1.6f; saveTxt = "LOADED!"; } }
 
-    if (saveMsg > 0) print_centered(saveTxt, 124, CLR_GREEN);
+    if (saveMsg > 0) print_centered(saveTxt, SCREEN_W/2, 124, CLR_GREEN);
 }

@@ -230,8 +230,8 @@ void draw() {
     if (gameover) {
         rectfill(SCREEN_W/2-64, SCREEN_H/2-20, 128, 50, CLR_BLACK);
         rect    (SCREEN_W/2-64, SCREEN_H/2-20, 128, 50, CLR_WHITE);
-        print_centered("GAME OVER",          SCREEN_H/2-12, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H/2,   CLR_YELLOW);
-        print_centered("Z to restart",       SCREEN_H/2+12, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H/2-12, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H/2, CLR_YELLOW);
+        print_centered("Z to restart", SCREEN_W/2, SCREEN_H/2+12, CLR_LIGHT_GREY);
     }
 }

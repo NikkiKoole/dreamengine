@@ -516,9 +516,8 @@ void draw(void) {
     // message line — small font on its own strip below the bar so long
     // sentences fit the 320px width instead of running off the right edge
     font(FONT_SMALL);
-    if (msg_t > 0) print_centered(msg, BAR_Y + 33, CLR_LIGHT_YELLOW);
-    else print_centered(str("ZAK McKRACKEN  -  %s", scene == SC_FLAT ? "apartment" : scene == SC_HALL ? "hallway" : "taxi"),
-                         BAR_Y + 33, CLR_DARK_GREY);
+    if (msg_t > 0) print_centered(msg, SCREEN_W/2, BAR_Y + 33, CLR_LIGHT_YELLOW);
+    else print_centered(str("ZAK McKRACKEN  -  %s", scene == SC_FLAT ? "apartment" : scene == SC_HALL ? "hallway" : "taxi"), SCREEN_W/2, BAR_Y + 33, CLR_DARK_GREY);
     font(FONT_NORMAL);
 
     // ── win card ──
@@ -527,8 +526,8 @@ void draw(void) {
         int w = 240, h = 56, bx = (SCREEN_W - w) / 2, by = 48;
         rectfill(bx, by, w, h, CLR_DARK_BLUE);
         rect(bx, by, w, h, CLR_LIGHT_YELLOW); rect(bx + 2, by + 2, w - 4, h - 4, CLR_INDIGO);
-        print_centered("OFF TO THE AIRPORT!", by + 12, CLR_LIGHT_YELLOW);
-        print_centered("The story of a lifetime awaits.", by + 26, CLR_LIGHT_PEACH);
-        if (blink(18)) print_centered("- click to play again -", by + 40, CLR_LIGHT_GREY);
+        print_centered("OFF TO THE AIRPORT!", SCREEN_W/2, by + 12, CLR_LIGHT_YELLOW);
+        print_centered("The story of a lifetime awaits.", SCREEN_W/2, by + 26, CLR_LIGHT_PEACH);
+        if (blink(18)) print_centered("- click to play again -", SCREEN_W/2, by + 40, CLR_LIGHT_GREY);
     }
 }

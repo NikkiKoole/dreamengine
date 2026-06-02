@@ -529,7 +529,7 @@ void draw(void) {
         if (regs[r].owner == 0 && regs[r].capp > 0 && regs[r].capBy != 0) under_attack = true;
     if (under_attack && blink(8)) {
         rect(0, 0, SCREEN_W, SCREEN_H, CLR_RED);
-        print_centered("DEFEND YOUR TURF!", 16, CLR_RED);
+        print_centered("DEFEND YOUR TURF!", SCREEN_W/2, 16, CLR_RED);
     }
 
     // "TURF TAKEN" pop
@@ -541,9 +541,9 @@ void draw(void) {
         fade(0.5f);
         rectfill(SCREEN_W / 2 - 78, SCREEN_H / 2 - 26, 156, 52, CLR_BLACK);
         rect(SCREEN_W / 2 - 78, SCREEN_H / 2 - 26, 156, 52, CLR_WHITE);
-        if (state == 1) print_centered("CITY IS YOURS", SCREEN_H / 2 - 14, CLR_GREEN);
-        else            print_centered("WIPED OUT", SCREEN_H / 2 - 14, CLR_RED);
-        print_centered(str("you held %d of %d  -  best %d", owned_count(0), NREG, best), SCREEN_H / 2, CLR_YELLOW);
-        print_centered("Z to run it back", SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
+        if (state == 1) print_centered("CITY IS YOURS", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_GREEN);
+        else            print_centered("WIPED OUT", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_RED);
+        print_centered(str("you held %d of %d  -  best %d", owned_count(0), NREG, best), SCREEN_W/2, SCREEN_H / 2, CLR_YELLOW);
+        print_centered("Z to run it back", SCREEN_W/2, SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
     }
 }

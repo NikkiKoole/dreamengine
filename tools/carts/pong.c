@@ -131,7 +131,7 @@ void draw() {
         rectfill(90, 82, 140, 36, CLR_BLACK);
         rect(90, 82, 140, 36, CLR_WHITE);
         const char *msg = s1 >= WIN ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!";
-        print_centered(msg,          90, CLR_YELLOW);
-        print_centered("Z to replay", 104, CLR_LIGHT_GREY);
+        print_centered(msg, SCREEN_W/2, 90, CLR_YELLOW);
+        print_centered("Z to replay", SCREEN_W/2, 104, CLR_LIGHT_GREY);
     }
 }

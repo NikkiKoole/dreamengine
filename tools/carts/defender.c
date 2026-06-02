@@ -419,10 +419,10 @@ void draw(void) {
 
     if (gstate == TITLE) {
         for (int i = 0; i < MAX_STAR; i++) pset((int)starx[i] % SCREEN_W, (int)stary[i], CLR_DARK_GREY);
-        print_centered("D E F E N D E R", 70, CLR_GREEN);
-        print_centered("save the humanoids from the landers", 92, CLR_LIGHT_GREY);
-        print_centered("arrows fly + thrust    Z fire", 108, CLR_WHITE);
-        if (blink(20)) print_centered("press Z to begin", 128, CLR_YELLOW);
+        print_centered("D E F E N D E R", SCREEN_W/2, 70, CLR_GREEN);
+        print_centered("save the humanoids from the landers", SCREEN_W/2, 92, CLR_LIGHT_GREY);
+        print_centered("arrows fly + thrust    Z fire", SCREEN_W/2, 108, CLR_WHITE);
+        if (blink(20)) print_centered("press Z to begin", SCREEN_W/2, 128, CLR_YELLOW);
         print_right(str("BEST %d", hiscore), SCREEN_W - 4, 4, CLR_YELLOW);
         return;
     }
@@ -545,8 +545,8 @@ void draw(void) {
     if (gstate == GAMEOVER) {
         rectfill(SCREEN_W/2 - 70, SCREEN_H/2 - 22, 140, 46, CLR_BLACK);
         rect    (SCREEN_W/2 - 70, SCREEN_H/2 - 22, 140, 46, CLR_RED);
-        print_centered(humans_alive() == 0 ? "PLANET LOST" : "GAME OVER", SCREEN_H/2 - 12, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H/2, CLR_YELLOW);
-        print_centered("Z to play again", SCREEN_H/2 + 12, CLR_LIGHT_GREY);
+        print_centered(humans_alive() == 0 ? "PLANET LOST" : "GAME OVER", SCREEN_W/2, SCREEN_H/2 - 12, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H/2, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H/2 + 12, CLR_LIGHT_GREY);
     }
 }

@@ -916,8 +916,7 @@ static void draw_battle(void) {
     // ── top bar ──
     rectfill(0, 0, SCREEN_W, 16, CLR_DARKER_BLUE);
     print(str("ROUND %d", round_no), 6, 4, CLR_WHITE);
-    print_centered(bmode == BM_PLAYER ? "your move" : bmode == BM_CPU ? "enemy moving..." : "", 4,
-                   bmode == BM_PLAYER ? CLR_GREEN : CLR_RED);
+    print_centered(bmode == BM_PLAYER ? "your move" : bmode == BM_CPU ? "enemy moving..." : "", SCREEN_W/2, 4, bmode == BM_PLAYER ? CLR_GREEN : CLR_RED);
     print_right(str("SPELL %d", spell_pts), SCREEN_W - 4, 4, CLR_BLUE);
 
     // ── forecast when hovering an enemy with the active stack ──
@@ -939,9 +938,9 @@ static void draw_battle(void) {
     if (bmode == BM_PLAYER || bmode == BM_CPU) {
         BStack *u = &bs[b_active];
         owner_pal(u->team); spr(CD[u->type].sprite, SCREEN_W/2 - 8, BINFO_Y + 2); pal_reset();
-        print_centered(str("%s x%d", CD[u->type].name, u->count), BINFO_Y + 2, CLR_WHITE);
+        print_centered(str("%s x%d", CD[u->type].name, u->count), SCREEN_W/2, BINFO_Y + 2, CLR_WHITE);
         print_centered(CD[u->type].shots > 0 ? "ranged - shoot any target" :
-                       "melee - click a tile or foe", BINFO_Y + 22, CLR_LIGHT_GREY);
+                       "melee - click a tile or foe", SCREEN_W/2, BINFO_Y + 22, CLR_LIGHT_GREY);
     }
     if (bmode == BM_PLAYER) {
         // spell buttons (left)
@@ -959,16 +958,16 @@ static void draw_battle(void) {
 
     if (bmode == BM_INTRO) {
         fade(0.4f);
-        print_centered("BATTLE!", 86, CLR_RED);
-        print_centered("click to begin", 100, CLR_LIGHT_GREY);
+        print_centered("BATTLE!", SCREEN_W/2, 86, CLR_RED);
+        print_centered("click to begin", SCREEN_W/2, 100, CLR_LIGHT_GREY);
     }
     if (bmode == BM_OVER) {
         fade(0.5f);
         int w = 200, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 80, w, 36, b_winner == 0 ? CLR_DARK_GREEN : CLR_DARK_PURPLE);
         rect(bx, 80, w, 36, CLR_WHITE);
-        print_centered(b_winner == 0 ? "FIELD WON" : "ARMY ROUTED", 88, b_winner == 0 ? CLR_GREEN : CLR_RED);
-        print_centered("click to continue", 102, CLR_LIGHT_GREY);
+        print_centered(b_winner == 0 ? "FIELD WON" : "ARMY ROUTED", SCREEN_W/2, 88, b_winner == 0 ? CLR_GREEN : CLR_RED);
+        print_centered("click to continue", SCREEN_W/2, 102, CLR_LIGHT_GREY);
     }
 }
 
@@ -1009,8 +1008,8 @@ static void draw_town(void) {
             else             print(str("%dg ea", CD[t].gcost), bx + 4, y + 14, costcol);
         }
     }
-    if (msg_t > 0) print_centered(msg, SCREEN_H - 10, CLR_LIGHT_YELLOW);
-    else print_centered("BUILD a dwelling, then RECRUIT (right-click = max).  B to leave", SCREEN_H - 10, CLR_INDIGO);
+    if (msg_t > 0) print_centered(msg, SCREEN_W/2, SCREEN_H - 10, CLR_LIGHT_YELLOW);
+    else print_centered("BUILD a dwelling, then RECRUIT (right-click = max).  B to leave", SCREEN_W/2, SCREEN_H - 10, CLR_INDIGO);
 
     for (int i = 0; i < 64; i++) if (sparks[i].life > 0) pset((int)sparks[i].x, (int)sparks[i].y, sparks[i].col);
 }
@@ -1021,10 +1020,10 @@ static void draw_over(void) {
     int w = 240, bx = (SCREEN_W - w) / 2;
     rectfill(bx, 70, w, 56, win_state == 0 ? CLR_DARK_GREEN : CLR_DARK_PURPLE);
     rect(bx, 70, w, 56, CLR_WHITE);
-    print_centered(win_state == 0 ? "VICTORY!" : "DEFEAT", 78, win_state == 0 ? CLR_GREEN : CLR_RED);
-    print_centered(over_reason, 94, CLR_LIGHT_GREY);
-    print_centered(str("victories: %d", wins), 106, CLR_LIGHT_YELLOW);
-    print_centered("click for a new campaign", 116, CLR_YELLOW);
+    print_centered(win_state == 0 ? "VICTORY!" : "DEFEAT", SCREEN_W/2, 78, win_state == 0 ? CLR_GREEN : CLR_RED);
+    print_centered(over_reason, SCREEN_W/2, 94, CLR_LIGHT_GREY);
+    print_centered(str("victories: %d", wins), SCREEN_W/2, 106, CLR_LIGHT_YELLOW);
+    print_centered("click for a new campaign", SCREEN_W/2, 116, CLR_YELLOW);
 }
 
 void draw(void) {

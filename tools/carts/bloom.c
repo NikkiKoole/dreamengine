@@ -315,7 +315,7 @@ void draw(void) {
     print_right(str("plants %d/%d", count, MAX_PLANTS), SCREEN_W - 4, 2, CLR_MEDIUM_GREY);
 
     // a swatch showing which species the next seed will be
-    print_centered(str("next: %s", SP[next_species].name), 2, SP[next_species].leaf);
+    print_centered(str("next: %s", SP[next_species].name), SCREEN_W/2, 2, SP[next_species].leaf);
 
     print("click/Z plant   space/X advance day", 4, SCREEN_H - 9, CLR_LIGHT_GREY);
 }

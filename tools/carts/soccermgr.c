@@ -417,7 +417,7 @@ void update(void) {
 static void draw_hud(void) {
     rectfill(0, 0, SCREEN_W, HUD_H, CLR_DARKER_BLUE);
     print(str("$%d", cash), 4, 2, CLR_YELLOW);
-    print_centered(str("ROUND %d/%d", round_, NROUNDS), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("ROUND %d/%d", round_, NROUNDS), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     print_right(str("STR %d", xi_strength()), 316, 2, CLR_LIME_GREEN);
 }
 
@@ -525,7 +525,7 @@ static void draw_squad(void) {
     draw_hud();
     draw_tabs();
     if (drag_from >= 0 || drag_bench >= 0)
-        print_centered("drop on a slot, or the bench", PY + PH + 1, CLR_DARK_GREY);
+        print_centered("drop on a slot, or the bench", SCREEN_W/2, PY + PH + 1, CLR_DARK_GREY);
     else
         print("drag players to set your XI", PX + 2, PY + PH + 1, CLR_DARK_GREY);
 }
@@ -583,7 +583,7 @@ static void draw_market(void) {
 
 static void draw_table(void) {
     cls(CLR_DARKER_BLUE);
-    print_centered("LEAGUE TABLE", 16, CLR_LIGHT_YELLOW);
+    print_centered("LEAGUE TABLE", SCREEN_W/2, 16, CLR_LIGHT_YELLOW);
     // header
     int y0 = 30;
     print("# CLUB", 12, y0, CLR_DARK_GREY);
@@ -619,7 +619,7 @@ static void draw_table(void) {
     bool hv = hover(110, 175, 100, 14);
     rectfill(110, 175, 100, 14, ready ? (hv ? CLR_LIME_GREEN : CLR_DARK_GREEN) : CLR_DARKER_GREY);
     rect(110, 175, 100, 14, CLR_GREEN);
-    print_centered(ready ? "PLAY MATCH >" : "set your XI first", 178, CLR_WHITE);
+    print_centered(ready ? "PLAY MATCH >" : "set your XI first", SCREEN_W/2, 178, CLR_WHITE);
 
     draw_hud();
     draw_tabs();
@@ -630,7 +630,7 @@ static void draw_result(void) {
     for (int i = 0; i < SCREEN_H; i += 16) rectfill(0, i, SCREEN_W, 8, CLR_MEDIUM_GREEN);
     fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();
 
-    print_centered("FULL TIME", 30, CLR_LIGHT_YELLOW);
+    print_centered("FULL TIME", SCREEN_W/2, 30, CLR_LIGHT_YELLOW);
     // scoreboard
     int bx = 50, by = 60, bw = 220, bh = 60;
     rectfill(bx, by, bw, bh, CLR_BLACK);
@@ -644,9 +644,9 @@ static void draw_result(void) {
     if (res_t >= 1.0f) {
         const char *verdict = res_my > res_op ? "WIN!" : res_my < res_op ? "DEFEAT" : "DRAW";
         int vc = res_my > res_op ? CLR_GREEN : res_my < res_op ? CLR_RED : CLR_YELLOW;
-        print_centered(verdict, 134, vc);
-        print_centered(str("league position: %d", league_pos()), 150, CLR_LIGHT_YELLOW);
-        if (blink(22)) print_centered(round_ >= NROUNDS ? "click for season end" : "click to continue", 168, CLR_WHITE);
+        print_centered(verdict, SCREEN_W/2, 134, vc);
+        print_centered(str("league position: %d", league_pos()), SCREEN_W/2, 150, CLR_LIGHT_YELLOW);
+        if (blink(22)) print_centered(round_ >= NROUNDS ? "click for season end" : "click to continue", SCREEN_W/2, 168, CLR_WHITE);
     }
 }
 
@@ -656,9 +656,9 @@ static void draw_title(void) {
     circ(SCREEN_W / 2, 70, 24, CLR_WHITE);
     print_scaled("FOOTBALL", (SCREEN_W - text_width("FOOTBALL") * 3) / 2, 100, CLR_WHITE, 3);
     print_scaled("MANAGER", (SCREEN_W - text_width("MANAGER") * 2) / 2, 124, CLR_LIGHT_YELLOW, 2);
-    print_centered("drag your XI - deal - PLAY MATCH", 150, CLR_LIGHT_GREY);
-    print_centered(str("best finish: %s", best == 0 ? "none yet" : (best == 1 ? "CHAMPIONS" : str("#%d", best))), 164, CLR_YELLOW);
-    print_centered("click / ENTER to kick off", 180, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered("drag your XI - deal - PLAY MATCH", SCREEN_W/2, 150, CLR_LIGHT_GREY);
+    print_centered(str("best finish: %s", best == 0 ? "none yet" : (best == 1 ? "CHAMPIONS" : str("#%d", best))), SCREEN_W/2, 164, CLR_YELLOW);
+    print_centered("click / ENTER to kick off", SCREEN_W/2, 180, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_over(void) {
@@ -667,14 +667,14 @@ static void draw_over(void) {
     cls(CLR_DARKER_BLUE);
     rectfill(40, 40, 240, 120, CLR_BLACK);
     rect(40, 40, 240, 120, CLR_LIGHT_YELLOW);
-    print_centered("-- SEASON OVER --", 52, CLR_LIGHT_YELLOW);
+    print_centered("-- SEASON OVER --", SCREEN_W/2, 52, CLR_LIGHT_YELLOW);
     const char *r = pos == 1 ? "CHAMPIONS!" : pos == 2 ? "RUNNERS-UP" : str("FINISHED #%d", pos);
     int rc = pos == 1 ? CLR_GREEN : pos == 2 ? CLR_LIME_GREEN : CLR_ORANGE;
     print_scaled(r, (SCREEN_W - text_width(r) * 2) / 2, 70, rc, 2);
-    print_centered(str("%dW %dD %dL", club[YOU].W, club[YOU].D, club[YOU].L), 98, CLR_WHITE);
-    print_centered(str("%d points  %+d GD", club[YOU].pts, club[YOU].GF - club[YOU].GA), 112, CLR_LIGHT_GREY);
-    print_centered(str("best finish: #%d", best), 128, CLR_YELLOW);
-    print_centered("click to manage a new season", 146, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered(str("%dW %dD %dL", club[YOU].W, club[YOU].D, club[YOU].L), SCREEN_W/2, 98, CLR_WHITE);
+    print_centered(str("%d points  %+d GD", club[YOU].pts, club[YOU].GF - club[YOU].GA), SCREEN_W/2, 112, CLR_LIGHT_GREY);
+    print_centered(str("best finish: #%d", best), SCREEN_W/2, 128, CLR_YELLOW);
+    print_centered("click to manage a new season", SCREEN_W/2, 146, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_flash(void) {

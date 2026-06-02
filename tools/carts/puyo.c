@@ -380,10 +380,10 @@ void draw() {
     draw_board_bg();
 
     if (state == ST_TITLE) {
-        print_centered("P U Y O", 60, CLR_GREEN);
-        print_centered("connect 4+ to pop", 84, CLR_LIGHT_GREY);
-        print_centered("chains = big score", 96, CLR_YELLOW);
-        if (blink(20)) print_centered("press Z to start", 124, CLR_WHITE);
+        print_centered("P U Y O", SCREEN_W/2, 60, CLR_GREEN);
+        print_centered("connect 4+ to pop", SCREEN_W/2, 84, CLR_LIGHT_GREY);
+        print_centered("chains = big score", SCREEN_W/2, 96, CLR_YELLOW);
+        if (blink(20)) print_centered("press Z to start", SCREEN_W/2, 124, CLR_WHITE);
         // little demo cluster
         puyo(BX + 1 * CELL, BY + 9 * CELL, 0, 1);
         puyo(BX + 2 * CELL, BY + 9 * CELL, 0, 1);
@@ -404,15 +404,15 @@ void draw() {
 
     // chain popup
     if ((state == ST_POP || state == ST_DROP) && chain >= 2) {
-        print_centered(str("%d CHAIN!", chain), BY + 4, CLR_YELLOW);
+        print_centered(str("%d CHAIN!", chain), SCREEN_W/2, BY + 4, CLR_YELLOW);
     }
 
     if (state == ST_OVER) {
         rectfill(BX - 6, SCREEN_H / 2 - 28, BW * CELL + 12, 60, CLR_BLACK);
         rect    (BX - 6, SCREEN_H / 2 - 28, BW * CELL + 12, 60, CLR_RED);
-        print_centered("GAME OVER", SCREEN_H / 2 - 18, CLR_RED);
-        print_centered(str("%d", score), SCREEN_H / 2 - 4, CLR_YELLOW);
-        print_centered("Z to restart", SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_RED);
+        print_centered(str("%d", score), SCREEN_W/2, SCREEN_H / 2 - 4, CLR_YELLOW);
+        print_centered("Z to restart", SCREEN_W/2, SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
     }
 }
 

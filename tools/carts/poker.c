@@ -233,10 +233,10 @@ void draw(void) {
                     : state == ST_HOLDING ? "click cards to HOLD, then DRAW"
                     : lastwin > 0 ? str("%s  +%d!", NAME[lastcat], lastwin)
                                   : "no win - deal again";
-    print_centered(msg, 152, lastwin > 0 ? CLR_YELLOW : CLR_LIGHT_PEACH);
+    print_centered(msg, SCREEN_W/2, 152, lastwin > 0 ? CLR_YELLOW : CLR_LIGHT_PEACH);
 
     print(str("CREDITS %d", credits), 78, 168, CLR_WHITE);
-    print_centered(str("BET %d", bet), 184, CLR_YELLOW);
+    print_centered(str("BET %d", bet), SCREEN_W/2, 184, CLR_YELLOW);
 
     button(4, 178, 64, 18, str("BET %d", bet), false);
     button(252, 178, 64, 18, state == ST_HOLDING ? "  DRAW" : "  DEAL", true);

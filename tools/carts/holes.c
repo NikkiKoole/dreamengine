@@ -40,10 +40,10 @@ void draw(void) {
 
     // top + bottom HUD bars (so the labels stay readable over the rainbow)
     rectfill(0, 0, SCREEN_W, 16, CLR_BLACK);
-    print_centered(str("FILLP   -   %s", NAME[p]), 4, CLR_WHITE);
+    print_centered(str("FILLP   -   %s", NAME[p]), SCREEN_W/2, 4, CLR_WHITE);
 
     rectfill(0, SCREEN_H - 26, SCREEN_W, 26, CLR_BLACK);
     print("holes:  fillp(p, -1)", 14, SCREEN_H - 22, CLR_LIGHT_PEACH);
     print_right("2 colors: fillp(p, c)", SCREEN_W - 14, SCREEN_H - 22, CLR_LIGHT_PEACH);
-    print_centered("A: change pattern", SCREEN_H - 12, CLR_DARK_GREY);
+    print_centered("A: change pattern", SCREEN_W/2, SCREEN_H - 12, CLR_DARK_GREY);
 }

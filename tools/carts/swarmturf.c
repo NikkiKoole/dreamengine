@@ -288,7 +288,7 @@ void draw(void) {
 
     int secs = (int)(t_end - now());
     if (!started) secs = ROUND_SEC;
-    print_centered(str("%d", secs < 0 ? 0 : secs), 4, CLR_WHITE);
+    print_centered(str("%d", secs < 0 ? 0 : secs), SCREEN_W/2, 4, CLR_WHITE);
 
     if (over) {
         fade(0.45f);
@@ -297,11 +297,11 @@ void draw(void) {
         const char *msg = cover[0] > cover[1] ? "YOU OWN THE TURF!" :
                           cover[1] > cover[0] ? "RIVAL OWNS THE TURF" : "DEAD HEAT!";
         int c = cover[0] > cover[1] ? INK[0] : cover[1] > cover[0] ? INK[1] : CLR_WHITE;
-        print_centered(msg, SCREEN_H / 2 - 16, c);
-        print_centered(str("%d%%  vs  %d%%", p0, p1), SCREEN_H / 2 - 2, CLR_LIGHT_GREY);
-        print_centered(str("best %d%%", best), SCREEN_H / 2 + 8, CLR_YELLOW);
-        if (blink(20)) print_centered("click / Z to replay", SCREEN_H / 2 + 18, CLR_DARK_GREY);
+        print_centered(msg, SCREEN_W/2, SCREEN_H / 2 - 16, c);
+        print_centered(str("%d%%  vs  %d%%", p0, p1), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_LIGHT_GREY);
+        print_centered(str("best %d%%", best), SCREEN_W/2, SCREEN_H / 2 + 8, CLR_YELLOW);
+        if (blink(20)) print_centered("click / Z to replay", SCREEN_W/2, SCREEN_H / 2 + 18, CLR_DARK_GREY);
     } else {
-        print_centered("hold LEFT-CLICK / WASD: pull your swarm", SCREEN_H - 9, CLR_DARKER_GREY);
+        print_centered("hold LEFT-CLICK / WASD: pull your swarm", SCREEN_W/2, SCREEN_H - 9, CLR_DARKER_GREY);
     }
 }

@@ -596,25 +596,25 @@ static void draw_race(void) {
     rectfill(4 + (int)(prog * (SCREEN_W - 8)) - 1, SCREEN_H - 6, 3, 4, CLR_YELLOW);
 
     if (perfectT > 0)
-        print_centered("PERFECT!", 40, blink(3) ? CLR_YELLOW : CLR_WHITE);
+        print_centered("PERFECT!", SCREEN_W/2, 40, blink(3) ? CLR_YELLOW : CLR_WHITE);
 
     if (racePhase == PH_COUNT) {
         int n = (int)countT + 1;
         const char *t = n > 0 ? str("%d", n) : "GO!";
         print_scaled(t, (SCREEN_W - text_width(t) * 4) / 2, SCREEN_H / 2 - 16, CLR_YELLOW, 4);
-        print_centered("level off your landings — don't redline", SCREEN_H - 28, CLR_LIGHT_GREY);
+        print_centered("level off your landings — don't redline", SCREEN_W/2, SCREEN_H - 28, CLR_LIGHT_GREY);
     }
-    if (p->state == ST_STALL)  print_centered("OVERHEATED!", SCREEN_H / 2, blink(4) ? CLR_RED : CLR_ORANGE);
-    if (p->state == ST_CRASH)  print_centered("WIPEOUT!",    SCREEN_H / 2, CLR_RED);
+    if (p->state == ST_STALL)  print_centered("OVERHEATED!", SCREEN_W/2, SCREEN_H / 2, blink(4) ? CLR_RED : CLR_ORANGE);
+    if (p->state == ST_CRASH)  print_centered("WIPEOUT!", SCREEN_W/2, SCREEN_H / 2, CLR_RED);
 
     if (racePhase == PH_RESULT) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 28, 140, 60, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 28, 140, 60, CLR_YELLOW);
         const char *pl = playerPlace == 1 ? "1st!" : playerPlace == 2 ? "2nd" : playerPlace == 3 ? "3rd" : "4th";
-        print_centered(str("FINISH — %s", pl), SCREEN_H / 2 - 20, CLR_GREEN);
-        print_centered(str("TIME %s", fmt_time((int)p->finishMs)), SCREEN_H / 2 - 8, CLR_WHITE);
-        print_centered(str("BEST %s", fmt_time(sv.bestMs)), SCREEN_H / 2 + 4, CLR_LIGHT_YELLOW);
-        print_centered("Z = title", SCREEN_H / 2 + 18, CLR_LIGHT_GREY);
+        print_centered(str("FINISH — %s", pl), SCREEN_W/2, SCREEN_H / 2 - 20, CLR_GREEN);
+        print_centered(str("TIME %s", fmt_time((int)p->finishMs)), SCREEN_W/2, SCREEN_H / 2 - 8, CLR_WHITE);
+        print_centered(str("BEST %s", fmt_time(sv.bestMs)), SCREEN_W/2, SCREEN_H / 2 + 4, CLR_LIGHT_YELLOW);
+        print_centered("Z = title", SCREEN_W/2, SCREEN_H / 2 + 18, CLR_LIGHT_GREY);
     }
 }
 
@@ -659,7 +659,7 @@ static void draw_build(void) {
     rectfill(0, SCREEN_H - 10, SCREEN_W, 10, CLR_BLACK);
     print("L-click paint  R-click erase  arrows scroll", 4, SCREEN_H - 9, CLR_LIGHT_GREY);
     print_right("S save  Z ride  B title", SCREEN_W - 4, SCREEN_H - 9, CLR_YELLOW);
-    if (savedT > 0) print_centered("TRACK SAVED", SCREEN_H / 2, blink(4) ? CLR_GREEN : CLR_WHITE);
+    if (savedT > 0) print_centered("TRACK SAVED", SCREEN_W/2, SCREEN_H / 2, blink(4) ? CLR_GREEN : CLR_WHITE);
 }
 
 // ---- TITLE --------------------------------------------------------
@@ -678,20 +678,20 @@ static void draw_title(void) {
     spr_rot(SLOT_BIKE, 150, by, 14);
 
     print_scaled("EXCITEBIKE", (SCREEN_W - text_width("EXCITEBIKE") * 3) / 2, 22, CLR_ORANGE, 3);
-    print_centered("land level - mind the heat - build a track", 50, CLR_LIGHT_YELLOW);
+    print_centered("land level - mind the heat - build a track", SCREEN_W/2, 50, CLR_LIGHT_YELLOW);
 
     const char *opts[2] = { "RACE", "BUILD" };
     for (int i = 0; i < 2; i++) {
         int y = 130 + i * 16;
         int on = (menuSel == i);
-        print_centered(opts[i], y, on ? CLR_YELLOW : CLR_LIGHT_GREY);
+        print_centered(opts[i], SCREEN_W/2, y, on ? CLR_YELLOW : CLR_LIGHT_GREY);
         if (on) {
             int w = text_width(opts[i]);
             print(blink(15) ? ">" : " ", SCREEN_W / 2 - w / 2 - 12, y, CLR_YELLOW);
         }
     }
-    if (sv.bestMs > 0) print_centered(str("best lap  %s", fmt_time(sv.bestMs)), 170, CLR_GREEN);
-    print_centered("Up/Down choose   Z select", SCREEN_H - 12, CLR_DARK_GREY);
+    if (sv.bestMs > 0) print_centered(str("best lap  %s", fmt_time(sv.bestMs)), SCREEN_W/2, 170, CLR_GREEN);
+    print_centered("Up/Down choose   Z select", SCREEN_W/2, SCREEN_H - 12, CLR_DARK_GREY);
 }
 
 void draw(void) {

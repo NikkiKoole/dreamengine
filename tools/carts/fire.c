@@ -209,7 +209,7 @@ void draw() {
     // HUD
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
     print_right(str("HI %d", hiscore), SCREEN_W - 4, 3, CLR_YELLOW);
-    print_centered(str("SAVED %d", saves), 3, CLR_LIGHT_GREY);
+    print_centered(str("SAVED %d", saves), SCREEN_W/2, 3, CLR_LIGHT_GREY);
     for (int i = 0; i < lives; i++) {
         int ix = 70 + i * 12;
         rectfill(ix - 4, 5, 8, 2, CLR_RED);
@@ -219,8 +219,8 @@ void draw() {
     if (state == 1) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 24, 128, 50, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 24, 128, 50, CLR_RED);
-        print_centered("GAME OVER",            SCREEN_H / 2 - 14, CLR_RED);
-        print_centered(str("SAVED %d", saves), SCREEN_H / 2 - 1,  CLR_YELLOW);
-        print_centered("Z to try again",       SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_RED);
+        print_centered(str("SAVED %d", saves), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_YELLOW);
+        print_centered("Z to try again", SCREEN_W/2, SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
     }
 }

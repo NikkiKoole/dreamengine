@@ -314,7 +314,7 @@ void draw(void){
     rectfill(0, 0, SCREEN_W, HUD, CLR_BLACK);
     line(0, HUD, SCREEN_W, HUD, CLR_DARK_GREY);
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
-    print_centered(str("WAVE %d", wave), 3, CLR_LIME_GREEN);
+    print_centered(str("WAVE %d", wave), SCREEN_W/2, 3, CLR_LIME_GREEN);
     print_right(str("HI %d", hi), SCREEN_W - 4, 3, CLR_LIGHT_GREY);
     // lives as little blasters
     for (int i = 0; i < lives; i++){
@@ -323,12 +323,12 @@ void draw(void){
     }
 
     if (state == 1){
-        print_centered(str("WAVE %d CLEAR!", wave), SCREEN_H/2 - 4, CLR_YELLOW);
+        print_centered(str("WAVE %d CLEAR!", wave), SCREEN_W/2, SCREEN_H/2 - 4, CLR_YELLOW);
     }
     if (state == 3){
         rectfill(70, 78, 180, 44, CLR_BLACK); rect(70, 78, 180, 44, CLR_RED);
-        print_centered("GAME OVER", 86, CLR_RED);
-        print_centered(str("SCORE %d", score), 100, CLR_WHITE);
-        print_centered("Z to play again", 112, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, 86, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, 100, CLR_WHITE);
+        print_centered("Z to play again", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     }
 }

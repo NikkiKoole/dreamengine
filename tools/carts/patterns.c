@@ -36,10 +36,10 @@ void draw(void) {
 
     // a RANDOM pattern, re-rolled every second — any 16-bit value is valid
     int bx = 70, by = 42, bw = 180, bh = 52;
-    print_centered("random pattern, new every second:", by - 9, CLR_LIGHT_GREY);
+    print_centered("random pattern, new every second:", SCREEN_W/2, by - 9, CLR_LIGHT_GREY);
     fillp(randpat, a); rectfill(bx, by, bw, bh, b); fillp_reset();
     rect(bx, by, bw, bh, CLR_WHITE);
-    print_centered(str("0x%04X", randpat & 0xFFFF), by + bh + 3, CLR_YELLOW);
+    print_centered(str("0x%04X", randpat & 0xFFFF), SCREEN_W/2, by + bh + 3, CLR_YELLOW);
 
     // the SAME global pattern works on circles & triangles, not just rects
     fillp(FILL_DIAG, a); circfill(32, 66, 21, b); fillp_reset(); circ(32, 66, 21, CLR_WHITE);
@@ -53,6 +53,6 @@ void draw(void) {
         print(NAME[i], x + 4, y + 30, CLR_LIGHT_GREY);
     }
 
-    print_centered("A: change colors", SCREEN_H - 11, CLR_DARK_BLUE);
-    print_centered("A: change colors", SCREEN_H - 12, CLR_WHITE);
+    print_centered("A: change colors", SCREEN_W/2, SCREEN_H - 11, CLR_DARK_BLUE);
+    print_centered("A: change colors", SCREEN_W/2, SCREEN_H - 12, CLR_WHITE);
 }

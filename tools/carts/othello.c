@@ -379,8 +379,7 @@ void draw(void) {
         int a = min(passMsg, 30);
         rectfill(SCREEN_W/2 - 56, 92, 112, 22, CLR_DARKER_BLUE);
         rect(SCREEN_W/2 - 56, 92, 112, 22, CLR_WHITE);
-        print_centered(passWho == BLACK ? "BLACK PASSES" : "WHITE PASSES",
-                       100, a > 4 ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
+        print_centered(passWho == BLACK ? "BLACK PASSES" : "WHITE PASSES", SCREEN_W/2, 100, a > 4 ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
     }
 
     // ── game-over banner ──
@@ -392,8 +391,8 @@ void draw(void) {
         rectfill(bxp, 70, boxw, 56, top);
         rect(bxp, 70, boxw, 56, CLR_WHITE);
         const char *msg = winner == BLACK ? "YOU WIN!" : winner == WHITE ? "CPU WINS" : "A TIE";
-        print_centered(msg, 78, winner == BLACK ? CLR_GREEN : winner == WHITE ? CLR_RED : CLR_LIGHT_YELLOW);
-        print_centered(str("black %d   white %d", b, w), 92, CLR_WHITE);
-        print_centered("click for a new game", 108, CLR_YELLOW);
+        print_centered(msg, SCREEN_W/2, 78, winner == BLACK ? CLR_GREEN : winner == WHITE ? CLR_RED : CLR_LIGHT_YELLOW);
+        print_centered(str("black %d   white %d", b, w), SCREEN_W/2, 92, CLR_WHITE);
+        print_centered("click for a new game", SCREEN_W/2, 108, CLR_YELLOW);
     }
 }

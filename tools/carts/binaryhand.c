@@ -56,7 +56,7 @@ void update(void) {
 
 void draw(void) {
     cls(CLR_DARK_BLUE);
-    print_centered("ONE-HAND BINARY", 4, CLR_WHITE);
+    print_centered("ONE-HAND BINARY", SCREEN_W/2, 4, CLR_WHITE);
 
     // place-value header — each power of two sits over its finger, lit when set
     int lblx[5] = { 120, 142, 164, 186, 218 };
@@ -83,6 +83,6 @@ void draw(void) {
     print(str("%d", value), 6, 34, CLR_YELLOW);
     print(bits, 6, 48, CLR_GREEN);
 
-    if (value == 4) print_centered("...real mature.", 188, CLR_PINK);
-    else            print_centered("Z +1    X -1    (0-31, one hand)", 188, CLR_LIGHT_GREY);
+    if (value == 4) print_centered("...real mature.", SCREEN_W/2, 188, CLR_PINK);
+    else            print_centered("Z +1    X -1    (0-31, one hand)", SCREEN_W/2, 188, CLR_LIGHT_GREY);
 }

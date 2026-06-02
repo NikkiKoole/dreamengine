@@ -204,7 +204,7 @@ void draw() {
 
     // HUD — top bar
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
-    print_centered(str("LVL %d", level+1), 3, CLR_DARK_GREY);
+    print_centered(str("LVL %d", level+1), SCREEN_W/2, 3, CLR_DARK_GREY);
     // lives as small ship icons
     for (int i = 0; i < lives; i++) {
         int ix = SCREEN_W - 10 - i*12, iy = 3;
@@ -235,21 +235,21 @@ void draw() {
     if (phase == LANDED) {
         rectfill(SCREEN_W/2-64, SCREEN_H/2-20, 128, 48, CLR_BLACK);
         rect    (SCREEN_W/2-64, SCREEN_H/2-20, 128, 48, CLR_GREEN);
-        print_centered("LANDED!",              SCREEN_H/2-12, CLR_GREEN);
-        print_centered(str("+%d pts", last_gain), SCREEN_H/2,  CLR_YELLOW);
-        print_centered("Z for next level",     SCREEN_H/2+12, CLR_LIGHT_GREY);
+        print_centered("LANDED!", SCREEN_W/2, SCREEN_H/2-12, CLR_GREEN);
+        print_centered(str("+%d pts", last_gain), SCREEN_W/2, SCREEN_H/2, CLR_YELLOW);
+        print_centered("Z for next level", SCREEN_W/2, SCREEN_H/2+12, CLR_LIGHT_GREY);
     }
     if (phase == CRASHED) {
         rectfill(SCREEN_W/2-64, SCREEN_H/2-20, 128, 48, CLR_BLACK);
         rect    (SCREEN_W/2-64, SCREEN_H/2-20, 128, 48, CLR_RED);
         if (lives > 0) {
-            print_centered("CRASHED!",         SCREEN_H/2-12, CLR_RED);
-            print_centered(str("LIVES LEFT %d", lives), SCREEN_H/2, CLR_WHITE);
-            print_centered("Z to retry",       SCREEN_H/2+12, CLR_LIGHT_GREY);
+            print_centered("CRASHED!", SCREEN_W/2, SCREEN_H/2-12, CLR_RED);
+            print_centered(str("LIVES LEFT %d", lives), SCREEN_W/2, SCREEN_H/2, CLR_WHITE);
+            print_centered("Z to retry", SCREEN_W/2, SCREEN_H/2+12, CLR_LIGHT_GREY);
         } else {
-            print_centered("GAME OVER",        SCREEN_H/2-12, CLR_RED);
-            print_centered(str("SCORE %d", score), SCREEN_H/2, CLR_YELLOW);
-            print_centered("Z to restart",     SCREEN_H/2+12, CLR_LIGHT_GREY);
+            print_centered("GAME OVER", SCREEN_W/2, SCREEN_H/2-12, CLR_RED);
+            print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H/2, CLR_YELLOW);
+            print_centered("Z to restart", SCREEN_W/2, SCREEN_H/2+12, CLR_LIGHT_GREY);
         }
     }
 }

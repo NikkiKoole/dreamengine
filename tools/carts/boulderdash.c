@@ -320,22 +320,22 @@ void draw(void) {
     print_right(str("TIME %d", (int)time_left), SCREEN_W - 4, 3, tcol);
 
     if (open_exit && !won && !dead)
-        print_centered(blink(10) ? "EXIT OPEN!" : "", 16, CLR_GREEN);
+        print_centered(blink(10) ? "EXIT OPEN!" : "", SCREEN_W/2, 16, CLR_GREEN);
 
     if (dead) {
         fade(0.55f);
         int w = 200, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 78, w, 40, CLR_DARK_RED);
         rect(bx, 78, w, 40, CLR_RED);
-        print_centered("CRUSHED!", 88, CLR_WHITE);
-        print_centered("R / SPACE to dig again", 104, CLR_LIGHT_PEACH);
+        print_centered("CRUSHED!", SCREEN_W/2, 88, CLR_WHITE);
+        print_centered("R / SPACE to dig again", SCREEN_W/2, 104, CLR_LIGHT_PEACH);
     }
     if (won) {
         int w = 220, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 74, w, 48, CLR_DARK_GREEN);
         rect(bx, 74, w, 48, CLR_LIME_GREEN);
-        print_centered("CAVE CLEARED!", 84, CLR_WHITE);
-        print_centered(str("time left %d  best %d", (int)time_left, best_time), 98, CLR_LIGHT_YELLOW);
-        print_centered("R / SPACE to play again", 110, CLR_LIGHT_PEACH);
+        print_centered("CAVE CLEARED!", SCREEN_W/2, 84, CLR_WHITE);
+        print_centered(str("time left %d  best %d", (int)time_left, best_time), SCREEN_W/2, 98, CLR_LIGHT_YELLOW);
+        print_centered("R / SPACE to play again", SCREEN_W/2, 110, CLR_LIGHT_PEACH);
     }
 }

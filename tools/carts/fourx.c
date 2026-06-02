@@ -369,7 +369,7 @@ void draw(void) {
         int w = 200, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 82, w, 32, winner == 0 ? CLR_DARK_GREEN : CLR_DARK_PURPLE);
         rect(bx, 82, w, 32, CLR_WHITE);
-        print_centered(winner == 0 ? "VICTORY!" : "DEFEAT", 90, winner == 0 ? CLR_GREEN : CLR_RED);
-        print_centered("press A for a new map", 102, CLR_LIGHT_GREY);
+        print_centered(winner == 0 ? "VICTORY!" : "DEFEAT", SCREEN_W/2, 90, winner == 0 ? CLR_GREEN : CLR_RED);
+        print_centered("press A for a new map", SCREEN_W/2, 102, CLR_LIGHT_GREY);
     }
 }

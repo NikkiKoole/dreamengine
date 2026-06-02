@@ -351,12 +351,12 @@ void draw(void) {
 
     if (state == S_WIN) {
         rectfill(70, 80, 180, 40, CLR_BLACK); rect(70, 80, 180, 40, CLR_YELLOW);
-        print_centered("YOU GOT THE TRIFORCE!", 90, CLR_YELLOW);
-        print_centered("Z to play again", 104, CLR_LIGHT_GREY);
+        print_centered("YOU GOT THE TRIFORCE!", SCREEN_W/2, 90, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, 104, CLR_LIGHT_GREY);
     }
     if (state == S_DEAD) {
         rectfill(80, 80, 160, 40, CLR_BLACK); rect(80, 80, 160, 40, CLR_RED);
-        print_centered("GAME OVER", 90, CLR_RED);
-        print_centered("Z to try again", 104, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, 90, CLR_RED);
+        print_centered("Z to try again", SCREEN_W/2, 104, CLR_LIGHT_GREY);
     }
 }

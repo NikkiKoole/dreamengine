@@ -439,7 +439,7 @@ static void draw_market_panel(void) {
 static void draw_hud(void) {
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("$%d", (int)showGold), 4, 2, CLR_YELLOW);
-    print_centered(str("%s   DAY %d/%d", PORT[here], day, SEASON), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("%s   DAY %d/%d", PORT[here], day, SEASON), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     if (debt > 0) print_right(str("DEBT $%d", debt), 314, 2, blink(24) && debt > gold ? CLR_WHITE : CLR_RED);
     else          print_right("DEBT CLEAR", 314, 2, CLR_GREEN);
 }
@@ -509,7 +509,7 @@ static void draw_chart(void) {
     draw_ship(NX[here], NY[here] - 2 + sin_deg(now() * 100) * 1.2f, 1.4f, false);
 
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
-    print_centered("SEA CHART  -  click a port to set sail", 2, CLR_LIGHT_YELLOW);
+    print_centered("SEA CHART  -  click a port to set sail", SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     print_right("M back", 314, 2, CLR_DARK_GREY);
 }
 
@@ -524,7 +524,7 @@ static void draw_sail_screen(void) {
 
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("$%d", (int)showGold), 4, 2, CLR_YELLOW);
-    print_centered(str("SAILING TO %s  -  %dd", PORT[sail_dest], sail_days), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("SAILING TO %s  -  %dd", PORT[sail_dest], sail_days), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     bar(60, SCREEN_H - 10, SCREEN_W - 120, 5, clamp(voyage, 0, 1), CLR_LIGHT_YELLOW, CLR_DARKER_GREY);
 }
 
@@ -545,10 +545,10 @@ static void draw_event_card(void) {
         case EV_GLUT:     title = "MARKET GLUT";  b1 = str("%s floods the docks here", GOOD[ev_g]);   b2 = "...the price CRASHES! buy cheap."; break;
         case EV_FAIR:     title = "TRADE FAIR";   b1 = "A merchant gifts a crate."; b2 = str("Free %d %s.", ev_amt, GOOD[ev_g]); break;
     }
-    print_centered(title, y + 8, ev_bad ? CLR_RED : CLR_LIGHT_YELLOW);
-    print_centered(b1, y + 30, CLR_WHITE);
-    print_centered(b2, y + 46, CLR_LIGHT_GREY);
-    if (ev_t > 0.5f && blink(20)) print_centered("press Z", y + 64, CLR_DARK_GREY);
+    print_centered(title, SCREEN_W/2, y + 8, ev_bad ? CLR_RED : CLR_LIGHT_YELLOW);
+    print_centered(b1, SCREEN_W/2, y + 30, CLR_WHITE);
+    print_centered(b2, SCREEN_W/2, y + 46, CLR_LIGHT_GREY);
+    if (ev_t > 0.5f && blink(20)) print_centered("press Z", SCREEN_W/2, y + 64, CLR_DARK_GREY);
 }
 
 static void draw_banner(void) {
@@ -571,10 +571,10 @@ static void draw_title(void) {
     for (int i = 0; i < 30; i++) pset((i * 73 + (int)(now() * 10)) % SCREEN_W, (i * 47) % 120, CLR_DARK_GREY);
     draw_ship(SCREEN_W / 2, 92, 3.4f, false);
     print_scaled("MERCHANT", (SCREEN_W - text_width("MERCHANT") * 3) / 2, 28, CLR_LIGHT_YELLOW, 3);
-    print_centered("buy low, sail far, sell dear", 132, CLR_LIGHT_GREY);
-    print_centered(str("clear $%d before %d days are out", GOAL, SEASON), 146, CLR_DARK_GREY);
-    print_centered(str("best fortune: $%d", best), 162, CLR_YELLOW);
-    print_centered("press Z / click to weigh anchor", 180, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered("buy low, sail far, sell dear", SCREEN_W/2, 132, CLR_LIGHT_GREY);
+    print_centered(str("clear $%d before %d days are out", GOAL, SEASON), SCREEN_W/2, 146, CLR_DARK_GREY);
+    print_centered(str("best fortune: $%d", best), SCREEN_W/2, 162, CLR_YELLOW);
+    print_centered("press Z / click to weigh anchor", SCREEN_W/2, 180, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_over(void) {
@@ -586,13 +586,13 @@ static void draw_over(void) {
     fillp(FILL_HLINES, -1); rectfill(0, 130, SCREEN_W, 70, CLR_DARK_BLUE); fillp_reset();
     rectfill(40, 40, 240, 116, CLR_BLACK); rect(40, 40, 240, 116, CLR_LIGHT_YELLOW);
     const char *head = won ? "-- A MERCHANT PRINCE! --" : "-- THE SEASON ENDS --";
-    print_centered(head, 50, won ? CLR_YELLOW : CLR_LIGHT_YELLOW);
-    print_centered(str("gold $%d", gold), 70, CLR_YELLOW);
-    print_centered(str("cargo worth $%d", net - gold + debt), 84, CLR_GREEN);
-    if (debt > 0) print_centered(str("debt -$%d", debt), 98, CLR_RED);
-    print_centered(str("NET FORTUNE  $%d", net), 116, net >= GOAL ? CLR_YELLOW : CLR_LIGHT_GREY);
-    print_centered(str("best  $%d", best), 132, CLR_LIGHT_GREY);
-    print_centered("press Z to sail again", 146, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered(head, SCREEN_W/2, 50, won ? CLR_YELLOW : CLR_LIGHT_YELLOW);
+    print_centered(str("gold $%d", gold), SCREEN_W/2, 70, CLR_YELLOW);
+    print_centered(str("cargo worth $%d", net - gold + debt), SCREEN_W/2, 84, CLR_GREEN);
+    if (debt > 0) print_centered(str("debt -$%d", debt), SCREEN_W/2, 98, CLR_RED);
+    print_centered(str("NET FORTUNE  $%d", net), SCREEN_W/2, 116, net >= GOAL ? CLR_YELLOW : CLR_LIGHT_GREY);
+    print_centered(str("best  $%d", best), SCREEN_W/2, 132, CLR_LIGHT_GREY);
+    print_centered("press Z to sail again", SCREEN_W/2, 146, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 void draw(void) {

@@ -689,9 +689,9 @@ void draw(void) {
     rectfill(0, 2, 4, HUD_Y-4, CLR_RED);
     print(str("RED  $%d", funds[0]), 8, 3, CLR_PEACH);
     print(str("BLUE $%d", funds[1]), 8, 13, CLR_BLUE);
-    print_centered(str("DAY %d", turn_no), 4, CLR_WHITE);
-    if (enemyMsg > 0) print_centered("-- your turn --", 14, CLR_YELLOW);
-    else              print_centered("capture the HQ", 14, CLR_LIGHT_GREY);
+    print_centered(str("DAY %d", turn_no), SCREEN_W/2, 4, CLR_WHITE);
+    if (enemyMsg > 0) print_centered("-- your turn --", SCREEN_W/2, 14, CLR_YELLOW);
+    else              print_centered("capture the HQ", SCREEN_W/2, 14, CLR_LIGHT_GREY);
     rectfill(SCREEN_W-66, 4, 62, HUD_Y-8, CLR_DARK_GREEN); rect(SCREEN_W-66, 4, 62, HUD_Y-8, CLR_WHITE);
     print("END TURN", SCREEN_W-62, 9, CLR_WHITE);
 
@@ -733,8 +733,8 @@ void draw(void) {
         int w = 220, bx = (SCREEN_W-w)/2;
         rectfill(bx, 78, w, 44, winner==0?CLR_DARK_GREEN:CLR_DARK_PURPLE);
         rect(bx, 78, w, 44, CLR_WHITE);
-        print_centered(winner==0 ? "VICTORY!" : "DEFEAT", 86, winner==0?CLR_GREEN:CLR_RED);
-        print_centered(winner==0 ? "the enemy HQ has fallen" : "your forces are routed", 100, CLR_LIGHT_GREY);
-        print_centered("click for a new battle", 110, CLR_YELLOW);
+        print_centered(winner==0 ? "VICTORY!" : "DEFEAT", SCREEN_W/2, 86, winner==0?CLR_GREEN:CLR_RED);
+        print_centered(winner==0 ? "the enemy HQ has fallen" : "your forces are routed", SCREEN_W/2, 100, CLR_LIGHT_GREY);
+        print_centered("click for a new battle", SCREEN_W/2, 110, CLR_YELLOW);
     }
 }

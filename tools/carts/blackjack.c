@@ -360,10 +360,9 @@ void draw(void) {
         draw_hand(dhand, dn, ddeal, 24, true, hidden);
         if (hole_shown) {
             int dt_total = hand_total(dhand, dn, &dsoft);
-            print_centered(str("DEALER  %d%s", dt_total, dsoft ? " (soft)" : ""),
-                           90, dt_total > 21 ? CLR_RED : CLR_LIGHT_PEACH);
+            print_centered(str("DEALER  %d%s", dt_total, dsoft ? " (soft)" : ""), SCREEN_W/2, 90, dt_total > 21 ? CLR_RED : CLR_LIGHT_PEACH);
         } else {
-            print_centered("DEALER", 90, CLR_LIGHT_GREY);
+            print_centered("DEALER", SCREEN_W/2, 90, CLR_LIGHT_GREY);
         }
     }
 
@@ -372,7 +371,7 @@ void draw(void) {
         draw_hand(phand, pn, pdeal, 100, false, -1);
         int pt = hand_total(phand, pn, &psoft);
         int c = pt > 21 ? CLR_RED : (pt == 21 ? CLR_YELLOW : CLR_WHITE);
-        print_centered(str("YOU  %d%s", pt, (psoft && pt != 21) ? " (soft)" : ""), 166, c);
+        print_centered(str("YOU  %d%s", pt, (psoft && pt != 21) ? " (soft)" : ""), SCREEN_W/2, 166, c);
     }
 
     camera(0, 0);
@@ -382,7 +381,7 @@ void draw(void) {
 
     // ── HUD top bar ──
     print(str("BANK $%d", bankroll), 4, 3, CLR_LIGHT_YELLOW);
-    print_centered(str("BET $%d%s", bet, doubled ? " x2" : ""), 3, CLR_YELLOW);
+    print_centered(str("BET $%d%s", bet, doubled ? " x2" : ""), SCREEN_W/2, 3, CLR_YELLOW);
     print_right(str("HANDS %d", hands_played), SCREEN_W - 4, 3, CLR_LIGHT_GREY);
 
     // ── status / result banner ──
@@ -403,7 +402,7 @@ void draw(void) {
             default:           msg = ""; break;
         }
     }
-    print_centered(msg, 138, mc);
+    print_centered(msg, SCREEN_W/2, 138, mc);
 
     // ── bottom button bar (state-dependent) ──
     if (state == ST_BET) {

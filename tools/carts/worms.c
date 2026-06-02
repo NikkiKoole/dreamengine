@@ -342,7 +342,7 @@ static void draw_hud(void) {
 
     // wind indicator (centered)
     int wmid = W / 2;
-    print_centered("WIND", 2, CLR_DARK_GREY);
+    print_centered("WIND", SCREEN_W/2, 2, CLR_DARK_GREY);
     int wlen = (int)(wind * 0.45f);
     if (wlen != 0) {
         line(wmid, 11, wmid + wlen, 11, CLR_BLUE);
@@ -413,7 +413,7 @@ void draw(void) {
         fade(0.3f);
         rectfill(W / 2 - 78, H / 2 - 20, 156, 42, CLR_BLACK);
         rect(W / 2 - 78, H / 2 - 20, 156, 42, teamcol[w - 1]);
-        print_centered(str("PLAYER %d WINS!", w), H / 2 - 10, teamcol[w - 1]);
-        print_centered("SPACE to play again", H / 2 + 6, CLR_LIGHT_GREY);
+        print_centered(str("PLAYER %d WINS!", w), SCREEN_W/2, H / 2 - 10, teamcol[w - 1]);
+        print_centered("SPACE to play again", SCREEN_W/2, H / 2 + 6, CLR_LIGHT_GREY);
     }
 }

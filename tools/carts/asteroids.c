@@ -236,7 +236,7 @@ void draw() {
     // HUD
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
     print_right(str("BEST %d", hiscore), SCREEN_W-4, 3, CLR_YELLOW);
-    print_centered(str("WAVE %d", wave), 3, CLR_DARK_GREY);
+    print_centered(str("WAVE %d", wave), SCREEN_W/2, 3, CLR_DARK_GREY);
 
     // life icons (mini ships)
     for (int i=0; i<lives; i++) {
@@ -250,8 +250,8 @@ void draw() {
     if (gameover) {
         rectfill(SCREEN_W/2-64, SCREEN_H/2-24, 128, 54, CLR_BLACK);
         rect    (SCREEN_W/2-64, SCREEN_H/2-24, 128, 54, CLR_WHITE);
-        print_centered("GAME OVER",          SCREEN_H/2-14, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H/2,    CLR_YELLOW);
-        print_centered("Z to play again",    SCREEN_H/2+14, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H/2-14, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H/2, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H/2+14, CLR_LIGHT_GREY);
     }
 }

@@ -450,7 +450,7 @@ void draw(void) {
     if (banner_t > 0) {
         float e = ease_out(clamp(banner_t / 1.2f, 0, 1));
         int ty = MAPY + 4 + (int)((1 - e) * -14);
-        print_centered(str("DAY %d", day), ty, CLR_LIGHT_YELLOW);
+        print_centered(str("DAY %d", day), SCREEN_W/2, ty, CLR_LIGHT_YELLOW);
     }
 
     // ── end screen ──
@@ -458,8 +458,8 @@ void draw(void) {
         fade(0.4f);
         rectfill(SCREEN_W / 2 - 84, SCREEN_H / 2 - 24, 168, 48, CLR_BROWNISH_BLACK);
         rect(SCREEN_W / 2 - 84, SCREEN_H / 2 - 24, 168, 48, CLR_ORANGE);
-        print_centered("THE FORTRESS ENDURES", SCREEN_H / 2 - 14, CLR_LIGHT_YELLOW);
-        print_centered(str("%d days dug, %d stone hewn", WIN_DAY, stone), SCREEN_H / 2 - 1, CLR_LIGHT_GREY);
-        print_centered("click to found a new fort", SCREEN_H / 2 + 11, blink(20) ? CLR_WHITE : CLR_DARK_GREY);
+        print_centered("THE FORTRESS ENDURES", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_LIGHT_YELLOW);
+        print_centered(str("%d days dug, %d stone hewn", WIN_DAY, stone), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_LIGHT_GREY);
+        print_centered("click to found a new fort", SCREEN_W/2, SCREEN_H / 2 + 11, blink(20) ? CLR_WHITE : CLR_DARK_GREY);
     }
 }

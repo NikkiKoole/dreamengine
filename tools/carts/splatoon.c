@@ -177,7 +177,7 @@ void draw(void) {
     print(str("%d%%", p2), 184, 4, C2_INK);
 
     int secs = (int)(t_end - now());
-    print_centered(str("%d", secs < 0 ? 0 : secs), 4, CLR_WHITE);
+    print_centered(str("%d", secs < 0 ? 0 : secs), SCREEN_W/2, 4, CLR_WHITE);
 
     if (over) {
         rectfill(70, 78, 180, 44, CLR_BLACK);
@@ -185,8 +185,8 @@ void draw(void) {
         const char *msg = cover[1] > cover[2] ? "BLUE WINS!" :
                           cover[2] > cover[1] ? "ORANGE WINS!" : "TIE!";
         int c = cover[1] > cover[2] ? C1_INK : cover[2] > cover[1] ? C2_INK : CLR_WHITE;
-        print_centered(msg, 86, c);
-        print_centered(str("%d%%  vs  %d%%", p1, p2), 99, CLR_LIGHT_GREY);
-        print_centered("Z / , to replay", 111, CLR_DARK_GREY);
+        print_centered(msg, SCREEN_W/2, 86, c);
+        print_centered(str("%d%%  vs  %d%%", p1, p2), SCREEN_W/2, 99, CLR_LIGHT_GREY);
+        print_centered("Z / , to replay", SCREEN_W/2, 111, CLR_DARK_GREY);
     }
 }

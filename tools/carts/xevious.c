@@ -212,5 +212,5 @@ void draw(void){
     print("ZAP / BOMB", SCREEN_W/2-40, 3, CLR_DARK_GREY);
 
     if(state==2){ rectfill(80,84,160,36,CLR_BLACK); rect(80,84,160,36,CLR_RED);
-        print_centered("GAME OVER", 92, CLR_RED); print_centered(str("score %d  -  Z", score), 104, CLR_LIGHT_GREY); }
+        print_centered("GAME OVER", SCREEN_W/2, 92, CLR_RED); print_centered(str("score %d  -  Z", score), SCREEN_W/2, 104, CLR_LIGHT_GREY); }
 }

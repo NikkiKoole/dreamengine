@@ -222,7 +222,7 @@ void draw() {
 
     // wind arrow (centered)
     int wmid = SCREEN_W/2;
-    print_centered("WIND", 3, CLR_DARK_GREY);
+    print_centered("WIND", SCREEN_W/2, 3, CLR_DARK_GREY);
     int wlen = (int)(wind * 3.0f);
     if (wlen != 0) {
         line(wmid+12, 7, wmid+12+wlen, 7, CLR_LIGHT_GREY);
@@ -246,7 +246,7 @@ void draw() {
         int w = (pts[0] >= WIN_HITS) ? 1 : 2;
         rectfill(SCREEN_W/2-76, SCREEN_H/2-20, 152, 42, CLR_BLACK);
         rect    (SCREEN_W/2-76, SCREEN_H/2-20, 152, 42, CLR_YELLOW);
-        print_centered(str("PLAYER %d WINS!", w), SCREEN_H/2-10, CLR_YELLOW);
-        print_centered("Z to play again",         SCREEN_H/2+6,  CLR_LIGHT_GREY);
+        print_centered(str("PLAYER %d WINS!", w), SCREEN_W/2, SCREEN_H/2-10, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H/2+6, CLR_LIGHT_GREY);
     }
 }

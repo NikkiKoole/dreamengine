@@ -663,8 +663,8 @@ void draw(void) {
     cls(CLR_DARKER_BLUE);
 
     if (appState == ST_TITLE) {
-        print_centered("C H E S S", 30, CLR_LIGHT_YELLOW);
-        print_centered("full legal chess", 44, CLR_LIGHT_GREY);
+        print_centered("C H E S S", SCREEN_W/2, 30, CLR_LIGHT_YELLOW);
+        print_centered("full legal chess", SCREEN_W/2, 44, CLR_LIGHT_GREY);
 
         // buttons
         rectfill(SCREEN_W/2-70, 92, 60, 22, CLR_BLUE_GREEN);
@@ -697,8 +697,8 @@ void draw(void) {
                         : result==2 ? "BLACK WINS — CHECKMATE"
                         : "STALEMATE — DRAW";
         int col = result==3 ? CLR_LIGHT_GREY : CLR_LIGHT_YELLOW;
-        print_centered(msg, SCREEN_H/2-12, col);
+        print_centered(msg, SCREEN_W/2, SCREEN_H/2-12, col);
         if (blink(20))
-            print_centered("R: NEW GAME    M: MENU", SCREEN_H/2+4, CLR_WHITE);
+            print_centered("R: NEW GAME    M: MENU", SCREEN_W/2, SCREEN_H/2+4, CLR_WHITE);
     }
 }

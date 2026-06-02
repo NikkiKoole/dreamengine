@@ -229,8 +229,8 @@ void draw() {
     if (state == 1) {
         rectfill(CX - 70, CYV - 16, 140, 40, CLR_BLACK);
         rect    (CX - 70, CYV - 16, 140, 40, CLR_RED);
-        print_centered("SHIP DESTROYED", CYV - 8, CLR_RED);
-        print_centered(str("score %d", score), CYV + 2, CLR_YELLOW);
-        print_centered("Z to relaunch", CYV + 13, CLR_LIGHT_GREY);
+        print_centered("SHIP DESTROYED", SCREEN_W/2, CYV - 8, CLR_RED);
+        print_centered(str("score %d", score), SCREEN_W/2, CYV + 2, CLR_YELLOW);
+        print_centered("Z to relaunch", SCREEN_W/2, CYV + 13, CLR_LIGHT_GREY);
     }
 }

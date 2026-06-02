@@ -278,17 +278,17 @@ void draw(void) {
 
     health_bar(p1.hp, 8, p1.wins, true, "P1");
     health_bar(p2.hp, SCREEN_W - 8 - 132, p2.wins, false, "P2");
-    print_centered(str("%d", round_clock / 60), 2, CLR_WHITE);
+    print_centered(str("%d", round_clock / 60), SCREEN_W/2, 2, CLR_WHITE);
 
     if (gphase == G_INTRO) {
-        if (gtimer > 28) print_centered(str("ROUND %d", round_n), 88, CLR_YELLOW);
-        else             print_centered("FIGHT!", 88, CLR_RED);
-        print_centered("down-forward + punch = FIREBALL", SCREEN_H - 10, CLR_DARK_GREY);
+        if (gtimer > 28) print_centered(str("ROUND %d", round_n), SCREEN_W/2, 88, CLR_YELLOW);
+        else             print_centered("FIGHT!", SCREEN_W/2, 88, CLR_RED);
+        print_centered("down-forward + punch = FIREBALL", SCREEN_W/2, SCREEN_H - 10, CLR_DARK_GREY);
     } else if (gphase == G_ROUNDEND) {
-        print_centered(result, 84, CLR_WHITE);
-        if (winner[0] != 'D') print_centered(str("%s wins the round", winner), 98, CLR_YELLOW);
+        print_centered(result, SCREEN_W/2, 84, CLR_WHITE);
+        if (winner[0] != 'D') print_centered(str("%s wins the round", winner), SCREEN_W/2, 98, CLR_YELLOW);
     } else if (gphase == G_MATCHEND) {
-        print_centered(str("%s WINS!", winner), 80, CLR_YELLOW);
-        print_centered("press Z / , for a rematch", 98, CLR_WHITE);
+        print_centered(str("%s WINS!", winner), SCREEN_W/2, 80, CLR_YELLOW);
+        print_centered("press Z / , for a rematch", SCREEN_W/2, 98, CLR_WHITE);
     }
 }

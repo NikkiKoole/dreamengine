@@ -352,7 +352,7 @@ void draw() {
     // ---- HUD ----
     int kmh = (int)(speed / MAX_SPD * 240);
     print(str("%3d km/h", kmh), 4, 4, kmh > 180 ? CLR_YELLOW : CLR_WHITE);
-    print_centered(str("LAP %d", lap), 4, CLR_LIGHT_GREY);
+    print_centered(str("LAP %d", lap), SCREEN_W/2, 4, CLR_LIGHT_GREY);
     print_right(str("%02d:%02d", (int)timer() / 60, (int)timer() % 60), SCREEN_W - 4, 4, CLR_WHITE);
 
     if (best_lap > 0)

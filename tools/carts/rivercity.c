@@ -600,12 +600,12 @@ static void hud(void) {
         int c = i < zone ? CLR_GREEN : i == zone ? (blink(20) ? CLR_YELLOW : CLR_ORANGE) : CLR_DARK_GREY;
         circfill(cx, 9, 3, c);
     }
-    print_centered(ZONE_NAME[zone], 16, CLR_WHITE);
+    print_centered(ZONE_NAME[zone], SCREEN_W/2, 16, CLR_WHITE);
 
-    if (hitcombo > 1) print_centered(str("COMBO x%d", hitcombo), 30, CLR_LIGHT_YELLOW);
+    if (hitcombo > 1) print_centered(str("COMBO x%d", hitcombo), SCREEN_W/2, 30, CLR_LIGHT_YELLOW);
 
-    if (intro_t > 0) print_centered(str("%s — clear the gang!", ZONE_NAME[zone]), SCREEN_H - 14, CLR_YELLOW);
-    else if (cleared && zone < LAST_ZONE) print_centered("ZONE CLEAR! head to the diner >>", SCREEN_H - 14, CLR_GREEN);
+    if (intro_t > 0) print_centered(str("%s — clear the gang!", ZONE_NAME[zone]), SCREEN_W/2, SCREEN_H - 14, CLR_YELLOW);
+    else if (cleared && zone < LAST_ZONE) print_centered("ZONE CLEAR! head to the diner >>", SCREEN_W/2, SCREEN_H - 14, CLR_GREEN);
 }
 
 static void draw_coins(void) {
@@ -621,7 +621,7 @@ static void draw_coins(void) {
 static void draw_shop(void) {
     cls(CLR_BROWNISH_BLACK);
     rectfill(0, 0, SCREEN_W, 24, CLR_DARK_RED);
-    print_centered("RIVER CITY DINER", 8, CLR_LIGHT_YELLOW);
+    print_centered("RIVER CITY DINER", SCREEN_W/2, 8, CLR_LIGHT_YELLOW);
     print_right(str("$%d", cash), SCREEN_W - 8, 8, CLR_YELLOW);
 
     const char *names[7] = { "BURGER (heal full)", "+6 MAX HP", "+1 STR", "+1 DEF",
@@ -636,7 +636,7 @@ static void draw_shop(void) {
         if (owned) print_right("OWNED", SCREEN_W - 16, y + 1, CLR_GREEN);
         else print_right(str("$%d", price[i]), SCREEN_W - 16, y + 1, cash >= price[i] ? CLR_GREEN : CLR_RED);
     }
-    print_centered("up/down pick   Z buy   X leave for the next zone", SCREEN_H - 10, CLR_LIGHT_GREY);
+    print_centered("up/down pick   Z buy   X leave for the next zone", SCREEN_W/2, SCREEN_H - 10, CLR_LIGHT_GREY);
 }
 
 void draw(void) {
@@ -657,15 +657,15 @@ void draw(void) {
 
     if (phase == G_OVER) {
         fade(0.5f);
-        print_centered("KNOCKED OUT", 84, CLR_RED);
-        print_centered(str("you reached %s with $%d", ZONE_NAME[zone], cash), 100, CLR_WHITE);
-        print_centered("press Z for a new run", 120, CLR_YELLOW);
+        print_centered("KNOCKED OUT", SCREEN_W/2, 84, CLR_RED);
+        print_centered(str("you reached %s with $%d", ZONE_NAME[zone], cash), SCREEN_W/2, 100, CLR_WHITE);
+        print_centered("press Z for a new run", SCREEN_W/2, 120, CLR_YELLOW);
     } else if (phase == G_WIN) {
         fade(0.35f);
         print_scaled("CITY CLEARED!", SCREEN_W / 2 - 78, 70, CLR_LIGHT_YELLOW, 2);
-        print_centered(str("you took down the docks boss  -  $%d", cash), 100, CLR_WHITE);
-        print_centered("press Z to run it again", 122, CLR_GREEN);
+        print_centered(str("you took down the docks boss  -  $%d", cash), SCREEN_W/2, 100, CLR_WHITE);
+        print_centered("press Z to run it again", SCREEN_W/2, 122, CLR_GREEN);
     } else if (win_t > 0) {
-        print_centered("BOSS DOWN!", 84, CLR_LIGHT_YELLOW);
+        print_centered("BOSS DOWN!", SCREEN_W/2, 84, CLR_LIGHT_YELLOW);
     }
 }

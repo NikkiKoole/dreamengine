@@ -238,18 +238,18 @@ void draw(void) {
     // HUD
     rectfill(0, 0, SCREEN_W, HUD_H, CLR_BLACK);
     print(str("SCORE %d", score), 4, 1, CLR_YELLOW);
-    print_centered(str("WAVE %d", wave + 1), 1, CLR_WHITE);
+    print_centered(str("WAVE %d", wave + 1), SCREEN_W/2, 1, CLR_WHITE);
     for (int i = 0; i < lives; i++) {
         int lx = SCREEN_W - 9 - i * 11;
         circfill(lx, 5, 3, CLR_LIGHT_YELLOW); circfill(lx, 3, 2, CLR_BLUE);
     }
 
-    if (wave_flash > 0) print_centered(str("WAVE %d", wave + 1), 96, CLR_LIGHT_YELLOW);
+    if (wave_flash > 0) print_centered(str("WAVE %d", wave + 1), SCREEN_W/2, 96, CLR_LIGHT_YELLOW);
     if (gameover) {
         int w = 200, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 82, w, 32, CLR_DARK_PURPLE);
         rect(bx, 82, w, 32, CLR_WHITE);
-        print_centered("GAME OVER", 90, CLR_RED);
-        print_centered(str("score %d  -  press A", score), 102, CLR_YELLOW);
+        print_centered("GAME OVER", SCREEN_W/2, 90, CLR_RED);
+        print_centered(str("score %d  -  press A", score), SCREEN_W/2, 102, CLR_YELLOW);
     }
 }

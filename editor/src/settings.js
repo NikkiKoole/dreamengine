@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, showProfiler: false }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, showProfiler: false, welcomeCart: 'zoo' }
 
 function load() {
   return {
@@ -11,6 +11,7 @@ function load() {
     cellH:         parseInt(localStorage.getItem('cellH')   || DEFAULTS.cellH),
     touchControls: localStorage.getItem('touchControls') === '1',
     showProfiler:  localStorage.getItem('showProfiler') === '1',
+    welcomeCart:   localStorage.getItem('welcomeCart') || 'zoo',
   }
 }
 
@@ -88,6 +89,19 @@ export function buildSettingsPanel(el) {
   touchSection.appendChild(note('floating stick on the left, A/B on the right. carts can override with touch_controls(true/false).'))
   el.appendChild(touchSection)
 
+  // ── startup ──────────────────────────────────────────────────
+  const startupSection = section('startup')
+  startupSection.appendChild(select(
+    'welcome cart',
+    [
+      { value: 'zoo',   label: 'pixel zoo (default)' },
+      { value: 'empty', label: 'empty template' },
+    ],
+    settings.welcomeCart,
+    v => { settings.welcomeCart = v; save('welcomeCart', v) },
+  ))
+  el.appendChild(startupSection)
+
   // ── profiler (advanced) ───────────────────────────────────────
   const profSection = section('profiler')
   profSection.appendChild(checkbox(
@@ -142,6 +156,25 @@ function checkbox(label, value, onChange) {
   const span = document.createElement('span')
   span.textContent = label
   wrap.appendChild(span)
+  return wrap
+}
+
+function select(label, options, value, onChange) {
+  const wrap = document.createElement('label')
+  wrap.className = 'settings-field'
+  const sel = document.createElement('select')
+  options.forEach(({ value: v, label: l }) => {
+    const opt = document.createElement('option')
+    opt.value = v
+    opt.textContent = l
+    if (v === value) opt.selected = true
+    sel.appendChild(opt)
+  })
+  sel.addEventListener('change', e => onChange(e.target.value))
+  const span = document.createElement('span')
+  span.textContent = label
+  wrap.appendChild(span)
+  wrap.appendChild(sel)
   return wrap
 }
 

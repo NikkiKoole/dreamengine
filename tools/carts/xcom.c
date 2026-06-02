@@ -656,7 +656,7 @@ static void draw_battle(void){
     // enemy-turn banner
     if(phase==PH_ENEMY){
         rectfill(0,2,SCREEN_W,12,CLR_DARK_RED);
-        print_centered(blink(14)?"ENEMY TURN":"...", 4, CLR_LIGHT_PEACH);
+        print_centered(blink(14)?"ENEMY TURN":"...", SCREEN_W/2, 4, CLR_LIGHT_PEACH);
     }
 
     // ── HUD ──
@@ -698,7 +698,7 @@ static void draw_battle(void){
 static void draw_barracks(void){
     cls(CLR_DARKER_BLUE);
     print_scaled("XCOM", (SCREEN_W-text_width("XCOM")*2)/2, 6, CLR_GREEN, 2);
-    print_centered(str("ENEMY UNKNOWN   -   mission %d", sav.missions+1), 24, CLR_LIGHT_GREY);
+    print_centered(str("ENEMY UNKNOWN   -   mission %d", sav.missions+1), SCREEN_W/2, 24, CLR_LIGHT_GREY);
     for(int i=0;i<SQUAD;i++){
         int y=40+i*26;
         rectfill(16,y,250,24, (ren==i)?CLR_DARKER_PURPLE:CLR_DARKER_GREY);
@@ -716,10 +716,10 @@ static void draw_barracks(void){
             print(str("AIM %d", aim_for(r)), 200, y+13, CLR_ORANGE);
         }
     }
-    print_centered("click a soldier to rename", 152, CLR_DARK_GREY);
+    print_centered("click a soldier to rename", SCREEN_W/2, 152, CLR_DARK_GREY);
     rectfill(SCREEN_W/2-50,168,100,22,CLR_DARK_GREEN); rect(SCREEN_W/2-50,168,100,22,CLR_WHITE);
-    print_centered("DEPLOY", 174, CLR_WHITE);
-    print_centered("permadeath - keep them alive", 192, CLR_DARK_GREY);
+    print_centered("DEPLOY", SCREEN_W/2, 174, CLR_WHITE);
+    print_centered("permadeath - keep them alive", SCREEN_W/2, 192, CLR_DARK_GREY);
 }
 
 static void draw_debrief(void){
@@ -741,7 +741,7 @@ static void draw_debrief(void){
         }
     }
     rectfill(SCREEN_W/2-50,168,100,22,CLR_DARK_BLUE); rect(SCREEN_W/2-50,168,100,22,CLR_WHITE);
-    print_centered("CONTINUE", 174, CLR_WHITE);
+    print_centered("CONTINUE", SCREEN_W/2, 174, CLR_WHITE);
 }
 
 void draw(void){

@@ -373,7 +373,7 @@ static void draw_market(void) {
 static void draw_hud(void) {
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("$%d", (int)showCash), 4, 2, CLR_YELLOW);
-    print_centered(str("%s  DAY %d/30", PLACE[here], day), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("%s  DAY %d/30", PLACE[here], day), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     if (debt > 0) print_right(str("DEBT $%d", debt), 316, 2, blink(24) && debt > cash + bank ? CLR_WHITE : CLR_RED);
     else          print_right("DEBT CLEAR", 316, 2, CLR_GREEN);
 }
@@ -411,8 +411,8 @@ static void draw_map_screen(void) {
     static const int NX[NPLACE] = { 160, 55, 265, 80, 160, 255 };
     static const int NY[NPLACE] = { 55, 95, 75, 150, 125, 160 };
     cls(CLR_DARKER_BLUE);
-    print_centered("CITY MAP", 18, CLR_LIGHT_YELLOW);
-    print_centered("click a district  -  travel costs 1 day", 28, CLR_DARK_GREY);
+    print_centered("CITY MAP", SCREEN_W/2, 18, CLR_LIGHT_YELLOW);
+    print_centered("click a district  -  travel costs 1 day", SCREEN_W/2, 28, CLR_DARK_GREY);
 
     for (int i = 0; i < NPLACE; i++)                         // roads
         for (int j = i + 1; j < NPLACE; j++)
@@ -452,10 +452,10 @@ static void draw_event_card(void) {
         case EV_COAT:  title = "NEW COAT";   b1 = "You find a roomy trenchcoat."; b2 = "+30 carry space."; break;
         case EV_SHARK: title = "LOAN SHARK"; b1 = "The shark's goons find you."; b2 = str("Debt +$%d.", ev_amt); break;
     }
-    print_centered(title, y + 8, ev_bad ? CLR_RED : CLR_LIGHT_YELLOW);
-    print_centered(b1, y + 30, CLR_WHITE);
-    print_centered(b2, y + 44, CLR_LIGHT_GREY);
-    if (ev_t > 0.5f && blink(20)) print_centered("press Z", y + 62, CLR_DARK_GREY);
+    print_centered(title, SCREEN_W/2, y + 8, ev_bad ? CLR_RED : CLR_LIGHT_YELLOW);
+    print_centered(b1, SCREEN_W/2, y + 30, CLR_WHITE);
+    print_centered(b2, SCREEN_W/2, y + 44, CLR_LIGHT_GREY);
+    if (ev_t > 0.5f && blink(20)) print_centered("press Z", SCREEN_W/2, y + 62, CLR_DARK_GREY);
 }
 
 static void draw_over(void) {
@@ -464,22 +464,22 @@ static void draw_over(void) {
     if (!over_saved) { if (net > best) { best = net; save(0, best); } over_saved = 1; }
     rectfill(50, 50, 220, 100, CLR_BLACK);
     rect(50, 50, 220, 100, CLR_LIGHT_YELLOW);
-    print_centered("-- 30 DAYS UP --", 60, CLR_LIGHT_YELLOW);
-    print_centered(str("cash $%d   bank $%d", cash, bank), 78, CLR_GREEN);
-    print_centered(str("debt -$%d", debt), 90, CLR_RED);
-    print_centered(str("NET WORTH  $%d", net), 108, net >= 0 ? CLR_YELLOW : CLR_RED);
-    print_centered(str("best $%d", best), 122, CLR_LIGHT_GREY);
-    print_centered("press Z to play again", 138, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered("-- 30 DAYS UP --", SCREEN_W/2, 60, CLR_LIGHT_YELLOW);
+    print_centered(str("cash $%d   bank $%d", cash, bank), SCREEN_W/2, 78, CLR_GREEN);
+    print_centered(str("debt -$%d", debt), SCREEN_W/2, 90, CLR_RED);
+    print_centered(str("NET WORTH  $%d", net), SCREEN_W/2, 108, net >= 0 ? CLR_YELLOW : CLR_RED);
+    print_centered(str("best $%d", best), SCREEN_W/2, 122, CLR_LIGHT_GREY);
+    print_centered("press Z to play again", SCREEN_W/2, 138, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_title(void) {
     cls(CLR_BROWNISH_BLACK);
     for (int i = 0; i < 40; i++) pset((i * 73) % SCREEN_W, (i * 91) % SCREEN_H, CLR_DARKER_GREY);
     print_scaled("DRUGLORD", (SCREEN_W - text_width("DRUGLORD") * 3) / 2, 44, CLR_GREEN, 3);
-    print_centered("30 days. one debt. get rich.", 86, CLR_LIGHT_GREY);
-    print_centered("buy low, sell high, dodge the cops", 100, CLR_DARK_GREY);
-    print_centered(str("best net worth: $%d", best), 124, CLR_YELLOW);
-    print_centered("press Z / click to deal", 150, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered("30 days. one debt. get rich.", SCREEN_W/2, 86, CLR_LIGHT_GREY);
+    print_centered("buy low, sell high, dodge the cops", SCREEN_W/2, 100, CLR_DARK_GREY);
+    print_centered(str("best net worth: $%d", best), SCREEN_W/2, 124, CLR_YELLOW);
+    print_centered("press Z / click to deal", SCREEN_W/2, 150, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_flash(void) {

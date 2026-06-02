@@ -304,6 +304,6 @@ void draw(void) {
         int bx = (SCREEN_W - w) / 2, by = ORIGIN_Y + (GH * CS) / 2 - 7;
         rectfill(bx, by, w, 14, won ? CLR_DARK_GREEN : CLR_DARK_RED);
         rect(bx, by, w, 14, CLR_WHITE);
-        print_centered(msg, by + 4, CLR_WHITE);
+        print_centered(msg, SCREEN_W/2, by + 4, CLR_WHITE);
     }
 }

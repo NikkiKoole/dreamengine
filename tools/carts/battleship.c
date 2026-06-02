@@ -378,7 +378,7 @@ void draw(void) {
 
     // title bar
     rectfill(0, 0, SCREEN_W, 12, CLR_DARKER_BLUE);
-    print_centered("BATTLESHIP", 3, CLR_LIGHT_PEACH);
+    print_centered("BATTLESHIP", SCREEN_W/2, 3, CLR_LIGHT_PEACH);
     print(str("W:%d", wins), 4, 3, CLR_GREEN);
     print_right(str("L:%d", losses), SCREEN_W - 4, 3, CLR_RED);
 
@@ -435,7 +435,7 @@ void draw(void) {
             print("CLICK READY TO FIGHT", 180, by + 5, CLR_GREEN);
         }
         if (badFlash > 0 && (now() - badFlashT) < 0.25f) {
-            print_centered("CAN'T PLACE THERE", GY + N*CELL + 32, CLR_RED);
+            print_centered("CAN'T PLACE THERE", SCREEN_W/2, GY + N*CELL + 32, CLR_RED);
         } else badFlash = 0;
     }
 
@@ -443,24 +443,23 @@ void draw(void) {
     if (phase == PH_BATTLE) {
         int by = GY + N*CELL + 10;
         if (turn == 1)
-            print_centered("ENEMY IS FIRING...", by + 3, CLR_ORANGE);
+            print_centered("ENEMY IS FIRING...", SCREEN_W/2, by + 3, CLR_ORANGE);
         else
-            print_centered("CLICK AN ENEMY CELL TO FIRE", by + 3, CLR_LIGHT_GREY);
+            print_centered("CLICK AN ENEMY CELL TO FIRE", SCREEN_W/2, by + 3, CLR_LIGHT_GREY);
     }
 
     // --- banner ---
     if (banner[0] && (now() - bannerT) < 2.2f) {
         int w = text_width(banner) + 8;
         rectfill(SCREEN_W/2 - w/2, SCREEN_H - 26, w, 12, CLR_BLACK);
-        print_centered(banner, SCREEN_H - 23, CLR_LIGHT_PEACH);
+        print_centered(banner, SCREEN_W/2, SCREEN_H - 23, CLR_LIGHT_PEACH);
     }
 
     // --- game over ---
     if (phase == PH_OVER) {
         fade(0.55f);
-        print_centered(playerWon ? "VICTORY!" : "DEFEAT",
-                       SCREEN_H/2 - 16, playerWon ? CLR_YELLOW : CLR_RED);
-        print_centered(banner, SCREEN_H/2 - 2, CLR_WHITE);
-        print_centered("CLICK OR Z TO PLAY AGAIN", SCREEN_H/2 + 16, CLR_LIGHT_GREY);
+        print_centered(playerWon ? "VICTORY!" : "DEFEAT", SCREEN_W/2, SCREEN_H/2 - 16, playerWon ? CLR_YELLOW : CLR_RED);
+        print_centered(banner, SCREEN_W/2, SCREEN_H/2 - 2, CLR_WHITE);
+        print_centered("CLICK OR Z TO PLAY AGAIN", SCREEN_W/2, SCREEN_H/2 + 16, CLR_LIGHT_GREY);
     }
 }

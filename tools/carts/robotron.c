@@ -434,7 +434,7 @@ void draw() {
 
     // HUD — rendered inside the border strips
     print(str("SCORE %d", score),   BORDER+2,             3, CLR_WHITE);
-    print_centered(str("WAVE %d", wave),                  3, CLR_WHITE);
+    print_centered(str("WAVE %d", wave), SCREEN_W/2, 3, CLR_WHITE);
     print_right(str("BEST %d", hiscore), SCREEN_W-BORDER-2, 3, CLR_YELLOW);
 
     // lives as mini player icons (bottom-left border)
@@ -451,15 +451,15 @@ void draw() {
     // wave clear flash
     if (wave_clear) {
         rectfill(SCREEN_W/2-56, SCREEN_H/2-12, 112, 22, CLR_BLACK);
-        print_centered("WAVE CLEAR!", SCREEN_H/2-6, CLR_YELLOW);
+        print_centered("WAVE CLEAR!", SCREEN_W/2, SCREEN_H/2-6, CLR_YELLOW);
     }
 
     // game over
     if (gameover) {
         rectfill(SCREEN_W/2-64, SCREEN_H/2-24, 128, 54, CLR_BLACK);
         rect    (SCREEN_W/2-64, SCREEN_H/2-24, 128, 54, CLR_WHITE);
-        print_centered("GAME OVER",            SCREEN_H/2-14, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H/2,    CLR_YELLOW);
-        print_centered("Z to play again",      SCREEN_H/2+14, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H/2-14, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H/2, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H/2+14, CLR_LIGHT_GREY);
     }
 }

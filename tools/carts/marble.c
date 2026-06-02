@@ -395,7 +395,7 @@ void draw(void) {
     for (int i = 0; i < lives; i++) circfill(7 + i * 11, 5, 3, CLR_LIGHT_GREY);
     // timer
     int col = time_left < 10 ? (blink(6) ? CLR_RED : CLR_ORANGE) : CLR_WHITE;
-    print_centered(str("%05.2f", time_left), 2, col);
+    print_centered(str("%05.2f", time_left), SCREEN_W/2, 2, col);
     if (best_time > 0)
         print_right(str("BEST %.1f", best_time / 100.0f), SCREEN_W - 3, 2, CLR_LIGHT_YELLOW);
 
@@ -404,15 +404,15 @@ void draw(void) {
         fade(0.4f);
         rectfill(SCREEN_W/2-70, SCREEN_H/2-26, 140, 52, CLR_BLACK);
         rect    (SCREEN_W/2-70, SCREEN_H/2-26, 140, 52, CLR_YELLOW);
-        print_centered("GOAL!", SCREEN_H/2-18, CLR_YELLOW);
-        print_centered(str("TIME LEFT %.2f", time_left), SCREEN_H/2-4, CLR_WHITE);
-        print_centered("Z to play again", SCREEN_H/2+12, CLR_LIGHT_GREY);
+        print_centered("GOAL!", SCREEN_W/2, SCREEN_H/2-18, CLR_YELLOW);
+        print_centered(str("TIME LEFT %.2f", time_left), SCREEN_W/2, SCREEN_H/2-4, CLR_WHITE);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H/2+12, CLR_LIGHT_GREY);
     } else if (gstate == ST_OVER) {
         fade(0.5f);
         rectfill(SCREEN_W/2-70, SCREEN_H/2-26, 140, 52, CLR_BLACK);
         rect    (SCREEN_W/2-70, SCREEN_H/2-26, 140, 52, CLR_RED);
-        print_centered(time_left <= 0 ? "TIME UP" : "GAME OVER", SCREEN_H/2-18, CLR_RED);
-        print_centered("the marble is lost", SCREEN_H/2-4, CLR_LIGHT_GREY);
-        print_centered("Z to try again", SCREEN_H/2+12, CLR_WHITE);
+        print_centered(time_left <= 0 ? "TIME UP" : "GAME OVER", SCREEN_W/2, SCREEN_H/2-18, CLR_RED);
+        print_centered("the marble is lost", SCREEN_W/2, SCREEN_H/2-4, CLR_LIGHT_GREY);
+        print_centered("Z to try again", SCREEN_W/2, SCREEN_H/2+12, CLR_WHITE);
     }
 }

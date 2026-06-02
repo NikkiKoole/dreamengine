@@ -86,7 +86,7 @@ static unsigned char rot[NB][NF];     // 0..15 per cell
 static int   view;                    // ANIM / RIG
 static int   selBone, selFrame;       // the cell marker (ANIM)
 static int   selPart;                 // selected length row (RIG)
-static int   playFrame, fps = 8, loopLen = NF;
+static int   playFrame, anim_fps = 8, loopLen = NF;
 static bool  playing;
 static float playAcc;
 static float saveMsg; static const char *saveTxt = "";
@@ -145,7 +145,7 @@ static void copy_prev(void) {
 typedef struct { int magic, fps, loopLen; unsigned char rot[NB][NF]; int partLen[NPARTS], partWid[NPARTS]; } Anim;
 #define MAGIC 0x424F4E34  // "BON4"
 static void save_anim(void) {
-    Anim a = { MAGIC, fps, loopLen };
+    Anim a = { MAGIC, anim_fps, loopLen };
     for (int b = 0; b < NB; b++) for (int f = 0; f < NF; f++) a.rot[b][f] = rot[b][f];
     for (int p = 0; p < NPARTS; p++) { a.partLen[p] = partLen[p]; a.partWid[p] = partWid[p]; }
     save_bytes(&a, sizeof a);
@@ -155,7 +155,7 @@ static void save_anim(void) {
 static bool load_anim(void) {
     Anim a;
     if (load_bytes(&a, sizeof a) != (int)sizeof a || a.magic != MAGIC) return false;
-    fps = mid(1, a.fps, 30);
+    anim_fps = mid(1, a.fps, 30);
     loopLen = mid(2, a.loopLen, NF);
     for (int b = 0; b < NB; b++) for (int f = 0; f < NF; f++) rot[b][f] = a.rot[b][f] & 15;
     for (int p = 0; p < NPARTS; p++) { partLen[p] = mid(2, a.partLen[p], 40); partWid[p] = mid(1, a.partWid[p], 9) | 1; }  // |1 keeps width odd (centered)
@@ -186,7 +186,7 @@ void update(void) {
     // ── global: playback clock + view + save ──
     if (playing) {
         playAcc += dt();
-        float spf = 1.0f / fps;
+        float spf = 1.0f / anim_fps;
         while (playAcc >= spf) { playAcc -= spf; playFrame = (playFrame + 1) % loopLen; }
     } else playAcc = 0;
 
@@ -207,8 +207,8 @@ void update(void) {
         if (keyp('X') || keyp('.')) rot[selBone][selFrame] = mod16(rot[selBone][selFrame] + 1);
         if (keyp('Z') || keyp(',')) rot[selBone][selFrame] = mod16(rot[selBone][selFrame] - 1);
         if (keyp('C')) copy_prev();
-        if (keyp('[')) fps = max(1, fps - 1);
-        if (keyp(']')) fps = min(30, fps + 1);
+        if (keyp('[')) anim_fps = max(1, anim_fps - 1);
+        if (keyp(']')) anim_fps = min(30, anim_fps + 1);
         if (keyp('-')) loopLen = max(2, loopLen - 1);
         if (keyp('=')) loopLen = min(NF, loopLen + 1);
 
@@ -250,19 +250,6 @@ void update(void) {
     if (saveMsg > 0) saveMsg -= dt();
 }
 
-// a thick line = a filled quad along the segment + rounded caps. Solid with no
-// gaps even on diagonals (parallel 1px strokes leave a checkerboard there), and
-// the round caps also close the notch where two bones bend at a joint.
-static void thickline(int x1, int y1, int x2, int y2, int wdt, int col) {
-    if (wdt <= 1) { line(x1, y1, x2, y2, col); return; }
-    float perp = angle_to(x1, y1, x2, y2) + 90.0f;
-    int half = wdt / 2;
-    int ox = iround(dx((float)half, perp)), oy = iround(dy((float)half, perp));
-    trifill(x1 - ox, y1 - oy, x1 + ox, y1 + oy, x2 - ox, y2 - oy, col);   // two tris = the band
-    trifill(x1 + ox, y1 + oy, x2 - ox, y2 - oy, x2 + ox, y2 + oy, col);
-    circfill(x1, y1, half, col);                                          // rounded caps / joints
-    circfill(x2, y2, half, col);
-}
 
 // ── shared figure preview ──
 static void draw_preview(void) {
@@ -354,7 +341,7 @@ void draw(void) {
     print("BONES", 4, 2, CLR_LIGHT_PEACH);
     print(" ANIM ", 56,  2, view == ANIM ? CLR_YELLOW : CLR_DARK_GREY);
     print(" RIG ",  104, 2, view == RIG  ? CLR_YELLOW : CLR_DARK_GREY);
-    print_right(str("FRAME %d/%d   %d FPS   %s", curFrame + 1, loopLen, fps, playing ? "\x10PLAY" : "STOP"),
+    print_right(str("FRAME %d/%d   %d FPS   %s", curFrame + 1, loopLen, anim_fps, playing ? "\x10PLAY" : "STOP"),
                 SCREEN_W - 4, 2, playing ? CLR_GREEN : CLR_LIGHT_GREY);
 
     if (view == ANIM) draw_grid(curFrame);

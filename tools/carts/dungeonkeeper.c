@@ -883,8 +883,8 @@ void draw(void) {
     if (over) {
         rectfill(SCREEN_W / 2 - 84, SCREEN_H / 2 - 26, 168, 52, CLR_BLACK);
         rect(SCREEN_W / 2 - 84, SCREEN_H / 2 - 26, 168, 52, over == 1 ? CLR_LIME_GREEN : CLR_RED);
-        print_centered(over == 1 ? "THE LAND IS YOURS" : "THE HEART IS BROKEN", SCREEN_H / 2 - 16, over == 1 ? CLR_LIME_GREEN : CLR_RED);
-        print_centered(over == 1 ? "all 5 waves repelled" : "the heroes have won", SCREEN_H / 2 - 3, CLR_YELLOW);
-        print_centered("click for a new dungeon", SCREEN_H / 2 + 11, CLR_LIGHT_GREY);
+        print_centered(over == 1 ? "THE LAND IS YOURS" : "THE HEART IS BROKEN", SCREEN_W/2, SCREEN_H / 2 - 16, over == 1 ? CLR_LIME_GREEN : CLR_RED);
+        print_centered(over == 1 ? "all 5 waves repelled" : "the heroes have won", SCREEN_W/2, SCREEN_H / 2 - 3, CLR_YELLOW);
+        print_centered("click for a new dungeon", SCREEN_W/2, SCREEN_H / 2 + 11, CLR_LIGHT_GREY);
     }
 }

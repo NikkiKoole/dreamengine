@@ -608,9 +608,9 @@ void draw(void) {
 
     // overlays
     if (tilted)
-        print_centered("T I L T", SCREEN_H / 2 - 4, blink(4) ? CLR_RED : CLR_DARK_RED);
+        print_centered("T I L T", SCREEN_W/2, SCREEN_H / 2 - 4, blink(4) ? CLR_RED : CLR_DARK_RED);
     if (multiballFlash > 0)
-        print_centered("MULTIBALL!", 60, blink(4) ? CLR_YELLOW : CLR_ORANGE);
+        print_centered("MULTIBALL!", SCREEN_W/2, 60, blink(4) ? CLR_YELLOW : CLR_ORANGE);
     if (drainFlash > 0) {
         rect(0, 0, SCREEN_W, SCREEN_H, CLR_RED);
         rect(1, 1, SCREEN_W - 2, SCREEN_H - 2, CLR_DARK_RED);
@@ -621,16 +621,16 @@ void draw(void) {
         rect(24, 120, 192, 90, CLR_YELLOW);
         int w = text_width("PINBALL") * 3;
         print_scaled("PINBALL", (SCREEN_W - w) / 2, 134, CLR_WHITE, 3);
-        print_centered("a hand-built table", 166, CLR_LIGHT_GREY);
-        if (blink(20)) print_centered("SPACE  TO  PLAY", 188, CLR_GREEN);
+        print_centered("a hand-built table", SCREEN_W/2, 166, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("SPACE  TO  PLAY", SCREEN_W/2, 188, CLR_GREEN);
     }
     if (gstate == 3) {  // game over
         rectfill(24, 120, 192, 90, CLR_DARK_BLUE);
         rect(24, 120, 192, 90, CLR_RED);
         int w = text_width("GAME OVER") * 2;
         print_scaled("GAME OVER", (SCREEN_W - w) / 2, 132, CLR_RED, 2);
-        print_centered(str("SCORE  %d", score), 158, CLR_YELLOW);
-        print_centered(str("BEST   %d", hiscore), 170, CLR_LIGHT_GREY);
-        if (blink(20)) print_centered("SPACE  TO  RETRY", 190, CLR_GREEN);
+        print_centered(str("SCORE  %d", score), SCREEN_W/2, 158, CLR_YELLOW);
+        print_centered(str("BEST   %d", hiscore), SCREEN_W/2, 170, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("SPACE  TO  RETRY", SCREEN_W/2, 190, CLR_GREEN);
     }
 }

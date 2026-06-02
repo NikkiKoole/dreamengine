@@ -522,7 +522,7 @@ void draw(void) {
     int rank = 1;
     for (int i = 0; i < NCPU; i++)
         if (cpu[i].lapn * TRACK_LEN + cpu[i].z > pprog) rank++;
-    print_centered(str("%d/%d", rank, NCPU + 1), 4, CLR_WHITE);
+    print_centered(str("%d/%d", rank, NCPU + 1), SCREEN_W/2, 4, CLR_WHITE);
     print_right(str("LAP %d/%d", lap, LAPS), SCREEN_W - 4, 4, CLR_LIGHT_GREY);
 
     // heat gauge — glows + pulses red near the blowout
@@ -537,17 +537,17 @@ void draw(void) {
     if (last_lap > 0) print_right(str("LAST %.1fs", last_lap), SCREEN_W - 4, SCREEN_H - 11, CLR_LIGHT_GREY);
 
     if (stalled) {
-        print_centered("!! OVERHEAT !!", HORIZON - 24, blink(3) ? CLR_RED : CLR_YELLOW);
-        print_centered("venting...", HORIZON - 12, CLR_LIGHT_GREY);
+        print_centered("!! OVERHEAT !!", SCREEN_W/2, HORIZON - 24, blink(3) ? CLR_RED : CLR_YELLOW);
+        print_centered("venting...", SCREEN_W/2, HORIZON - 12, CLR_LIGHT_GREY);
     }
 
     if (finished) {
         rectfill(70, 70, 180, 56, CLR_BLACK);
         rect(70, 70, 180, 56, CLR_YELLOW);
-        print_centered("RACE COMPLETE", 80, CLR_YELLOW);
-        print_centered(str("finished %d / %d", rank, NCPU + 1), 94, CLR_WHITE);
-        print_centered(str("best lap %.1fs", best_lap), 106, CLR_LIME_GREEN);
-        print_centered("A to race again", 118, CLR_LIGHT_GREY);
+        print_centered("RACE COMPLETE", SCREEN_W/2, 80, CLR_YELLOW);
+        print_centered(str("finished %d / %d", rank, NCPU + 1), SCREEN_W/2, 94, CLR_WHITE);
+        print_centered(str("best lap %.1fs", best_lap), SCREEN_W/2, 106, CLR_LIME_GREEN);
+        print_centered("A to race again", SCREEN_W/2, 118, CLR_LIGHT_GREY);
     }
 
     // perf read-out while tuning the software-trifill haze cost (F1 toggles the

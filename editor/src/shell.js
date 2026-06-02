@@ -1111,14 +1111,26 @@ if (window.studio?.onLog) {
 }
 
 // ── welcome cart ──────────────────────────────────────────────
-// On startup, greet with the pixel-zoo cart — loaded exactly like the Load Cart
-// button, so the cart PNG (editor/public/carts/zoo.cart.png) is the single source
-// of truth for its code + sprites + settings. Electron-only: a browser tab can't
-// parse or run carts anyway, so it just starts on the empty startDoc.
-if (window.studio) {
-  window.addEventListener('load', () => {
+// On startup, load the configured welcome cart (settings tab → startup).
+// Works in both Electron and the browser — loadCartFromUrl has a browser-side
+// fallback for parsing carts; only ▶ run requires Electron.
+const EMPTY_TEMPLATE =
+`// dreamengine — write c, make things!
+
+#include "studio.h"
+
+void draw() {
+    cls(CLR_DARK_BLUE);
+    print("hello!", 10, 10, CLR_PEACH);
+}
+`
+
+window.addEventListener('load', () => {
+  if (settings.welcomeCart === 'empty') {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: EMPTY_TEMPLATE } })
+  } else {
     currentCartName = 'pixel zoo'
     loadCartFromUrl('/carts/zoo.cart.png').catch(() => {})
-  })
-}
+  }
+})
 

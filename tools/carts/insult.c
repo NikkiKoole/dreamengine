@@ -58,13 +58,13 @@ void update(void) {
 
 void draw(void) {
     cls(CLR_DARKER_PURPLE);
-    print_centered("SHAKESPEAREAN INSULT KIT", 8, CLR_LIGHT_GREY);
+    print_centered("SHAKESPEAREAN INSULT KIT", SCREEN_W/2, 8, CLR_LIGHT_GREY);
 
-    print_centered("Thou", 44, CLR_MAUVE);
-    print_centered(C1[i1], 64, CLR_LIGHT_YELLOW);
-    print_centered(C2[i2], 82, CLR_ORANGE);
-    print_centered(str("%s!", C3[i3]), 100, CLR_PINK);
+    print_centered("Thou", SCREEN_W/2, 44, CLR_MAUVE);
+    print_centered(C1[i1], SCREEN_W/2, 64, CLR_LIGHT_YELLOW);
+    print_centered(C2[i2], SCREEN_W/2, 82, CLR_ORANGE);
+    print_centered(str("%s!", C3[i3]), SCREEN_W/2, 100, CLR_PINK);
 
-    print_centered(str("1 of %d insults", N1 * N2 * N3), 130, CLR_DARK_GREY);
-    print_centered("Z: hurl another", SCREEN_H - 11, CLR_LIGHT_GREY);
+    print_centered(str("1 of %d insults", N1 * N2 * N3), SCREEN_W/2, 130, CLR_DARK_GREY);
+    print_centered("Z: hurl another", SCREEN_W/2, SCREEN_H - 11, CLR_LIGHT_GREY);
 }

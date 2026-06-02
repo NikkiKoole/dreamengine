@@ -216,13 +216,13 @@ void draw() {
             if ((PIECE[nxt][0] >> (rr * 4 + cc)) & 1)
                 block(224 + cc * CELL, 44 + rr * CELL, PCOL[nxt]);
 
-    print_centered("TETRIS", 4, CLR_GREEN);
+    print_centered("TETRIS", SCREEN_W/2, 4, CLR_GREEN);
 
     if (state == 1) {
         rectfill(BX - 4, SCREEN_H / 2 - 24, BW * CELL + 8, 50, CLR_BLACK);
         rect    (BX - 4, SCREEN_H / 2 - 24, BW * CELL + 8, 50, CLR_RED);
-        print_centered("GAME OVER",            SCREEN_H / 2 - 14, CLR_RED);
-        print_centered(str("%d", score),       SCREEN_H / 2 - 1,  CLR_YELLOW);
-        print_centered("Z to restart",         SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_RED);
+        print_centered(str("%d", score), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_YELLOW);
+        print_centered("Z to restart", SCREEN_W/2, SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
     }
 }

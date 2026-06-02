@@ -268,8 +268,8 @@ void draw() {
     if (gameover) {
         rectfill(SCREEN_W/2-68, SCREEN_H/2-22, 136, 52, CLR_BLACK);
         rect    (SCREEN_W/2-68, SCREEN_H/2-22, 136, 52, CLR_RED);
-        print_centered("GUN CAPTURED!",      SCREEN_H/2-12, CLR_RED);
-        print_centered(str("SCORE %d",score), SCREEN_H/2+2,  CLR_YELLOW);
-        print_centered("Z to play again",    SCREEN_H/2+14, CLR_LIGHT_GREY);
+        print_centered("GUN CAPTURED!", SCREEN_W/2, SCREEN_H/2-12, CLR_RED);
+        print_centered(str("SCORE %d",score), SCREEN_W/2, SCREEN_H/2+2, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H/2+14, CLR_LIGHT_GREY);
     }
 }

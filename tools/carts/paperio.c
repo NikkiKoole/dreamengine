@@ -262,10 +262,10 @@ void draw() {
     if (state == 1) {
         rectfill(SCREEN_W / 2 - 72, SCREEN_H / 2 - 28, 144, 58, CLR_BLACK);
         rect    (SCREEN_W / 2 - 72, SCREEN_H / 2 - 28, 144, 58, CLR_WHITE);
-        if (winner == 0)        print_centered("YOU WIN!",   SCREEN_H / 2 - 18, CLR_GREEN);
-        else if (winner > 0)    print_centered("A RIVAL WON", SCREEN_H / 2 - 18, CLR_RED);
-        else                    print_centered("YOU CRASHED", SCREEN_H / 2 - 18, CLR_RED);
-        print_centered(str("you claimed %d%%", pct), SCREEN_H / 2 - 2, CLR_YELLOW);
-        print_centered("Z to play again", SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
+        if (winner == 0)        print_centered("YOU WIN!", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_GREEN);
+        else if (winner > 0)    print_centered("A RIVAL WON", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_RED);
+        else                    print_centered("YOU CRASHED", SCREEN_W/2, SCREEN_H / 2 - 18, CLR_RED);
+        print_centered(str("you claimed %d%%", pct), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
     }
 }

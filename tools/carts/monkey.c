@@ -563,7 +563,7 @@ static void draw_duel(void) {
     // scoreboard
     print("YOU", 60, 8, CLR_LIGHT_YELLOW); draw_pips(60, 18, you_score, CLR_GREEN);
     print_right("MASTER", SCREEN_W - 56, 8, CLR_LIGHT_YELLOW); draw_pips(SCREEN_W - 56, 18, foe_score, CLR_RED);
-    print_centered("INSULT SWORD-FIGHTING", 30, CLR_INDIGO);
+    print_centered("INSULT SWORD-FIGHTING", SCREEN_W/2, 30, CLR_INDIGO);
 
     // who's speaking
     bool foe_speaks = (duel_turn == 0);
@@ -578,7 +578,7 @@ static void draw_duel(void) {
 
     if (!resolving) {
         if (foe_speaks) {
-            print_centered("Pick the comeback that ANSWERS her:", 64, CLR_LIGHT_PEACH);
+            print_centered("Pick the comeback that ANSWERS her:", SCREEN_W/2, 64, CLR_LIGHT_PEACH);
             int top = 118;
             int mx = mouse_x(), my = mouse_y();
             for (int i = 0; i < HAND; i++) {
@@ -590,7 +590,7 @@ static void draw_duel(void) {
                 print(PAIRS[hand[i]].retort, 28, ly + 3, hot ? CLR_WHITE : CLR_LIGHT_GREY);
             }
         } else {
-            print_centered("Press the attack! Hurl your insult:", 64, CLR_LIGHT_PEACH);
+            print_centered("Press the attack! Hurl your insult:", SCREEN_W/2, 64, CLR_LIGHT_PEACH);
             int top = 118;
             int mx = mouse_x(), my = mouse_y();
             for (int i = 0; i < HAND; i++) {
@@ -608,15 +608,15 @@ static void draw_duel(void) {
         rectfill(8, 118, SCREEN_W - 16, 13, CLR_DARK_BLUE);
         print(picked, 12, 121, CLR_WHITE);
         if (last_result > 0) {
-            print_centered("PARRIED! You press the attack.", 140, CLR_GREEN);
+            print_centered("PARRIED! You press the attack.", SCREEN_W/2, 140, CLR_GREEN);
             if (blink(4)) circ((int)74 + 14, 100, 6, CLR_LIGHT_YELLOW);
         } else {
             fade(clamp(0.4f - turn_t * 0.5f, 0, 0.4f));
-            print_centered("You falter... a hit lands!", 140, CLR_RED);
+            print_centered("You falter... a hit lands!", SCREEN_W/2, 140, CLR_RED);
         }
     }
 
-    print_centered("click a line  -  or press its number", SCREEN_H - 9, CLR_DARK_GREY);
+    print_centered("click a line  -  or press its number", SCREEN_W/2, SCREEN_H - 9, CLR_DARK_GREY);
 }
 
 // ── drawing: end card ────────────────────────────────────────────────────
@@ -627,14 +627,14 @@ static void draw_over(void) {
     rectfill(bx, by, w, h, CLR_DARK_BLUE);
     rect(bx, by, w, h, CLR_LIGHT_YELLOW); rect(bx + 2, by + 2, w - 4, h - 4, CLR_INDIGO);
     if (player_won) {
-        print_centered("YOU WIN THE DUEL!", by + 10, CLR_LIME_GREEN);
-        print_centered("\"You fight like a dairy farmer...\"", by + 26, CLR_LIGHT_PEACH);
-        print_centered("\"...but you won. You ARE a pirate.\"", by + 38, CLR_LIGHT_PEACH);
+        print_centered("YOU WIN THE DUEL!", SCREEN_W/2, by + 10, CLR_LIME_GREEN);
+        print_centered("\"You fight like a dairy farmer...\"", SCREEN_W/2, by + 26, CLR_LIGHT_PEACH);
+        print_centered("\"...but you won. You ARE a pirate.\"", SCREEN_W/2, by + 38, CLR_LIGHT_PEACH);
     } else {
-        print_centered("YOU LOSE THE DUEL.", by + 10, CLR_RED);
-        print_centered("\"Go home, swab. Practice your wit.\"", by + 28, CLR_LIGHT_PEACH);
+        print_centered("YOU LOSE THE DUEL.", SCREEN_W/2, by + 10, CLR_RED);
+        print_centered("\"Go home, swab. Practice your wit.\"", SCREEN_W/2, by + 28, CLR_LIGHT_PEACH);
     }
-    if (blink(18)) print_centered("- click to duel again -", by + h - 12, CLR_LIGHT_GREY);
+    if (blink(18)) print_centered("- click to duel again -", SCREEN_W/2, by + h - 12, CLR_LIGHT_GREY);
 }
 
 // ── top-level draw ───────────────────────────────────────────────────────

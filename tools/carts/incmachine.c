@@ -534,17 +534,17 @@ void draw(void) {
 
     // overlays
     if (gstate == 2)
-        print_centered("IN THE BUCKET!", SCREEN_H / 2 - 4, blink(4) ? CLR_YELLOW : CLR_GREEN);
+        print_centered("IN THE BUCKET!", SCREEN_W/2, SCREEN_H / 2 - 4, blink(4) ? CLR_YELLOW : CLR_GREEN);
 
     if (gstate == 3) {
         fade(0.5f);
         rectfill(60, 70, 200, 70, CLR_DARK_BLUE);
         rect(60, 70, 200, 70, CLR_YELLOW);
-        print_centered("MACHINE COMPLETE!", 84, CLR_WHITE);
-        print_centered("both contraptions solved", 100, CLR_LIGHT_GREY);
-        if (blink(20)) print_centered("R  TO  PLAY  AGAIN", 118, CLR_GREEN);
+        print_centered("MACHINE COMPLETE!", SCREEN_W/2, 84, CLR_WHITE);
+        print_centered("both contraptions solved", SCREEN_W/2, 100, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("R  TO  PLAY  AGAIN", SCREEN_W/2, 118, CLR_GREEN);
     }
 
     if (gstate == 0 && nplaced == 0)
-        print_centered("drag parts in, then press R to run", SCREEN_H - 12, CLR_DARK_GREY);
+        print_centered("drag parts in, then press R to run", SCREEN_W/2, SCREEN_H - 12, CLR_DARK_GREY);
 }

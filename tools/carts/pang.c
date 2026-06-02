@@ -176,22 +176,22 @@ void draw() {
     // HUD
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
     print_right(str("BEST %d", hiscore), SCREEN_W - 4, 3, CLR_YELLOW);
-    print_centered(str("LVL %d", level), 3, CLR_LIGHT_GREY);
+    print_centered(str("LVL %d", level), SCREEN_W/2, 3, CLR_LIGHT_GREY);
     for (int i = 0; i < lives; i++) circfill(60 + i * 9, 7, 3, CLR_RED);
 
-    if (now() < msg_until) print_centered(str("LEVEL %d", level), SCREEN_H / 2 - 20, CLR_LIGHT_YELLOW);
+    if (now() < msg_until) print_centered(str("LEVEL %d", level), SCREEN_W/2, SCREEN_H / 2 - 20, CLR_LIGHT_YELLOW);
 
     if (state == 1) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 24, 128, 50, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 24, 128, 50, CLR_RED);
-        print_centered("GAME OVER",            SCREEN_H / 2 - 14, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 - 1,  CLR_YELLOW);
-        print_centered("Z to play again",      SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 14, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 1, CLR_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 13, CLR_LIGHT_GREY);
     }
     if (state == 2) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 38, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 38, CLR_GREEN);
-        print_centered("CLEAR!",            SCREEN_H / 2 - 9, CLR_GREEN);
-        print_centered("Z for next level",  SCREEN_H / 2 + 5, CLR_LIGHT_GREY);
+        print_centered("CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 9, CLR_GREEN);
+        print_centered("Z for next level", SCREEN_W/2, SCREEN_H / 2 + 5, CLR_LIGHT_GREY);
     }
 }

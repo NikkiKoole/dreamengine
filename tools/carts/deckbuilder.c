@@ -385,7 +385,7 @@ static void draw_enemy(void) {
     // enemy hp bar
     draw_pip_bar(ex - 30, ey + 50, 60, ehp, emaxhp, CLR_RED, "HP");
     if (eblock > 0) draw_shield(ex - 38, ey + 55, eblock, CLR_TRUE_BLUE);
-    print_centered(ename, 8, CLR_LIGHT_PEACH);
+    print_centered(ename, SCREEN_W/2, 8, CLR_LIGHT_PEACH);
 
     // INTENT bubble above the enemy
     int ix = ex, iy = ey - 30;
@@ -455,13 +455,13 @@ static void draw_combat(void) {
         draw_card_face(cx, HAND_Y, hand[i], playable, hover);
     }
 
-    if (!player_turn) print_centered("enemy turn...", 104, CLR_YELLOW);
+    if (!player_turn) print_centered("enemy turn...", SCREEN_W/2, 104, CLR_YELLOW);
 }
 
 static void draw_map(void) {
     cls(CLR_BROWNISH_BLACK);
-    print_centered("THE DUNGEON", 16, CLR_LIGHT_PEACH);
-    print_centered(str("runs cleared: %d", load_int("runsWon", 0)), 28, CLR_DARK_GREY);
+    print_centered("THE DUNGEON", SCREEN_W/2, 16, CLR_LIGHT_PEACH);
+    print_centered(str("runs cleared: %d", load_int("runsWon", 0)), SCREEN_W/2, 28, CLR_DARK_GREY);
 
     const char *labels[3] = { "FIGHT", "FIGHT", "BOSS" };
     // path
@@ -479,13 +479,13 @@ static void draw_map(void) {
         circ(nx, ny, 20, col);
         if (i == 2) print("BOSS", nx - 14, ny - 3, col);
         else print(done ? "DONE" : "FIGHT", nx - (done?12:14), ny - 3, col);
-        if (here) print_centered("click to enter", 140, CLR_WHITE);
+        if (here) print_centered("click to enter", SCREEN_W/2, 140, CLR_WHITE);
     }
 }
 
 static void draw_reward(void) {
     cls(CLR_DARKER_PURPLE);
-    print_centered("VICTORY! pick a card", 24, CLR_YELLOW);
+    print_centered("VICTORY! pick a card", SCREEN_W/2, 24, CLR_YELLOW);
     int mx = mouse_x(), my = mouse_y();
     for (int i = 0; i < 3; i++) {
         int cx = 50 + i * 80, cy = 70;
@@ -506,15 +506,15 @@ void draw(void) {
         case ST_WIN:
             cls(CLR_DARK_GREEN);
             print_scaled("RUN CLEARED", SCREEN_W/2 - 88, 70, CLR_YELLOW, 2);
-            print_centered("the dread knight falls.", 100, CLR_WHITE);
-            print_centered(str("runs cleared: %d", load_int("runsWon", 0)), 120, CLR_LIGHT_PEACH);
-            print_centered("click to start a new run", 150, CLR_LIGHT_GREY);
+            print_centered("the dread knight falls.", SCREEN_W/2, 100, CLR_WHITE);
+            print_centered(str("runs cleared: %d", load_int("runsWon", 0)), SCREEN_W/2, 120, CLR_LIGHT_PEACH);
+            print_centered("click to start a new run", SCREEN_W/2, 150, CLR_LIGHT_GREY);
             break;
         case ST_LOSE:
             cls(CLR_DARK_RED);
             fade(0.2f);
             print_scaled("YOU DIED", SCREEN_W/2 - 64, 80, CLR_WHITE, 2);
-            print_centered("click to try again", 130, CLR_LIGHT_GREY);
+            print_centered("click to try again", SCREEN_W/2, 130, CLR_LIGHT_GREY);
             break;
     }
 }

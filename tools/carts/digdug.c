@@ -558,7 +558,7 @@ void draw() {
     // HUD
     rectfill(0, 0, SCREEN_W, Y0, CLR_BLACK);
     print(str("SCORE %d", score), 3, 2, CLR_WHITE);
-    print_centered(str("DEPTH %d", level), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("DEPTH %d", level), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     print_right(str("HI %d", hiscore), SCREEN_W - 3, 2, CLR_YELLOW);
     for (int i = 0; i < lives; i++) circfill(SCREEN_W - 10 - i * 12, 11, 4, CLR_WHITE);
     print(str("LEFT %d", alive_count), 3, 10, CLR_LIME_GREEN);
@@ -566,14 +566,14 @@ void draw() {
     if (state == 2) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 14, 128, 30, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 14, 128, 30, CLR_GREEN);
-        print_centered("LAYER CLEAR!", SCREEN_H / 2 - 8, CLR_LIME_GREEN);
-        print_centered("Z to dig deeper", SCREEN_H / 2 + 4, CLR_LIGHT_GREY);
+        print_centered("LAYER CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 8, CLR_LIME_GREEN);
+        print_centered("Z to dig deeper", SCREEN_W/2, SCREEN_H / 2 + 4, CLR_LIGHT_GREY);
     }
     if (state == 3) {
         fade(0.4f);
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 14, 128, 30, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 14, 128, 30, CLR_RED);
-        print_centered("GAME OVER", SCREEN_H / 2 - 8, CLR_RED);
-        print_centered("Z to play again", SCREEN_H / 2 + 4, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 8, CLR_RED);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 4, CLR_LIGHT_GREY);
     }
 }

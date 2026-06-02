@@ -229,7 +229,7 @@ void draw(void) {
     rectfill(0, 0, SCREEN_W, 10, CLR_BLACK);
     print(str("SCORE %d", score), 4, 1, CLR_YELLOW);
     int tleft = (int)(TIME_TOTAL - (now() - start_t)); if (tleft < 0) tleft = 0;
-    print_centered(str("TIME %d:%02d", tleft / 60, tleft % 60), 1, CLR_WHITE);
+    print_centered(str("TIME %d:%02d", tleft / 60, tleft % 60), SCREEN_W/2, 1, CLR_WHITE);
     for (int i = 0; i < lives; i++) {                       // life icons
         int lx = SCREEN_W - 8 - i * 9;
         rectfill(lx - 1, 2, 3, 5, CLR_RED); circfill(lx, 2, 1, CLR_LIGHT_PEACH);
@@ -240,8 +240,8 @@ void draw(void) {
         int w = 220, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 80, w, 36, CLR_DARK_PURPLE);
         rect(bx, 80, w, 36, CLR_WHITE);
-        print_centered("GAME OVER", 88, CLR_RED);
-        print_centered(str("final score %d", score), 100, CLR_YELLOW);
-        print_centered("- press A to play again -", 108, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, 88, CLR_RED);
+        print_centered(str("final score %d", score), SCREEN_W/2, 100, CLR_YELLOW);
+        print_centered("- press A to play again -", SCREEN_W/2, 108, CLR_LIGHT_GREY);
     }
 }

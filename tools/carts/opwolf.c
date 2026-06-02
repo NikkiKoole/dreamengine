@@ -751,24 +751,24 @@ void draw(void) {
     // ---- banners ----
     if (gstate == G_PLAY && banner_t > 0) {
         if (wave == 1 && stage <= 2) {              // stage intro
-            print_centered(str("STAGE %d", stage + 1), SCREEN_H / 2 - 12, CLR_YELLOW);
-            print_centered(STAGE_NAME[stage], SCREEN_H / 2, CLR_WHITE);
+            print_centered(str("STAGE %d", stage + 1), SCREEN_W/2, SCREEN_H / 2 - 12, CLR_YELLOW);
+            print_centered(STAGE_NAME[stage], SCREEN_W/2, SCREEN_H / 2, CLR_WHITE);
         } else {
-            print_centered(str("WAVE %d", wave), SCREEN_H / 2 - 4, CLR_YELLOW);
+            print_centered(str("WAVE %d", wave), SCREEN_W/2, SCREEN_H / 2 - 4, CLR_YELLOW);
         }
     }
     if (gstate == G_CLEAR) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 18, 140, 36, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 18, 140, 36, CLR_GREEN);
-        print_centered("STAGE CLEAR!", SCREEN_H / 2 - 10, CLR_GREEN);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 + 2, CLR_YELLOW);
+        print_centered("STAGE CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 10, CLR_GREEN);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 + 2, CLR_YELLOW);
     }
     if (gstate == G_OVER) {
         rectfill(SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 60, CLR_BLACK);
         rect    (SCREEN_W / 2 - 78, SCREEN_H / 2 - 28, 156, 60, win ? CLR_YELLOW : CLR_RED);
-        print_centered(win ? "MISSION COMPLETE" : "K.I.A.", SCREEN_H / 2 - 18, win ? CLR_YELLOW : CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 - 4, CLR_WHITE);
-        print_centered(str("BEST %d", best), SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
-        if (blink(20)) print_centered("CLICK TO REDEPLOY", SCREEN_H / 2 + 18, CLR_GREEN);
+        print_centered(win ? "MISSION COMPLETE" : "K.I.A.", SCREEN_W/2, SCREEN_H / 2 - 18, win ? CLR_YELLOW : CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 4, CLR_WHITE);
+        print_centered(str("BEST %d", best), SCREEN_W/2, SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("CLICK TO REDEPLOY", SCREEN_W/2, SCREEN_H / 2 + 18, CLR_GREEN);
     }
 }

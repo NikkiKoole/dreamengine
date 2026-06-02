@@ -321,13 +321,13 @@ void draw() {
     if (state == 1) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 40, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 40, CLR_GREEN);
-        print_centered("YOU WIN!", SCREEN_H / 2 - 9, CLR_GREEN);
-        print_centered("Z to play again", SCREEN_H / 2 + 5, CLR_LIGHT_GREY);
+        print_centered("YOU WIN!", SCREEN_W/2, SCREEN_H / 2 - 9, CLR_GREEN);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 5, CLR_LIGHT_GREY);
     }
     if (state == 2) {
         rectfill(SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 40, CLR_BLACK);
         rect    (SCREEN_W / 2 - 64, SCREEN_H / 2 - 18, 128, 40, CLR_RED);
-        print_centered("BOOM — YOU LOSE", SCREEN_H / 2 - 9, CLR_RED);
-        print_centered("Z to play again", SCREEN_H / 2 + 5, CLR_LIGHT_GREY);
+        print_centered("BOOM — YOU LOSE", SCREEN_W/2, SCREEN_H / 2 - 9, CLR_RED);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 5, CLR_LIGHT_GREY);
     }
 }

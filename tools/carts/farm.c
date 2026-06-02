@@ -360,11 +360,11 @@ void draw(void) {
     // feedback pop above the player
     if (popT > 0) {
         int alpha_y = (int)((1.0f - popT / 1.4f) * 8);
-        print_centered(popMsg, (int)py - 18 - alpha_y, popColor);
+        print_centered(popMsg, SCREEN_W/2, (int)py - 18 - alpha_y, popColor);
     }
 
     // sleep / pass-out flash
     if (dayFade > 0) fade(dayFade * 0.85f);
     if (energy <= 0 && !passedOut)
-        print_centered("EXHAUSTED — sleep in the bed", SCREEN_H - 12, blink(10) ? CLR_RED : CLR_DARK_RED);
+        print_centered("EXHAUSTED — sleep in the bed", SCREEN_W/2, SCREEN_H - 12, blink(10) ? CLR_RED : CLR_DARK_RED);
 }

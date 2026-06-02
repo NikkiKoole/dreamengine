@@ -486,7 +486,7 @@ static void draw_hud(void) {
         bar(40, PLAYFIELD_H + 2, 24, 4, p, CLR_BLUE, CLR_DARKER_GREY);
     }
 
-    print_centered("REACH THE EXIT", PLAYFIELD_H + 1, CLR_LIME_GREEN);
+    print_centered("REACH THE EXIT", SCREEN_W/2, PLAYFIELD_H + 1, CLR_LIME_GREEN);
     print_right(str("RUN %d  ASH %d", wins, deaths), SCREEN_W - 4, PLAYFIELD_H + 1, CLR_LIGHT_GREY);
 }
 
@@ -496,8 +496,8 @@ static void panel(const char *title, int tcol, const char *sub, const char *prom
     rectfill(x, y, w, h, CLR_BROWNISH_BLACK);
     rect(x, y, w, h, tcol);
     print_scaled(title, SCREEN_W / 2 - text_width(title), y + 10, tcol, 2);
-    print_centered(sub, y + 34, CLR_LIGHT_PEACH);
-    print_centered(prompt, y + 52, blink(20) ? CLR_YELLOW : CLR_LIGHT_GREY);
+    print_centered(sub, SCREEN_W/2, y + 34, CLR_LIGHT_PEACH);
+    print_centered(prompt, SCREEN_W/2, y + 52, blink(20) ? CLR_YELLOW : CLR_LIGHT_GREY);
 }
 
 void draw(void) {

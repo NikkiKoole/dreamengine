@@ -751,7 +751,7 @@ static void draw_hub(void) {
     if (at_table)       prompt = "[Z]  open the galaxy map";
     else if (crew == 0) prompt = "[Z]  talk to Joker";
     else if (crew == 1) prompt = "[Z]  talk to Dr. T'Sara";
-    if (prompt && blink(20)) print_centered(prompt, 120, CLR_YELLOW);
+    if (prompt && blink(20)) print_centered(prompt, SCREEN_W/2, 120, CLR_YELLOW);
 
     // title + morality meter
     rectfill(0, 0, SCREEN_W, 9, CLR_BLACK);
@@ -861,7 +861,7 @@ static void draw_mission(void) {
         for (int i = 0; i < MAX_ENE; i++) if (ene[i].on && ene[i].kind == K_BOSS) {
             rectfill(50, 12, 220, 12, CLR_BLACK);
             bar(54, 15, 212, 6, ene[i].hp / (float)ene[i].maxhp, CLR_RED, CLR_DARKER_GREY);
-            print_centered("REAPER CORE", 13, CLR_RED);
+            print_centered("REAPER CORE", SCREEN_W/2, 13, CLR_RED);
             break;
         }
     }
@@ -897,8 +897,8 @@ static void draw_mission(void) {
     if (mission_state == 1) {
         rectfill(SCREEN_W / 2 - 80, SCREEN_H / 2 - 22, 160, 44, CLR_BLACK);
         rect(SCREEN_W / 2 - 80, SCREEN_H / 2 - 22, 160, 44, CLR_RED);
-        print_centered("MISSION FAILED", SCREEN_H / 2 - 12, CLR_RED);
-        print_centered("Z: return to the Normandy", SCREEN_H / 2 + 4, CLR_LIGHT_GREY);
+        print_centered("MISSION FAILED", SCREEN_W/2, SCREEN_H / 2 - 12, CLR_RED);
+        print_centered("Z: return to the Normandy", SCREEN_W/2, SCREEN_H / 2 + 4, CLR_LIGHT_GREY);
     }
 }
 
@@ -919,7 +919,7 @@ static void draw_dialogue(void) {
         draw_wheel(108, 126, 60);
         print_right("<- ->  choose    Z  select", SCREEN_W - 6, SCREEN_H - 9, CLR_LIGHT_GREY);
     } else {
-        print_centered("- Z to continue -", 150, blink(20) ? CLR_LIGHT_GREY : CLR_DARK_GREY);
+        print_centered("- Z to continue -", SCREEN_W/2, 150, blink(20) ? CLR_LIGHT_GREY : CLR_DARK_GREY);
     }
 }
 
@@ -945,11 +945,11 @@ static void draw_end(void) {
         "simply done."
     };
     print_scaled(TITLE[ending], SCREEN_W / 2 - text_width(TITLE[ending]), 44, TCOL[ending], 2);
-    print_centered(L1[ending], 84, CLR_LIGHT_PEACH);
-    print_centered(L2[ending], 96, CLR_LIGHT_PEACH);
-    print_centered(L3[ending], 108, CLR_LIGHT_PEACH);
-    print_centered(str("MISSIONS COMPLETED: %d", missions_done), 140, CLR_YELLOW);
-    if (blink(22)) print_centered("Z: return to the Normandy", 170, CLR_LIGHT_GREY);
+    print_centered(L1[ending], SCREEN_W/2, 84, CLR_LIGHT_PEACH);
+    print_centered(L2[ending], SCREEN_W/2, 96, CLR_LIGHT_PEACH);
+    print_centered(L3[ending], SCREEN_W/2, 108, CLR_LIGHT_PEACH);
+    print_centered(str("MISSIONS COMPLETED: %d", missions_done), SCREEN_W/2, 140, CLR_YELLOW);
+    if (blink(22)) print_centered("Z: return to the Normandy", SCREEN_W/2, 170, CLR_LIGHT_GREY);
 }
 
 void draw(void) {

@@ -409,25 +409,25 @@ void draw() {
     // HUD
     print(str("SCORE %d", score), 4, 3, CLR_WHITE);
     print_right(str("BEST %d", hiscore), SCREEN_W - 4, 3, CLR_YELLOW);
-    print_centered(str("LVL %d", level), 3, CLR_LIGHT_GREY);
+    print_centered(str("LVL %d", level), SCREEN_W/2, 3, CLR_LIGHT_GREY);
     for (int i = 0; i < lives; i++) { int ix = 6 + i * 9; rectfill(ix - 3, 22, 6, 3, CLR_WHITE); }
     print(str("PEPPER %d", pepper), 4, 188, CLR_LIGHT_YELLOW);
 
     if (now() - level_start < 2.2f)
-        print_centered("BUILD THE BURGERS!", SCREEN_H / 2, CLR_LIGHT_YELLOW);
+        print_centered("BUILD THE BURGERS!", SCREEN_W/2, SCREEN_H / 2, CLR_LIGHT_YELLOW);
 
     if (state == 1) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 56, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 56, CLR_ORANGE);
-        print_centered("GAME OVER",            SCREEN_H / 2 - 16, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 - 2,  CLR_YELLOW);
-        print_centered("Z to cook again",      SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z to cook again", SCREEN_W/2, SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
     }
     if (state == 2) {
         rectfill(SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 56, CLR_BLACK);
         rect    (SCREEN_W / 2 - 70, SCREEN_H / 2 - 26, 140, 56, CLR_GREEN);
-        print_centered("STAGE CLEAR!",         SCREEN_H / 2 - 16, CLR_GREEN);
-        print_centered("burgers served",       SCREEN_H / 2 - 2,  CLR_YELLOW);
-        print_centered("Z for next stage",     SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
+        print_centered("STAGE CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_GREEN);
+        print_centered("burgers served", SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z for next stage", SCREEN_W/2, SCREEN_H / 2 + 14, CLR_LIGHT_GREY);
     }
 }

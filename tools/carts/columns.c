@@ -252,7 +252,7 @@ void draw(void) {
     // chain banner
     if (chain_pop > 0 && chain_show >= 2) {
         int yy = GY + wh / 3;
-        print_centered(str("CHAIN x%d", chain_show), yy, blink(4) ? CLR_YELLOW : CLR_PEACH);
+        print_centered(str("CHAIN x%d", chain_show), SCREEN_W/2, yy, blink(4) ? CLR_YELLOW : CLR_PEACH);
     }
 
     // controls hint along the bottom-left
@@ -264,8 +264,8 @@ void draw(void) {
         int bw = ww + 30, bx = GX - 15, by = SCREEN_H / 2 - 26;
         rectfill(bx, by, bw, 52, CLR_BLACK);
         rect    (bx, by, bw, 52, CLR_RED);
-        print_centered("GAME OVER",       by + 8,  CLR_RED);
-        print_centered(str("%d", score),  by + 22, CLR_YELLOW);
-        print_centered("Z to restart",    by + 36, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, by + 8, CLR_RED);
+        print_centered(str("%d", score), SCREEN_W/2, by + 22, CLR_YELLOW);
+        print_centered("Z to restart", SCREEN_W/2, by + 36, CLR_LIGHT_GREY);
     }
 }

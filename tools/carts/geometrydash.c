@@ -219,7 +219,7 @@ void draw(void) {
     if (state == ST_WON) {
         rectfill(90, 80, 140, 40, CLR_BLACK);
         rect(90, 80, 140, 40, CLR_YELLOW);
-        print_centered("LEVEL COMPLETE!", 90, CLR_YELLOW);
-        print_centered(str("attempts: %d", attempts), 102, CLR_LIGHT_GREY);
+        print_centered("LEVEL COMPLETE!", SCREEN_W/2, 90, CLR_YELLOW);
+        print_centered(str("attempts: %d", attempts), SCREEN_W/2, 102, CLR_LIGHT_GREY);
     }
 }

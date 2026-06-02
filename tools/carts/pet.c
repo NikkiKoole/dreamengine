@@ -284,13 +284,13 @@ void draw(void) {
     rectfill(262, 30, (int)(50 * (health < 0 ? 0 : health) / 100), 5, CLR_RED);
 
     // status message
-    if (awayT > 0)           print_centered(str("you were away %dm!", awaySecs / 60), 122, CLR_PINK);
-    else if (msgT > 0)       print_centered(msg, 122, CLR_YELLOW);
-    else if (!alive)         print_centered("your blob has passed on...", 122, CLR_LIGHT_GREY);
-    else if (sick)           print_centered("I don't feel good...", 122, CLR_GREEN);
-    else if (hunger < 20)    print_centered("I'm so hungry!", 122, CLR_ORANGE);
-    else if (clean < 20)     print_centered("it's filthy in here!", 122, CLR_ORANGE);
-    else if (energy < 15)    print_centered("so sleepy...", 122, CLR_LIGHT_GREY);
+    if (awayT > 0)           print_centered(str("you were away %dm!", awaySecs / 60), SCREEN_W/2, 122, CLR_PINK);
+    else if (msgT > 0)       print_centered(msg, SCREEN_W/2, 122, CLR_YELLOW);
+    else if (!alive)         print_centered("your blob has passed on...", SCREEN_W/2, 122, CLR_LIGHT_GREY);
+    else if (sick)           print_centered("I don't feel good...", SCREEN_W/2, 122, CLR_GREEN);
+    else if (hunger < 20)    print_centered("I'm so hungry!", SCREEN_W/2, 122, CLR_ORANGE);
+    else if (clean < 20)     print_centered("it's filthy in here!", SCREEN_W/2, 122, CLR_ORANGE);
+    else if (energy < 15)    print_centered("so sleepy...", SCREEN_W/2, 122, CLR_LIGHT_GREY);
 
     // action bar
     for (int i = 0; i < 5; i++) {
@@ -302,7 +302,7 @@ void draw(void) {
 
     if (!alive) {
         rectfill(70, 84, 180, 34, CLR_BLACK); rect(70, 84, 180, 34, CLR_RED);
-        print_centered(str("lived to age %d", (int)lived), 92, CLR_WHITE);
-        print_centered("Z for a new egg", 104, CLR_LIGHT_GREY);
+        print_centered(str("lived to age %d", (int)lived), SCREEN_W/2, 92, CLR_WHITE);
+        print_centered("Z for a new egg", SCREEN_W/2, 104, CLR_LIGHT_GREY);
     }
 }

@@ -426,14 +426,14 @@ void draw(void) {
     if (state == 1) {
         rectfill(BX - 6, SCREEN_H / 2 - 26, BW * CELL + 12, 54, CLR_BLACK);
         rect    (BX - 6, SCREEN_H / 2 - 26, BW * CELL + 12, 54, CLR_GREEN);
-        print_centered("LEVEL CLEAR!",        SCREEN_H / 2 - 16, CLR_GREEN);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 - 2,  CLR_YELLOW);
-        print_centered("Z: next level",        SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("LEVEL CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_GREEN);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z: next level", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     } else if (state == 2) {
         rectfill(BX - 6, SCREEN_H / 2 - 26, BW * CELL + 12, 54, CLR_BLACK);
         rect    (BX - 6, SCREEN_H / 2 - 26, BW * CELL + 12, 54, CLR_RED);
-        print_centered("GAME OVER",            SCREEN_H / 2 - 16, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H / 2 - 2,  CLR_YELLOW);
-        print_centered("Z: restart",           SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 16, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H / 2 - 2, CLR_YELLOW);
+        print_centered("Z: restart", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }

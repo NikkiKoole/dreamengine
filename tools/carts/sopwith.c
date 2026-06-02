@@ -294,11 +294,11 @@ void draw(void) {
     print_right(str("HANGARS %d", targets_left()), 316, 4, CLR_RED);
 
     if (gstate == GAMEOVER) {
-        print_centered("SHOT DOWN", 86, CLR_RED);
-        print_centered("press Z to fly again", 100, CLR_WHITE);
+        print_centered("SHOT DOWN", SCREEN_W/2, 86, CLR_RED);
+        print_centered("press Z to fly again", SCREEN_W/2, 100, CLR_WHITE);
     } else if (gstate == WIN) {
-        print_centered("MISSION COMPLETE", 86, CLR_YELLOW);
-        print_centered("press Z for a new sortie", 100, CLR_WHITE);
+        print_centered("MISSION COMPLETE", SCREEN_W/2, 86, CLR_YELLOW);
+        print_centered("press Z for a new sortie", SCREEN_W/2, 100, CLR_WHITE);
     } else {
         print("W/S pitch   Z gun   X bomb", 4, SCREEN_H - 9, CLR_LIGHT_GREY);
     }

@@ -252,15 +252,14 @@ void draw(void){
 
     // banners
     if (resultT > 0){
-        print_centered("CHALLENGING STAGE", 52, CLR_GREEN);
-        print_centered(str("HITS  %d / %d", rHits, chTotal), 66, CLR_WHITE);
-        print_centered(rHits >= chTotal ? "PERFECT!  +1000" : str("BONUS  %d", rBonus), 80, CLR_YELLOW);
+        print_centered("CHALLENGING STAGE", SCREEN_W/2, 52, CLR_GREEN);
+        print_centered(str("HITS  %d / %d", rHits, chTotal), SCREEN_W/2, 66, CLR_WHITE);
+        print_centered(rHits >= chTotal ? "PERFECT!  +1000" : str("BONUS  %d", rBonus), SCREEN_W/2, 80, CLR_YELLOW);
     } else if (banner > 0 && state == 0){
-        print_centered(challenge ? "CHALLENGING STAGE" : str("STAGE %d", stage), 60,
-                       challenge ? CLR_GREEN : CLR_WHITE);
+        print_centered(challenge ? "CHALLENGING STAGE" : str("STAGE %d", stage), SCREEN_W/2, 60, challenge ? CLR_GREEN : CLR_WHITE);
     }
-    if (extraT > 0) print_centered("EXTRA SHIP!", 94, CLR_YELLOW);
+    if (extraT > 0) print_centered("EXTRA SHIP!", SCREEN_W/2, 94, CLR_YELLOW);
 
     if (state == 2){ rectfill(80,82,160,38,CLR_BLACK); rect(80,82,160,38,CLR_RED);
-        print_centered("GAME OVER", 90, CLR_RED); print_centered(str("score %d  -  Z", score), 104, CLR_LIGHT_GREY); }
+        print_centered("GAME OVER", SCREEN_W/2, 90, CLR_RED); print_centered(str("score %d  -  Z", score), SCREEN_W/2, 104, CLR_LIGHT_GREY); }
 }

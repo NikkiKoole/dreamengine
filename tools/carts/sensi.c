@@ -580,29 +580,29 @@ void draw(void) {
     print_right("CPU", SCREEN_W - 4, 2, CLR_RED);
     print_right(str("%d", score[1]), SCREEN_W - 28, 2, CLR_WHITE);
     int tt = (int)mclock; if (tt > HALF_SECS) tt = HALF_SECS;
-    print_centered(str("H%d  %d:%02d", half, tt / 60, tt % 60), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("H%d  %d:%02d", half, tt / 60, tt % 60), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
 
     if (humanShot && atouch > 0 && blink(4))
-        print_centered("BEND IT!", 22, CLR_YELLOW);
+        print_centered("BEND IT!", SCREEN_W/2, 22, CLR_YELLOW);
     if (half == 1 && mclock < 6 && mode == M_PLAY)
         print("Z=kick/tackle  hold to bend", 6, SCREEN_H - 9, CLR_LIGHT_GREY);
 
-    if (flashT > 0) print_centered(flashMsg, SCREEN_H / 2 - 24, CLR_WHITE);
-    if (mode == M_KICKOFF) print_centered(str("%d", (int)modeT + 1), SCREEN_H / 2, CLR_WHITE);
+    if (flashT > 0) print_centered(flashMsg, SCREEN_W/2, SCREEN_H / 2 - 24, CLR_WHITE);
+    if (mode == M_KICKOFF) print_centered(str("%d", (int)modeT + 1), SCREEN_W/2, SCREEN_H / 2, CLR_WHITE);
 
     if (mode == M_HALF) {
         rectfill(60, 78, 200, 44, CLR_BLACK); rect(60, 78, 200, 44, CLR_WHITE);
-        print_centered("HALF TIME", 86, CLR_LIGHT_YELLOW);
-        print_centered(str("%d - %d", score[0], score[1]), 100, CLR_WHITE);
-        print_centered("Z to kick off", 112, CLR_LIGHT_GREY);
+        print_centered("HALF TIME", SCREEN_W/2, 86, CLR_LIGHT_YELLOW);
+        print_centered(str("%d - %d", score[0], score[1]), SCREEN_W/2, 100, CLR_WHITE);
+        print_centered("Z to kick off", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     }
     if (mode == M_FULL) {
         rectfill(50, 68, 220, 64, CLR_BLACK); rect(50, 68, 220, 64, CLR_WHITE);
         const char *r = score[0] > score[1] ? "YOU WIN!" : score[0] < score[1] ? "CPU WINS" : "DRAW";
         int rc = score[0] > score[1] ? CLR_GREEN : score[0] < score[1] ? CLR_RED : CLR_LIGHT_GREY;
-        print_centered(r, 78, rc);
-        print_centered(str("%d - %d", score[0], score[1]), 94, CLR_WHITE);
-        if (bestSet) print_centered(str("best diff %+d", best), 108, CLR_LIGHT_YELLOW);
-        print_centered("Z to play again", 120, CLR_LIGHT_GREY);
+        print_centered(r, SCREEN_W/2, 78, rc);
+        print_centered(str("%d - %d", score[0], score[1]), SCREEN_W/2, 94, CLR_WHITE);
+        if (bestSet) print_centered(str("best diff %+d", best), SCREEN_W/2, 108, CLR_LIGHT_YELLOW);
+        print_centered("Z to play again", SCREEN_W/2, 120, CLR_LIGHT_GREY);
     }
 }

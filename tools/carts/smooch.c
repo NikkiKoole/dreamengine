@@ -536,7 +536,7 @@ static void draw_hud(void) {
 
     // tease meter
     if (bigfinish) {
-        print_centered("BIG FINISH!", 17, (frame() & 2) ? CLR_YELLOW : CLR_PINK);
+        print_centered("BIG FINISH!", SCREEN_W/2, 17, (frame() & 2) ? CLR_YELLOW : CLR_PINK);
         bar(110, 26, 100, 5, tease, CLR_YELLOW, CLR_DARKER_PURPLE);
     } else {
         print("TEASE", 84, 26, CLR_PINK);
@@ -550,7 +550,7 @@ static void draw_hud(void) {
         int bx = (LANEX(0) + LANEX(3) + LANEW) / 2;
         int pop = poseT > 0.3f ? 1 : 0;
         print_scaled(str("x%d", mult), bx - 8, 36 - pop, bigfinish ? CLR_YELLOW : CLR_PINK, 2);
-        print_centered(str("%d combo", combo), 52, CLR_LIGHT_GREY);
+        print_centered(str("%d combo", combo), SCREEN_W/2, 52, CLR_LIGHT_GREY);
     }
 
     // judgment callout near the hit line
@@ -567,9 +567,9 @@ static void draw_title(void) {
     fillp_reset();
     print_scaled("SMOOCH", 64, 64, CLR_PINK, 4);
     print_scaled("LOUNGE", 164, 96, CLR_RED, 4);
-    print_centered(str("tonight's number: %s", SONG_TITLE), 132, CLR_LIGHT_YELLOW);
-    if (blink(20)) print_centered("press SPACE to take the stage", 156, CLR_WHITE);
-    print_centered("A S K L  =  kiss the beat   (hold for a long kiss)", 172, CLR_LIGHT_GREY);
+    print_centered(str("tonight's number: %s", SONG_TITLE), SCREEN_W/2, 132, CLR_LIGHT_YELLOW);
+    if (blink(20)) print_centered("press SPACE to take the stage", SCREEN_W/2, 156, CLR_WHITE);
+    print_centered("A S K L  =  kiss the beat   (hold for a long kiss)", SCREEN_W/2, 172, CLR_LIGHT_GREY);
 }
 
 static void draw_end(void) {
@@ -585,13 +585,13 @@ static void draw_end(void) {
     rectfill(54, 40, 212, 124, CLR_BLACK);
     fillp_reset();
     rect(54, 40, 212, 124, CLR_DARK_RED);
-    print_centered("THE CURTAIN FALLS", 48, CLR_LIGHT_YELLOW);
+    print_centered("THE CURTAIN FALLS", SCREEN_W/2, 48, CLR_LIGHT_YELLOW);
     print_scaled(grade, 150, 60, gc, 4);
-    print_centered(rank, 96, gc);
-    print_centered(str("score %ld", score), 110, CLR_WHITE);
-    print_centered(str("SMOOCH %d   SMOOTH %d   max combo %d", c_smooch, c_smooth, maxcombo), 122, CLR_LIGHT_GREY);
-    if (new_hi && blink(15)) print_centered("* NEW HIGH! *", 134, CLR_PINK);
-    if (blink(20)) print_centered("press SPACE for an encore", 150, CLR_WHITE);
+    print_centered(rank, SCREEN_W/2, 96, gc);
+    print_centered(str("score %ld", score), SCREEN_W/2, 110, CLR_WHITE);
+    print_centered(str("SMOOCH %d   SMOOTH %d   max combo %d", c_smooch, c_smooth, maxcombo), SCREEN_W/2, 122, CLR_LIGHT_GREY);
+    if (new_hi && blink(15)) print_centered("* NEW HIGH! *", SCREEN_W/2, 134, CLR_PINK);
+    if (blink(20)) print_centered("press SPACE for an encore", SCREEN_W/2, 150, CLR_WHITE);
 }
 
 void draw(void) {

@@ -213,8 +213,8 @@ void draw(void) {
         int worth = money + food * 4 + energy * 4 + ore * 20;
         for (int i = 0; i < NPLOT; i++) if (mule[i] != G_NONE) worth += 60;
         if (worth > best) { best = worth; save(0, best); }
-        print_centered("ROUND COMPLETE", py, CLR_YELLOW);
-        print_centered(str("net worth:  $%d", worth), py + 14, CLR_WHITE);
-        print_centered("Z: play another round", py + 34, CLR_LIGHT_GREY);
+        print_centered("ROUND COMPLETE", SCREEN_W/2, py, CLR_YELLOW);
+        print_centered(str("net worth:  $%d", worth), SCREEN_W/2, py + 14, CLR_WHITE);
+        print_centered("Z: play another round", SCREEN_W/2, py + 34, CLR_LIGHT_GREY);
     }
 }

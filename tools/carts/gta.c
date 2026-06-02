@@ -370,16 +370,16 @@ void draw() {
             if (!cars[i].driven && near((int)px,(int)py,(int)cars[i].x,(int)cars[i].y, 22))
                 { near_car = true; break; }
         if (near_car)
-            print_centered("Z: get in", SCREEN_H-22, CLR_LIGHT_GREY);
+            print_centered("Z: get in", SCREEN_W/2, SCREEN_H-22, CLR_LIGHT_GREY);
     } else {
-        print_centered("Z: get out", SCREEN_H-22, CLR_LIGHT_GREY);
+        print_centered("Z: get out", SCREEN_W/2, SCREEN_H-22, CLR_LIGHT_GREY);
     }
 
     // busted overlay
     if (busted) {
         rectfill(SCREEN_W/2-60, SCREEN_H/2-22, 120, 44, CLR_RED);
         rectfill(SCREEN_W/2-58, SCREEN_H/2-20, 116, 40, CLR_BLACK);
-        print_centered("BUSTED!",           SCREEN_H/2-12, CLR_RED);
-        print_centered(str("SCORE %d", score), SCREEN_H/2+2, CLR_YELLOW);
+        print_centered("BUSTED!", SCREEN_W/2, SCREEN_H/2-12, CLR_RED);
+        print_centered(str("SCORE %d", score), SCREEN_W/2, SCREEN_H/2+2, CLR_YELLOW);
     }
 }

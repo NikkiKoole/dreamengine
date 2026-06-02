@@ -180,7 +180,7 @@ void draw(void) {
     print_right(str("MOVES %d  PUSHES %d", moves, pushes), SCREEN_W - 4, 2, CLR_LIGHT_GREY);
 
     rectfill(0, SCREEN_H - 11, SCREEN_W, 11, CLR_BLACK);
-    print_centered("arrows: push   A: undo   B: restart", SCREEN_H - 9, CLR_DARK_GREY);
+    print_centered("arrows: push   A: undo   B: restart", SCREEN_W/2, SCREEN_H - 9, CLR_DARK_GREY);
 
     if (won) {
         const char *t = (level + 1 < NLEVELS) ? "LEVEL COMPLETE!  press A for next"
@@ -188,6 +188,6 @@ void draw(void) {
         int w = 250, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 88, w, 26, CLR_DARK_GREEN);
         rect(bx, 88, w, 26, CLR_WHITE);
-        print_centered(t, 98, CLR_WHITE);
+        print_centered(t, SCREEN_W/2, 98, CLR_WHITE);
     }
 }

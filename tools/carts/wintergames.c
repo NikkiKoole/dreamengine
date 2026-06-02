@@ -293,8 +293,7 @@ static void sj_draw(void) {
     if (sj_phase == SJ_RUN) {
         // power meter with a marked sweet spot
         int mx = SCREEN_W / 2 - 50, my = SCREEN_H - 24;
-        print_centered("TIME THE TAKEOFF - Z at the mark", SCREEN_H - 38,
-                       blink(12) ? CLR_YELLOW : CLR_WHITE);
+        print_centered("TIME THE TAKEOFF - Z at the mark", SCREEN_W/2, SCREEN_H - 38, blink(12) ? CLR_YELLOW : CLR_WHITE);
         bar(mx, my, 100, 8, sj_meter, CLR_GREEN, CLR_DARKER_GREY);
         int sweetx = mx + (int)(SJ_SWEET * 100);
         rectfill(sweetx - 1, my - 2, 3, 12, CLR_RED);
@@ -302,7 +301,7 @@ static void sj_draw(void) {
     } else if (sj_phase == SJ_AIR) {
         // lean gauge: keep the needle centered (slight forward)
         int gx = SCREEN_W / 2, gy = 22;
-        print_centered("BALANCE - Up=back  Down=fwd", 8, CLR_WHITE);
+        print_centered("BALANCE - Up=back  Down=fwd", SCREEN_W/2, 8, CLR_WHITE);
         rectfill(gx - 50, gy, 100, 6, CLR_DARKER_GREY);
         rectfill(gx - 3, gy - 2, 6, 10, CLR_DARK_GREEN);          // ideal zone
         int needle = gx + (int)((sj_lean - 0.2f) * 60);
@@ -317,9 +316,9 @@ static void sj_draw(void) {
             int c = sj_crash ? CLR_RED : CLR_GREEN;
             rectfill(SCREEN_W / 2 - 70, 40, 140, 40, CLR_BLACK);
             rect(SCREEN_W / 2 - 70, 40, 140, 40, c);
-            print_centered(t, 48, c);
-            print_centered(str("%d METERS", (int)sj_dist), 60, CLR_WHITE);
-            print_centered("Z = scoreboard", 70, blink(15) ? CLR_LIGHT_GREY : CLR_DARK_GREY);
+            print_centered(t, SCREEN_W/2, 48, c);
+            print_centered(str("%d METERS", (int)sj_dist), SCREEN_W/2, 60, CLR_WHITE);
+            print_centered("Z = scoreboard", SCREEN_W/2, 70, blink(15) ? CLR_LIGHT_GREY : CLR_DARK_GREY);
         }
     }
 }
@@ -471,8 +470,7 @@ static void sk_draw(void) {
     // ---- event UI ----
     if (sk_phase == SK_GO) {
         // the alternating prompt — big Z / X that lights the expected key
-        print_centered("ALTERNATE  Z  X  - keep the rhythm", SCREEN_H - 28,
-                       CLR_WHITE);
+        print_centered("ALTERNATE  Z  X  - keep the rhythm", SCREEN_W/2, SCREEN_H - 28, CLR_WHITE);
         int zc = (sk_expect == 0) ? CLR_YELLOW : CLR_DARK_GREY;
         int xc = (sk_expect == 1) ? CLR_YELLOW : CLR_DARK_GREY;
         print_scaled("Z", cx - 26, SCREEN_H - 22, zc, 2);
@@ -483,16 +481,16 @@ static void sk_draw(void) {
         print_right("Up/Down hold lane", SCREEN_W - 4, SCREEN_H - 16, CLR_LIGHT_GREY);
         // lap progress
         bar(SCREEN_W / 2 - 45, 50, 90, 4, sk_prog, CLR_YELLOW, CLR_DARKER_GREY);
-        print_centered(str("%.1fs", sk_time), 6, CLR_LIGHT_YELLOW);
+        print_centered(str("%.1fs", sk_time), SCREEN_W/2, 6, CLR_LIGHT_YELLOW);
         // rail warning
         if (sk_lane < -0.85f || sk_lane > 0.85f)
-            print_centered("RAIL!", 60, blink(4) ? CLR_RED : CLR_ORANGE);
+            print_centered("RAIL!", SCREEN_W/2, 60, blink(4) ? CLR_RED : CLR_ORANGE);
     } else {
         rectfill(SCREEN_W / 2 - 70, 80, 140, 42, CLR_BLACK);
         rect(SCREEN_W / 2 - 70, 80, 140, 42, CLR_GREEN);
-        print_centered("FINISH!", 88, CLR_GREEN);
-        print_centered(str("%.2f sec", sk_time), 100, CLR_WHITE);
-        print_centered("Z = scoreboard", 110, blink(15) ? CLR_LIGHT_GREY : CLR_DARK_GREY);
+        print_centered("FINISH!", SCREEN_W/2, 88, CLR_GREEN);
+        print_centered(str("%.2f sec", sk_time), SCREEN_W/2, 100, CLR_WHITE);
+        print_centered("Z = scoreboard", SCREEN_W/2, 110, blink(15) ? CLR_LIGHT_GREY : CLR_DARK_GREY);
     }
 }
 
@@ -594,13 +592,13 @@ static void draw_title(void) {
     print_scaled("GAMES",  (SCREEN_W - text_width("GAMES") * 4) / 2, 56, CLR_WHITE, 4);
 
     // nation picker
-    print_centered("- choose your nation -", 96, CLR_LIGHT_YELLOW);
+    print_centered("- choose your nation -", SCREEN_W/2, 96, CLR_LIGHT_YELLOW);
     draw_flag(SCREEN_W / 2 - 18, 106, 36, 22);
-    print_centered(nations[nation].name, 132, CLR_WHITE);
+    print_centered(nations[nation].name, SCREEN_W/2, 132, CLR_WHITE);
     print(blink(15) ? "<" : " ", SCREEN_W / 2 - 38, 113, CLR_YELLOW);
     print(blink(15) ? ">" : " ", SCREEN_W / 2 + 32, 113, CLR_YELLOW);
 
-    print_centered("Left/Right pick   Z start", SCREEN_H - 14, CLR_LIGHT_GREY);
+    print_centered("Left/Right pick   Z start", SCREEN_W/2, SCREEN_H - 14, CLR_LIGHT_GREY);
 }
 
 static void draw_board(void) {
@@ -631,14 +629,14 @@ static void draw_board(void) {
     print("MEDAL CEREMONY", 28, cy + 1, conB ? CLR_WHITE : CLR_LIGHT_GREY);
     print_right(str("total %d", total), SCREEN_W - 18, cy + 1, CLR_LIGHT_YELLOW);
 
-    print_centered("Up/Down choose   Z enter   X title", SCREEN_H - 12, CLR_LIGHT_GREY);
+    print_centered("Up/Down choose   Z enter   X title", SCREEN_W/2, SCREEN_H - 12, CLR_LIGHT_GREY);
 }
 
 static void draw_event(void) {
     events[curEvent].draw();
     draw_hud_bar(events[curEvent].name);
     if (newBest && screen == S_EVENT)
-        print_centered("NEW BEST!", 16, blink(6) ? CLR_YELLOW : CLR_WHITE);
+        print_centered("NEW BEST!", SCREEN_W/2, 16, blink(6) ? CLR_YELLOW : CLR_WHITE);
 }
 
 static void draw_ceremony(void) {
@@ -665,8 +663,8 @@ static void draw_ceremony(void) {
     rectfill(bx - 3, 114, 6, 12, nations[nation].c0);
     circfill(bx, 112, 3, CLR_LIGHT_PEACH);
 
-    print_centered(str("%s  -  TOTAL %d", nations[nation].name, total), 92, CLR_LIGHT_YELLOW);
-    print_centered("Z = back", SCREEN_H - 12, CLR_LIGHT_GREY);
+    print_centered(str("%s  -  TOTAL %d", nations[nation].name, total), SCREEN_W/2, 92, CLR_LIGHT_YELLOW);
+    print_centered("Z = back", SCREEN_W/2, SCREEN_H - 12, CLR_LIGHT_GREY);
 }
 
 void draw(void) {

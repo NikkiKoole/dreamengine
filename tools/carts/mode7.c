@@ -145,7 +145,7 @@ void draw(void) {
     if (over) {
         rectfill(80, 80, 160, 40, CLR_BLACK);
         rect(80, 80, 160, 40, CLR_YELLOW);
-        print_centered("OUT OF TIME", 90, CLR_YELLOW);
-        print_centered(str("%d rings - Z to fly again", score), 104, CLR_LIGHT_GREY);
+        print_centered("OUT OF TIME", SCREEN_W/2, 90, CLR_YELLOW);
+        print_centered(str("%d rings - Z to fly again", score), SCREEN_W/2, 104, CLR_LIGHT_GREY);
     }
 }

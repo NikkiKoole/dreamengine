@@ -330,11 +330,11 @@ void draw() {
     if (state == 2) {
         rectfill(SCREEN_W / 2 - 60, SCREEN_H / 2 - 12, 120, 30, CLR_BLACK);
         rect    (SCREEN_W / 2 - 60, SCREEN_H / 2 - 12, 120, 30, CLR_RED);
-        print_centered("GAME OVER", SCREEN_H / 2 - 6, CLR_RED);
-        print_centered("Z to play again", SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
+        print_centered("GAME OVER", SCREEN_W/2, SCREEN_H / 2 - 6, CLR_RED);
+        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
     }
     if (state == 3) {
-        print_centered("LEVEL CLEAR!", SCREEN_H / 2 - 6, CLR_YELLOW);
-        print_centered("Z to continue", SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
+        print_centered("LEVEL CLEAR!", SCREEN_W/2, SCREEN_H / 2 - 6, CLR_YELLOW);
+        print_centered("Z to continue", SCREEN_W/2, SCREEN_H / 2 + 6, CLR_LIGHT_GREY);
     }
 }

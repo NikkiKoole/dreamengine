@@ -446,8 +446,8 @@ void draw(void) {
     line(SCREEN_W/2 - 3, HORIZON, SCREEN_W/2 + 3, HORIZON, CLR_RED);
     line(SCREEN_W/2, HORIZON - 3, SCREEN_W/2, HORIZON + 3, CLR_RED);
 
-    if (msg_t > 0) print_centered(msg, VIEW_H - 16, CLR_YELLOW);
-    if (now() < 7) print_centered("WASD MOVE  QE STRAFE  Z FIRE  X WEAPON  SPACE USE", 3, CLR_LIGHT_GREY);
+    if (msg_t > 0) print_centered(msg, SCREEN_W/2, VIEW_H - 16, CLR_YELLOW);
+    if (now() < 7) print_centered("WASD MOVE  QE STRAFE  Z FIRE  X WEAPON  SPACE USE", SCREEN_W/2, 3, CLR_LIGHT_GREY);
 
     clip(0, 0, 0, 0);
 
@@ -476,12 +476,12 @@ void draw(void) {
         fade(0.55f);
         const char *t = "YOU DIED";
         print_scaled(t, (SCREEN_W - text_width(t) * 3) / 2, 64, CLR_RED, 3);
-        print_centered("Z TO RESTART", 108, CLR_WHITE);
+        print_centered("Z TO RESTART", SCREEN_W/2, 108, CLR_WHITE);
     } else if (gamestate == 2) {
         fade(0.55f);
         const char *t = "LEVEL CLEAR";
         print_scaled(t, (SCREEN_W - text_width(t) * 2) / 2, 62, CLR_YELLOW, 2);
-        print_centered("YOU ESCAPED THE BASE", 92, CLR_WHITE);
-        print_centered("Z TO PLAY AGAIN", 108, CLR_LIGHT_GREY);
+        print_centered("YOU ESCAPED THE BASE", SCREEN_W/2, 92, CLR_WHITE);
+        print_centered("Z TO PLAY AGAIN", SCREEN_W/2, 108, CLR_LIGHT_GREY);
     }
 }

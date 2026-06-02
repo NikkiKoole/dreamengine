@@ -349,8 +349,8 @@ void draw(void) {
         fade(0.5f);
         rectfill(60, 78, 200, 44, CLR_DARK_BLUE);
         rect(60, 78, 200, 44, CLR_YELLOW);
-        print_centered("YOU WIN!", 88, CLR_YELLOW);
-        print_centered(str("games won: %d", won), 102, CLR_WHITE);
-        print_centered("click to deal again", 112, CLR_LIGHT_GREY);
+        print_centered("YOU WIN!", SCREEN_W/2, 88, CLR_YELLOW);
+        print_centered(str("games won: %d", won), SCREEN_W/2, 102, CLR_WHITE);
+        print_centered("click to deal again", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     }
 }

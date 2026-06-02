@@ -499,7 +499,7 @@ static void draw_market_panel(void) {
 static void draw_hud(void) {
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("$%d", (int)showGold), 4, 2, CLR_YELLOW);
-    print_centered(str("%s   DAY %d/%d", PORT[here], day, SEASON), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("%s   DAY %d/%d", PORT[here], day, SEASON), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     print(str("HULL"), 232, 2, hull < hullmax / 3 ? (blink(18) ? CLR_RED : CLR_DARK_RED) : CLR_LIGHT_GREY);
     bar(266, 2, 50, 7, (float)hull / hullmax, hull < hullmax / 3 ? CLR_RED : CLR_GREEN, CLR_DARK_RED);
 }
@@ -526,7 +526,7 @@ static void draw_shipyard(void) {
         rect(bx, ys[i], bw, bh, c);
         print(lab[i], bx + 8, ys[i] + 5, hv ? CLR_WHITE : CLR_LIGHT_GREY);
     }
-    print_centered(str("HOLD %d   SPEED %d   CANNONS %d", capacity, speed, guns), my + mh - 14, CLR_DARK_GREY);
+    print_centered(str("HOLD %d   SPEED %d   CANNONS %d", capacity, speed, guns), SCREEN_W/2, my + mh - 14, CLR_DARK_GREY);
 }
 
 static void draw_chart(void) {
@@ -564,7 +564,7 @@ static void draw_chart(void) {
     draw_chart_ship(NX[here], NY[here] - 4, false, false);   // you, in port
 
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
-    print_centered("SEA CHART  -  click a port to set sail", 2, CLR_LIGHT_YELLOW);
+    print_centered("SEA CHART  -  click a port to set sail", SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     print_right("M back", 314, 2, CLR_DARK_GREY);
 }
 
@@ -578,7 +578,7 @@ static void draw_sail_screen(void) {
 
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(str("$%d", (int)showGold), 4, 2, CLR_YELLOW);
-    print_centered(str("SAILING TO %s  -  %dd", PORT[sail_dest], sail_days), 2, CLR_LIGHT_YELLOW);
+    print_centered(str("SAILING TO %s  -  %dd", PORT[sail_dest], sail_days), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
     bar(60, SCREEN_H - 10, SCREEN_W - 120, 5, clamp(voyage, 0, 1), CLR_LIGHT_YELLOW, CLR_DARKER_GREY);
 }
 
@@ -590,8 +590,8 @@ static void draw_storm_screen(void) {
     float rock = sin_deg(now() * 220) * 10 + (helm - 0.5f) * 30;
     draw_ship(SCREEN_W / 2, 120, 3.2f, false, rock);
 
-    print_centered("RIDE OUT THE STORM", 18, CLR_LIGHT_YELLOW);
-    print_centered("steer to meet the wave   (mouse  /  < >)", 30, CLR_LIGHT_GREY);
+    print_centered("RIDE OUT THE STORM", SCREEN_W/2, 18, CLR_LIGHT_YELLOW);
+    print_centered("steer to meet the wave   (mouse  /  < >)", SCREEN_W/2, 30, CLR_LIGHT_GREY);
 
     // steering track
     int tx = 40, tw = SCREEN_W - 80, ty = 56;
@@ -625,7 +625,7 @@ static void draw_pirate_screen(void) {
     if (pstate == 0) {
         fillp(FILL_CHECKER, -1); rectfill(50, 110, 220, 60, CLR_BLACK); fillp_reset();
         rect(50, 110, 220, 60, CLR_LIGHT_YELLOW);
-        print_centered("A PIRATE BEARS DOWN ON YOU!", 116, CLR_LIGHT_YELLOW);
+        print_centered("A PIRATE BEARS DOWN ON YOU!", SCREEN_W/2, 116, CLR_LIGHT_YELLOW);
         bool h0 = hover(70, 130, 80, 24), h1 = hover(170, 130, 80, 24);
         rectfill(70, 130, 80, 24, h0 ? CLR_DARK_GREY : CLR_DARKER_GREY); rect(70, 130, 80, 24, CLR_RED);
         print("FIGHT (Z)", 70 + (80 - text_width("FIGHT (Z)")) / 2, 138, CLR_WHITE);
@@ -667,10 +667,10 @@ static void draw_title(void) {
     for (int i = 0; i < 30; i++) pset((i * 73 + (int)(now() * 10)) % SCREEN_W, (i * 47) % 120, CLR_DARK_GREY);
     draw_ship(SCREEN_W / 2, 96, 4.0f, false, sin_deg(now() * 90) * 5);
     print_scaled("TRADE WINDS", (SCREEN_W - text_width("TRADE WINDS") * 3) / 2, 26, CLR_LIGHT_YELLOW, 3);
-    print_centered("buy low, sail far, sell dear", 130, CLR_LIGHT_GREY);
-    print_centered(str("reach $%d before %d days are out", GOAL, SEASON), 144, CLR_DARK_GREY);
-    print_centered(str("best fortune: $%d", best), 160, CLR_YELLOW);
-    print_centered("press Z / click to weigh anchor", 178, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered("buy low, sail far, sell dear", SCREEN_W/2, 130, CLR_LIGHT_GREY);
+    print_centered(str("reach $%d before %d days are out", GOAL, SEASON), SCREEN_W/2, 144, CLR_DARK_GREY);
+    print_centered(str("best fortune: $%d", best), SCREEN_W/2, 160, CLR_YELLOW);
+    print_centered("press Z / click to weigh anchor", SCREEN_W/2, 178, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_over(void) {
@@ -682,17 +682,17 @@ static void draw_over(void) {
     fillp(FILL_HLINES, -1); rectfill(0, 130, SCREEN_W, 70, CLR_DARK_BLUE); fillp_reset();
     rectfill(40, 40, 240, 110, CLR_BLACK); rect(40, 40, 240, 110, CLR_LIGHT_YELLOW);
     const char *head = sunk ? "-- YOUR SHIP IS LOST --" : won ? "-- A MERCHANT PRINCE! --" : "-- THE SEASON ENDS --";
-    print_centered(head, 50, sunk ? CLR_RED : won ? CLR_YELLOW : CLR_LIGHT_YELLOW);
+    print_centered(head, SCREEN_W/2, 50, sunk ? CLR_RED : won ? CLR_YELLOW : CLR_LIGHT_YELLOW);
     if (sunk) {
-        print_centered("the sea swallows your fortune.", 72, CLR_LIGHT_GREY);
-        print_centered(str("you went down on day %d", day), 88, CLR_RED);
+        print_centered("the sea swallows your fortune.", SCREEN_W/2, 72, CLR_LIGHT_GREY);
+        print_centered(str("you went down on day %d", day), SCREEN_W/2, 88, CLR_RED);
     } else {
-        print_centered(str("gold $%d", gold), 72, CLR_YELLOW);
-        print_centered(str("cargo worth $%d", net - gold), 86, CLR_GREEN);
-        print_centered(str("FINAL FORTUNE  $%d", net), 104, won ? CLR_YELLOW : CLR_LIGHT_GREY);
+        print_centered(str("gold $%d", gold), SCREEN_W/2, 72, CLR_YELLOW);
+        print_centered(str("cargo worth $%d", net - gold), SCREEN_W/2, 86, CLR_GREEN);
+        print_centered(str("FINAL FORTUNE  $%d", net), SCREEN_W/2, 104, won ? CLR_YELLOW : CLR_LIGHT_GREY);
     }
-    print_centered(str("best  $%d", best), 122, CLR_LIGHT_GREY);
-    print_centered("press Z to sail again", 138, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    print_centered(str("best  $%d", best), SCREEN_W/2, 122, CLR_LIGHT_GREY);
+    print_centered("press Z to sail again", SCREEN_W/2, 138, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 void draw(void) {

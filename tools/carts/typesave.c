@@ -54,11 +54,11 @@ void draw(void) {
         const char *w = str("welcome back, %s!", saved.text);
         print(w, (SCREEN_W - text_width(w)) / 2, 46, CLR_LIGHT_PEACH);
     } else {
-        print_centered("(nothing saved yet)", 46, CLR_DARK_GREY);
+        print_centered("(nothing saved yet)", SCREEN_W/2, 46, CLR_DARK_GREY);
     }
 
     // input box
-    print_centered("your name:", 80, CLR_LIGHT_GREY);
+    print_centered("your name:", SCREEN_W/2, 80, CLR_LIGHT_GREY);
     int boxw = 160, bx = (SCREEN_W - boxw) / 2;
     rect(bx, 92, boxw, 22, CLR_LIGHT_GREY);
 
@@ -67,7 +67,7 @@ void draw(void) {
     const char *shown = str("%s%s", cur.text, cursor);
     print(shown, (SCREEN_W - text_width(shown)) / 2, 99, CLR_WHITE);
 
-    if (msgT > 0) print_centered("saved!", 122, CLR_GREEN);
+    if (msgT > 0) print_centered("saved!", SCREEN_W/2, 122, CLR_GREEN);
 
-    print_centered("letters to type    BACKSPACE    ENTER = save", SCREEN_H - 14, CLR_DARK_GREY);
+    print_centered("letters to type    BACKSPACE    ENTER = save", SCREEN_W/2, SCREEN_H - 14, CLR_DARK_GREY);
 }

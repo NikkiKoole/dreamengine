@@ -317,7 +317,7 @@ void draw(void) {
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print("SAND BURROW", 4, 2, CLR_ORANGE);
     int gc = gems >= quota ? CLR_GREEN : CLR_LIGHT_YELLOW;
-    print_centered(str("GEMS %d/%d", gems, quota), 2, gc);
+    print_centered(str("GEMS %d/%d", gems, quota), SCREEN_W/2, 2, gc);
 
     // burial meter — fills red, the core tension readout
     int bw = 60, bxx = SCREEN_W - bw - 4;
@@ -325,23 +325,23 @@ void draw(void) {
     bar(bxx, 2, bw, 7, 1.0f - bury, bury > 0.6f ? CLR_RED : CLR_GREEN, CLR_DARKER_GREY);
 
     if (gems >= quota && !won && !dead)
-        print_centered(blink(12) ? "EXIT OPEN — head bottom-right" : "", 200 - 9, CLR_GREEN);
+        print_centered(blink(12) ? "EXIT OPEN — head bottom-right" : "", SCREEN_W/2, 200 - 9, CLR_GREEN);
 
     if (dead) {
         fade(0.55f);
         int w = 220, bxw = (SCREEN_W - w) / 2;
         rectfill(bxw, 80, w, 42, CLR_DARK_RED);
         rect(bxw, 80, w, 42, CLR_RED);
-        print_centered(death_msg, 90, CLR_WHITE);
-        print_centered("keep an air pocket overhead!", 102, CLR_LIGHT_PEACH);
-        print_centered("Z / R to dig again", 112, CLR_LIGHT_GREY);
+        print_centered(death_msg, SCREEN_W/2, 90, CLR_WHITE);
+        print_centered("keep an air pocket overhead!", SCREEN_W/2, 102, CLR_LIGHT_PEACH);
+        print_centered("Z / R to dig again", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     }
     if (won) {
         int w = 220, bxw = (SCREEN_W - w) / 2;
         rectfill(bxw, 80, w, 42, CLR_DARK_GREEN);
         rect(bxw, 80, w, 42, CLR_LIME_GREEN);
-        print_centered("ESCAPED THE BURROW!", 90, CLR_WHITE);
-        print_centered(str("all %d gems out alive", quota), 102, CLR_LIGHT_YELLOW);
-        print_centered("Z / R to dig again", 112, CLR_LIGHT_GREY);
+        print_centered("ESCAPED THE BURROW!", SCREEN_W/2, 90, CLR_WHITE);
+        print_centered(str("all %d gems out alive", quota), SCREEN_W/2, 102, CLR_LIGHT_YELLOW);
+        print_centered("Z / R to dig again", SCREEN_W/2, 112, CLR_LIGHT_GREY);
     }
 }

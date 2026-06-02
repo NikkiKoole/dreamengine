@@ -351,7 +351,7 @@ void draw(void) {
     rectfill(0, 0, SCREEN_W, T_Y1 - RAIL, CLR_BLACK);
     print(str("P1  %d", potted[0]), 6, 4, cur == 0 ? CLR_WHITE : CLR_DARK_GREY);
     print_right(str("%d  P2", potted[1]), SCREEN_W - 6, 4, cur == 1 ? CLR_WHITE : CLR_DARK_GREY);
-    print_centered(str("BALLS  %d", object_balls_left()), 4, CLR_LIGHT_GREY);
+    print_centered(str("BALLS  %d", object_balls_left()), SCREEN_W/2, 4, CLR_LIGHT_GREY);
     print(str("BEST %d", hiPots), 6, 12, CLR_DARK_GREY);
 
     // power meter (bottom) while charging
@@ -360,10 +360,9 @@ void draw(void) {
         print_right("hold / release", px - 6, py, CLR_DARK_GREY);
         bar(px, py, pw, 6, charge, charge > 0.8f ? CLR_RED : CLR_ORANGE, CLR_DARKER_GREY);
     } else if (gstate == 0) {
-        print_centered(blink(20) ? str("P%d  -  hold mouse to shoot", cur + 1) : str("P%d", cur + 1),
-                       SCREEN_H - 9, CLR_LIGHT_GREY);
+        print_centered(blink(20) ? str("P%d  -  hold mouse to shoot", cur + 1) : str("P%d", cur + 1), SCREEN_W/2, SCREEN_H - 9, CLR_LIGHT_GREY);
     } else if (gstate == 2) {
-        print_centered("...", SCREEN_H - 9, CLR_DARK_GREY);
+        print_centered("...", SCREEN_W/2, SCREEN_H - 9, CLR_DARK_GREY);
     }
 
     // win banner
@@ -372,8 +371,8 @@ void draw(void) {
         int winner = (potted[0] >= potted[1]) ? 0 : 1;
         rectfill(SCREEN_W / 2 - 80, SCREEN_H / 2 - 22, 160, 46, CLR_DARK_GREEN);
         rect(SCREEN_W / 2 - 80, SCREEN_H / 2 - 22, 160, 46, blink(8) ? CLR_YELLOW : CLR_WHITE);
-        print_centered(str("PLAYER %d WINS", winner + 1), SCREEN_H / 2 - 12, CLR_WHITE);
-        print_centered(str("%d - %d", potted[0], potted[1]), SCREEN_H / 2, CLR_LIGHT_YELLOW);
-        print_centered("SPACE to rack again", SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered(str("PLAYER %d WINS", winner + 1), SCREEN_W/2, SCREEN_H / 2 - 12, CLR_WHITE);
+        print_centered(str("%d - %d", potted[0], potted[1]), SCREEN_W/2, SCREEN_H / 2, CLR_LIGHT_YELLOW);
+        print_centered("SPACE to rack again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }

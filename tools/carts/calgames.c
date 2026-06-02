@@ -376,12 +376,12 @@ static void draw_hud(void) {
     // air read-out
     if (airborne) {
         const char *t = trick_name(trick_id);
-        if (t[0]) print_centered(t, 24, CLR_WHITE);
-        print_centered(str("+%d", (int)air_score), 34, CLR_LIGHT_YELLOW);
+        if (t[0]) print_centered(t, SCREEN_W/2, 24, CLR_WHITE);
+        print_centered(str("+%d", (int)air_score), SCREEN_W/2, 34, CLR_LIGHT_YELLOW);
     } else if (pump_flash > 0) {
-        print_centered("PUMP!", 150, pump_good > 0 ? CLR_GREEN : CLR_LIGHT_YELLOW);
+        print_centered("PUMP!", SCREEN_W/2, 150, pump_good > 0 ? CLR_GREEN : CLR_LIGHT_YELLOW);
     } else if (bail_t > 0) {
-        print_centered("BAIL!", 150, CLR_RED);
+        print_centered("BAIL!", SCREEN_W/2, 150, CLR_RED);
     }
 }
 
@@ -424,10 +424,10 @@ void draw(void) {
         draw_skater(sx, sy - 13, lean);
         print_scaled("CALIFORNIA", CX - 80, 28, CLR_LIGHT_YELLOW, 2);
         print_scaled("GAMES", CX - 40, 46, CLR_PEACH, 2);
-        print_centered("- HALF-PIPE -", 72, CLR_WHITE);
-        if (blink(20)) print_centered("PRESS Z TO SKATE", 148, CLR_GREEN);
-        print_centered(str("BEST  %d", best), 164, CLR_LIGHT_GREY);
-        print_centered("PUMP at the bottom - TRICKS in the air", 184, CLR_INDIGO);
+        print_centered("- HALF-PIPE -", SCREEN_W/2, 72, CLR_WHITE);
+        if (blink(20)) print_centered("PRESS Z TO SKATE", SCREEN_W/2, 148, CLR_GREEN);
+        print_centered(str("BEST  %d", best), SCREEN_W/2, 164, CLR_LIGHT_GREY);
+        print_centered("PUMP at the bottom - TRICKS in the air", SCREEN_W/2, 184, CLR_INDIGO);
         return;
     }
 
@@ -436,16 +436,16 @@ void draw(void) {
     draw_hud();
 
     if (pop_t > 0 && pop_val > 0)
-        print_centered(str("+%d", pop_val), (int)pop_y, pop_col);
+        print_centered(str("+%d", pop_val), SCREEN_W/2, (int)pop_y, pop_col);
 
     if (state == ST_OVER) {
         fade(0.45f);
         rectfill(70, 60, 180, 78, CLR_DARKER_PURPLE);
         rect(70, 60, 180, 78, CLR_PEACH);
-        print_centered("RUN OVER", 68, CLR_PEACH);
+        print_centered("RUN OVER", SCREEN_W/2, 68, CLR_PEACH);
         print_scaled(str("%d", score), CX - text_width(str("%d", score)), 84, CLR_LIGHT_YELLOW, 2);
-        if (score >= best && score > 0) print_centered("NEW BEST!", 110, CLR_GREEN);
-        else print_centered(str("BEST  %d", best), 110, CLR_LIGHT_GREY);
-        if (blink(20)) print_centered("PRESS Z TO SKATE AGAIN", 124, CLR_WHITE);
+        if (score >= best && score > 0) print_centered("NEW BEST!", SCREEN_W/2, 110, CLR_GREEN);
+        else print_centered(str("BEST  %d", best), SCREEN_W/2, 110, CLR_LIGHT_GREY);
+        if (blink(20)) print_centered("PRESS Z TO SKATE AGAIN", SCREEN_W/2, 124, CLR_WHITE);
     }
 }

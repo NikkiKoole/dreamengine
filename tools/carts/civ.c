@@ -452,7 +452,7 @@ void draw(void) {
         int w = 150, bx = (PANELX - w) / 2;
         rectfill(bx, 90, w, 24, CLR_DARK_GREEN);
         rect(bx, 90, w, 24, blink(6) ? CLR_WHITE : CLR_GREEN);
-        print_centered("IRRIGATION!", 95, CLR_WHITE);   // centered over whole screen ok
+        print_centered("IRRIGATION!", SCREEN_W/2, 95, CLR_WHITE);   // centered over whole screen ok
         print("cities grow faster", bx + 16, 104, CLR_LIGHT_YELLOW);
     }
 
@@ -462,10 +462,9 @@ void draw(void) {
         int w = 220, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 78, w, 46, result == 1 ? CLR_DARK_GREEN : CLR_DARKER_PURPLE);
         rect(bx, 78, w, 46, CLR_WHITE);
-        print_centered(result == 1 ? "EMPIRE FOUNDED!" : "EXPEDITION STALLED",
-                       86, result == 1 ? CLR_GREEN : CLR_ORANGE);
+        print_centered(result == 1 ? "EMPIRE FOUNDED!" : "EXPEDITION STALLED", SCREEN_W/2, 86, result == 1 ? CLR_GREEN : CLR_ORANGE);
         print_centered(result == 1 ? str("3 cities in %d turns", turn)
-                                   : "ran out of turns", 100, CLR_LIGHT_GREY);
-        print_centered("click for a new continent", 112, CLR_YELLOW);
+                                   : "ran out of turns", SCREEN_W/2, 100, CLR_LIGHT_GREY);
+        print_centered("click for a new continent", SCREEN_W/2, 112, CLR_YELLOW);
     }
 }

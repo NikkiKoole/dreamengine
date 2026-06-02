@@ -587,8 +587,8 @@ void draw(void) {
         circfill(hcx - hr/2, hcy - hr/3, hr/2, CLR_RED);
         circfill(hcx + hr/2, hcy - hr/3, hr/2, CLR_RED);
         trifill(hcx - hr, hcy, hcx + hr, hcy, hcx, hcy + hr, CLR_RED);
-        print_centered("- IT'S A DATE -", by + 30, CLR_LIGHT_YELLOW);
-        print_centered("Larry's still got it. (Had it?)", by + 42, CLR_LIGHT_PEACH);
-        if (blink(18)) print_centered("click to play again", by + 52, CLR_LIGHT_GREY);
+        print_centered("- IT'S A DATE -", SCREEN_W/2, by + 30, CLR_LIGHT_YELLOW);
+        print_centered("Larry's still got it. (Had it?)", SCREEN_W/2, by + 42, CLR_LIGHT_PEACH);
+        if (blink(18)) print_centered("click to play again", SCREEN_W/2, by + 52, CLR_LIGHT_GREY);
     }
 }

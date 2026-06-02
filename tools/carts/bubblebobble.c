@@ -258,16 +258,16 @@ void draw(void) {
     // HUD
     rectfill(0, 0, SCREEN_W, HUD_H, CLR_BLACK);
     print(str("SCORE %d", score), 4, 2, CLR_YELLOW);
-    print_centered(str("LEVEL %d", level + 1), 2, CLR_WHITE);
+    print_centered(str("LEVEL %d", level + 1), SCREEN_W/2, 2, CLR_WHITE);
     for (int i = 0; i < lives; i++) draw_bub(SCREEN_W - 10 - i * 12, 10, 1, CLR_GREEN);
 
     if (level_flash > 0)
-        print_centered(str("WAVE %d  -  READY!", level + 1), 90, CLR_LIGHT_YELLOW);
+        print_centered(str("WAVE %d  -  READY!", level + 1), SCREEN_W/2, 90, CLR_LIGHT_YELLOW);
     if (gameover) {
         int w = 200, bx = (SCREEN_W - w) / 2;
         rectfill(bx, 80, w, 34, CLR_DARK_PURPLE);
         rect(bx, 80, w, 34, CLR_WHITE);
-        print_centered("GAME OVER", 88, CLR_RED);
-        print_centered(str("score %d  -  press A", score), 100, CLR_YELLOW);
+        print_centered("GAME OVER", SCREEN_W/2, 88, CLR_RED);
+        print_centered(str("score %d  -  press A", score), SCREEN_W/2, 100, CLR_YELLOW);
     }
 }
