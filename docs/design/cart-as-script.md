@@ -369,6 +369,34 @@ Known v1 limitations (documented for the next pass):
 - **Hot-reload state model:** host-owned `de_state` block (PICO-8-like continuity) —
   proven in Step 3.
 
+## Web editor: the cart contract is portable; *running in the browser tab* is the gap
+
+Where a cart can run today, by editor:
+
+| | Electron (desktop) | Browser tab |
+|---|---|---|
+| edit code/sprites/map | ✓ | ✓ |
+| ▶ run — native (clang) | ✓ | ✗ (can't spawn a compiler) |
+| ▶ run — live (libtcc) | ✓ | ✗ (native code can't run in a browser) |
+| Build for web (emcc → wasm) | ✓ (spawns emcc) | ✗ (also needs to spawn emcc) |
+
+So the live/native backends are **desktop-only by construction** — they're native machine
+code, which a browser sandbox can't execute. None of the libtcc work moves the
+browser-run needle. The browser tab is **edit-only** today.
+
+What *does* carry over is the **cart source**: `de_state` is a normal `studio.h` function
+(not `DE_TCC`-gated), so a `STATE { … } / S->field` cart compiles unchanged under
+emscripten. **Verified 2026-06-02:** the starter cart built to `cart.html/js/wasm` via
+the existing web path with no changes. So games written live on desktop are web-portable.
+
+The remaining gap is **goal B from the top of this doc** — letting the *browser tab
+itself* build+run a cart — still unbuilt. Two paths (see also `../guides/sharing.md`):
+a **build server** (browser → emcc on a backend → wasm → `<canvas>`; needs a backend), or
+**emscripten-in-the-browser** (no backend, much heavier). Nice structural note: a browser
+hot-reload would recompile to wasm and hot-swap the module, and to keep state across that
+swap you'd want the host (JS) to own the block — which is exactly the `de_state` shape, so
+the *state model* already ports even though the *compiler* doesn't.
+
 ## de_state ergonomics — DECIDED: `STATE { … }; / S->field`, baked into the starter
 
 Chosen: option 4 (the keyword pair) with `S` as the accessor, **defined in the starter
