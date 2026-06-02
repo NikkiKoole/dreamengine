@@ -252,24 +252,33 @@ if (args[0] === '--update') {
   const chunks = extractCartChunks(fs.readFileSync(cartFile))
   if (!chunks.source) { console.error('not a dreamengine cart'); process.exit(1) }
 
-  fs.mkdirSync(BUILD_DIR, { recursive: true })
+  // Bake into an ISOLATED per-cart scratch dir, never the shared build/ dir.
+  // The live (libtcc) editor host watches build/cart.c by mtime and hot-swaps on
+  // any change — so writing build/cart.c here would yank a user's running cart over
+  // to THIS one. A per-cart dir also keeps parallel bakes of different carts from
+  // colliding (the old "don't run --run in parallel" caveat). studio.c loads the
+  // font + sprites from embedded headers, not cwd, so nothing else needs staging.
+  const bakeName = (path.basename(cartFile).replace(/\.cart\.png$/i, '').replace(/[^a-z0-9_-]/gi, '_')) || 'cart'
+  const BAKE_DIR = path.join(BUILD_DIR, '.bake', bakeName)
+  const BAKE_BIN = path.join(BAKE_DIR, 'cart')
+  fs.mkdirSync(BAKE_DIR, { recursive: true })
 
-  // write source, sprites, map to build/
-  fs.writeFileSync(path.join(BUILD_DIR, 'cart.c'), chunks.source)
+  // write source, sprites, map to the scratch dir
+  fs.writeFileSync(path.join(BAKE_DIR, 'cart.c'), chunks.source)
   const spritesBuf = chunks.sprites
     ? Buffer.from(chunks.sprites.replace(/^data:image\/png;base64,/, ''), 'base64')
     : makeBlankSpritePng()
-  fs.writeFileSync(path.join(BUILD_DIR, 'sprites.png'), spritesBuf)
-  fs.writeFileSync(path.join(BUILD_DIR, 'map.dat'),
+  fs.writeFileSync(path.join(BAKE_DIR, 'sprites.png'), spritesBuf)
+  fs.writeFileSync(path.join(BAKE_DIR, 'map.dat'),
     chunks.map ? Buffer.from(chunks.map, 'base64') : Buffer.alloc(8192))
 
   // generate headers via xxd
-  const xxd = (file) => execSync(`xxd -i ${file}`, { cwd: BUILD_DIR }).toString()
-  fs.writeFileSync(path.join(BUILD_DIR, 'sprites_data.h'),
+  const xxd = (file) => execSync(`xxd -i ${file}`, { cwd: BAKE_DIR }).toString()
+  fs.writeFileSync(path.join(BAKE_DIR, 'sprites_data.h'),
     xxd('sprites.png')
       .replace(/unsigned char sprites_png\[\]/, 'static const unsigned char SPRITES_DATA[]')
       .replace(/unsigned int sprites_png_len/,  'static const unsigned int  SPRITES_DATA_LEN'))
-  fs.writeFileSync(path.join(BUILD_DIR, 'map_data.h'),
+  fs.writeFileSync(path.join(BAKE_DIR, 'map_data.h'),
     xxd('map.dat')
       .replace(/unsigned char map_dat\[\]/, 'static const unsigned char MAP_DATA[]')
       .replace(/unsigned int map_dat_len/,  'static const unsigned int  MAP_DATA_LEN'))
@@ -285,17 +294,17 @@ if (args[0] === '--update') {
 
   // compile
   const studioC = path.join(RUNTIME_DIR, 'studio.c')
-  const cartSrc = path.join(BUILD_DIR, 'cart.c')
+  const cartSrc = path.join(BAKE_DIR, 'cart.c')
   const clangArgs = [
     `"${cartSrc}"`, `"${studioC}"`,
-    `-I"${RUNTIME_DIR}"`, `-I"${BUILD_DIR}"`, `-I"${RAYLIB}/include"`,
+    `-I"${RUNTIME_DIR}"`, `-I"${BAKE_DIR}"`, `-I"${RAYLIB}/include"`,
     `-DSCREEN_W=${SW}`, `-DSCREEN_H=${SH}`, '-DSCALE=1',
     `-DMAP_W=${MW}`, `-DMAP_H=${MH}`, `-DCELL_W=${CW}`, `-DCELL_H=${CH}`,
     '-DTOUCH_CONTROLS_DEFAULT=0', '-Os', '-fno-delete-null-pointer-checks',
     `"${RAYLIB}/lib/libraylib.a"`,
     '-framework OpenGL', '-framework Cocoa', '-framework IOKit',
     '-framework CoreVideo', '-framework CoreFoundation',
-    `-Wl,-dead_strip`, `-o "${CART_BIN}"`,
+    `-Wl,-dead_strip`, `-o "${BAKE_BIN}"`,
   ].join(' ')
 
   process.stdout.write('compiling... ')
@@ -309,10 +318,10 @@ if (args[0] === '--update') {
 
   // run with --screenshot: window opens briefly, 3 frames, exits, saves screenshot.png
   console.log('running (window will flash briefly)...')
-  spawnSync(CART_BIN, ['--screenshot'], { cwd: BUILD_DIR, stdio: 'inherit' })
+  spawnSync(BAKE_BIN, ['--screenshot'], { cwd: BAKE_DIR, stdio: 'inherit' })
 
   // bake screenshot into cart
-  const screenshotPath = path.join(BUILD_DIR, 'screenshot.png')
+  const screenshotPath = path.join(BAKE_DIR, 'screenshot.png')
   if (!fs.existsSync(screenshotPath)) {
     console.error('screenshot.png not written — did the cart crash?')
     process.exit(1)

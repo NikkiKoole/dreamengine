@@ -42,8 +42,13 @@ node tools/make-cart.js --run <cart.png>
 ```
 
 Extracts the cart's source/sprites/map, compiles with clang, runs the binary with
-`--screenshot` (3 frames, window flashes briefly), reads `build/screenshot.png`, and
-writes it back as the cart's visible thumbnail. The data chunks are untouched.
+`--screenshot` (3 frames, window flashes briefly), reads the resulting `screenshot.png`,
+and writes it back as the cart's visible thumbnail. The data chunks are untouched.
+
+Each `--run` builds into its **own** scratch dir, `build/.bake/<name>/`, and never writes
+the shared `build/` dir. So baking a thumbnail is safe to run in parallel (different carts
+don't collide) and can't disturb a live (libtcc) editor session, whose host watches
+`build/cart.c` and would otherwise hot-swap to whatever you just baked.
 
 **This is the normal finishing step after creating a cart.**
 
@@ -225,7 +230,8 @@ Rows shorter than `MAP_W` are zero-padded. Rows beyond `MAP_H` are ignored.
 | `tools/carts/XX-name.cart.js` | optional sprites + map config |
 | `editor/public/carts/XX-name.cart.png` | finished cart (served to the tutorials page) |
 | `editor/public/carts/index.json` | metadata list for the tutorials panel |
-| `build/screenshot.png` | last screenshot from `--run` or from the editor |
+| `build/.bake/<name>/` | isolated scratch dir for a `--run` bake (its `screenshot.png` is read back into the cart) |
+| `build/screenshot.png` | last screenshot from the editor |
 | `tools/carts/compile_flags.txt` | clangd flags so the editor lints cart `.c` files correctly |
 
 ---
