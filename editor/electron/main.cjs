@@ -232,18 +232,25 @@ function macTccHostArgs(dims) {
 let liveProc = null
 let liveSig  = null
 function fileMtime(p) { try { return fs.statSync(p).mtimeMs } catch { return 0 } }
+function fileHash(p)  { try { return require('crypto').createHash('md5').update(fs.readFileSync(p)).digest('hex') } catch { return '' } }
 function liveSignature(dims) {
+  // What forces a host REBUILD/relaunch (vs. an in-place hot reload). studio sources +
+  // dims are baked into the host binary; so are sprites/map (via the embedded data
+  // headers). BUT the editor rewrites sprites.png/map.dat on every run, so keying on
+  // their mtime would relaunch the window every time — key on their CONTENT instead, so
+  // an unchanged sheet keeps the same signature and the cart hot-reloads in place.
   return JSON.stringify({
     dims,
     studio:  fileMtime(path.join(RUNTIME_DIR, 'studio.c')),
     studioH: fileMtime(path.join(RUNTIME_DIR, 'studio.h')),
     syms:    fileMtime(path.join(RUNTIME_DIR, 'studio_tcc_symbols.h')),
-    sprites: fileMtime(path.join(BUILD_DIR, 'sprites.png')),
-    map:     fileMtime(path.join(BUILD_DIR, 'map.dat')),
+    sprites: fileHash(path.join(BUILD_DIR, 'sprites.png')),
+    map:     fileHash(path.join(BUILD_DIR, 'map.dat')),
   })
 }
 function killLiveHost() {
-  if (liveProc && !liveProc.killed) { try { liveProc.kill() } catch {} }
+  // mark the kill as ours so its SIGTERM exit isn't reported to the editor as a crash
+  if (liveProc && !liveProc.killed) { liveProc.__intentional = true; try { liveProc.kill() } catch {} }
   liveProc = null
 }
 function buildTccHost(dims) {
@@ -272,12 +279,14 @@ async function runLive(dims, cfg, wc) {
     return { ok: true, live: true, reloaded: true, src: CART_SRC }
   }
 
+  const wasRunning = !!(liveProc && !liveProc.killed)   // true → a relaunch, not a first launch
   killLiveHost()
   if (!fs.existsSync(TCC_HOST_BIN) || sig !== liveSig) {
     send('cart:log', '── building live host ──\n')
     const b = await buildTccHost(dims)
     if (!b.ok) return { ok: false, cmd: b.cmd, output: b.output || 'live host build failed' }
   }
+  if (wasRunning) send('cart:log', '↻ relaunching live window (sprites / screen / runtime changed)\n')
   liveSig = sig
 
   const cartTitle = cfg?.cartName ? `dreamengine (live): ${cfg.cartName}` : 'dreamengine (live)'
@@ -285,7 +294,11 @@ async function runLive(dims, cfg, wc) {
     { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
   proc.stdout.on('data', c => send('cart:log', c.toString()))
   proc.stderr.on('data', c => send('cart:log', c.toString()))   // [tcc] compiled / hot-reloaded / errors
-  proc.on('exit', (code, signal) => { if (proc === liveProc) liveProc = null; send('cart:exit', { code, signal }) })
+  proc.on('exit', (code, signal) => {
+    const wasIntentional = proc.__intentional
+    if (proc === liveProc) liveProc = null
+    if (!wasIntentional) send('cart:exit', { code, signal })   // real exit (window closed / crash)
+  })
   proc.on('error', () => {})
   liveProc = proc
   return { ok: true, live: true, src: CART_SRC, bin: TCC_HOST_BIN }
