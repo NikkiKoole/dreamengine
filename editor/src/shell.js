@@ -847,7 +847,7 @@ function renderProfile(result) {
   if (perf) {
     const fps = Math.round(perf.fps)
     const verdict = fps >= 58 ? 'smooth 60fps' : fps >= 50 ? `~${fps}fps` : `dropping to ~${fps}fps`
-    addLine(`  CPU ${perf.workMsAvg.toFixed(1)}ms/frame avg · ${perf.workMsMax.toFixed(1)}ms peak`
+    addLine(`  CPU ${perf.workMedian.toFixed(1)}ms/frame typical · ${perf.workP95.toFixed(1)}ms p95`
           + ` · ${Math.round(perf.budgetPct)}% of the 16.6ms budget · ${verdict}`,
             fps >= 58 ? 'build-ok' : 'build-warn')
   }
@@ -856,9 +856,11 @@ function renderProfile(result) {
   const { total, cartSamples, leaves } = hotspots
   const wallPct = total ? Math.round((cartSamples / total) * 100) : 0
   addLine('')
-  addLine(`hottest functions  (${cartSamples}/${total} samples in cart code, ~${wallPct}% of wall; rest = vsync/system)`)
+  addLine(`hottest functions in your update()/draw()  (${cartSamples}/${total} samples, ~${wallPct}% of wall; rest = vsync/system)`)
+  if (cartSamples > 0 && cartSamples < 80)
+    addLine('  ⚠ low sample count — cart is mostly idle, so this ranking is rough', 'build-warn')
   if (!leaves || !leaves.length) {
-    addLine('  (no cart-code hotspots — the cart was mostly idle / waiting on vsync)')
+    addLine('  (nothing hot — the cart was idle / waiting on vsync the whole time)')
   } else {
     leaves.slice(0, 8).forEach(leaf => {
       addLine(`  ${leaf.pct.toFixed(1).padStart(5)}%  ${String(leaf.samples).padStart(4)}  ${leaf.symbol}`)

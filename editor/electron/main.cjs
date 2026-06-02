@@ -243,14 +243,22 @@ function parseSample(report) {
     const childSum = n.children.reduce((s, c) => s + c.count, 0)
     const excl = Math.max(0, n.count - childSum)
     if (!excl) continue
-    leafSamples[n.symbol] = (leafSamples[n.symbol] || 0) + excl
-    // path from the owning primitive down to this leaf
+
+    // full chain root→leaf, then find the OUTERMOST studio.h primitive in it.
+    // - no primitive at all → engine plumbing (the vsync-wait/frame-limiter path
+    //   loop_step›EndDrawing›WaitTime›glfwGetTime, the canvas blit, the audio
+    //   thread): not the cart's frame work, so skip it.
+    // - root the displayed path at that outermost primitive so the cart's OWN
+    //   functions (draw › draw_rag › …) stay visible instead of being chopped
+    //   off above the nearest drawing primitive.
     const chain = []
-    for (let a = n; a; a = a.parent) {
-      chain.unshift(a.symbol)
-      if (PRIM.has(a.symbol)) break
-    }
-    const via = chain.length > 5 ? '…› ' + chain.slice(-5).join(' › ') : chain.join(' › ')
+    for (let a = n; a; a = a.parent) chain.unshift(a.symbol)
+    const rootPrim = chain.findIndex(s => PRIM.has(s))
+    if (rootPrim < 0) continue
+
+    leafSamples[n.symbol] = (leafSamples[n.symbol] || 0) + excl
+    const sub = chain.slice(rootPrim)
+    const via = sub.length > 5 ? '…› ' + sub.slice(-5).join(' › ') : sub.join(' › ')
     const byPath = pathSamples[n.symbol] || (pathSamples[n.symbol] = {})
     byPath[via] = (byPath[via] || 0) + excl
   }
@@ -285,13 +293,22 @@ function readPerf() {
       .map(([name, total]) => ({ name, perFrame: total / frames, total }))
       .sort((a, b) => b.perFrame - a.perFrame)
     const frameMsAvg = j.frameMsAvg || 0
+    // Robust per-frame stats: a single stall (e.g. the frame `sample` attaches
+    // and suspends our threads) wrecks both the raw max AND the mean — for a
+    // near-idle cart one 125ms frame can be half the average. So headline the
+    // median ("typical frame") + p95, both of which ignore the tail.
+    const work = (j.work || []).slice().sort((a, b) => a - b)
+    const pct = q => work.length ? work[Math.min(work.length - 1, Math.floor(work.length * q))] : (j.workMsMax || 0)
+    const median = pct(0.50)
     return {
       frames,
-      workMsAvg: j.workMsAvg || 0,
-      workMsMax: j.workMsMax || 0,
+      workMedian: median,
+      workP95:    pct(0.95),
+      workMsAvg:  j.workMsAvg || 0,   // kept for reference; not displayed (outlier-sensitive)
+      workMsMax:  work.length ? work[work.length - 1] : (j.workMsMax || 0),
       frameMsAvg,
-      fps:       frameMsAvg > 0 ? 1000 / frameMsAvg : 0,
-      budgetPct: (j.workMsAvg || 0) / (1000 / 60) * 100,   // share of the 16.6ms 60fps budget
+      fps:        frameMsAvg > 0 ? 1000 / frameMsAvg : 0,
+      budgetPct:  median / (1000 / 60) * 100,   // typical frame's share of the 16.6ms 60fps budget
       calls,
     }
   } catch { return null }

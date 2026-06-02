@@ -37,14 +37,14 @@ Three sections, top to bottom. Here's a real run of `flyover` (the voxel terrain
 
 ```
 ⏱ profiled 4s
-  CPU 4.5ms/frame avg · 7.8ms peak · 28% of the 16.6ms budget · smooth 60fps
+  CPU 4.5ms/frame typical · 5.9ms p95 · 28% of the 16.6ms budget · smooth 60fps
 
-hottest functions  (592/3307 samples in cart code, ~18% of wall; rest = vsync/system)
+hottest functions in your update()/draw()  (592/3307 samples, ~18% of wall; rest = vsync/system)
    58.6%  347  rlVertex3f
-            222  ← pset › DrawPixelV › rlVertex3f
-             69  ← rectfill › DrawRectanglePro › rlVertex3f
+            222  ← draw › draw_terrain › pset › DrawPixelV › rlVertex3f
+             69  ← draw › rectfill › DrawRectanglePro › rlVertex3f
     5.9%   35  poly_inside
-             35  ← trifill › poly_fill_cov › poly_inside
+             35  ← draw › trifill › poly_fill_cov › poly_inside
     …
 
 draw calls per frame  (your direct calls; nested ones counted once)
@@ -57,25 +57,34 @@ draw calls per frame  (your direct calls; nested ones counted once)
 ### 1. Frame budget — *should I even care?*
 
 ```
-  CPU 4.5ms/frame avg · 7.8ms peak · 28% of the 16.6ms budget · smooth 60fps
+  CPU 4.5ms/frame typical · 5.9ms p95 · 28% of the 16.6ms budget · smooth 60fps
 ```
 
-60fps gives you a **16.6ms** budget per frame. This line is the CPU time spent in
-your `update()` + `draw()` (the vsync wait is excluded). At 28% you have plenty of
-headroom; if it creeps toward 100% — or the verdict stops saying *smooth 60fps* —
-that's when the rest of the report matters. The first few frames (one-time texture
-and font loads) are skipped so the peak is representative.
+60fps gives you a **16.6ms** budget per frame. This is the CPU time spent in your
+`update()` + `draw()` (the vsync wait is excluded). *typical* is the **median**
+frame and *p95* is the worst 1-in-20 — both deliberately ignore one-off stalls (a
+single frame can spike to 100+ms when `sample` attaches and suspends the process;
+that's measurement noise, not your cart, so it's kept out of the headline). The
+first few frames (one-time texture/font loads) are skipped too. At 28% you have
+plenty of headroom; when it creeps toward 100% — or the verdict stops saying
+*smooth 60fps* — that's when the rest matters.
 
 ### 2. Hottest functions — *what's expensive, and why is it called?*
 
 This comes from **statistical sampling**: every millisecond the profiler notes
-which function is running. The percentage is the share of cart-active CPU (vsync
-and OS idle are filtered out — that's the `~18% of wall` note).
+which function is running. Only work reached through your `update()`/`draw()` is
+counted — the engine's own per-frame plumbing (the vsync frame-limiter, the canvas
+blit, the audio thread) is filtered out, which is what the `~18% of wall` note
+means. The percentage is each function's share of that cart-active CPU.
 
 Each hot function lists the **call paths** that reached it, newest call on the
-right. `rlVertex3f` is a raylib internal you never call directly — the paths show
-it's driven by *your* `pset` and `rectfill`. That's the actionable part: to make
-`rlVertex3f` cheaper, make fewer/cheaper `pset`/`rectfill` calls.
+right, rooted at your `draw`/`update` so **your own function names stay in the
+path**. `rlVertex3f` is a raylib internal you never call directly — the path
+`draw › draw_terrain › pset › …` shows it's *your* `draw_terrain`'s `pset` calls
+driving it. That's the actionable part.
+
+> If a cart is nearly idle you'll see a **⚠ low sample count** warning — with only a
+> few dozen samples the ranking is noise; drive the busy part or profile longer.
 
 ### 3. Draw calls per frame — *how many times am I calling things?*
 
@@ -123,8 +132,9 @@ A normal build `#define`s `PROF()` to nothing — zero cost, nothing emitted.
 - **The counters perturb the sampler slightly** — `PROF` bookkeeping shows up as a
   cheap child of each primitive. Negligible in practice, but it means §1's timing
   is a good budget estimate, not a microbenchmark.
-- **Audio runs on its own thread,** so it can appear in §2's paths
-  (`…› sound_callback › sound_svf`). That's real CPU, just not draw work.
+- **§2 shows only `update()`/`draw()` work.** Audio runs on its own thread and the
+  vsync frame-limiter isn't your code, so both are excluded — §2 is "where does my
+  per-frame logic and drawing go," not a whole-process accounting.
 
 ---
 

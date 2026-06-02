@@ -571,6 +571,8 @@ static double prof_work_total  = 0.0;   // ms, summed update+draw (CPU work)
 static double prof_work_max    = 0.0;
 static double prof_frame_total = 0.0;   // ms, summed full frame (incl. vsync)
 static long   prof_frames      = 0;
+static float  prof_work_samples[4096];  // per-frame work ms, for the editor's p95
+static int    prof_work_n      = 0;
 
 static void prof_bump(const char *name) {
     // identical string literals share storage within this TU, so pointer
@@ -601,6 +603,11 @@ static void prof_write(void) {
     for (int i = 0; i < prof_counter_n; i++)
         fprintf(f, "%s{\"name\":\"%s\",\"total\":%ld}",
                 i ? "," : "", prof_counters[i].name, prof_counters[i].calls);
+    // raw per-frame work times so the editor can report p95 (robust to one-off
+    // stalls — e.g. the frame `sample` attaches and suspends our threads)
+    fprintf(f, "],\"work\":[");
+    for (int i = 0; i < prof_work_n; i++)
+        fprintf(f, "%s%.3f", i ? "," : "", prof_work_samples[i]);
     fprintf(f, "]}\n");
     fclose(f);
 }
@@ -701,6 +708,7 @@ static void loop_step(void) {
             double w = (GetTime() - prof_t0) * 1000.0;   // update+draw CPU, ms
             prof_work_total += w;
             if (w > prof_work_max) prof_work_max = w;
+            if (prof_work_n < 4096) prof_work_samples[prof_work_n++] = (float)w;
             prof_frame_total += frame_dt * 1000.0;        // full frame incl. vsync
             prof_frames++;
         }
