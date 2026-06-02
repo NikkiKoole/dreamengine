@@ -105,6 +105,31 @@ inputs), and **ENV** is an AD envelope (gate in → 0→1→0 CV out) you patch 
 per-note plucks. The rest of the catalog (SLEW, MULT, ATTENUVERTER, SCOPE, DELAY, VOICE B…)
 are later additions; each is a ~20-line pure function over the jack graph (see the build plan).
 
+### Famous-module-inspired ideas
+
+The Eurorack cult favorites — mostly **Mutable Instruments** + **Make Noise** — and how they
+map onto our control-rate engine (cables carry gate/pitch/cv; sound is made by `note_on`/`hit`):
+
+**Great fits (generative / CV — doable as ~20-line modules):**
+- **TURING** (Turing Machine) — a looping shift-register: a *rnd* knob sweeps from a locked
+  repeating melody → evolving variations → full chaos. Stepped CV out. *The* cult generative
+  module; perfect control-rate fit. **(shipping now)**
+- **GRIDS** (Mutable Grids) — drum-pattern generator: *map* morphs the pattern, *fill* sets
+  density; outputs kick/snare/hat gates into DRUM. Instant evolving beats. **(shipping now)**
+- **MARBLES** (Mutable Marbles) — shaped randomness: *dens* sets how often a random gate fires,
+  *sprd* how wide the random CV swings; held & quantizable. **(shipping now)**
+- **BRANCHES** (Bernoulli gate) — a gate in, routed to A *or* B by a probability knob (coin flip).
+- **MATHS / FUNC** (Make Noise Maths) — the beloved all-in-one rise/fall function gen = envelope
+  + LFO + slew + end-of-cycle trigger. We have those split (ENV/LFO/SLEW); Maths bundles them.
+
+**Doable once the timbre work lands (needs the navkit instrument port, audio-notes §8):**
+- **PLAITS** — a macro-oscillator: one voice, many synthesis *models* (analog/FM/wavetable/bell/
+  chord) with timbre + morph knobs. We'd expose navkit engines (organ/Rhodes/Karplus) as a MACRO voice.
+- **RINGS** — physical-modeling strings/bells (Karplus/modal) as a voice timbre.
+
+**Out of scope (need audio-rate buffers between modules, which our cables don't carry):**
+- **CLOUDS** (granular), reverb / delay / audio FX.
+
 > The widths below are the **old 480px sketch** — kept for the per-module knob/jack
 > inventory, but the v1 layout is 320px vertical strips (relayout pending step 2).
 

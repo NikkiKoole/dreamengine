@@ -31,7 +31,7 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 
 // ── module type registry ──
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
-       MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, NTYPE };
+       MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, NTYPE };
 enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
@@ -67,6 +67,13 @@ ModType TYPES[NTYPE] = {
                    1, {{"mod",0,2.99f,0,24,34,FMT_LOGIC}} },
     [MOD_SCOPE] = { "SCOPE", CLR_LIGHT_GREY, 6, 4, 1, {{2,false,8,13,"in"}}, 0, {} },
     [MOD_KEYS]  = { "KEYS", CLR_LIGHT_PEACH, 6, 5, 2, {{0,true,24,52,"g"},{1,true,48,52,"p"}}, 0, {} },
+    // ── famous-module-inspired (generative) ──
+    [MOD_TURING]= { "TURING", CLR_TRUE_BLUE, 6, 7, 2, {{0,false,36,16,"clk"},{2,true,36,72,"cv"}},
+                   2, {{"rnd",0,1,0.4f,22,40,FMT_F1},{"len",2,16.99f,8,50,40,FMT_INT}} },
+    [MOD_GRIDS] = { "GRIDS", CLR_DARK_ORANGE, 6, 7, 4, {{0,false,36,16,"clk"},{0,true,16,72,"k"},{0,true,36,72,"s"},{0,true,56,72,"h"}},
+                   2, {{"map",0,1,0.3f,22,40,FMT_F1},{"fill",0,1,0.5f,50,40,FMT_F1}} },
+    [MOD_MARBLES]={ "MARBLES", CLR_LIME_GREEN, 6, 7, 3, {{0,false,36,16,"clk"},{0,true,22,72,"g"},{2,true,50,72,"cv"}},
+                   2, {{"dens",0,1,0.6f,22,40,FMT_F1},{"sprd",0,1,0.7f,50,40,FMT_F1}} },
 };
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -86,6 +93,9 @@ const char *HELP[NTYPE][3] = {
     [MOD_LOGIC]  = { "Combines two gates: AND / OR / XOR (mod).", "AND two EUCLIDs for a pattern neither", "has alone -- emergent rhythm." },
     [MOD_SCOPE]  = { "Oscilloscope. Patch a cv into 'in' to see", "it drawn as a moving trace -- a probe for", "watching what a signal is actually doing." },
     [MOD_KEYS]   = { "Play it! Click the keys or use computer", "keys A S D F G H J. Outputs gate (g) +", "pitch (p) -- patch them into a VOICE." },
+    [MOD_TURING] = { "Turing Machine: a looping random melody.", "rnd=0 locks the loop, rnd=1 = chaos, in", "between it evolves. cv out -> QUANT -> VOICE." },
+    [MOD_GRIDS]  = { "Drum-pattern generator. map morphs the", "groove, fill sets density. k/s/h gate outs", "-> patch into a DRUM. Clock it from CLOCK." },
+    [MOD_MARBLES]= { "Shaped randomness. dens = how often the", "random gate (g) fires; sprd = how wide the", "random cv swings. Clock it; cv -> QUANT." },
 };
 
 // ── module instances + cables ──
@@ -181,9 +191,30 @@ void preset_pwmpad(void) {       // square voice with a slow LFO sweeping its pu
     add_cable(lf, 0, sh, 0); add_cable(sh, 2, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(lf, 0, vo, 4);     // LFO → 'w' = the PWM shimmer
 }
-const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad" };
-void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad };
-#define NPRESET 5
+void preset_turing(void) {       // looping random melody (Turing) + a euclidean beat
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), tm = spawn(MOD_TURING, bayx(1), bayy(1));
+    int qt = spawn(MOD_QUANT, bayx(2), bayy(2)), vo = spawn(MOD_VOICE, bayx(3), bayy(3));
+    int eu = spawn(MOD_EUCLID, bayx(4), bayy(4)), dr = spawn(MOD_DRUM, bayx(5), bayy(5));
+    mod[tm].param[0] = 0.3f;   // mostly-locked, slowly evolving loop
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1); add_cable(ck, 0, vo, 0);
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
+}
+void preset_grids(void) {        // Grids drum-pattern generator → a full kit
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), gr = spawn(MOD_GRIDS, bayx(1), bayy(1)), dr = spawn(MOD_DRUM, bayx(2), bayy(2));
+    add_cable(ck, 0, gr, 0);
+    add_cable(gr, 1, dr, 0); add_cable(gr, 2, dr, 1); add_cable(gr, 3, dr, 2);
+}
+void preset_marbles(void) {      // shaped randomness drives both rhythm (gate) and melody (cv)
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), mb = spawn(MOD_MARBLES, bayx(1), bayy(1));
+    int qt = spawn(MOD_QUANT, bayx(2), bayy(2)), vo = spawn(MOD_VOICE, bayx(3), bayy(3));
+    add_cable(ck, 0, mb, 0); add_cable(mb, 1, vo, 0); add_cable(mb, 2, qt, 0); add_cable(qt, 1, vo, 1);
+}
+const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles" };
+void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles };
+#define NPRESET 8
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[4]; } SaveMod;
@@ -317,6 +348,43 @@ void eval_mod(int mi) {
             if (pitch >= 0) m->state[1] = pitch;          // pitch (holds last)
             m->jackval[0] = m->state[0];
             m->jackval[1] = m->state[1];
+            break; }
+        case MOD_TURING: {   // looping shift-register: head cycles a ring; each new step mutates with prob 'rnd'
+            if (m->state[18] < 0.5f) { for (int i = 0; i < 16; i++) m->state[2 + i] = rnd_float(); m->state[18] = 1; }   // seed the loop
+            int len = (int)m->param[1]; if (len < 2) len = 2; if (len > 16) len = 16;
+            float clk = read_in(mi, 0);
+            if (clk > 0.5f && m->state[0] <= 0.5f) {
+                int head = ((int)m->state[1] + 1) % len;
+                if (rnd_float() < m->param[0]) m->state[2 + head] = rnd_float();   // mutate (rnd=0 locks the loop)
+                m->state[1] = head;
+            }
+            m->state[0] = clk;
+            m->jackval[1] = m->state[2 + (int)m->state[1]];
+            break; }
+        case MOD_GRIDS: {    // drum-pattern generator → kick/snare/hat gates
+            static const float STR[3][16] = {
+                { 1.0f,.1f,.3f,.1f, .8f,.1f,.4f,.2f, .9f,.1f,.3f,.5f, .7f,.1f,.4f,.6f },   // kick
+                { .1f,.1f,.4f,.2f, 1.0f,.1f,.3f,.4f, .2f,.3f,.5f,.2f, .9f,.2f,.6f,.5f },   // snare
+                { .9f,.4f,.8f,.4f, .85f,.4f,.8f,.5f, .9f,.4f,.8f,.5f, .85f,.4f,.8f,.6f } }; // hat
+            float clk = read_in(mi, 0);
+            m->jackval[1] = m->jackval[2] = m->jackval[3] = 0;
+            if (clk > 0.5f && m->state[0] <= 0.5f) {
+                int step = ((int)m->state[1] + (int)(m->param[0] * 16)) % 16;     // map = pattern rotation
+                for (int d = 0; d < 3; d++)
+                    if (STR[d][step] >= 1.0f - m->param[1]) { m->jackval[1 + d] = 1; m->state[2 + d] = 0; }   // fill = threshold
+                m->state[1] += 1;
+            }
+            m->state[0] = clk; for (int d = 0; d < 3; d++) m->state[2 + d] += 1;
+            break; }
+        case MOD_MARBLES: {  // shaped randomness: a random gate (density) + a held random cv (spread)
+            float clk = read_in(mi, 0);
+            m->jackval[1] = 0;
+            if (clk > 0.5f && m->state[0] <= 0.5f) {
+                if (rnd_float() < m->param[0]) { m->jackval[1] = 1; m->state[3] = 0; }                         // gate fires with prob 'dens'
+                m->state[1] = clamp(0.5f + (rnd_float() - 0.5f) * m->param[1], 0, 1);                          // held cv, width 'sprd'
+            }
+            m->state[0] = clk; m->state[3] += 1;
+            m->jackval[2] = m->state[1];
             break; }
     }
 }
@@ -458,6 +526,23 @@ void draw_extras(int mi) {
                 pset(x + GW - 5 - i * 3, y + 42 - (int)(m->state[2 + idx] * 24), CLR_LIME_GREEN);
             }
             break; }
+        case MOD_TURING: {  // the looping ring: dot brightness = value, current head ringed
+            int len = (int)m->param[1]; if (len < 2) len = 2; if (len > 16) len = 16;
+            for (int i = 0; i < len; i++) {
+                int dx = x + 6 + (int)(i * (58.0f / len));
+                circfill(dx, y + 58, 2, m->state[2 + i] > 0.5f ? CLR_TRUE_BLUE : CLR_DARKER_GREY);
+                if (i == (int)m->state[1]) circ(dx, y + 58, 3, CLR_WHITE);
+            }
+            break; }
+        case MOD_GRIDS:     // 3 drum LEDs flashing on their hits
+            circfill(x + 16, y + 56, 4, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_RED);
+            circfill(x + 36, y + 56, 3, m->state[3] < 5 ? CLR_WHITE : CLR_BROWN);
+            circfill(x + 56, y + 56, 2, m->state[4] < 5 ? CLR_WHITE : CLR_DARK_GREY);
+            break;
+        case MOD_MARBLES:   // gate flash + cv meter
+            circfill(x + 18, y + 56, 4, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_GREEN);
+            meter(x + 44, y + 30, 6, 30, m->state[1], CLR_LIME_GREEN);
+            break;
         case MOD_KEYS: {    // 7 white keys; lit while held
             const char KK[7] = { 'A','S','D','F','G','H','J' }; const int OFF[7] = { 0,2,4,5,7,9,11 };
             for (int i = 0; i < 7; i++) {
