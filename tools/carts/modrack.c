@@ -31,7 +31,7 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 
 // ── module type registry ──
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
-       MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, NTYPE };
+       MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS, NTYPE };
 enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
@@ -74,6 +74,8 @@ ModType TYPES[NTYPE] = {
                    2, {{"map",0,1,0.3f,22,40,FMT_F1},{"fill",0,1,0.5f,50,40,FMT_F1}} },
     [MOD_MARBLES]={ "MARBLES", CLR_LIME_GREEN, 6, 7, 3, {{0,false,36,16,"clk"},{0,true,22,72,"g"},{2,true,50,72,"cv"}},
                    2, {{"dens",0,1,0.6f,22,40,FMT_F1},{"sprd",0,1,0.7f,50,40,FMT_F1}} },
+    [MOD_MATHS] = { "MATHS", CLR_BLUE_GREEN, 6, 7, 3, {{0,false,36,16,"t"},{2,true,24,72,"cv"},{0,true,50,72,"eoc"}},
+                   3, {{"rise",0.005f,2,0.1f,16,40,FMT_MS},{"fall",0.005f,2,0.3f,36,40,FMT_MS},{"cyc",0,1,0,56,40,FMT_F1}} },
 };
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -96,6 +98,7 @@ const char *HELP[NTYPE][3] = {
     [MOD_TURING] = { "Turing Machine: a looping random melody.", "rnd=0 locks the loop, rnd=1 = chaos, in", "between it evolves. cv out -> QUANT -> VOICE." },
     [MOD_GRIDS]  = { "Drum-pattern generator. map morphs the", "groove, fill sets density. k/s/h gate outs", "-> patch into a DRUM. Clock it from CLOCK." },
     [MOD_MARBLES]= { "Shaped randomness. dens = how often the", "random gate (g) fires; sprd = how wide the", "random cv swings. Clock it; cv -> QUANT." },
+    [MOD_MATHS]  = { "Function generator (Make Noise Maths).", "rise/fall shape a cv ramp: 't' triggers a", "one-shot; cyc>0 loops it (an LFO). eoc pulses at end." },
 };
 
 // ── module instances + cables ──
@@ -386,6 +389,22 @@ void eval_mod(int mi) {
             m->state[0] = clk; m->state[3] += 1;
             m->jackval[2] = m->state[1];
             break; }
+        case MOD_MATHS: {    // rise/fall function gen: env when triggered, LFO when cycling, + EOC
+            float trig = read_in(mi, 0);
+            bool cyc = m->param[2] > 0.5f;
+            m->jackval[2] = 0;
+            if ((trig > 0.5f && m->state[0] <= 0.5f) || (cyc && m->state[1] < 0.5f)) m->state[1] = 1;   // start rising
+            m->state[0] = trig;
+            if (m->state[1] > 1.5f) {            // falling
+                m->state[3] -= dt() / (m->param[1] < 0.002f ? 0.002f : m->param[1]);
+                if (m->state[3] <= 0) { m->state[3] = 0; m->state[1] = 0; m->jackval[2] = 1; m->state[4] = 0; }   // end-of-cycle pulse
+            } else if (m->state[1] > 0.5f) {     // rising
+                m->state[3] += dt() / (m->param[0] < 0.002f ? 0.002f : m->param[0]);
+                if (m->state[3] >= 1) { m->state[3] = 1; m->state[1] = 2; }
+            }
+            m->jackval[1] = clamp(m->state[3], 0, 1);
+            m->state[4] += 1;
+            break; }
     }
 }
 
@@ -542,6 +561,11 @@ void draw_extras(int mi) {
         case MOD_MARBLES:   // gate flash + cv meter
             circfill(x + 18, y + 56, 4, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_GREEN);
             meter(x + 44, y + 30, 6, 30, m->state[1], CLR_LIME_GREEN);
+            break;
+        case MOD_MATHS:     // level bar + EOC flash
+            rectfill(x + 8, y + 58, GW - 16, 3, CLR_BLACK);
+            rectfill(x + 8, y + 58, (int)(clamp(m->state[3], 0, 1) * (GW - 16)), 3, CLR_BLUE_GREEN);
+            if (m->state[4] < 5) circfill(x + 50, y + 52, 3, CLR_WHITE);
             break;
         case MOD_KEYS: {    // 7 white keys; lit while held
             const char KK[7] = { 'A','S','D','F','G','H','J' }; const int OFF[7] = { 0,2,4,5,7,9,11 };
