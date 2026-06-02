@@ -34,6 +34,10 @@ static float focal = 220.0f;
 #define VP_CX    (VP_X + VP_W / 2)
 #define VP_CY    (VP_Y + VP_H / 2)
 
+// UV editor — sprite sheet shown at 1:1 centred in the viewport
+#define UV_OX  (VP_X + (VP_W - 128) / 2)   // 128
+#define UV_OY  (VP_Y + (VP_H - 128) / 2)   // 36
+
 // color picker dimensions (4 rows × 8 cols of 6×6 swatches with 1px gap)
 #define CP_COLS  8
 #define CP_ROWS  4
@@ -99,6 +103,11 @@ static int   save_flash  = 0;
 static bool  show_help   = false;
 static bool  show_normals = false;
 static bool  ortho_mode   = false;
+
+// UV editor
+static bool  uv_mode         = false;
+static int   uv_sel_corner   = -1;
+static int   uv_hover_corner = -1;
 
 // rename
 static bool  renaming    = false;
@@ -299,8 +308,8 @@ static void build_default_cube(void) {
         Face *f = &obj->faces[i];
         for (int k = 0; k < 4; k++) f->vi[k] = quads[i][k];
         f->color = colors[i]; f->flags = FACE_NOTEX;
-        f->fu[0]=0; f->fv[0]=0; f->fu[1]=1; f->fv[1]=0;
-        f->fu[2]=1; f->fv[2]=1; f->fu[3]=0; f->fv[3]=1;
+        f->fu[0]=0; f->fv[0]=0;  f->fu[1]=16; f->fv[1]=0;
+        f->fu[2]=16;f->fv[2]=16; f->fu[3]=0;  f->fv[3]=16;
     }
 }
 
@@ -430,8 +439,17 @@ static void draw_face_filled(Face *f) {
     int x1=(int)px[f->vi[1]], y1=(int)py[f->vi[1]];
     int x2=(int)px[f->vi[2]], y2=(int)py[f->vi[2]];
     int x3=(int)px[f->vi[3]], y3=(int)py[f->vi[3]];
-    trifill(x0,y0, x1,y1, x2,y2, f->color);
-    trifill(x0,y0, x2,y2, x3,y3, f->color);
+    if (f->flags & FACE_NOTEX) {
+        trifill(x0,y0, x1,y1, x2,y2, f->color);
+        trifill(x0,y0, x2,y2, x3,y3, f->color);
+    } else {
+        tritex(x0,y0, f->fu[0],f->fv[0],
+               x1,y1, f->fu[1],f->fv[1],
+               x2,y2, f->fu[2],f->fv[2]);
+        tritex(x0,y0, f->fu[0],f->fv[0],
+               x2,y2, f->fu[2],f->fv[2],
+               x3,y3, f->fu[3],f->fv[3]);
+    }
 }
 
 static void draw_face_wire(Face *f, int color) {
@@ -507,7 +525,7 @@ static void draw_objects(int view, float cx, float cy, float os, int wsel) {
 
 static void draw_help(void) {
     // floating help panel, top-right of viewport
-    int pw = 118, ph = 143;
+    int pw = 118, ph = 157;
     int px_ = VP_X + VP_W - pw - 4;
     int py_ = VP_Y + 4;
     rectfill(px_, py_, pw, ph, CLR_DARKER_BLUE);
@@ -528,11 +546,13 @@ static void draw_help(void) {
     print("R",   x, y, kc); print("reset cube",  x+18, y, dc); y += lh;
     print("N",   x, y, kc); print("normals dbg", x+18, y, dc); y += lh;
     print("O",   x, y, kc); print("ortho toggle",x+18, y, dc); y += lh;
+    print("U",   x, y, kc); print("UV editor",   x+18, y, dc); y += lh;
     print("[/]", x, y, kc); print("fov",         x+18, y, dc); y += lh;
     line(px_, y, px_+pw-1, y, CLR_DARK_BLUE); y += 2;
     print("face selected:", x, y, sc); y += lh;
     print("E",   x, y, kc); print("extrude",     x+18, y, dc); y += lh;
     print("F",   x, y, kc); print("flip normal", x+18, y, dc); y += lh;
+    print("T",   x, y, kc); print("tex on/off",  x+18, y, dc); y += lh;
     print("DEL", x, y, kc); print("delete face", x+18, y, dc); y += lh;
     print("click color",   x, y, sc); y += lh;
     line(px_, y, px_+pw-1, y, CLR_DARK_BLUE); y += 2;
@@ -540,6 +560,89 @@ static void draw_help(void) {
     print("drag",x, y, kc); print("move",        x+18, y, dc); y += lh;
     print("DEL", x, y, kc); print("delete vert", x+18, y, dc);
     font(FONT_NORMAL);
+}
+
+static void draw_uv_editor(void) {
+    rectfill(VP_X, VP_Y, VP_W, VP_H, CLR_BROWNISH_BLACK);
+
+    // sprite sheet at 1:1
+    sspr(0, 0, 128, 128, UV_OX, UV_OY, 128, 128);
+
+    // grid at sprite boundaries (every 8px)
+    for (int i = 0; i <= 128; i += 8) {
+        line(UV_OX+i, UV_OY, UV_OX+i, UV_OY+127, CLR_DARKER_GREY);
+        line(UV_OX, UV_OY+i, UV_OX+127, UV_OY+i, CLR_DARKER_GREY);
+    }
+
+    // UV quad for selected face
+    if (sel_face >= 0 && sel_obj >= 0) {
+        Face *f = &scene.objects[sel_obj].faces[sel_face];
+        for (int i = 0; i < 4; i++) {
+            int a = i, b = (i+1)%4;
+            line(UV_OX+(int)f->fu[a], UV_OY+(int)f->fv[a],
+                 UV_OX+(int)f->fu[b], UV_OY+(int)f->fv[b], CLR_YELLOW);
+        }
+        for (int i = 0; i < 4; i++) {
+            int cx = UV_OX+(int)f->fu[i];
+            int cy = UV_OY+(int)f->fv[i];
+            int col = (i == uv_sel_corner)   ? CLR_YELLOW :
+                      (i == uv_hover_corner) ? CLR_PINK   : CLR_WHITE;
+            rectfill(cx-2, cy-2, 5, 5, col);
+        }
+    }
+
+    font(FONT_SMALL);
+    print("UV  ESC:back", VP_X+3, VP_Y+3, CLR_DARK_GREY);
+    if (sel_face >= 0 && sel_obj >= 0) {
+        bool textured = !(scene.objects[sel_obj].faces[sel_face].flags & FACE_NOTEX);
+        int tc = textured ? CLR_GREEN : CLR_RED;
+        int tx = SCREEN_W - 4;
+        tx = print(textured ? "TEX ON" : "TEX OFF", tx - text_width(textured ? "TEX ON" : "TEX OFF"), VP_Y+3, tc) - 4;
+        print("T:", tx - text_width("T:"), VP_Y+3, CLR_DARK_GREY);
+    }
+    font(FONT_NORMAL);
+}
+
+static void handle_uv_input(void) {
+    if (keyp(KEY_ESCAPE) || keyp('U')) { uv_mode = false; return; }
+
+    if (keyp('T') && sel_face >= 0 && sel_obj >= 0) {
+        scene.objects[sel_obj].faces[sel_face].flags ^= FACE_NOTEX;
+        save_bytes(&scene, sizeof(scene));
+    }
+
+    int mx = mouse_x(), my = mouse_y();
+
+    // hover detection
+    uv_hover_corner = -1;
+    if (sel_face >= 0 && sel_obj >= 0) {
+        Face *f = &scene.objects[sel_obj].faces[sel_face];
+        for (int i = 0; i < 4; i++) {
+            float dx = mx - (UV_OX + f->fu[i]);
+            float dy = my - (UV_OY + f->fv[i]);
+            if (dx*dx + dy*dy < 25.0f) { uv_hover_corner = i; break; }
+        }
+    }
+
+    // press: select corner
+    if (mouse_pressed(MOUSE_LEFT)) uv_sel_corner = uv_hover_corner;
+
+    // drag: move selected corner
+    if (uv_sel_corner >= 0 && mouse_down(MOUSE_LEFT) && sel_face >= 0 && sel_obj >= 0) {
+        Face *f = &scene.objects[sel_obj].faces[sel_face];
+        float u = mx - UV_OX;
+        float v = my - UV_OY;
+        if (u <   0) u =   0;
+        if (u > 127) u = 127;
+        if (v <   0) v =   0;
+        if (v > 127) v = 127;
+        f->fu[uv_sel_corner] = u;
+        f->fv[uv_sel_corner] = v;
+    }
+    if (mouse_released(MOUSE_LEFT) && uv_sel_corner >= 0) {
+        save_bytes(&scene, sizeof(scene));
+        uv_sel_corner = -1;
+    }
 }
 
 static void draw_scene(void) {
@@ -588,7 +691,7 @@ static void draw_topbar(void) {
     tx = print("FILE", tx, 3, CLR_WHITE) + 5;
     tx = print("MESH", tx, 3, CLR_WHITE) + 5;
     tx = print("FACE", tx, 3, CLR_WHITE) + 5;
-         print("UV",   tx, 3, CLR_WHITE);
+         print("UV",   tx, 3, uv_mode ? CLR_YELLOW : CLR_WHITE);
     if (scene.object_count > 0) {
         const char *name = (renaming && rename_obj == sel_obj) ? rename_buf : scene.objects[sel_obj].name;
         int nc = (renaming && rename_obj == sel_obj) ? CLR_ORANGE : CLR_YELLOW;
@@ -670,13 +773,22 @@ static void draw_statusbar(void) {
     else if (view_mode != VIEW_PERSP && view_mode != VIEW_QUAD)
         hint = "drag vert  scroll:zoom  tab:view";
     print(hint, 3, SCREEN_H-BOT_H+2, CLR_DARK_GREY);
+    // right-align items: compute positions right-to-left
     int rx = SCREEN_W - 3;
-    if (snap_on) rx = print("SNAP", rx - text_width("SNAP"), SCREEN_H-BOT_H+2, CLR_YELLOW) - 4;
+    int ry = SCREEN_H - BOT_H + 2;
+    rx -= text_width("H:help");
+    print("H:help", rx, ry, CLR_DARKER_GREY);
+    rx -= 5;
     if (view_mode == VIEW_PERSP || view_mode == VIEW_QUAD) {
         const char *fov_str = str("fov:%d", (int)focal);
-        rx = print(fov_str, rx - text_width(fov_str), SCREEN_H-BOT_H+2, CLR_DARK_GREY) - 4;
+        rx -= text_width(fov_str);
+        print(fov_str, rx, ry, CLR_DARK_GREY);
+        rx -= 5;
     }
-    print("H:help", rx - text_width("H:help"), SCREEN_H-BOT_H+2, CLR_DARKER_GREY);
+    if (snap_on) {
+        rx -= text_width("SNAP");
+        print("SNAP", rx, ry, CLR_YELLOW);
+    }
     font(FONT_NORMAL);
 }
 
@@ -730,6 +842,28 @@ static void handle_input(void) {
     if (keyp('H')) show_help = !show_help;
     if (keyp('N')) show_normals = !show_normals;
     if (keyp('O')) ortho_mode  = !ortho_mode;
+    if (keyp('U')) {
+        uv_mode = true; uv_sel_corner = -1;
+        // entering UV mode implies you want texturing — auto-enable it
+        if (sel_face >= 0 && sel_obj >= 0)
+            scene.objects[sel_obj].faces[sel_face].flags &= ~FACE_NOTEX;
+    }
+    if (keyp('T') && sel_face >= 0 && sel_obj >= 0) {
+        scene.objects[sel_obj].faces[sel_face].flags ^= FACE_NOTEX;
+        save_bytes(&scene, sizeof(scene));
+    }
+    // click UV in topbar
+    if (mouse_pressed(MOUSE_LEFT) && mouse_y() < TOP_H) {
+        // rough hit test for the UV label position
+        font(FONT_SMALL);
+        int uv_x = 3 + (text_width("FILE")+5) + (text_width("MESH")+5) + (text_width("FACE")+5);
+        font(FONT_NORMAL);
+        if (mouse_x() >= uv_x && mouse_x() < uv_x + 16) {
+            uv_mode = true; uv_sel_corner = -1;
+            if (sel_face >= 0 && sel_obj >= 0)
+                scene.objects[sel_obj].faces[sel_face].flags &= ~FACE_NOTEX;
+        }
+    }
     if (key('[')) { focal -= 1.0f; if (focal < 60.0f)  focal = 60.0f;  }
     if (key(']')) { focal += 1.0f; if (focal > 600.0f) focal = 600.0f; }
     if (keyp('R')) {
@@ -981,14 +1115,16 @@ static bool started = false;
 
 void update(void) {
     if (!started) { init_scene(); started = true; }
-    handle_input();
+    if (uv_mode) handle_uv_input();
+    else         handle_input();
 }
 
 void draw(void) {
     cls(CLR_BLACK);
-    draw_scene();
+    if (uv_mode) draw_uv_editor();
+    else         draw_scene();
     draw_topbar();
     draw_sidebar();
-    draw_statusbar();
+    if (!uv_mode) draw_statusbar();
     if (show_help) draw_help();
 }
