@@ -127,6 +127,8 @@ const studioClickToHelp = EditorView.domEventHandlers({
       new RegExp(`#define\\s+(${escName})\\b`),
       // [static] type [*] name
       new RegExp(`\\b(?:static\\s+)?(?:${typeWords})\\s+\\*?\\s*(${escName})\\b`),
+      // typedef struct/union/enum { ... } TypeName;
+      new RegExp(`}\\s*(${escName})\\s*;`),
     ]
     let best = null
     for (const re of patterns) {
@@ -138,12 +140,23 @@ const studioClickToHelp = EditorView.domEventHandlers({
     // jump cursor to the name part of the match (always the last group)
     const namePos = best.index + best[0].length - name.length
     if (namePos === word.from) return false  // already at the declaration
+
+    // for typedef closings (} TypeName;), scroll to the opening typedef keyword
+    let jumpPos = namePos
+    let jumpLen = name.length
+    if (best[0].trimStart().startsWith('}')) {
+      const tdIdx = doc.lastIndexOf('typedef', best.index)
+      if (tdIdx !== -1) { jumpPos = tdIdx; jumpLen = 'typedef'.length }
+    }
+
+    // cursor-only (anchor === head) so highlightSelectionMatches doesn't
+    // light up every instance of the matched keyword across the file
     view.dispatch({
-      selection: { anchor: namePos, head: namePos + name.length },
+      selection: { anchor: jumpPos, head: jumpPos },
       scrollIntoView: true,
     })
     view.focus()
-    flashRange(view, namePos, namePos + name.length)
+    flashRange(view, jumpPos, jumpPos + jumpLen)
     event.preventDefault()
     return true
   },
