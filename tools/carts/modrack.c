@@ -2,35 +2,37 @@
 
 // MODRACK — a tiny modular synth, built in steps (see docs/design/modular-synth.md).
 //
-// STEP 6 (v1 complete): EUCLID is now a real euclidean-drum module (clock in → a kick on
-// each evenly-spread hit, with a gate output you can patch anywhere), and the whole patch
-// — every cable and knob — SAVES/LOADS. Drag output→input to patch (type-checked), click
-// an occupied input to rewire, right-click a jack to clear. Press S to save, L to load.
-//
-// Default patch (wired on load) = a generative Berlin-school melody over a euclidean beat:
-//   CLOCK → S&H clk + VOICE gate + EUCLID clk,  LFO → S&H in + VOICE filter,
-//   S&H → QUANT → VOICE pitch.
+// Generative Berlin-school patch, fully editable. Drag an output jack to an input
+// (type-checked: green=gate, blue=cv, yellow=pitch), click an occupied input to rewire,
+// right-click a jack to clear. Knobs drag. S saves the patch, L loads, R resets.
+// Strips use the small font so they stay narrow — 7 bays fit, the last one's empty.
 
 #define SLOT 5
 #define ROOT_OCT 4
 
+// ── layout (parametrized so the rack is easy to resize) ──
+#define NSLOT 7          // visible bays (6 modules + 1 empty)
+#define SX0   5          // x of the first strip
+#define SP    44         // strip pitch (x spacing)
+#define SW    40         // strip width
+#define SY    18
+#define SH    156
+#define stripx(i) (SX0 + (i) * SP)
+#define stripcx(i) (stripx(i) + SW / 2)
+
 const char *NOTES[12] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
 const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 
-// patch parameters — knob-backed floats (saved/loaded)
 float p_bpm = 112, p_rate = 0.37f, p_scale = SCALE_PENTA, p_root = 0, p_cut = 700;
 float p_hits = 4, p_steps = 8;
 
-// runtime display mirrors + edge state
 float lfo_out = 0, sh = 0, cutoff = 700;
 int   cur_midi = 60, voice = -1, last_step = -1, tick_flash = 99, eu_counter = 0, eu_flash = 99;
 float prev_clk = 0, prev_gate = 0, prev_euclk = 0;
 
-// UI state
 int   held_knob = 0, drag_y = 0, drag_from = -1, msg_flash = 0;
 const char *msg = "";
 
-// ── jacks: addressable table. type 0 gate / 1 pitch / 2 cv. val = signal this frame ──
 typedef struct { int x, y, type; bool out; float val; } Jack;
 enum { J_CLK1, J_CLK2, J_CLK4, J_LFO, J_SH_IN, J_SH_CLK, J_SH_OUT,
        J_QT_IN, J_QT_OUT, J_VO_G, J_VO_P, J_VO_F, J_EU_CLK, J_EU, JACK_N };
@@ -57,7 +59,6 @@ void wire_default(void) {
     add_cable(J_LFO, J_VO_F);
 }
 
-// ── persistence: one struct holds the whole patch ──
 typedef struct {
     int   ncable; Cable cable[MAXCABLE];
     float p_bpm, p_rate, p_scale, p_root, p_cut, p_hits, p_steps;
@@ -85,12 +86,13 @@ void init(void) {
     instrument(SLOT, INSTR_SAW, 4, 90, 3, 260);
     instrument_filter(SLOT, FILTER_LOW, 600, 10);
 
-    setjack(J_CLK1,  17, 150, 0, true);   setjack(J_CLK2,  29, 150, 0, true);  setjack(J_CLK4, 41, 150, 0, true);
-    setjack(J_LFO,   81, 150, 2, true);
-    setjack(J_SH_IN, 123, 48, 2, false);  setjack(J_SH_CLK, 143, 48, 0, false); setjack(J_SH_OUT, 133, 150, 2, true);
-    setjack(J_QT_IN, 185, 42, 2, false);  setjack(J_QT_OUT, 185, 150, 1, true);
-    setjack(J_VO_G, 223, 42, 0, false);   setjack(J_VO_P, 237, 42, 1, false);  setjack(J_VO_F, 251, 42, 2, false);
-    setjack(J_EU_CLK, 289, 42, 0, false); setjack(J_EU, 289, 150, 0, true);
+    int top = SY + 24, bot = SY + 132;
+    setjack(J_CLK1, stripx(0) + 7, bot, 0, true); setjack(J_CLK2, stripx(0) + 20, bot, 0, true); setjack(J_CLK4, stripx(0) + 33, bot, 0, true);
+    setjack(J_LFO, stripcx(1), bot, 2, true);
+    setjack(J_SH_IN, stripx(2) + 12, top + 4, 2, false); setjack(J_SH_CLK, stripx(2) + 28, top + 4, 0, false); setjack(J_SH_OUT, stripcx(2), bot, 2, true);
+    setjack(J_QT_IN, stripcx(3), top, 2, false); setjack(J_QT_OUT, stripcx(3), bot, 1, true);
+    setjack(J_VO_G, stripx(4) + 8, top, 0, false); setjack(J_VO_P, stripcx(4), top, 1, false); setjack(J_VO_F, stripx(4) + 32, top, 2, false);
+    setjack(J_EU_CLK, stripcx(5), top, 0, false); setjack(J_EU, stripcx(5), bot, 0, true);
     wire_default();
 }
 
@@ -98,10 +100,9 @@ void update(void) {
     bpm((int)p_bpm);
     if (keyp('S')) save_patch();
     if (keyp('L')) load_patch();
-    if (keyp('R')) wire_default();           // R = reset to the default patch
+    if (keyp('R')) wire_default();
     if (msg_flash > 0) msg_flash--;
 
-    // CLOCK — gate outs pulse high on a new step (/1 every, /2 every 2, /4 every 4)
     int step8 = beat() * 2 + (int)(beat_pos() * 2.0f);
     bool newstep = step8 != last_step;
     if (newstep) { last_step = step8; tick_flash = 0; } else tick_flash++;
@@ -110,24 +111,20 @@ void update(void) {
     jk[J_CLK2].val = (newstep && step8 % 2 == 0) ? 1 : 0;
     jk[J_CLK4].val = (newstep && step8 % 4 == 0) ? 1 : 0;
 
-    // LFO
     static float lfo_phase = 0;
     lfo_phase += p_rate * dt();
     if (lfo_phase >= 1.0f) lfo_phase -= 1.0f;
     jk[J_LFO].val = lfo_out = (sin_deg(lfo_phase * 360.0f) + 1.0f) * 0.5f;
 
-    // S&H — latch CV in on a rising clock edge
     float clk = read_in(J_SH_CLK);
     if (clk > 0.5f && prev_clk <= 0.5f) jk[J_SH_OUT].val = read_in(J_SH_IN);
     prev_clk = clk;
     sh = jk[J_SH_OUT].val;
 
-    // QUANT — snap held CV to a scale degree
     int n = (int)(clamp(read_in(J_QT_IN), 0, 1) * 7.999f);
     cur_midi = degree((int)p_scale, ROOT_OCT, n) + (int)p_root;
     jk[J_QT_OUT].val = cur_midi;
 
-    // VOICE — gate retriggers a held note; filter CV sweeps it live
     float gate = read_in(J_VO_G);
     if (gate > 0.5f && prev_gate <= 0.5f) {
         int m = (int)read_in(J_VO_P); if (m < 1) m = 48;
@@ -138,14 +135,13 @@ void update(void) {
     cutoff = p_cut + clamp(read_in(J_VO_F), 0, 1) * 1800.0f;
     if (voice >= 0) note_cutoff(voice, (int)cutoff);
 
-    // EUCLID — advance on its clock input; a kick on each euclidean hit, gate out
     float euclk = read_in(J_EU_CLK);
     jk[J_EU].val = 0;
     if (euclk > 0.5f && prev_euclk <= 0.5f) {
         eu_counter++;
         if (euclid((int)p_hits, (int)p_steps, eu_counter)) {
-            hit(72, INSTR_NOISE, 3, 18);      // click — a transient that cuts through small speakers
-            hit(43, INSTR_TRI, 7, 90);        // body — the low thump
+            hit(72, INSTR_NOISE, 3, 18);
+            hit(43, INSTR_TRI, 7, 90);
             jk[J_EU].val = 1;
             eu_flash = 0;
         }
@@ -159,11 +155,11 @@ void update(void) {
 }
 
 // ── drawing helpers ──
-int sig_col(int t) { return t == 0 ? CLR_GREEN : t == 1 ? CLR_YELLOW : CLR_BLUE; }  // gate / pitch / cv
+int sig_col(int t) { return t == 0 ? CLR_GREEN : t == 1 ? CLR_YELLOW : CLR_BLUE; }
 
 int near_col(int x, int y) {
     float d = distance(mouse_x(), mouse_y(), x, y);
-    return d < 14 ? CLR_WHITE : d < 30 ? CLR_LIGHT_GREY : d < 54 ? CLR_MEDIUM_GREY : CLR_DARKER_GREY;
+    return d < 12 ? CLR_WHITE : d < 26 ? CLR_LIGHT_GREY : d < 48 ? CLR_MEDIUM_GREY : CLR_DARKER_GREY;
 }
 
 int jack_at(int mx, int my) {
@@ -176,7 +172,7 @@ void jack_l(int id, bool lit, const char *name) {
     int c = sig_col(j.type);
     if (j.out) { circ(j.x, j.y, 3, c); if (lit) circfill(j.x, j.y, 1, CLR_WHITE); }
     else         circfill(j.x, j.y, 3, lit ? CLR_WHITE : c);
-    print(name, j.x - text_width(name) / 2, j.y + 6, near_col(j.x, j.y));
+    print(name, j.x - text_width(name) / 2, j.y + 5, near_col(j.x, j.y));
 }
 
 void draw_cable(int sx, int sy, int dx, int dy, int c, bool pulse) {
@@ -196,18 +192,18 @@ void meter(int x, int y, int w, int h, float v, int col) {
 }
 
 float knob_dial(int id, int cx, int cy, float v, float lo, float hi, const char *name, const char *val) {
-    if (mouse_pressed(MOUSE_LEFT) && distance(mouse_x(), mouse_y(), cx, cy) < 8) { held_knob = id; drag_y = mouse_y(); }
+    if (mouse_pressed(MOUSE_LEFT) && distance(mouse_x(), mouse_y(), cx, cy) < 7) { held_knob = id; drag_y = mouse_y(); }
     if (held_knob == id && mouse_down(MOUSE_LEFT)) {
         v = clamp(v + (drag_y - mouse_y()) * (hi - lo) / 120.0f, lo, hi);
         drag_y = mouse_y();
     }
-    bool hot = held_knob == id || distance(mouse_x(), mouse_y(), cx, cy) < 8;
-    circfill(cx, cy, 6, CLR_DARKER_GREY);
-    circ(cx, cy, 6, hot ? CLR_WHITE : CLR_MEDIUM_GREY);
+    bool hot = held_knob == id || distance(mouse_x(), mouse_y(), cx, cy) < 7;
+    circfill(cx, cy, 5, CLR_DARKER_GREY);
+    circ(cx, cy, 5, hot ? CLR_WHITE : CLR_MEDIUM_GREY);
     float a = 135.0f + clamp((v - lo) / (hi - lo), 0, 1) * 270.0f;
-    line(cx, cy, cx + (int)(cos_deg(a) * 5), cy + (int)(sin_deg(a) * 5), CLR_WHITE);
-    print(name, cx - text_width(name) / 2, cy + 9, near_col(cx, cy));
-    if (hot) print(val, cx - text_width(val) / 2, cy + 17, CLR_WHITE);
+    line(cx, cy, cx + (int)(cos_deg(a) * 4), cy + (int)(sin_deg(a) * 4), CLR_WHITE);
+    print(name, cx - text_width(name) / 2, cy + 7, near_col(cx, cy));
+    if (hot) print(val, cx - text_width(val) / 2, cy + 13, CLR_WHITE);
     return v;
 }
 
@@ -236,62 +232,71 @@ void draw(void) {
     edit_cables(mx, my);
 
     cls(CLR_DARKER_BLUE);
+    font(FONT_NORMAL);
     print("MODRACK", 6, 4, CLR_WHITE);
-    if (msg_flash > 0) print(msg, 84, 5, CLR_LIGHT_PEACH);
-    else               print("step6: save/load + beat", 84, 5, CLR_INDIGO);
+    font(FONT_SMALL);
+    if (msg_flash > 0) print(msg, 84, 6, CLR_LIGHT_PEACH);
+    else               print("drag out->in to patch", 84, 6, CLR_INDIGO);
 
     const char *nm[6] = { "CLOCK", "LFO", "S&H", "QUANT", "VOICE", "EUCLID" };
     int col[6]        = { CLR_ORANGE, CLR_PINK, CLR_YELLOW, CLR_GREEN, CLR_BLUE, CLR_RED };
-    int y = 18, h = 156;
     bool gate_lit = tick_flash < 5;
 
-    for (int i = 0; i < 6; i++) {
-        int x = 6 + i * 52, w = 46, cx = x + w / 2;
-        rectfill(x, y, w, h, CLR_DARKER_PURPLE);
-        rect(x, y, w, h, col[i]);
-        print(nm[i], x + 3, y + 3, col[i]);
+    for (int i = 0; i < NSLOT; i++) {
+        int x = stripx(i), cx = stripcx(i);
+
+        if (i >= 6) {   // empty bay — room for the next module
+            rect(x, SY, SW, SH, CLR_DARKER_GREY);
+            print("+", cx - 2, SY + SH / 2 - 6, CLR_DARK_GREY);
+            print("add", cx - 6, SY + SH / 2 + 2, CLR_DARKER_GREY);
+            continue;
+        }
+
+        rectfill(x, SY, SW, SH, CLR_DARKER_PURPLE);
+        rect(x, SY, SW, SH, col[i]);
+        print(nm[i], x + 3, SY + 3, col[i]);
 
         switch (i) {
             case 0:
-                circfill(cx, y + 16, 4, gate_lit ? CLR_WHITE : CLR_DARK_ORANGE);
-                p_bpm = knob_dial(1, cx, y + 44, p_bpm, 60, 240, "bpm", str("%d", (int)p_bpm));
+                circfill(cx, SY + 16, 4, gate_lit ? CLR_WHITE : CLR_DARK_ORANGE);
+                p_bpm = knob_dial(1, cx, SY + 40, p_bpm, 60, 240, "bpm", str("%d", (int)p_bpm));
                 jack_l(J_CLK1, gate_lit, "1"); jack_l(J_CLK2, jk[J_CLK2].val > 0.5f, "2"); jack_l(J_CLK4, jk[J_CLK4].val > 0.5f, "4");
                 break;
             case 1:
-                p_rate = knob_dial(2, cx, y + 36, p_rate, 0.1f, 8.0f, "rate", str("%.1f", p_rate));
-                meter(x + 8, y + 60, 6, 48, lfo_out, CLR_PINK);
+                p_rate = knob_dial(2, cx, SY + 34, p_rate, 0.1f, 8.0f, "rate", str("%.1f", p_rate));
+                meter(x + 6, SY + 54, 5, 50, lfo_out, CLR_PINK);
                 jack_l(J_LFO, false, "cv");
                 break;
             case 2:
                 jack_l(J_SH_IN, false, "in"); jack_l(J_SH_CLK, gate_lit, "clk");
-                meter(x + 8, y + 56, 6, 52, sh, CLR_YELLOW);
+                meter(x + 6, SY + 58, 5, 48, sh, CLR_YELLOW);
                 jack_l(J_SH_OUT, false, "cv");
                 break;
             case 3:
                 jack_l(J_QT_IN, false, "in");
-                p_scale = knob_dial(3, cx, y + 48, p_scale, 0, 5.99f, "scl", SCALES[(int)p_scale]);
-                p_root  = knob_dial(4, cx, y + 74, p_root, 0, 11.99f, "root", NOTES[(int)p_root]);
-                print(NOTES[cur_midi % 12], cx - text_width(NOTES[cur_midi % 12]) / 2, y + 96, CLR_WHITE);
+                p_scale = knob_dial(3, cx, SY + 46, p_scale, 0, 5.99f, "scl", SCALES[(int)p_scale]);
+                p_root  = knob_dial(4, cx, SY + 70, p_root, 0, 11.99f, "root", NOTES[(int)p_root]);
+                print(NOTES[cur_midi % 12], cx - text_width(NOTES[cur_midi % 12]) / 2, SY + 90, CLR_WHITE);
                 jack_l(J_QT_OUT, gate_lit, "pit");
                 break;
             case 4:
                 jack_l(J_VO_G, gate_lit, "g"); jack_l(J_VO_P, gate_lit, "p"); jack_l(J_VO_F, false, "f");
-                p_cut = knob_dial(5, cx, y + 54, p_cut, 200, 2200, "cut", str("%d", (int)p_cut));
-                meter(x + 8, y + 74, 6, 40, (cutoff - 300) / 2600.0f, CLR_BLUE);
-                if (tick_flash < 8) circ(cx, y + 54, 10 - tick_flash, CLR_LIGHT_PEACH);
+                p_cut = knob_dial(5, cx, SY + 52, p_cut, 200, 2200, "cut", str("%d", (int)p_cut));
+                meter(x + 6, SY + 70, 5, 40, (cutoff - 300) / 2600.0f, CLR_BLUE);
+                if (tick_flash < 8) circ(cx, SY + 52, 9 - tick_flash, CLR_LIGHT_PEACH);
                 break;
-            case 5: {  // EUCLID — euclidean drum
+            case 5: {
                 jack_l(J_EU_CLK, gate_lit, "clk");
                 int hits = (int)p_hits, steps = (int)p_steps;
-                p_hits  = knob_dial(6, x + 14, y + 40, p_hits, 1, 8.99f, "h", str("%d", hits));
-                p_steps = knob_dial(7, x + 33, y + 40, p_steps, 2, 16.99f, "s", str("%d", steps));
-                for (int s = 0; s < steps; s++) {           // the euclidean pattern, lit dot = hit
-                    int dx = x + 6 + s * (34 / steps);
+                p_hits  = knob_dial(6, x + 11, SY + 40, p_hits, 1, 8.99f, "h", str("%d", hits));
+                p_steps = knob_dial(7, x + 29, SY + 40, p_steps, 2, 16.99f, "s", str("%d", steps));
+                for (int s = 0; s < steps; s++) {
+                    int dx = x + 4 + (int)(s * (32.0f / steps));
                     bool on = euclid(hits, steps, s);
-                    circfill(dx, y + 74, on ? 2 : 1, on ? CLR_RED : CLR_DARK_GREY);
-                    if (s == ((eu_counter % steps) + steps) % steps && eu_flash < 6) circ(dx, y + 74, 3, CLR_WHITE);
+                    circfill(dx, SY + 64, on ? 2 : 1, on ? CLR_RED : CLR_DARK_GREY);
+                    if (s == ((eu_counter % steps) + steps) % steps && eu_flash < 6) circ(dx, SY + 64, 3, CLR_WHITE);
                 }
-                if (eu_flash < 6) circfill(cx, y + 92, 4, CLR_LIGHT_PEACH);   // kick LED
+                if (eu_flash < 6) circfill(cx, SY + 84, 4, CLR_LIGHT_PEACH);
                 jack_l(J_EU, jk[J_EU].val > 0.5f, "g");
                 break;
             }
@@ -307,5 +312,6 @@ void draw(void) {
         for (int i = 0; i < JACK_N; i++) if (!jk[i].out && jk[i].type == jk[drag_from].type) circ(jk[i].x, jk[i].y, 5, CLR_WHITE);
     }
 
-    print("drag patch  rclick clear  S/L save  R reset", 6, 192, CLR_DARKER_GREY);
+    print("drag patch   rclick clear   S/L save   R reset", 6, 192, CLR_DARKER_GREY);
+    font(FONT_NORMAL);
 }
