@@ -167,6 +167,7 @@ void preset_keys(void) {         // play KEYS into a voice with an envelope-pluc
     note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     int kb = spawn(MOD_KEYS, bayx(0), bayy(0)), en = spawn(MOD_ENV, bayx(1), bayy(1)), vo = spawn(MOD_VOICE, bayx(2), bayy(2));
     int ck = spawn(MOD_CLOCK, bayx(4), bayy(4)), eu = spawn(MOD_EUCLID, bayx(5), bayy(5)), dr = spawn(MOD_DRUM, bayx(6), bayy(6));
+    mod[vo].param[3] = 2;   // triangle — mellow, rounded; a warm played pluck distinct from the buzzier presets
     add_cable(kb, 0, vo, 0); add_cable(kb, 1, vo, 1); add_cable(kb, 0, en, 0); add_cable(en, 1, vo, 2);
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
 }
