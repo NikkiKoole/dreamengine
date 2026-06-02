@@ -28,17 +28,21 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 
 float p_bpm = 112, p_rate = 0.37f, p_scale = SCALE_PENTA, p_root = 0, p_cut = 700;
 float p_hits = 4, p_steps = 8;
+float p_env_a = 0.01f, p_env_d = 0.25f;          // ENV attack/decay, seconds
 
-float lfo_out = 0, sh = 0, cutoff = 700;
+float lfo_out = 0, sh = 0, cutoff = 700, env_level = 0, env_phase = 0;
+bool  env_active = false;
 int   cur_midi = 60, voice = -1, last_step = -1, tick_flash = 99, eu_counter = 0, eu_flash = 99;
-float prev_clk = 0, prev_gate = 0, prev_euclk = 0;
+int   dr_k = 99, dr_s = 99, dr_h = 99;           // DRUM LED flash counters
+float prev_clk = 0, prev_gate = 0, prev_euclk = 0, prev_env_g = 0, prev_dr_k = 0, prev_dr_s = 0, prev_dr_h = 0;
 
 int   held_knob = 0, drag_y = 0, drag_from = -1, msg_flash = 0;
 const char *msg = "";
 
 typedef struct { int x, y, type; bool out; float val; } Jack;
 enum { J_CLK1, J_CLK2, J_CLK4, J_LFO, J_SH_IN, J_SH_CLK, J_SH_OUT,
-       J_QT_IN, J_QT_OUT, J_VO_G, J_VO_P, J_VO_F, J_EU_CLK, J_EU, JACK_N };
+       J_QT_IN, J_QT_OUT, J_VO_G, J_VO_P, J_VO_F, J_EU_CLK, J_EU,
+       J_ENV_G, J_ENV_OUT, J_DR_K, J_DR_S, J_DR_H, JACK_N };
 Jack jk[JACK_N];
 
 typedef struct { int src, dst; } Cable;
@@ -60,15 +64,17 @@ void wire_default(void) {
     add_cable(J_CLK1, J_SH_CLK);  add_cable(J_CLK1, J_VO_G);  add_cable(J_CLK1, J_EU_CLK);
     add_cable(J_LFO, J_SH_IN);    add_cable(J_SH_OUT, J_QT_IN); add_cable(J_QT_OUT, J_VO_P);
     add_cable(J_LFO, J_VO_F);
+    add_cable(J_EU, J_DR_K);      add_cable(J_CLK1, J_DR_H);   add_cable(J_CLK4, J_DR_S);   // a beat
+    add_cable(J_CLK1, J_ENV_G);   // ENV armed; patch its cv out → VOICE f for plucks
 }
 
 typedef struct {
     int   ncable; Cable cable[MAXCABLE];
-    float p_bpm, p_rate, p_scale, p_root, p_cut, p_hits, p_steps;
+    float p_bpm, p_rate, p_scale, p_root, p_cut, p_hits, p_steps, p_env_a, p_env_d;
 } Patch;
 
 void save_patch(void) {
-    Patch p = { ncable, {0}, p_bpm, p_rate, p_scale, p_root, p_cut, p_hits, p_steps };
+    Patch p = { ncable, {0}, p_bpm, p_rate, p_scale, p_root, p_cut, p_hits, p_steps, p_env_a, p_env_d };
     for (int i = 0; i < ncable; i++) p.cable[i] = cable[i];
     save_bytes(&p, sizeof p);
     msg = "SAVED"; msg_flash = 40;
@@ -79,7 +85,7 @@ void load_patch(void) {
         ncable = p.ncable < 0 ? 0 : p.ncable > MAXCABLE ? MAXCABLE : p.ncable;
         for (int i = 0; i < ncable; i++) cable[i] = p.cable[i];
         p_bpm = p.p_bpm; p_rate = p.p_rate; p_scale = p.p_scale; p_root = p.p_root;
-        p_cut = p.p_cut; p_hits = p.p_hits; p_steps = p.p_steps;
+        p_cut = p.p_cut; p_hits = p.p_hits; p_steps = p.p_steps; p_env_a = p.p_env_a; p_env_d = p.p_env_d;
         msg = "LOADED";
     } else msg = "no save";
     msg_flash = 40;
@@ -99,6 +105,9 @@ void init(void) {
     int o4 = bayx(4), y4 = bayy(4);                       // VOICE
     setjack(J_VO_G, o4 + 18, y4 + 16, 0, false); setjack(J_VO_P, o4 + 36, y4 + 16, 1, false); setjack(J_VO_F, o4 + 54, y4 + 16, 2, false);
     setjack(J_EU_CLK, baycx(5), bayy(5) + 16, 0, false); setjack(J_EU, baycx(5), bayy(5) + 72, 0, true);  // EUCLID
+    setjack(J_ENV_G, baycx(6), bayy(6) + 16, 0, false); setjack(J_ENV_OUT, baycx(6), bayy(6) + 72, 2, true);  // ENV
+    int o7 = bayx(7), y7 = bayy(7);                       // DRUM (3 trigger inputs)
+    setjack(J_DR_K, o7 + 18, y7 + 16, 0, false); setjack(J_DR_S, o7 + 36, y7 + 16, 0, false); setjack(J_DR_H, o7 + 54, y7 + 16, 0, false);
     wire_default();
 }
 
@@ -141,22 +150,36 @@ void update(void) {
     cutoff = p_cut + clamp(read_in(J_VO_F), 0, 1) * 1800.0f;
     if (voice >= 0) note_cutoff(voice, (int)cutoff);
 
+    // EUCLID — pure gate source now: a gate out on each euclidean hit (patch it to DRUM)
     float euclk = read_in(J_EU_CLK);
     jk[J_EU].val = 0;
     if (euclk > 0.5f && prev_euclk <= 0.5f) {
         eu_counter++;
-        if (euclid((int)p_hits, (int)p_steps, eu_counter)) {
-            hit(72, INSTR_NOISE, 3, 18);
-            hit(43, INSTR_TRI, 7, 90);
-            jk[J_EU].val = 1;
-            eu_flash = 0;
-        }
+        if (euclid((int)p_hits, (int)p_steps, eu_counter)) { jk[J_EU].val = 1; eu_flash = 0; }
     }
     prev_euclk = euclk;
+
+    // ENV — AD envelope: gate in retriggers a 0→1→0 ramp; patch its cv out to a filter
+    float eg = read_in(J_ENV_G);
+    if (eg > 0.5f && prev_env_g <= 0.5f) { env_phase = 0; env_active = true; }
+    prev_env_g = eg;
+    if (env_active) {
+        env_phase += dt();
+        if      (env_phase < p_env_a)            env_level = env_phase / p_env_a;             // attack 0→1
+        else if (env_phase < p_env_a + p_env_d)  env_level = 1.0f - (env_phase - p_env_a) / p_env_d;  // decay 1→0
+        else { env_level = 0; env_active = false; }
+    }
+    jk[J_ENV_OUT].val = clamp(env_level, 0, 1);
+
+    // DRUM — three gate-triggered percussion voices (the sink for EUCLID/CLOCK gates)
+    float dk = read_in(J_DR_K); if (dk > 0.5f && prev_dr_k <= 0.5f) { hit(72, INSTR_NOISE, 3, 18); hit(43, INSTR_TRI, 7, 90); dr_k = 0; } prev_dr_k = dk; dr_k++;
+    float ds = read_in(J_DR_S); if (ds > 0.5f && prev_dr_s <= 0.5f) { hit(58, INSTR_NOISE, 5, 90); dr_s = 0; } prev_dr_s = ds; dr_s++;
+    float dh = read_in(J_DR_H); if (dh > 0.5f && prev_dr_h <= 0.5f) { hit(92, INSTR_NOISE, 3, 22); dr_h = 0; } prev_dr_h = dh; dr_h++;
 
 #ifdef DE_TRACE
     watch("bpm", "%d", (int)p_bpm);
     watch("cables", "%d", ncable);
+    watch("env", "%d", (int)(env_level * 100));
 #endif
 }
 
@@ -244,18 +267,12 @@ void draw(void) {
     if (msg_flash > 0) print(msg, 80, 5, CLR_LIGHT_PEACH);
     else               print("drag out->in to patch", 80, 5, CLR_INDIGO);
 
-    const char *nm[6] = { "CLOCK", "LFO", "S&H", "QUANT", "VOICE", "EUCLID" };
-    int col[6]        = { CLR_ORANGE, CLR_PINK, CLR_YELLOW, CLR_GREEN, CLR_BLUE, CLR_RED };
+    const char *nm[8] = { "CLOCK", "LFO", "S&H", "QUANT", "VOICE", "EUCLID", "ENV", "DRUM" };
+    int col[8]        = { CLR_ORANGE, CLR_PINK, CLR_YELLOW, CLR_GREEN, CLR_BLUE, CLR_RED, CLR_MEDIUM_GREEN, CLR_DARK_ORANGE };
     bool gate_lit = tick_flash < 5;
 
     for (int i = 0; i < NBAY; i++) {
         int x = bayx(i), y = bayy(i), cx = baycx(i);
-
-        if (i >= 6) {   // empty bay — room for a new module
-            rect(x, y, GW, GH, CLR_DARKER_GREY);
-            print("+ add", cx - 10, y + GH / 2 - 3, CLR_DARK_GREY);
-            continue;
-        }
 
         rectfill(x, y, GW, GH, CLR_DARKER_PURPLE);
         rect(x, y, GW, GH, col[i]);
@@ -305,6 +322,20 @@ void draw(void) {
                 jack_l(J_EU, jk[J_EU].val > 0.5f, "g");
                 break;
             }
+            case 6:  // ENV — AD envelope
+                jack_l(J_ENV_G, env_active, "g");
+                p_env_a = knob_dial(8, x + 26, y + 40, p_env_a, 0.005f, 0.5f, "atk", str("%dms", (int)(p_env_a * 1000)));
+                p_env_d = knob_dial(9, x + 52, y + 40, p_env_d, 0.02f, 1.0f, "dec", str("%dms", (int)(p_env_d * 1000)));
+                meter(x + 8, y + 30, 6, 36, env_level, CLR_MEDIUM_GREEN);
+                jack_l(J_ENV_OUT, env_level > 0.05f, "cv");
+                break;
+            case 7:  // DRUM — kick / snare / hat triggers
+                jack_l(J_DR_K, dr_k < 5, "k"); jack_l(J_DR_S, dr_s < 5, "s"); jack_l(J_DR_H, dr_h < 5, "h");
+                circfill(x + 18, y + 48, 5, dr_k < 5 ? CLR_WHITE : CLR_DARK_RED);
+                circfill(x + 36, y + 48, 4, dr_s < 5 ? CLR_WHITE : CLR_BROWN);
+                circfill(x + 54, y + 48, 3, dr_h < 5 ? CLR_WHITE : CLR_DARK_GREY);
+                print("kik sn hat", x + 8, y + 64, CLR_DARK_GREY);
+                break;
         }
     }
 

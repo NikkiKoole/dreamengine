@@ -69,10 +69,12 @@ When the catalog outgrows the screen the escape hatch is *swap-per-slot* (pick w
 lives in each slot) first, *horizontal scroll* (pan a wider rack) later — both additive, no
 rework. For a teaching toy, fewer-but-understood beats a wall of cramped strips.
 
-**v1 starter set (the 6 slots):** CLOCK · LFO · S&H · QUANT · VOICE · EUCLID — the full
-generative-melody chain plus a generative beat. VOICE B, DRUMS, and everything in the
-expansion clusters (SLEW, ENV, MULT, ATTENUVERTER, SCOPE, DELAY…) come as later catalog
-modules; each is a ~20-line pure function over the jack graph (see the build plan above).
+**Shipped module set (8 bays, full):** CLOCK · LFO · S&H · QUANT · VOICE · EUCLID · **ENV** ·
+**DRUM**. The generative-melody chain (CLOCK→S&H←LFO→QUANT→VOICE) plus a beat: EUCLID is now a
+*pure gate source* (no built-in sound) that drives the **DRUM** module (kick/snare/hat trigger
+inputs), and **ENV** is an AD envelope (gate in → 0→1→0 CV out) you patch to a filter for
+per-note plucks. The rest of the catalog (SLEW, MULT, ATTENUVERTER, SCOPE, DELAY, VOICE B…)
+are later additions; each is a ~20-line pure function over the jack graph (see the build plan).
 
 > The widths below are the **old 480px sketch** — kept for the per-module knob/jack
 > inventory, but the v1 layout is 320px vertical strips (relayout pending step 2).
