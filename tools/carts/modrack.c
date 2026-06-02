@@ -65,55 +65,110 @@ void update(void) {
     if (voice >= 0) note_cutoff(voice, (int)cutoff);
 }
 
-// a vertical 0..1 meter inside a module box
-void meter(int x, int y, int w, int h, float v, int col) {
+// ── Step 2: draw the rack as real Eurorack-style strips (still no interaction) ──
+// signal-type colours: 0 gate (green), 1 pitch (yellow), 2 CV (cyan-ish)
+int sig_col(int t) { return t == 0 ? CLR_GREEN : t == 1 ? CLR_YELLOW : CLR_BLUE_GREEN; }
+
+// proximity reveal: a label is dim at rest and brightens as the cursor nears it,
+// so the cramped 46px strips stay legible without permanent clutter.
+int near_col(int x, int y) {
+    float d = distance(mouse_x(), mouse_y(), x, y);
+    return d < 14 ? CLR_WHITE : d < 30 ? CLR_LIGHT_GREY : d < 54 ? CLR_MEDIUM_GREY : CLR_DARKER_GREY;
+}
+
+// a knob: dark dial with a tick pointing at value v (0..1), sweeping 135°..405°
+void knob(int cx, int cy, float v) {
+    circfill(cx, cy, 6, CLR_DARKER_GREY);
+    circ(cx, cy, 6, CLR_MEDIUM_GREY);
+    float a = 135.0f + clamp(v, 0, 1) * 270.0f;
+    line(cx, cy, cx + (int)(cos_deg(a) * 5), cy + (int)(sin_deg(a) * 5), CLR_WHITE);
+}
+
+// a patch jack: hollow ring = output, filled = input; coloured by signal type; lit pulses white
+void jack(int cx, int cy, int type, bool out, bool lit) {
+    int c = sig_col(type);
+    if (out) { circ(cx, cy, 3, c); if (lit) circfill(cx, cy, 1, CLR_WHITE); }
+    else       circfill(cx, cy, 3, lit ? CLR_WHITE : c);
+}
+
+// a labelled knob: knob + its name (proximity-dimmed) + value when the cursor is near
+void knob_l(int cx, int cy, float v, const char *name, const char *val) {
+    knob(cx, cy, v);
+    print(name, cx - text_width(name) / 2, cy + 9, near_col(cx, cy));
+    if (distance(mouse_x(), mouse_y(), cx, cy) < 16) print(val, cx - text_width(val) / 2, cy + 17, CLR_WHITE);
+}
+
+// a labelled jack: jack + its name (proximity-dimmed)
+void jack_l(int cx, int cy, int type, bool out, bool lit, const char *name) {
+    jack(cx, cy, type, out, lit);
+    print(name, cx - text_width(name) / 2, cy + 6, near_col(cx, cy));
+}
+
+void meter(int x, int y, int w, int h, float v, int col) {   // vertical 0..1 output meter
     int fill = (int)(clamp(v, 0, 1) * h);
+    rectfill(x, y, w, h, CLR_BLACK);
     rectfill(x, y + h - fill, w, fill, col);
 }
 
 void draw(void) {
     cls(CLR_DARKER_BLUE);
-    print("MODRACK", 8, 5, CLR_WHITE);
-    print("step1: hardcoded chain", 92, 6, CLR_INDIGO);
+    print("MODRACK", 6, 4, CLR_WHITE);
+    print("step2: the rack", 84, 5, CLR_INDIGO);
 
-    int bx[5]      = { 8, 66, 124, 182, 240 };
-    const char *nm[5] = { "CLOCK", "LFO", "S&H", "QUANT", "VOICE" };
-    int col[5]     = { CLR_ORANGE, CLR_PINK, CLR_YELLOW, CLR_GREEN, CLR_BLUE };
-    int w = 50, y = 36, h = 110;
+    const char *nm[6] = { "CLOCK", "LFO", "S&H", "QUANT", "VOICE", "EUCLID" };
+    int col[6]        = { CLR_ORANGE, CLR_PINK, CLR_YELLOW, CLR_GREEN, CLR_BLUE, CLR_DARK_GREY };
+    int y = 18, h = 156;
 
-    for (int i = 0; i < 5; i++) {
-        int x = bx[i];
-        bool lit = (i == 0 && tick_flash < 5) || (i == 4 && tick_flash < 8);
-        rectfill(x, y, w, h, CLR_DARKER_PURPLE);
-        rect(x, y, w, h, lit ? CLR_WHITE : col[i]);
+    for (int i = 0; i < 6; i++) {
+        int x = 6 + i * 52, w = 46, cx = x + w / 2;
+        bool placeholder = (i == 5);                       // EUCLID lands in step 6
+        bool gate_lit = tick_flash < 5;
+
+        rectfill(x, y, w, h, placeholder ? CLR_BROWNISH_BLACK : CLR_DARKER_PURPLE);
+        rect(x, y, w, h, col[i]);
         print(nm[i], x + 3, y + 3, col[i]);
-        if (i < 4) print(">", x + w + 1, y + h / 2 - 3, CLR_MEDIUM_GREY);   // signal-flow arrow
 
-        int ix = x + 6, iy = y + 16, iw = w - 12, ih = h - 40;
         switch (i) {
-            case 0:  // CLOCK — pulsing LED + BPM
-                circfill(x + w / 2, y + 40, 6, tick_flash < 5 ? CLR_WHITE : CLR_DARK_ORANGE);
-                print(str("%d", tempo), x + 14, y + h - 16, CLR_LIGHT_GREY);
-                print("bpm", x + 12, y + h - 8, CLR_DARK_GREY);
+            case 0:  // CLOCK — BPM knob, pulse LED, three gate outs (/1 /2 /4)
+                circfill(cx, y + 16, 4, gate_lit ? CLR_WHITE : CLR_DARK_ORANGE);
+                knob_l(cx, y + 42, (tempo - 60) / 180.0f, "bpm", str("%d", tempo));
+                jack_l(x + 11, y + 132, 0, true, gate_lit, "1");
+                jack_l(cx,     y + 132, 0, true, false,    "2");
+                jack_l(x + 35, y + 132, 0, true, false,    "4");
                 break;
-            case 1:  // LFO — live wander
-                meter(ix, iy, iw, ih, lfo_out, CLR_PINK);
+            case 1:  // LFO — rate knob, live CV out
+                knob_l(cx, y + 36, lfo_rate / 8.0f, "rate", str("%.1f", lfo_rate));
+                meter(x + 8, y + 60, 6, 48, lfo_out, CLR_PINK);
+                jack_l(cx, y + 132, 2, true, false, "cv");
                 break;
-            case 2:  // S&H — frozen between ticks
-                meter(ix, iy, iw, ih, sh, CLR_YELLOW);
+            case 2:  // S&H — CV+clock in, held CV out
+                jack_l(x + 13, y + 30, 2, false, false,    "in");
+                jack_l(x + 33, y + 30, 0, false, gate_lit, "clk");
+                meter(x + 8, y + 56, 6, 52, sh, CLR_YELLOW);
+                jack_l(cx, y + 132, 2, true, false, "cv");
                 break;
-            case 3:  // QUANT — note name
-                print(NOTES[cur_midi % 12], x + 18, y + 44, CLR_WHITE);
-                print(str("midi %d", cur_midi), x + 6, y + h - 10, CLR_MEDIUM_GREY);
+            case 3:  // QUANT — scale knob, CV in, pitch out, the note it picked
+                jack_l(cx, y + 26, 2, false, false, "in");
+                knob_l(cx, y + 50, scale / 5.0f, "scl", "penta");
+                print(NOTES[cur_midi % 12], cx - text_width(NOTES[cur_midi % 12]) / 2, y + 84, CLR_WHITE);
+                jack_l(cx, y + 132, 1, true, gate_lit, "pit");
                 break;
-            case 4:  // VOICE — filter cutoff the LFO is sweeping
-                meter(ix, iy, iw, ih, (cutoff - 300) / 2600.0f, CLR_BLUE);
-                if (tick_flash < 8) circ(x + w / 2, y + 40, 8 - tick_flash, CLR_LIGHT_PEACH);
+            case 4:  // VOICE — cutoff knob, three CV ins, trigger LED, live cutoff meter
+                jack_l(x + 9,  y + 26, 0, false, gate_lit, "g");
+                jack_l(cx,     y + 26, 1, false, gate_lit, "p");
+                jack_l(x + 37, y + 26, 2, false, false,    "f");
+                knob_l(cx, y + 52, 0.45f, "cut", str("%d", (int)cutoff));
+                meter(x + 8, y + 72, 6, 40, (cutoff - 300) / 2600.0f, CLR_BLUE);
+                if (tick_flash < 8) circ(cx, y + 52, 9 - tick_flash, CLR_LIGHT_PEACH);
+                break;
+            case 5:  // EUCLID — placeholder until step 6
+                knob_l(cx, y + 40, 0.4f, "hits", "—");
+                jack_l(cx, y + 132, 0, true, false, "g");
+                print("step6", x + 6, y + h - 12, CLR_DARK_GREY);
                 break;
         }
     }
 
-    print("clock -> lfo -> sample&hold -> quantize -> voice", 8, 162, CLR_DARK_GREY);
-    print("hardcoded patch. next: draw the strips, then make cables editable.", 8, 176, CLR_DARKER_GREY);
-    print(str("cutoff %d hz   note %s%d", (int)cutoff, NOTES[cur_midi % 12], cur_midi / 12 - 1), 8, 188, CLR_BLUE_GREEN);
+    print("rack is display-only - step3 adds knobs", 6, 180, CLR_DARKER_GREY);
+    print("hover a knob to read its value", 6, 190, CLR_DARK_GREY);
 }
