@@ -139,12 +139,12 @@ void wire_default(void) {
 
 // ── preset patches (the top "PRESETS" dropdown) ──
 void preset_generative(void) {   // the default: in-key melody over a euclidean beat
-    note_off_all(); nmod = 0; palette_scroll = 0;
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     for (int i = 0; i < 8; i++) spawn(i, bayx(i), bayy(i));
     wire_default();
 }
 void preset_acid(void) {         // euclid-gated squelch bass, slewed pitch + LFO wah
-    note_off_all(); nmod = 0; palette_scroll = 0;
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
     int lf = spawn(MOD_LFO, bayx(2), bayy(2)), sh = spawn(MOD_SH, bayx(3), bayy(3));
     int sl = spawn(MOD_SLEW, bayx(4), bayy(4)), qt = spawn(MOD_QUANT, bayx(5), bayy(5)), vo = spawn(MOD_VOICE, bayx(6), bayy(6));
@@ -155,7 +155,7 @@ void preset_acid(void) {         // euclid-gated squelch bass, slewed pitch + LF
     add_cable(lf, 0, vo, 2);
 }
 void preset_beats(void) {        // two euclidean rhythms → a drum kit
-    note_off_all(); nmod = 0; palette_scroll = 0;
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), e1 = spawn(MOD_EUCLID, bayx(1), bayy(1));
     int e2 = spawn(MOD_EUCLID, bayx(2), bayy(2)), dr = spawn(MOD_DRUM, bayx(3), bayy(3));
     mod[e1].param[0] = 4; mod[e1].param[1] = 8; mod[e2].param[0] = 3; mod[e2].param[1] = 8;
@@ -163,7 +163,7 @@ void preset_beats(void) {        // two euclidean rhythms → a drum kit
     add_cable(e1, 1, dr, 0); add_cable(e2, 1, dr, 1); add_cable(ck, 0, dr, 2);
 }
 void preset_keys(void) {         // play KEYS into a voice with an envelope-plucked filter, over a beat
-    note_off_all(); nmod = 0; palette_scroll = 0;
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     int kb = spawn(MOD_KEYS, bayx(0), bayy(0)), en = spawn(MOD_ENV, bayx(1), bayy(1)), vo = spawn(MOD_VOICE, bayx(2), bayy(2));
     int ck = spawn(MOD_CLOCK, bayx(4), bayy(4)), eu = spawn(MOD_EUCLID, bayx(5), bayy(5)), dr = spawn(MOD_DRUM, bayx(6), bayy(6));
     add_cable(kb, 0, vo, 0); add_cable(kb, 1, vo, 1); add_cable(kb, 0, en, 0); add_cable(en, 1, vo, 2);
