@@ -215,9 +215,20 @@ void preset_marbles(void) {      // shaped randomness drives both rhythm (gate) 
     int qt = spawn(MOD_QUANT, bayx(2), bayy(2)), vo = spawn(MOD_VOICE, bayx(3), bayy(3));
     add_cable(ck, 0, mb, 0); add_cable(mb, 1, vo, 0); add_cable(mb, 2, qt, 0); add_cable(qt, 1, vo, 1);
 }
-const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles" };
-void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles };
-#define NPRESET 8
+void preset_maths(void) {        // MATHS cycling as a slow asymmetric filter sweep over a generative line
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), lf = spawn(MOD_LFO, bayx(1), bayy(1)), sh = spawn(MOD_SH, bayx(2), bayy(2)), qt = spawn(MOD_QUANT, bayx(3), bayy(3));
+    int vo = spawn(MOD_VOICE, bayx(4), bayy(4)), ma = spawn(MOD_MATHS, bayx(5), bayy(5)), eu = spawn(MOD_EUCLID, bayx(6), bayy(6)), dr = spawn(MOD_DRUM, bayx(7), bayy(7));
+    mod[ma].param[0] = 0.4f; mod[ma].param[1] = 1.2f; mod[ma].param[2] = 1;   // slow rise, slower fall, cycling
+    mod[vo].param[0] = 500;                                                   // low cutoff so the sweep opens it
+    add_cable(ck, 0, sh, 1); add_cable(ck, 0, vo, 0); add_cable(ck, 0, eu, 0);
+    add_cable(lf, 0, sh, 0); add_cable(sh, 2, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(ma, 1, vo, 2);   // MATHS cv → VOICE filter = the slow sweep
+    add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
+}
+const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep" };
+void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths };
+#define NPRESET 9
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[4]; } SaveMod;
