@@ -368,3 +368,42 @@ Known v1 limitations (documented for the next pass):
   ship/web/iPad. See "One cart, many backends".
 - **Hot-reload state model:** host-owned `de_state` block (PICO-8-like continuity) —
   proven in Step 3.
+
+## de_state ergonomics — make it friendlier (OPEN, to design)
+
+`de_state` works, but the cart-author surface is a bit cryptic for beginners:
+
+```c
+typedef struct { float x; int score; } State;
+#define ST ((State*)de_state(sizeof(State)))   // cast + sizeof + macro = scary line
+// then ST->x, ST->score
+```
+
+The function itself is fine; it's the *spelling* that's unfriendly (the cast, the
+`sizeof`, the macro, and the techy name). Options to weigh (not yet chosen):
+
+1. **Zero-API change — bake it into the starter template.** Ship the welcome/empty cart
+   with the `State` struct + `#define ST …` already written, plus an empty `State {}`.
+   Beginners just add fields and use `ST->…`; they never type the scary line. Cheapest;
+   normalises the pattern without touching the engine.
+2. **Generic accessor macro in `studio.h`** — `#define de_state_of(T) ((T*)de_state(sizeof(T)))`
+   → `de_state_of(State)->x`. Hides the cast/sizeof but repeats the type each use. Meh.
+3. **Friendlier name** — `remember()` / `keep()` / `persist()` instead of `de_state`
+   (keep the same mechanism). Low effort, warmer to read.
+4. **A `STATE { … }` keyword pair** (strongest candidate for "looks friendly"):
+   ```c
+   // in studio.h:
+   #define STATE  typedef struct DeState DeState; struct DeState
+   #define S      ((DeState *)de_state(sizeof(DeState)))
+   // in the cart — no typedef, no cast, no sizeof:
+   STATE { float x; int score; };
+   void update(void){ S->x += 1; }
+   ```
+   One word to declare (`STATE { … };`), one letter to use (`S`). Fixed names are fine
+   for a fantasy console (one state blob per cart). Reads almost like a language feature.
+
+Tensions to keep in mind while deciding: it must still compile cleanly under **native
+clang** (it does — pure macros over the existing fn); keep the **struct-reshape gotcha**
+teachable (changing fields → relaunch for a fresh zeroed block); and don't collide with
+common cart identifiers (`S`, `ST`, `STATE` — check against the namespace trap in
+`CLAUDE.md`). Decision deferred — the user wants to sit with the feel of it.
