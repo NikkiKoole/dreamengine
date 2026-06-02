@@ -140,9 +140,10 @@ int  print(const char *text, int x, int y, int color);             // returns x 
 int  print_centered(const char *text, int y, int color);           // center text horizontally on screen; returns x after last char
 int  print_right(const char *text, int right_x, int y, int color); // right-align text at right_x; returns x after last char
 int  print_scaled(const char *text, int x, int y, int color, int scale); // bigger text for titles/menus (scale 2 = double size); returns x after last char
-int  print_shadow(const char *text, int x, int y, int color, int shadow_color);   // text with a drop shadow at (+1,+1); legible over busy backgrounds
 int  print_outline(const char *text, int x, int y, int color, int outline_color); // text with a 1px outline in all 8 directions; maximum legibility
 void line(int x1, int y1, int x2, int y2, int color);
+void bezier(int x0, int y0, int cx, int cy, int x1, int y1, int color);                                                    // quadratic Bezier: smooth curve from (x0,y0) to (x1,y1) pulled toward control point (cx,cy)
+void bezier_cubic(int x0, int y0, int cx0, int cy0, int cx1, int cy1, int x1, int y1, int color);                          // cubic Bezier: two control points — S-curves and tighter bends
 void pset(int x, int y, int color);                     // set a single pixel (pairs with pget)
 void rect(int x, int y, int w, int h, int color);       // rectangle border
 void rectfill(int x, int y, int w, int h, int color);   // filled rectangle
@@ -187,6 +188,7 @@ void thickline(int x1, int y1, int x2, int y2, int w, int color); // line with p
 void thicklineoutline(int x1, int y1, int x2, int y2, int w, int color); // outline of a thick line (capsule boundary) — hugs thickline
 void rrect(int x, int y, int w, int h, int r, int color);         // rounded rectangle outline. r = corner radius
 void rrectfill(int x, int y, int w, int h, int r, int color);     // filled rounded rectangle — panels, buttons, speech bubbles
+void gradient(int x, int y, int w, int h, int c_a, int c_b, float angle_deg); // dithered gradient at any angle — 0=left→right, 90=top→bottom, any value in between
 void vgradient(int x, int y, int w, int h, int c_top, int c_bot);    // vertical dithered gradient from c_top to c_bot — skies, backdrops
 void hgradient(int x, int y, int w, int h, int c_left, int c_right); // horizontal dithered gradient — side lighting, panels
 void tritex(int x1, int y1, float u1, float v1, int x2, int y2, float u2, float v2, int x3, int y3, float u3, float v3); // texture-mapped triangle: each corner maps a screen point to a sprite-sheet pixel (u,v). affine (PS1-style). the textured-3D primitive

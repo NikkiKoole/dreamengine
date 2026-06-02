@@ -23,6 +23,11 @@ if (!fs.existsSync(plist)) {
 }
 
 try {
+  // Skip the two PlistBuddy writes when already branded (the common case after
+  // npm install, which also runs this script via postinstall).
+  const current = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleName', plist], { encoding: 'utf8' }).trim()
+  if (current === NAME) process.exit(0)
+
   for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
     execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} ${NAME}`, plist])
   }

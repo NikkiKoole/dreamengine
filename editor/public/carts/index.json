@@ -930,6 +930,11 @@
     "file": "ragdoll.cart.png"
   },
   {
+    "title": "dreamcad",
+    "description": "A picoCAD-style 3D model editor. Orbit camera in perspective view, three orthographic views (Tab to cycle). Object list in the sidebar. v1: view the default cube, orbit and zoom with mouse. More editing coming soon.",
+    "file": "dreamcad.cart.png"
+  },
+  {
     "title": "Physics playground",
     "description": "A tiny verlet physics world you can read end to end — the whole engine is three ideas: a point remembers where it was last frame (so velocity is just now-minus-last), a stick keeps two points a fixed distance apart, and each frame you move every point then relax the sticks a few times. From those two primitives the cart builds a whole showcase: a dangling chain, a draping cloth sheet, a wobbly soft-body blob (a ring of points around a hub), pseudo-solid boxes and a triangle that stack and tumble, and bouncy balls — all colliding as circles and against each other's edges. Left/Right change the substep count live (more substeps = fast/heavy things stop tunnelling through thin surfaces). Drag any point to grab and throw it; Z drops a ball, X drops a box, R resets.",
     "file": "physics.cart.png"

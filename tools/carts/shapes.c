@@ -40,7 +40,8 @@ void draw(void) {
     // rrect / rrectfill
     rrectfill(10, 112, 90, 30, 6, CLR_DARK_PURPLE);
     rrect(    10, 112, 90, 30, 6, CLR_PINK);
-    print_shadow("speech bubble", 14, 120, CLR_WHITE, CLR_BLACK);
+    print("speech bubble", 15, 121, CLR_BLACK);
+    print("speech bubble", 14, 120, CLR_WHITE);
 
     rrectfill(110, 112, 60, 30, 12, CLR_DARK_BROWN);
     rrect(    110, 112, 60, 30, 12, CLR_ORANGE);

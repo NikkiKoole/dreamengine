@@ -96,8 +96,10 @@ void draw(void) {
         fillp_reset();
     }
 
+    print("fillp_anchor", 9, 9, CLR_BLACK);
     print("fillp_anchor", 8, 8, CLR_WHITE);
-    if (anchored) print("ON  - dither glued to each shape", 8, 20, CLR_LIME_GREEN);
-    else          print("OFF - dither crawls (world-pinned)", 8, 20, CLR_RED);
+    if (anchored) { print("ON  - dither glued to each shape", 9, 21, CLR_BLACK); print("ON  - dither glued to each shape", 8, 20, CLR_LIME_GREEN); }
+    else          { print("OFF - dither crawls (world-pinned)", 9, 21, CLR_BLACK); print("OFF - dither crawls (world-pinned)", 8, 20, CLR_RED); }
+    print("Z: toggle  -  squares & tilts show it", 9, SCREEN_H - 11, CLR_BLACK);
     print("Z: toggle  -  squares & tilts show it", 8, SCREEN_H - 12, CLR_LIGHT_GREY);
 }

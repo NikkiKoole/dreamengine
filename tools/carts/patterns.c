@@ -30,7 +30,9 @@ void draw(void) {
     fillp_reset();
 
     const char *t = "FILL PATTERNS";
-    print_scaled(t, (SCREEN_W - text_width(t) * 2) / 2, 8, CLR_WHITE, 2);
+    int tx = (SCREEN_W - text_width(t) * 2) / 2;
+    print_scaled(t, tx + 2, 10, CLR_DARK_BLUE, 2);
+    print_scaled(t, tx, 8, CLR_WHITE, 2);
 
     // a RANDOM pattern, re-rolled every second — any 16-bit value is valid
     int bx = 70, by = 42, bw = 180, bh = 52;
@@ -51,5 +53,6 @@ void draw(void) {
         print(NAME[i], x + 4, y + 30, CLR_LIGHT_GREY);
     }
 
+    print_centered("A: change colors", SCREEN_H - 11, CLR_DARK_BLUE);
     print_centered("A: change colors", SCREEN_H - 12, CLR_WHITE);
 }

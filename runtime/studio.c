@@ -1271,12 +1271,6 @@ int print(const char *text, int x, int y, int color) {
     return x + text_width(text);
 }
 
-int print_shadow(const char *text, int x, int y, int color, int shadow_color) {
-    PROF("print_shadow");
-    DrawTextEx(cur_font(), text, (Vector2){ (float)(x+1), (float)(y+1) },
-               cur_font_size(), 0, palette[shadow_color % PALETTE_SIZE]);
-    return print(text, x, y, color);
-}
 
 int print_outline(const char *text, int x, int y, int color, int outline_color) {
     PROF("print_outline");
@@ -1550,6 +1544,40 @@ void tritex(int x1, int y1, float u1, float v1,
 void line(int x1, int y1, int x2, int y2, int color) {
     PROF("line");
     DrawLine(x1, y1, x2, y2, palette[color % PALETTE_SIZE]);
+}
+
+static int bez_steps(float len) {
+    int n = (int)(len * 0.5f);
+    return n < 4 ? 4 : n > 200 ? 200 : n;
+}
+void bezier(int x0, int y0, int cx, int cy, int x1, int y1, int color) {
+    PROF("bezier");
+    float len = sqrtf((float)((cx-x0)*(cx-x0)+(cy-y0)*(cy-y0)))
+              + sqrtf((float)((x1-cx)*(x1-cx)+(y1-cy)*(y1-cy)));
+    int n = bez_steps(len);
+    float px = (float)x0, py = (float)y0;
+    for (int i = 1; i <= n; i++) {
+        float t = i / (float)n, mt = 1.0f - t;
+        float nx = mt*mt*x0 + 2.0f*mt*t*cx + t*t*x1;
+        float ny = mt*mt*y0 + 2.0f*mt*t*cy + t*t*y1;
+        line((int)roundf(px), (int)roundf(py), (int)roundf(nx), (int)roundf(ny), color);
+        px = nx; py = ny;
+    }
+}
+void bezier_cubic(int x0, int y0, int cx0, int cy0, int cx1, int cy1, int x1, int y1, int color) {
+    PROF("bezier_cubic");
+    float len = sqrtf((float)((cx0-x0)*(cx0-x0)+(cy0-y0)*(cy0-y0)))
+              + sqrtf((float)((cx1-cx0)*(cx1-cx0)+(cy1-cy0)*(cy1-cy0)))
+              + sqrtf((float)((x1-cx1)*(x1-cx1)+(y1-cy1)*(y1-cy1)));
+    int n = bez_steps(len);
+    float px = (float)x0, py = (float)y0;
+    for (int i = 1; i <= n; i++) {
+        float t = i / (float)n, mt = 1.0f - t;
+        float nx = mt*mt*mt*x0 + 3.0f*mt*mt*t*cx0 + 3.0f*mt*t*t*cx1 + t*t*t*x1;
+        float ny = mt*mt*mt*y0 + 3.0f*mt*mt*t*cy0 + 3.0f*mt*t*t*cy1 + t*t*t*y1;
+        line((int)roundf(px), (int)roundf(py), (int)roundf(nx), (int)roundf(ny), color);
+        px = nx; py = ny;
+    }
 }
 
 void pset(int x, int y, int color) {
@@ -1971,6 +1999,30 @@ static void gradient_band(int bx, int by, int bw, int bh, int ca, int cb, float 
     fillp_reset();
 }
 
+static const int BAYER4[4][4] = {
+    {  0,  8,  2, 10 },
+    { 12,  4, 14,  6 },
+    {  3, 11,  1,  9 },
+    { 15,  7, 13,  5 },
+};
+void gradient(int x, int y, int w, int h, int c_a, int c_b, float angle_deg) {
+    PROF("gradient");
+    if (w <= 0 || h <= 0) return;
+    float ca = cosf(angle_deg * 3.14159265f / 180.0f);
+    float sa = sinf(angle_deg * 3.14159265f / 180.0f);
+    float cx = x + w * 0.5f, cy = y + h * 0.5f;
+    float half_ext = fabsf(ca) * w * 0.5f + fabsf(sa) * h * 0.5f;
+    if (half_ext < 0.5f) half_ext = 0.5f;
+    for (int py = y; py < y + h; py++) {
+        for (int px = x; px < x + w; px++) {
+            float proj = ca * (px + 0.5f - cx) + sa * (py + 0.5f - cy);
+            float t = (proj + half_ext) / (2.0f * half_ext);
+            if (t < 0.0f) t = 0.0f; if (t > 1.0f) t = 1.0f;
+            float thr = (BAYER4[py & 3][px & 3] + 0.5f) / 16.0f;
+            pset(px, py, t > thr ? c_b : c_a);
+        }
+    }
+}
 void vgradient(int x, int y, int w, int h, int c_top, int c_bot) {
     PROF("vgradient");
     if (h <= 0 || w <= 0) return;

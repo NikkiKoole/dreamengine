@@ -9,7 +9,8 @@ void draw(void) {
     // ── FONT_NORMAL (8x8) ──────────────────────────────────
     font(FONT_NORMAL);
     print("FONT_NORMAL  (8x8)", 8, 26, CLR_WHITE);
-    print_shadow("drop shadow", 8, 36, CLR_LIGHT_GREY, CLR_BLACK);
+    print("drop shadow", 9, 37, CLR_BLACK);
+    print("drop shadow", 8, 36, CLR_LIGHT_GREY);
     print_outline("outline text", 8, 46, CLR_WHITE, CLR_DARK_PURPLE);
 
     // chained print — shows return-x usage
@@ -22,7 +23,8 @@ void draw(void) {
     font(FONT_SMALL);
     print("FONT_SMALL  (4x6) — fits ~64 chars across 320px", 8, 76, CLR_ORANGE);
     print("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 !?.,;:", 8, 84, CLR_WHITE);
-    print_shadow("shadow on small font", 8, 92, CLR_LIGHT_GREY, CLR_BLACK);
+    print("shadow on small font", 9, 93, CLR_BLACK);
+    print("shadow on small font", 8, 92, CLR_LIGHT_GREY);
 
     // show text_width respects active font
     const char *sw = "text_width uses active font";
@@ -33,7 +35,8 @@ void draw(void) {
     font(FONT_TINY);
     print("FONT_TINY  (3x5) — fits ~80 chars across 320px", 8, 116, CLR_LIME_GREEN);
     print("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 !?.,;:+-*/=", 8, 124, CLR_WHITE);
-    print_shadow("shadow on tiny font", 8, 132, CLR_LIGHT_GREY, CLR_BLACK);
+    print("shadow on tiny font", 9, 133, CLR_BLACK);
+    print("shadow on tiny font", 8, 132, CLR_LIGHT_GREY);
     print_outline("outline on tiny", 8, 141, CLR_YELLOW, CLR_DARK_GREEN);
 
     // pack a lot of info into tiny space
@@ -41,6 +44,7 @@ void draw(void) {
 
     // ── reset + footer ────────────────────────────────────
     font(FONT_NORMAL);
-    print_shadow(str("frame %d", frame()), 8, SCREEN_H - 10, CLR_DARK_GREY, CLR_BLACK);
+    print(str("frame %d", frame()), 9, SCREEN_H - 9, CLR_BLACK);
+    print(str("frame %d", frame()), 8, SCREEN_H - 10, CLR_DARK_GREY);
     print_right("font(FONT_NORMAL) resets", SCREEN_W - 4, SCREEN_H - 10, CLR_DARK_GREY);
 }

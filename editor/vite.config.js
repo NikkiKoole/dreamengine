@@ -58,4 +58,18 @@ function serveDocs() {
 
 export default defineConfig({
   plugins: [serveDocs()],
+  server: {
+    warmup: {
+      // Pre-transform the entry chain so Electron's first page load is instant
+      // rather than waiting for Vite to transform each import on demand.
+      clientFiles: [
+        './src/shell.js',
+        './src/main.js',
+        './src/sprite-editor.js',
+        './src/map-editor.js',
+        './src/studioDocs.js',
+        './src/settings.js',
+      ],
+    },
+  },
 })

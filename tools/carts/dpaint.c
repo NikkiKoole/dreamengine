@@ -19,8 +19,8 @@
 //   LEFT  paint with the current tool + FG     RIGHT  paint with BG (secondary)
 //   click toolbar / palette / patterns to pick · drag for line/rect/oval/grad
 //   keys: b pencil  l line  r rect  o oval  f fill  s spray  i pick
-//         c custom-brush  d gradient · [ ] brush size · x swap · m mirror
-//         h hole · u undo
+//         c custom-brush  d gradient  p poly  z bezier · [ ] brush size · x swap · m mirror
+//         h hole · u undo · esc cancel poly/bezier
 //
 // fillp polarity (from studio.c): bit (pat>>(15-i))&1 — 1-bits take the HOLE
 // color, 0-bits take the draw color. So a fully SOLID fill is 0x0000, and
@@ -39,9 +39,9 @@
 
 #define SBX 242            // sidebar left edge
 
-enum { T_PENCIL, T_LINE, T_RECT, T_OVAL, T_FILL, T_SPRAY, T_PICK, T_BRUSH, T_GRAD, T_COUNT };
+enum { T_PENCIL, T_LINE, T_RECT, T_OVAL, T_FILL, T_SPRAY, T_PICK, T_BRUSH, T_GRAD, T_POLY, T_BEZIER, T_COUNT };
 static const char *TOOLNAME[T_COUNT] = {
-    "PENCIL","LINE","RECT","OVAL","FILL","SPRAY","PICK","BRUSH","GRADIENT"
+    "PENCIL","LINE","RECT","OVAL","FILL","SPRAY","PICK","BRUSH","GRADIENT","POLY","BEZIER"
 };
 
 // ── state ───────────────────────────────────────────────────────────────────
@@ -53,7 +53,6 @@ static int  pat = 0x0000;              // current fill pattern (0x0000 = solid)
 static int  patHole = -1;              // 1-bit color (-1 = transparent)
 static bool filled = true;             // rect/oval fill mode
 static bool mirx = false, miry = false;
-static int  gradDir = 0;               // 0 = vertical, 1 = horizontal
 
 // color cycling
 static bool cycleOn = true;
@@ -91,6 +90,16 @@ static bool dragRight = false;
 static bool painting = false;
 static int  lastx, lasty;
 static bool grabMode = false;
+
+// bezier: after dragging start→end, phase2 lets the mouse set the control point
+static int  bez_x0, bez_y0, bez_x1, bez_y1;
+static bool bez_phase2 = false;
+static bool bez_right  = false;
+
+// in-progress polygon vertices
+#define POLY_MAX 32
+static int  poly_pts[POLY_MAX * 2];
+static int  poly_n = 0;
 
 // custom brush
 #define CBR 56
@@ -210,14 +219,16 @@ static void cflood(int sx, int sy, int draw) {
     }
 }
 
-// dithered fg→bg gradient over a rectangle (Bayer ordered dither)
-static void cgrad(int x0, int y0, int x1, int y1) {
-    int xa = min(x0, x1), xb = max(x0, x1), ya = min(y0, y1), yb = max(y0, y1);
-    for (int y = ya; y <= yb; y++)
-        for (int x = xa; x <= xb; x++) {
-            if (x < 0 || y < 0 || x >= CW || y >= CH) continue;
-            float t = gradDir ? (xb == xa ? 0 : (float)(x - xa) / (xb - xa))
-                              : (yb == ya ? 0 : (float)(y - ya) / (yb - ya));
+// dithered fg→bg gradient — drag a line to set direction and extent.
+// each canvas pixel is projected onto the AB vector; t=0 at A (fg), t=1 at B (bg).
+static void cgrad(int ax, int ay, int bx, int by) {
+    float dx = bx - ax, dy = by - ay;
+    float len2 = dx*dx + dy*dy;
+    if (len2 < 1.0f) { for (int y = 0; y < CH; y++) for (int x = 0; x < CW; x++) cset(x, y, fg); return; }
+    for (int y = 0; y < CH; y++)
+        for (int x = 0; x < CW; x++) {
+            float t = ((x - ax)*dx + (y - ay)*dy) / len2;
+            if (t < 0.0f) t = 0.0f; if (t > 1.0f) t = 1.0f;
             float thr = (BAYER[y & 3][x & 3] + 0.5f) / 16.0f;
             cset(x, y, t > thr ? bg : fg);
         }
@@ -253,6 +264,59 @@ static void cstamp(int cx, int cy) {
         }
 }
 
+// ── bezier onto canvas ───────────────────────────────────────────────────────
+static void cbezier(int x0, int y0, int cx, int cy, int x1, int y1, int draw) {
+    float len = fsqrt((float)((cx-x0)*(cx-x0)+(cy-y0)*(cy-y0)))
+              + fsqrt((float)((x1-cx)*(x1-cx)+(y1-cy)*(y1-cy)));
+    int n = (int)(len * 0.5f); if (n < 4) n = 4; if (n > 200) n = 200;
+    float px = (float)x0, py = (float)y0;
+    for (int i = 1; i <= n; i++) {
+        float t = i / (float)n, mt = 1.0f - t;
+        float nx = mt*mt*x0 + 2.0f*mt*t*cx + t*t*x1;
+        float ny = mt*mt*y0 + 2.0f*mt*t*cy + t*t*y1;
+        cline((int)(px+0.5f), (int)(py+0.5f), (int)(nx+0.5f), (int)(ny+0.5f), draw);
+        px = nx; py = ny;
+    }
+}
+
+// ── polygon fill + commit ────────────────────────────────────────────────────
+static void push_undo(void);
+static void cpolyfill(const int *xy, int n, int draw) {
+    if (n < 3) return;
+    int x0 = xy[0], x1 = xy[0], y0 = xy[1], y1 = xy[1];
+    for (int i = 1; i < n; i++) {
+        if (xy[i*2]   < x0) x0 = xy[i*2];   if (xy[i*2]   > x1) x1 = xy[i*2];
+        if (xy[i*2+1] < y0) y0 = xy[i*2+1]; if (xy[i*2+1] > y1) y1 = xy[i*2+1];
+    }
+    if (x0 < 0) x0 = 0; if (x1 >= CW) x1 = CW - 1;
+    if (y0 < 0) y0 = 0; if (y1 >= CH) y1 = CH - 1;
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++) {
+            bool inside = false;
+            for (int i = 0, j = n - 1; i < n; j = i++) {
+                float yi = (float)xy[i*2+1], yj = (float)xy[j*2+1], fy = y + 0.5f;
+                if ((yi > fy) != (yj > fy))
+                    if ((float)x + 0.5f < (xy[j*2] - xy[i*2]) * (fy - yi) / (yj - yi) + xy[i*2])
+                        inside = !inside;
+            }
+            if (inside) cset(x, y, pat_at(x, y, draw));
+        }
+}
+
+static void commit_poly(int draw) {
+    if (poly_n < 2) { poly_n = 0; return; }
+    push_undo();
+    if (poly_n == 2) {
+        cline(poly_pts[0], poly_pts[1], poly_pts[2], poly_pts[3], draw);
+    } else if (filled) {
+        cpolyfill(poly_pts, poly_n, draw);
+    } else {
+        for (int i = 0; i < poly_n; i++)
+            cline(poly_pts[i*2], poly_pts[i*2+1], poly_pts[((i+1)%poly_n)*2], poly_pts[((i+1)%poly_n)*2+1], draw);
+    }
+    poly_n = 0;
+}
+
 // ── undo ────────────────────────────────────────────────────────────────────
 static void push_undo(void) {
     for (int y = 0; y < CH; y++) for (int x = 0; x < CW; x++) undostack[undotop][y][x] = canvas[y][x];
@@ -273,7 +337,7 @@ static void paint_demo(void) {
     mirx = miry = false; patHole = -1; pat = 0x0000;
 
     // sky: dithered vertical gradient
-    gradDir = 0; fg = CLR_BLUE; bg = CLR_DARK_BLUE; cgrad(0, 0, CW - 1, 96);
+    fg = CLR_BLUE; bg = CLR_DARK_BLUE; cgrad(0, 0, 0, 96);
 
     // cycling water band (WATER ramp, flowing diagonally)
     for (int y = 96; y < CH; y++)
@@ -302,13 +366,13 @@ static void paint_demo(void) {
 
     // restore working defaults
     fg = CLR_WHITE; bg = CLR_BLACK; pat = 0x0000; patHole = -1;
-    tool = T_PENCIL; brush = 1; filled = true; gradDir = 0;
+    tool = T_PENCIL; brush = 1; filled = true;
 }
 
 void init(void) {
     fg = CLR_WHITE; bg = CLR_BLACK; tool = T_PENCIL; brush = 1;
     pat = 0x0000; patHole = -1; filled = true; mirx = miry = false;
-    gradDir = 0; cycleOn = true; rampSel = 1; cycSpeed = 5.0f; cycPhase = 0;
+    cycleOn = true; rampSel = 1; cycSpeed = 5.0f; cycPhase = 0;
     colorkey(-1);
 
     int n = load_bytes(canvas, sizeof canvas);
@@ -324,6 +388,10 @@ void update(void) {
     if (cycleOn) cycPhase += cycSpeed * dt();
     if (msgT > 0) msgT -= dt();
 
+    // cancel in-progress polygon when switching tools
+    static int prev_tool = T_PENCIL;
+    if (tool != prev_tool) { if (prev_tool == T_POLY) poly_n = 0; if (prev_tool == T_BEZIER) bez_phase2 = false; prev_tool = tool; }
+
     // keyboard shortcuts
     if (keyp('B')) tool = T_PENCIL;
     if (keyp('L')) tool = T_LINE;
@@ -334,12 +402,15 @@ void update(void) {
     if (keyp('I')) tool = T_PICK;
     if (keyp('C')) { tool = T_BRUSH; grabMode = true; }
     if (keyp('D')) tool = T_GRAD;
+    if (keyp('P')) tool = T_POLY;
+    if (keyp('Z')) tool = T_BEZIER;
     if (keyp('X')) { int t = fg; fg = bg; bg = t; }
     if (keyp('M')) mirx = !mirx;
     if (keyp('H')) patHole = (patHole < 0) ? bg : -1;
     if (keyp('U')) do_undo();
     if (keyp(']')) brush = min(8, brush + 1);
     if (keyp('[')) brush = max(1, brush - 1);
+    if (keyp(KEY_ESCAPE)) { if (tool == T_POLY) poly_n = 0; bez_phase2 = false; }
 
     // ── canvas interaction ──
     if (curin) {
@@ -368,6 +439,24 @@ void update(void) {
             case T_LINE: case T_RECT: case T_OVAL: case T_GRAD:
                 if (Lp || Rp) { dragging = true; dsx = curcx; dsy = curcy; dragRight = Rp; }
                 break;
+            case T_BEZIER:
+                if (bez_phase2) {
+                    if (Lp) { push_undo(); cbezier(bez_x0, bez_y0, curcx, curcy, bez_x1, bez_y1, bez_right ? bg : fg); bez_phase2 = false; }
+                    if (Rp) bez_phase2 = false;
+                } else {
+                    if (Lp || Rp) { dragging = true; dsx = curcx; dsy = curcy; dragRight = Rp; }
+                }
+                break;
+            case T_POLY:
+                if (Lp) {
+                    if (poly_n >= 3) {
+                        int ddx = curcx - poly_pts[0], ddy = curcy - poly_pts[1];
+                        if (ddx*ddx + ddy*ddy <= 25) { commit_poly(fg); break; }
+                    }
+                    if (poly_n < POLY_MAX) { poly_pts[poly_n*2] = curcx; poly_pts[poly_n*2+1] = curcy; poly_n++; }
+                }
+                if (Rp) commit_poly(fg);
+                break;
             case T_BRUSH:
                 if (grabMode) { if (Lp) { dragging = true; dsx = curcx; dsy = curcy; dragRight = false; } }
                 else if (Lp || Rp) { push_undo(); cstamp(curcx, curcy); }
@@ -380,6 +469,7 @@ void update(void) {
         int ex = mid(0, curcx, CW - 1), ey = mid(0, curcy, CH - 1);
         int draw = dragRight ? bg : fg;
         if (tool == T_BRUSH && grabMode) { capture(dsx, dsy, ex, ey); grabMode = false; flash("brush grabbed"); }
+        else if (tool == T_BEZIER) { bez_x0 = dsx; bez_y0 = dsy; bez_x1 = ex; bez_y1 = ey; bez_right = dragRight; bez_phase2 = true; }
         else {
             push_undo();
             if      (tool == T_LINE) cline(dsx, dsy, ex, ey, draw);
@@ -415,7 +505,17 @@ static void tool_icon(int t, int x, int y, int c) {
         case T_SPRAY:  for (int i = 0; i < 9; i++) pset(x + 4 + rnd(9), y + 3 + rnd(10), c); break;
         case T_PICK:   line(x + 3, y + 13, x + 9, y + 7, c); line(x + 9, y + 4, x + 13, y + 8, c); pset(x + 3, y + 13, CLR_YELLOW); break;
         case T_BRUSH:  for (int i = 0; i < 11; i += 2) { pset(x + 3 + i, y + 3, c); pset(x + 3 + i, y + 13, c); pset(x + 3, y + 3 + i, c); pset(x + 13, y + 3 + i, c); } break;
-        case T_GRAD:   for (int i = 0; i < 11; i++) { int col = (i < 4) ? c : (i < 8) ? CLR_DARK_GREY : CLR_BLACK; line(x + 3 + i, y + 3, x + 3 + i, y + 13, col); } break;
+        case T_GRAD:   for (int i = 0; i < 11; i++) { int col = (i < 4) ? c : (i < 8) ? CLR_DARK_GREY : CLR_BLACK; line(x+3+i, y+3, x+3+i, y+13, col); } line(x+2,y+13,x+14,y+3,CLR_WHITE); break;
+        case T_POLY: {
+            int pxy[10] = { x+8,y+2, x+14,y+7, x+12,y+13, x+4,y+13, x+2,y+7 };
+            for (int i = 0; i < 5; i++) { int j = (i+1)%5; line(pxy[i*2],pxy[i*2+1],pxy[j*2],pxy[j*2+1],c); }
+            break;
+        }
+        case T_BEZIER:
+            bezier(x+2, y+13, x+5, y+2, x+14, y+13, c);
+            pset(x+2,  y+13, c); pset(x+14, y+13, c);
+            line(x+2, y+13, x+5, y+2, CLR_DARK_GREY);
+            break;
     }
 }
 
@@ -455,13 +555,40 @@ void draw(void) {
         if      (tool == T_LINE) line(sx, sy, ux, uy, pc);
         else if (tool == T_RECT) rect(min(sx, ux), min(sy, uy), abs(ux - sx) + 1, abs(uy - sy) + 1, pc);
         else if (tool == T_OVAL) oval((sx + ux) / 2, (sy + uy) / 2, abs(ux - sx) / 2, abs(uy - sy) / 2, pc);
-        else if (tool == T_GRAD) rect(min(sx, ux), min(sy, uy), abs(ux - sx) + 1, abs(uy - sy) + 1, pc);
+        else if (tool == T_GRAD) line(sx, sy, ux, uy, pc);
         else if (tool == T_BRUSH && grabMode) rect(min(sx, ux), min(sy, uy), abs(ux - sx) + 1, abs(uy - sy) + 1, CLR_GREEN);
     }
-    if (curin && !dragging) {
+    if (curin && !dragging && tool != T_POLY) {
         int cx = CANVAS_X + curcx, cy = CANVAS_Y + curcy, r = brush;
         int pc = blink(16) ? CLR_WHITE : CLR_BLACK;
         rect(cx - r, cy - r, 2 * r + 1, 2 * r + 1, pc);
+    }
+    // bezier phase 2: live curve + handle lines
+    if (tool == T_BEZIER && bez_phase2) {
+        int ax = CANVAS_X + bez_x0, ay = CANVAS_Y + bez_y0;
+        int bx = CANVAS_X + bez_x1, by = CANVAS_Y + bez_y1;
+        int mx = CANVAS_X + curcx,  my = CANVAS_Y + curcy;
+        line(ax, ay, mx, my, CLR_DARK_GREY);
+        line(bx, by, mx, my, CLR_DARK_GREY);
+        bezier(ax, ay, mx, my, bx, by, blink(8) ? CLR_WHITE : CLR_LIGHT_GREY);
+        pset(ax, ay, CLR_YELLOW); pset(bx, by, CLR_YELLOW);
+        pset(mx, my, CLR_WHITE);
+    }
+    // polygon tool: in-progress vertex chain
+    if (tool == T_POLY && poly_n > 0) {
+        for (int i = 0; i + 1 < poly_n; i++)
+            line(CANVAS_X + poly_pts[i*2], CANVAS_Y + poly_pts[i*2+1],
+                 CANVAS_X + poly_pts[i*2+2], CANVAS_Y + poly_pts[i*2+3], CLR_WHITE);
+        if (curin && blink(8))
+            line(CANVAS_X + poly_pts[(poly_n-1)*2], CANVAS_Y + poly_pts[(poly_n-1)*2+1],
+                 CANVAS_X + curcx, CANVAS_Y + curcy, CLR_LIGHT_GREY);
+        for (int i = 0; i < poly_n; i++)
+            pset(CANVAS_X + poly_pts[i*2], CANVAS_Y + poly_pts[i*2+1], i == 0 ? CLR_YELLOW : CLR_WHITE);
+        if (curin && poly_n >= 3) {
+            int ddx = curcx - poly_pts[0], ddy = curcy - poly_pts[1];
+            if (ddx*ddx + ddy*ddy <= 25)
+                rect(CANVAS_X + poly_pts[0] - 3, CANVAS_Y + poly_pts[1] - 3, 7, 7, CLR_YELLOW);
+        }
     }
     clip(0, 0, 0, 0);
 
@@ -475,13 +602,13 @@ void draw(void) {
         rectfill(x, y, TBW, TBH, active ? CLR_TRUE_BLUE : hot ? CLR_DARK_GREY : CLR_DARKER_GREY);
         rect(x, y, TBW, TBH, active ? CLR_WHITE : CLR_DARKER_GREY);
         tool_icon(t, x, y, active ? CLR_WHITE : CLR_LIGHT_GREY);
-        if (hot && mouse_pressed(MOUSE_LEFT)) { tool = t; if (t == T_BRUSH) grabMode = !hasbr; }
+        if (hot && mouse_pressed(MOUSE_LEFT)) { if (t != T_POLY) poly_n = 0; tool = t; if (t == T_BRUSH) grabMode = !hasbr; }
     }
-    // brush size under the toolbar
-    print("SIZE", TBX, 110, CLR_DARK_GREY);
-    if (button(TBX, 118, 16, 13, "-", false)) brush = max(1, brush - 1);
-    if (button(TBX + 19, 118, 16, 13, "+", false)) brush = min(8, brush + 1);
-    print(str("%d", brush), TBX + 15, 134, CLR_WHITE);
+    // brush size under the toolbar (BEZIER ends at y=121, so start at 125)
+    print("SIZE", TBX, 125, CLR_DARK_GREY);
+    if (button(TBX, 133, 16, 13, "-", false)) brush = max(1, brush - 1);
+    if (button(TBX + 19, 133, 16, 13, "+", false)) brush = min(8, brush + 1);
+    print(str("%d", brush), TBX + 15, 149, CLR_WHITE);
 
     // ── sidebar (right) ──
     int sx = SBX;
@@ -511,10 +638,6 @@ void draw(void) {
     if (button(sx + 44, 110, 26, 12, "X", mirx)) mirx = !mirx;
     if (button(sx + 72, 110, 26, 12, "Y", miry)) miry = !miry;
 
-    // gradient direction
-    print("GRAD", sx, 128, CLR_LIGHT_GREY);
-    if (button(sx + 44, 126, 54, 12, gradDir ? "HORIZ" : "VERT", false)) gradDir = !gradDir;
-
     // color cycling — the showpiece
     print("CYCLE", sx, 144, CLR_LIGHT_GREY);
     if (button(sx + 44, 142, 54, 12, cycleOn ? "ON" : "OFF", cycleOn)) cycleOn = !cycleOn;
@@ -534,9 +657,9 @@ void draw(void) {
 
     // captured custom brush preview (left column, under SIZE)
     if (hasbr) {
-        print("STAMP", TBX, 148, CLR_DARK_GREY);
-        int bx = TBX, by = 158;
-        int pw = min(cbw, 36), ph = min(cbh, 38);
+        print("STAMP", TBX, 163, CLR_DARK_GREY);
+        int bx = TBX, by = 173;
+        int pw = min(cbw, 36), ph = min(cbh, 32);
         rect(bx - 1, by - 1, pw + 2, ph + 2, CLR_DARK_GREY);
         for (int y = 0; y < ph; y++)
             for (int x = 0; x < pw; x++) {
@@ -579,6 +702,4 @@ void draw(void) {
         }
     }
 
-    float f = dt();
-    watch("fps", "%d", f > 0 ? (int)(1.0f / f) : 0);
 }
