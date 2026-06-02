@@ -38,7 +38,11 @@ Once the fixed rack felt complete, the next arc turns it into an open patcher yo
 | **P1** | **Data-driven modules** — a `ModType` registry (jacks + knobs as data) and `Module` instances (type + position + `param[]`/`state[]`); generic eval/draw via a `switch` per kind. Cables address `(module, jack)`. Same default patch, same look & sound. | ✅ done — `modrack.c` |
 | **P2** | Palette sidebar + drag-to-add (spawn an instance) + delete a module (`x` corner; cables reindex) | ✅ done — `modrack.c` |
 | **P3** | Zoom/pan endless canvas (`camera_ex` + `mouse_world_*` for all hit-tests) — folded into P2, since the palette needs canvas room. wheel=zoom, drag-empty=pan | ✅ done — `modrack.c` |
-| **P4** | Drag-to-move modules around the stage | — |
+| **P4** | Drag-to-move modules around the stage (grab the body → follows cursor, snaps to grid, cables follow) | ✅ done — `modrack.c` |
+
+All P1–P4 shipped. modrack is now a full patcher: data-driven modules, palette + drag-to-add,
+delete, pan/zoom + 1:1, 12px grid + snap, variable module sizes, three tiny utilities, per-module
+`?` help, and drag-to-move. Plus a `+` cell-grid foundation for future 1×1 modules.
 
 P1 is the gate: modules became data, so adding one is a registry entry and you can have
 several of the same kind. The catalog to draw from (SLEW, ATTENUVERTER, LOGIC, SEQ, SCOPE,

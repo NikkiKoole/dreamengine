@@ -106,6 +106,7 @@ const char *msg = "";
 float cam_x = -28, cam_y = -2, zoom = 0.82f;     // pannable/zoomable view of the stage
 int   wmx = 0, wmy = 0;                           // mouse in world space (valid while the stage camera is active)
 int   panning = 0, pan_px = 0, pan_py = 0, palette_drag = -1, help_type = -1;
+int   drag_mod = -1, grab_dx = 0, grab_dy = 0;    // module being dragged around the canvas
 
 int  spawn(int type, int x, int y) {
     Module *m = &mod[nmod];
@@ -305,6 +306,12 @@ int qmark_at(int mx, int my) {  // the ? help corner of a module
         if (distance(mx, my, mod[mi].x + tw(mod[mi].type) - 15, mod[mi].y + 4) < 5) return mi;
     return -1;
 }
+int module_at(int mx, int my) {  // topmost module whose body contains (mx,my)
+    int r = -1;
+    for (int mi = 0; mi < nmod; mi++)
+        if (mx >= mod[mi].x && mx < mod[mi].x + tw(mod[mi].type) && my >= mod[mi].y && my < mod[mi].y + th(mod[mi].type)) r = mi;
+    return r;
+}
 void delete_mod(int mi) {
     for (int c = ncable - 1; c >= 0; c--) if (cable[c].sm == mi || cable[c].dm == mi) remove_cable(c);
     for (int k = mi; k < nmod - 1; k++) mod[k] = mod[k + 1];
@@ -319,7 +326,7 @@ void meter(int x, int y, int w, int h, float v, int col) {
 }
 
 float knob_dial(int id, int cx, int cy, float v, float lo, float hi, const char *name, const char *val) {
-    if (palette_drag < 0 && !panning && help_type < 0 && mouse_pressed(MOUSE_LEFT) && distance(wmx, wmy, cx, cy) < 7) { held_knob = id; drag_y = wmy; }
+    if (palette_drag < 0 && !panning && help_type < 0 && drag_mod < 0 && mouse_pressed(MOUSE_LEFT) && distance(wmx, wmy, cx, cy) < 7) { held_knob = id; drag_y = wmy; }
     if (held_knob == id && mouse_down(MOUSE_LEFT)) { v = clamp(v + (drag_y - wmy) * (hi - lo) / 120.0f, lo, hi); drag_y = wmy; }
     bool hot = held_knob == id || distance(wmx, wmy, cx, cy) < 7;
     circfill(cx, cy, 5, CLR_DARKER_GREY);
@@ -439,13 +446,21 @@ void draw(void) {
 
     if (help_type >= 0) {
         if (mouse_pressed(MOUSE_LEFT)) help_type = -1;          // any click dismisses the help panel
-    } else if (!over_side && palette_drag < 0 && !panning && mouse_pressed(MOUSE_LEFT)) {
+    } else if (!over_side && palette_drag < 0 && !panning && drag_mod < 0 && mouse_pressed(MOUSE_LEFT)) {
         int q = qmark_at(wmx, wmy), dm = delx_at(wmx, wmy);
         if (q >= 0) help_type = mod[q].type;
         else if (dm >= 0) delete_mod(dm);
-        else if (jack_at(wmx, wmy) < 0 && knob_at(wmx, wmy) < 0) { panning = 1; pan_px = mouse_x(); pan_py = mouse_y(); }
+        else if (jack_at(wmx, wmy) < 0 && knob_at(wmx, wmy) < 0) {
+            int bm = module_at(wmx, wmy);                       // grab a module body to move it
+            if (bm >= 0) { drag_mod = bm; grab_dx = wmx - mod[bm].x; grab_dy = wmy - mod[bm].y; }
+            else { panning = 1; pan_px = mouse_x(); pan_py = mouse_y(); }   // else pan the canvas
+        }
     }
-    if (help_type < 0 && !over_side && palette_drag < 0 && !panning) edit_cables(wmx, wmy);
+    if (drag_mod >= 0) {   // move the grabbed module (snaps to the cell grid; its cables follow)
+        if (mouse_down(MOUSE_LEFT)) { mod[drag_mod].x = snap12(wmx - grab_dx); mod[drag_mod].y = snap12(wmy - grab_dy); }
+        else drag_mod = -1;
+    }
+    if (help_type < 0 && !over_side && palette_drag < 0 && !panning && drag_mod < 0) edit_cables(wmx, wmy);
 
     font(FONT_SMALL);   // module labels (titles, ? / x, jacks, knobs) use the small font
 
