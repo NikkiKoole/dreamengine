@@ -84,7 +84,7 @@ The web build (emcc → `cart.html/js/wasm`) is its own "Build for web" button, 
 
 ```c
 // input
-bool btn(int player, int button);   // player 0=WASD+ZX, player 1=Arrows+,.
+bool btn(int player, int button);   // player 0=Arrows+Z/X, player 1=WASD+J/K (default; rebind in settings → controls)
 
 // graphics
 void cls(int color);

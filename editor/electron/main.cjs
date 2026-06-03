@@ -110,6 +110,7 @@ function prepareCart(code, cfg) {
     cellW:   cfg?.cellW   || 16,
     cellH:   cfg?.cellH   || 16,
     touchDefault: cfg?.touchControls ? 1 : 0,
+    keymap:  cfg?.keymap || null,
     studioC: path.join(RUNTIME_DIR, 'studio.c'),
   }
 
@@ -156,12 +157,30 @@ function prepareCart(code, cfg) {
   return dims
 }
 
+// Turn the editor's saved keymap into -DP0_BTN_A=<keycode> … flags. Omitted
+// buttons just fall back to studio.c's compiled-in defaults, so a null/partial
+// keymap is safe. Shared by every native build path (run / profile / live host).
+function keymapDefs(keymap) {
+  if (!keymap) return []
+  const btns = [['up', 'UP'], ['down', 'DOWN'], ['left', 'LEFT'], ['right', 'RIGHT'], ['a', 'A'], ['b', 'B']]
+  const out = []
+  for (const [pid, prefix] of [['p0', 'P0'], ['p1', 'P1']]) {
+    const m = keymap[pid]
+    if (!m) continue
+    for (const [btn, suffix] of btns) {
+      const code = m[btn]
+      if (Number.isInteger(code)) out.push(`-D${prefix}_BTN_${suffix}=${code}`)
+    }
+  }
+  return out
+}
+
 // macOS clang command for a native cart build. optFlags swaps between the
 // shipping build (-Os) and the profiling build (-O1 -fno-inline, which keeps
 // studio.c primitives as distinct, named symbols so `sample` can attribute
 // time to them instead of folding them into draw()).
 function macCompileArgs(dims, optFlags) {
-  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, studioC } = dims
+  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, keymap, studioC } = dims
   return [
     `"${CART_SRC}"`,
     `"${studioC}"`,
@@ -176,6 +195,7 @@ function macCompileArgs(dims, optFlags) {
     `-DCELL_W=${cellW}`,
     `-DCELL_H=${cellH}`,
     `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
+    ...keymapDefs(keymap),
     ...optFlags,
     // keep beginners' null-pointer mistakes as real crashes (caught by the
     // crash handler in studio.c) instead of letting the optimizer delete them
@@ -196,7 +216,7 @@ function macCompileArgs(dims, optFlags) {
 // cart.c at runtime and hot-reloads it on save. Screen/map dims are baked into the host
 // (it forwards them to the cart), so a dims change means a host rebuild.
 function macTccHostArgs(dims) {
-  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault } = dims
+  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, keymap } = dims
   return [
     `"${path.join(RUNTIME_DIR, 'studio.c')}"`,
     '-DDE_TCC',
@@ -214,6 +234,7 @@ function macTccHostArgs(dims) {
     `-DCELL_W=${cellW}`,
     `-DCELL_H=${cellH}`,
     `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
+    ...keymapDefs(keymap),
     '-fno-delete-null-pointer-checks',
     `"${path.join(LIBTCC_DIR, 'libtcc.dylib')}"`,
     `-Wl,-rpath,"${LIBTCC_DIR}"`,
@@ -588,7 +609,7 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
   if (cfg?.backend === 'live') return runLive(dims, cfg, _event.sender)
   killLiveHost()   // a native run supersedes any running live host
 
-  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, studioC } = dims
+  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, keymap, studioC } = dims
 
   const args = macCompileArgs(dims, ['-Os'])
   const cmd  = `clang ${args.join(' ')}`
@@ -628,6 +649,7 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
           `-DCELL_W=${cellW}`,
           `-DCELL_H=${cellH}`,
           `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
+          ...keymapDefs(keymap),
           '-Os',
           '-fno-delete-null-pointer-checks',
           `"${RAYLIB_WIN}/lib/libraylib.a"`,

@@ -1091,6 +1091,48 @@ int main(int argc, char **argv) {
 // api implementation
 // ------------------------------------------------------------
 
+// Default key bindings for btn(). Each is overridable at compile time via -D
+// (the editor's settings → controls panel passes the saved layout as raylib
+// keycodes, e.g. -DP0_BTN_A=90). When no flag is passed these defaults apply, so
+// the runtime works standalone and old build commands keep compiling.
+//   Player 0: Arrows + Z/X      Player 1: WASD + J/K
+#ifndef P0_BTN_UP
+#define P0_BTN_UP    KEY_UP
+#endif
+#ifndef P0_BTN_DOWN
+#define P0_BTN_DOWN  KEY_DOWN
+#endif
+#ifndef P0_BTN_LEFT
+#define P0_BTN_LEFT  KEY_LEFT
+#endif
+#ifndef P0_BTN_RIGHT
+#define P0_BTN_RIGHT KEY_RIGHT
+#endif
+#ifndef P0_BTN_A
+#define P0_BTN_A     KEY_Z
+#endif
+#ifndef P0_BTN_B
+#define P0_BTN_B     KEY_X
+#endif
+#ifndef P1_BTN_UP
+#define P1_BTN_UP    KEY_W
+#endif
+#ifndef P1_BTN_DOWN
+#define P1_BTN_DOWN  KEY_S
+#endif
+#ifndef P1_BTN_LEFT
+#define P1_BTN_LEFT  KEY_A
+#endif
+#ifndef P1_BTN_RIGHT
+#define P1_BTN_RIGHT KEY_D
+#endif
+#ifndef P1_BTN_A
+#define P1_BTN_A     KEY_J
+#endif
+#ifndef P1_BTN_B
+#define P1_BTN_B     KEY_K
+#endif
+
 bool btn(int player, int button) {
     if (player == 0) {
         if (show_touch_ui) {
@@ -1105,21 +1147,21 @@ bool btn(int player, int button) {
             }
         }
         switch (button) {
-            case BTN_UP:    return inp_down(KEY_W);
-            case BTN_DOWN:  return inp_down(KEY_S);
-            case BTN_LEFT:  return inp_down(KEY_A);
-            case BTN_RIGHT: return inp_down(KEY_D);
-            case BTN_A:     return inp_down(KEY_Z);
-            case BTN_B:     return inp_down(KEY_X);
+            case BTN_UP:    return inp_down(P0_BTN_UP);
+            case BTN_DOWN:  return inp_down(P0_BTN_DOWN);
+            case BTN_LEFT:  return inp_down(P0_BTN_LEFT);
+            case BTN_RIGHT: return inp_down(P0_BTN_RIGHT);
+            case BTN_A:     return inp_down(P0_BTN_A);
+            case BTN_B:     return inp_down(P0_BTN_B);
         }
     } else if (player == 1) {
         switch (button) {
-            case BTN_UP:    return inp_down(KEY_UP);
-            case BTN_DOWN:  return inp_down(KEY_DOWN);
-            case BTN_LEFT:  return inp_down(KEY_LEFT);
-            case BTN_RIGHT: return inp_down(KEY_RIGHT);
-            case BTN_A:     return inp_down(KEY_COMMA);
-            case BTN_B:     return inp_down(KEY_PERIOD);
+            case BTN_UP:    return inp_down(P1_BTN_UP);
+            case BTN_DOWN:  return inp_down(P1_BTN_DOWN);
+            case BTN_LEFT:  return inp_down(P1_BTN_LEFT);
+            case BTN_RIGHT: return inp_down(P1_BTN_RIGHT);
+            case BTN_A:     return inp_down(P1_BTN_A);
+            case BTN_B:     return inp_down(P1_BTN_B);
         }
     }
     return false;

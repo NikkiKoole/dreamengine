@@ -1,5 +1,74 @@
 const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, showProfiler: false, welcomeCart: 'zoo', backend: 'native' }
 
+// ── key bindings ──────────────────────────────────────────────
+// Values are raylib (GLFW) keycodes — letters/digits are ASCII, specials match
+// raylib's enum. main.cjs passes these to the build as -DP0_BTN_A=<code> etc.;
+// studio.c's btn() reads them (falling back to these same defaults if absent).
+// Machine-local (not baked into a .cart.png) — your keyboard, your layout.
+//   Player 0: Arrows + Z/X      Player 1: WASD + J/K
+export const KEYMAP_DEFAULTS = {
+  p0: { up: 265, down: 264, left: 263, right: 262, a: 90, b: 88 },
+  p1: { up: 87,  down: 83,  left: 65,  right: 68,  a: 74, b: 75 },
+}
+
+// The bindable keys: [ KeyboardEvent.code, raylib keycode, display label ].
+// Keyed on .code (the PHYSICAL key — layout-independent) rather than .key, so the
+// left/right modifiers and the numpad are distinct and match how raylib/GLFW
+// identify keys. The raylib codes below are raylib's KeyboardKey enum values.
+const KEYS = [
+  // letters (KeyA..KeyZ → raylib KEY_A=65..KEY_Z=90)
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c => ['Key' + c, c.charCodeAt(0), c]),
+  // top-row digits (Digit0..9 → KEY_ZERO=48..KEY_NINE=57)
+  ...'0123456789'.split('').map(d => ['Digit' + d, d.charCodeAt(0), d]),
+  // punctuation
+  ['Minus', 45, '-'], ['Equal', 61, '='], ['BracketLeft', 91, '['], ['BracketRight', 93, ']'],
+  ['Backslash', 92, '\\'], ['Semicolon', 59, ';'], ['Quote', 39, "'"], ['Backquote', 96, '`'],
+  ['Comma', 44, ','], ['Period', 46, '.'], ['Slash', 47, '/'],
+  // whitespace / editing
+  ['Space', 32, 'SPC'], ['Enter', 257, '⏎'], ['Tab', 258, 'TAB'], ['Backspace', 259, '⌫'],
+  ['Insert', 260, 'INS'], ['Delete', 261, 'DEL'],
+  // arrows
+  ['ArrowRight', 262, '→'], ['ArrowLeft', 263, '←'], ['ArrowDown', 264, '↓'], ['ArrowUp', 265, '↑'],
+  // navigation
+  ['PageUp', 266, 'PgUp'], ['PageDown', 267, 'PgDn'], ['Home', 268, 'Home'], ['End', 269, 'End'],
+  // locks / system
+  ['CapsLock', 280, 'Caps'], ['ScrollLock', 281, 'ScrLk'], ['NumLock', 282, 'NumLk'],
+  ['PrintScreen', 283, 'PrtSc'], ['Pause', 284, 'Pause'],
+  // function keys (F1..F12 → 290..301)
+  ...Array.from({ length: 12 }, (_, i) => ['F' + (i + 1), 290 + i, 'F' + (i + 1)]),
+  // numpad (Numpad0..9 → KEY_KP_0=320..KEY_KP_9=329)
+  ...Array.from({ length: 10 }, (_, i) => ['Numpad' + i, 320 + i, 'KP' + i]),
+  ['NumpadDecimal', 330, 'KP.'], ['NumpadDivide', 331, 'KP/'], ['NumpadMultiply', 332, 'KP*'],
+  ['NumpadSubtract', 333, 'KP-'], ['NumpadAdd', 334, 'KP+'], ['NumpadEnter', 335, 'KP⏎'], ['NumpadEqual', 336, 'KP='],
+  // modifiers (left/right distinct → KEY_LEFT_SHIFT=340 .. KEY_KB_MENU=348)
+  ['ShiftLeft', 340, 'LShift'], ['ControlLeft', 341, 'LCtrl'], ['AltLeft', 342, 'LAlt'], ['MetaLeft', 343, 'LSuper'],
+  ['ShiftRight', 344, 'RShift'], ['ControlRight', 345, 'RCtrl'], ['AltRight', 346, 'RAlt'], ['MetaRight', 347, 'RSuper'],
+  ['ContextMenu', 348, 'Menu'],
+]
+const CODE_TO_KEY = new Map(KEYS.map(([code, ray, label]) => [code, { code: ray, label }]))
+const RAYLIB_LABEL = new Map(KEYS.map(([, ray, label]) => [ray, label]))
+
+// browser KeyboardEvent → { code, label } in raylib terms, or null if we don't bind it
+function eventToKey(e) {
+  return CODE_TO_KEY.get(e.code) || null
+}
+
+// stored raylib keycode → display label
+export function keyLabel(code) {
+  return RAYLIB_LABEL.get(code) || ('#' + code)
+}
+
+function loadKeymap() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('keymap'))
+    if (raw && raw.p0 && raw.p1) {
+      // merge over defaults so a partial/old blob still yields all six buttons
+      return { p0: { ...KEYMAP_DEFAULTS.p0, ...raw.p0 }, p1: { ...KEYMAP_DEFAULTS.p1, ...raw.p1 } }
+    }
+  } catch {}
+  return { p0: { ...KEYMAP_DEFAULTS.p0 }, p1: { ...KEYMAP_DEFAULTS.p1 } }
+}
+
 function load() {
   return {
     screenW:       parseInt(localStorage.getItem('screenW') || DEFAULTS.screenW),
@@ -13,6 +82,7 @@ function load() {
     showProfiler:  localStorage.getItem('showProfiler') === '1',
     welcomeCart:   localStorage.getItem('welcomeCart') || 'zoo',
     backend:       localStorage.getItem('backend') || DEFAULTS.backend,
+    keymap:        loadKeymap(),
   }
 }
 
@@ -45,13 +115,14 @@ export function buildSettingsPanel(el) {
   ))
   el.appendChild(screenSection)
 
-  // ── key layouts ──────────────────────────────────────────────
-  const keysSection = section('keyboard')
+  // ── controls (key bindings) ──────────────────────────────────
+  // Click a key, then press the key you want. Stored as raylib keycodes in
+  // settings.keymap and shipped to the build by main.cjs; btn() honors them.
+  const keysSection = section('controls')
 
-  const layouts = [
-    { player: 'player 1', up: 'W', down: 'S', left: 'A', right: 'D', a: 'Z', b: 'X' },
-    { player: 'player 2', up: '↑', down: '↓', left: '←', right: '→', a: ',', b: '.' },
-  ]
+  const BTNS = ['up', 'down', 'left', 'right', 'a', 'b']
+  const PLAYERS = [['p0', 'player 0'], ['p1', 'player 1']]
+  const cells = { p0: {}, p1: {} }   // pid → btn → button element, for the reset button
 
   const table = document.createElement('div')
   table.className = 'key-table'
@@ -61,23 +132,71 @@ export function buildSettingsPanel(el) {
   header.innerHTML = '<span></span><span>↑</span><span>↓</span><span>←</span><span>→</span><span>A</span><span>B</span>'
   table.appendChild(header)
 
-  layouts.forEach(l => {
-    const row = document.createElement('div')
-    row.className = 'key-row'
-    row.innerHTML = `
-      <span class="key-player">${l.player}</span>
-      <span class="key">${l.up}</span>
-      <span class="key">${l.down}</span>
-      <span class="key">${l.left}</span>
-      <span class="key">${l.right}</span>
-      <span class="key">${l.a}</span>
-      <span class="key">${l.b}</span>
-    `
-    table.appendChild(row)
+  let armed = null   // { cell, pid, btn, prevLabel } while capturing a keypress
+
+  function disarm() {
+    if (!armed) return
+    armed.cell.classList.remove('key-armed')
+    armed.cell.textContent = armed.prevLabel
+    armed = null
+    window.removeEventListener('keydown', onKey, true)
+  }
+
+  function onKey(e) {
+    if (!armed) return
+    e.preventDefault(); e.stopPropagation()
+    if (e.key === 'Escape') { disarm(); return }
+    const k = eventToKey(e)
+    if (!k) return   // key we don't bind — stay armed, let them try again
+    settings.keymap[armed.pid][armed.btn] = k.code
+    save('keymap', JSON.stringify(settings.keymap))
+    armed.cell.classList.remove('key-armed')
+    armed.cell.textContent = k.label
+    armed = null
+    window.removeEventListener('keydown', onKey, true)
+  }
+
+  PLAYERS.forEach(([pid, label]) => {
+    const r = document.createElement('div')
+    r.className = 'key-row'
+    const name = document.createElement('span')
+    name.className = 'key-player'
+    name.textContent = label
+    r.appendChild(name)
+    BTNS.forEach(btn => {
+      const cell = document.createElement('button')
+      cell.className = 'key'
+      cell.textContent = keyLabel(settings.keymap[pid][btn])
+      cell.title = `${label} ${btn.toUpperCase()} — click, then press a key`
+      cell.addEventListener('click', () => {
+        const wasArmed = armed && armed.cell === cell
+        disarm()
+        if (wasArmed) return   // clicking the armed cell again just cancels
+        armed = { cell, pid, btn, prevLabel: cell.textContent }
+        cell.classList.add('key-armed')
+        cell.textContent = '…'
+        window.addEventListener('keydown', onKey, true)
+      })
+      cells[pid][btn] = cell
+      r.appendChild(cell)
+    })
+    table.appendChild(r)
   })
 
   keysSection.appendChild(table)
-  keysSection.appendChild(note('key remapping coming soon'))
+
+  const reset = document.createElement('button')
+  reset.className = 'settings-reset'
+  reset.textContent = 'reset to defaults'
+  reset.addEventListener('click', () => {
+    disarm()
+    settings.keymap = { p0: { ...KEYMAP_DEFAULTS.p0 }, p1: { ...KEYMAP_DEFAULTS.p1 } }
+    save('keymap', JSON.stringify(settings.keymap))
+    for (const [pid] of PLAYERS)
+      for (const btn of BTNS) cells[pid][btn].textContent = keyLabel(settings.keymap[pid][btn])
+  })
+  keysSection.appendChild(reset)
+  keysSection.appendChild(note('click a slot, then press any key to bind it — letters, digits, arrows, numpad (KP8…), function keys, and modifiers (LShift, RAlt…) all work. Esc cancels. machine-local — applies to every cart you run; carts read these via btn(), or use key() for raw keypresses. takes effect on the next ▶ run.'))
   el.appendChild(keysSection)
 
   // ── touch controls ───────────────────────────────────────────
