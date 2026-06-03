@@ -5,14 +5,22 @@
 // turn; send fleets to colonise neutral stars (grey) or invade the rival's
 // (red). Send enough ships to beat the defenders — they get a defensive edge.
 // Take every enemy star to win; lose all of yours and it's over.
-// Arrows / WASD: pick a star   A: select source, then target to send all ships
-// B: end turn
+// Mouse: hover a star to inspect it; click a green (your) star, then a target,
+//   to send all its ships. Right-click (or click empty space) cancels.
+//   Click the END TURN button (top-right) to advance the turn.
+// Keys still work: arrows / WASD pick a star, Z select/send, X end turn.
 
 #define NSTAR   14
 #define MAXFLT  48
 #define DEF     1.3f          // defender's advantage
 #define P_YOU   1
 #define P_FOE   2
+
+// end-turn button (mouse), top-right of the star map
+#define ETB_X (SCREEN_W - 74)
+#define ETB_Y 3
+#define ETB_W 70
+#define ETB_H 11
 
 typedef struct { int x, y, owner, ships, prod; float build; const char *name; } Star;
 typedef struct { int from, to, owner, ships; float prog, speed; bool active; } Fleet;
@@ -138,27 +146,62 @@ static void move_sel(int dx, int dy) {
     if (best >= 0) sel = best;
 }
 
-void update() {
-    if (state != 0) { if (btnp(0, BTN_A) || btnp(0, BTN_B)) new_game(); return; }
+// nearest star under the pointer (with a little slop for easy clicking), or -1
+static int star_at(int mx, int my) {
+    int best = -1; float bd = 1e9f;
+    for (int i = 0; i < NSTAR; i++) {
+        int r = 3 + st[i].prod + 3;
+        float d = distance(mx, my, st[i].x, st[i].y);
+        if (d <= r && d < bd) { bd = d; best = i; }
+    }
+    return best;
+}
 
+static bool over_endturn(int mx, int my) {
+    return mx >= ETB_X && mx < ETB_X + ETB_W && my >= ETB_Y && my < ETB_Y + ETB_H;
+}
+
+// select source, or send a fleet to the target — shared by mouse click and the Z key
+static void try_select(int s) {
+    if (src < 0) {
+        if (st[s].owner == P_YOU && st[s].ships > 0) { src = s; say(str("send from %s — pick a target", st[s].name)); }
+        else note(40, INSTR_SQUARE, 2);
+    } else if (s == src) { src = -1; say("cancelled"); }
+    else {
+        launch(src, s, P_YOU);
+        say(str("fleet away to %s", st[s].name));
+        note(67, INSTR_SQUARE, 2);
+        src = -1;
+    }
+}
+
+void update() {
+    int mx = mouse_x(), my = mouse_y();
+    int hov = star_at(mx, my);
+
+    if (state != 0) {
+        if (btnp(0, BTN_A) || btnp(0, BTN_B) || mouse_pressed(MOUSE_LEFT)) new_game();
+        return;
+    }
+
+    // hovering a star drives the selection, so the ring + HUD follow the pointer
+    if (hov >= 0 && !over_endturn(mx, my)) sel = hov;
+
+    // mouse: left-click a star to select/send, the button to end turn, empty space cancels
+    if (mouse_pressed(MOUSE_LEFT)) {
+        if (over_endturn(mx, my)) { end_turn(); note(60, INSTR_SINE, 1); }
+        else if (hov >= 0)        try_select(hov);
+        else if (src >= 0)        { src = -1; say("cancelled"); }
+    }
+    if (mouse_pressed(MOUSE_RIGHT) && src >= 0) { src = -1; say("cancelled"); }
+
+    // keyboard / gamepad still work
     if (btnp(0, BTN_LEFT))  move_sel(-1, 0);
     if (btnp(0, BTN_RIGHT)) move_sel(1, 0);
     if (btnp(0, BTN_UP))    move_sel(0, -1);
     if (btnp(0, BTN_DOWN))  move_sel(0, 1);
-
-    if (btnp(0, BTN_A)) {
-        if (src < 0) {
-            if (st[sel].owner == P_YOU && st[sel].ships > 0) { src = sel; say(str("send from %s — pick a target", st[sel].name)); }
-            else note(40, INSTR_SQUARE, 2);
-        } else if (sel == src) { src = -1; say("cancelled"); }
-        else {
-            launch(src, sel, P_YOU);
-            say(str("fleet away to %s", st[sel].name));
-            note(67, INSTR_SQUARE, 2);
-            src = -1;
-        }
-    }
-    if (btnp(0, BTN_B)) { end_turn(); note(60, INSTR_SINE, 1); }
+    if (btnp(0, BTN_A))     try_select(sel);
+    if (btnp(0, BTN_B))     { end_turn(); note(60, INSTR_SINE, 1); }
 }
 
 // ====================================================================
@@ -182,8 +225,8 @@ void draw() {
         print(str("%d", flt[i].ships), fx + 3, fy - 3, ocol(flt[i].owner));
     }
 
-    // send-line preview
-    if (src >= 0) line(st[src].x, st[src].y, st[sel].x, st[sel].y, CLR_YELLOW);
+    // send-line preview — follows the pointer
+    if (src >= 0) line(st[src].x, st[src].y, mouse_x(), mouse_y(), CLR_YELLOW);
 
     // stars
     for (int i = 0; i < NSTAR; i++) {
@@ -215,11 +258,17 @@ void draw() {
               s->prod, s->ships), 4, 182, CLR_WHITE);
     print(msg, 4, 191, CLR_LIGHT_PEACH);
 
+    // end-turn button (mouse)
+    bool overET = over_endturn(mouse_x(), mouse_y());
+    rectfill(ETB_X, ETB_Y, ETB_W, ETB_H, overET ? CLR_INDIGO : CLR_DARKER_PURPLE);
+    rect    (ETB_X, ETB_Y, ETB_W, ETB_H, CLR_LIGHT_GREY);
+    print("END TURN", ETB_X + 4, ETB_Y + 2, CLR_WHITE);
+
     if (state != 0) {
         rectfill(SCREEN_W / 2 - 74, SCREEN_H / 2 - 22, 148, 46, CLR_BLACK);
         rect    (SCREEN_W / 2 - 74, SCREEN_H / 2 - 22, 148, 46, state == 1 ? CLR_GREEN : CLR_RED);
         print_centered(state == 1 ? "GALAXY CONQUERED" : "YOUR EMPIRE FALLS", SCREEN_W/2, SCREEN_H / 2 - 12, state == 1 ? CLR_GREEN : CLR_RED);
         print_centered(str("in %d turns", turn), SCREEN_W/2, SCREEN_H / 2, CLR_YELLOW);
-        print_centered("Z to play again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
+        print_centered("click to play again", SCREEN_W/2, SCREEN_H / 2 + 12, CLR_LIGHT_GREY);
     }
 }
