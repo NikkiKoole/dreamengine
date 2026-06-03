@@ -422,10 +422,23 @@ mark.docs-find-hit.current {
      [find]      [prev] [next]
      match case  regexp  by word
      [replace]   [replace] [all]                                      */
-/* the strip the panel sits in: drop oneDark's full-width bar so only our card shows */
-.cm-panels.cm-panels-top { background: transparent; border-bottom: none; }
+/* the strip the panel sits in: drop oneDark's full-width bar so only our card
+   shows. Float it OVER the editor (like VS Code's find widget) instead of letting
+   it push the code down — otherwise the full-width strip reserves a blank band as
+   tall as the card and the code starts below it. pointer-events:none lets clicks in
+   the empty area fall through to the code; the card re-enables them for itself. */
+.cm-editor { position: relative; }   /* anchor for the floating panel */
+.cm-panels.cm-panels-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 6;
+  background: transparent;
+  border-bottom: none;
+  pointer-events: none;
+}
 
 .cm-panel.cm-search {
+  pointer-events: auto;
   display: grid;
   grid-template-columns: auto auto auto;
   gap: 7px;

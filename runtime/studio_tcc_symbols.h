@@ -74,6 +74,7 @@
     X(hgradient) \
     X(tritex) \
     X(pget) \
+    X(sget) \
     X(camera) \
     X(camera_ex) \
     X(follow) \

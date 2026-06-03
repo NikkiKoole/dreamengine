@@ -1717,6 +1717,19 @@ int pget(int x, int y) {
     return 0;
 }
 
+int sget(int sx, int sy) {
+    // reads the spritesheet directly (not the canvas), so it's a stable data lookup —
+    // e.g. paint a level in the sprite editor and read the blocks back here. The
+    // sheet is loaded straight from PNG (top-down), so no Y flip like pget needs.
+    if (!spritesheet_img.data) return 0;
+    if (sx < 0 || sx >= spritesheet_img.width || sy < 0 || sy >= spritesheet_img.height) return 0;
+    Color c = GetImageColor(spritesheet_img, sx, sy);
+    for (int i = 0; i < PALETTE_SIZE; i++) {
+        if (palette[i].r == c.r && palette[i].g == c.g && palette[i].b == c.b) return i;
+    }
+    return 0;
+}
+
 // push the current cam to the GPU. if we're mid-draw (inside BeginMode2D), restart
 // the 2D mode so a camera()/camera_ex() call takes effect for the rest of the frame.
 static void cam_reapply(void) {
