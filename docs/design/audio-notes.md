@@ -530,7 +530,8 @@ independently shippable:
    gives §5.5 and §8.3's formant.
 4. **`INSTR_EPIANO` / `INSTR_PIANO` / `INSTR_GUITAR`/`INSTR_HARP`** — the rest of the buffered
    family, riding the path pluck validated. The pianist.
-5. **Formant filter** + a couple of cheap character effects (chorus, soft drive, bitcrush).
+5. **Formant filter** + the **effects layer** (§8.10 — buses vs. master; reverb / delay / tape /
+   leslie / wah, starting with one master reverb + the formalized bus concept).
 6. **Optional:** bowed strings; and/or the SCW bank (§8.4).
 
 ### 8.6 Cons / watch-outs
@@ -666,6 +667,58 @@ the table's only job is to say what those three mean for each. Grow it freely.
 
 *Format for adding more:* just name the sound + a reference patch/track if you have one; the
 buffer flag, navkit source, and macro mapping get filled in here.
+
+### 8.10 Effects layer — buses vs. master (the §8.5-phase-4 plan)
+
+> The effects wishlist + the routing model. Still **deferred** to §8.5 phase 4 (after the first
+> engines ship) — begin small. The Leslie (§8.3/§8.8) is the first instance and sets the pattern.
+
+**The routing model: unify on "bus"; master is just the default bus.** Rather than two concepts
+(master FX vs. bus FX), there's *one* — a **bus** carrying a small fixed FX chain — and "master"
+is bus 0:
+
+- An instrument slot names a **bus** (default = master).
+- **Aux buses (1..N):** voices route in → the bus's FX chain → summed into master.
+- **Master bus (0):** the full sum → master FX → output.
+
+This gives both behaviours from one mechanism: Leslie/wah on a per-instrument **aux** bus (only the
+organ gets the rotary, only the lead gets wah); tape/reverb/limiter on **master** (everything
+shares them). The `organ_bus` already in the §8.8 sketch *is* aux bus #1 — the general version just
+lets any instrument pick a bus and any bus carry a chain. Generalizing §8.8's organ sub-bus:
+
+```c
+float bus[NBUS];                          // small fixed N; accumulators zeroed per sample
+// voice loop:   bus[v->bus] += out_s;             // was: organ_bus += … / mix += …
+// post-loop:    for (aux b) master += fx_chain(b, bus[b]);
+//               out[i] = fx_chain(MASTER, master + bus[MASTER]);
+```
+
+**Surface discipline** (same as macros/Leslie — tiny, global-first): the smallest cart-facing step
+is global **master** effects — `reverb(amount)`, `delay(ms, fb)`, `drive(amount)` — i.e. "effects
+on master," matching the global `filter()` precedent (§5.5). Per-bus routing
+(`instrument_bus(slot, b)` + per-bus setters) is the *next* increment, when a cart wants the lead
+on its own wah without washing the whole mix.
+
+**The wishlist.** "Shared" below means *one* processor instance (not 8 private ones), **not**
+"applied to everything" — you pick *which* sounds feed it by routing them to a bus. So a delay on
+just the lead = route the lead to an aux bus carrying delay (`instrument_bus(LEAD,1)`); everything
+else stays dry. That's per-*instrument*, achieved with one shared delay line + bus routing — the
+buffer-hungry effects (delay/reverb/tape) are shared-and-routed rather than per-voice purely on
+memory cost (a per-voice echo line would be ~384 KB × 8 voices for an effect nobody wants 8 of).
+The cheap exception is **wah** — it's just the per-voice SVF, so it genuinely *is* per-note.
+
+| Effect | granularity | DSP | buffer | home | insert/send | notes |
+|---|---|---|---|---|---|---|
+| **Reverb** | bus / master | Freeverb (8 comb + 4 allpass) | shared ~20–40 KB | master / aux | send (dry+wet) | the big "space" |
+| **Delay / echo** | bus / master | delay line + feedback + tone | shared (~SR·2) | aux / master | send | route one instrument to it; tempo-syncable to the beat clock |
+| **Tape** | master | wow/flutter (modulated delay) + soft-clip drive + HF rolloff | shared small | master | insert | lo-fi character over the whole mix |
+| **Leslie** | bus | 2 rotors: tremolo + doppler delay-mod (§8.3) | shared ~2 KB | aux (organ) | insert | already specced |
+| **Wah** | **per-voice** | resonant SVF bandpass swept by LFO / envelope / expression | none — reuses SVF | per voice | insert | **4th use of the one SVF** — filter (§5.5) + formant (§8.3) + wah, build it once |
+
+**Begin small:** when this layer opens, the minimal first bite is **one master reverb + formalizing
+the bus concept** (so the Leslie stops being a hardcoded organ special-case). Delay / tape / wah
+follow. Stereo (a §9 open question) matters more here than for engines — reverb/delay/Leslie are
+where width lives — so resolve stereo before or alongside this layer.
 
 ## 9. Open questions
 
