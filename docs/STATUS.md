@@ -7,7 +7,7 @@
 > **here**, then fix the prose in the relevant design doc. If a design doc and this file
 > disagree, this file wins.
 
-_Last updated: 2026-06-03 (added two ideas from a Picotron API comparison: `menuitem` folded into the Pause item (#4 — same feature, two ends), and frame-spanning **sequence scripts** as new open item #17, kept distinct from the cut DIV process model). Prior: 2026-06-02 (session 14 — `fps()` shipped as the perf read-out; **one-click profiler shipped** (⏱ profile button, see [`guides/profiler.md`](guides/profiler.md)); **off-screen poly bbox clamp shipped** (item 14) — a cliff guard, ~17× on the synthetic stress cart, modest on real carts; `trifill_stress` regression cart added). Prior: session 13 — `fade()` made immediate-mode, fixing a 27-cart stuck-dim bug._
+_Last updated: 2026-06-03 (Picotron API comparison — added four ideas: `menuitem` folded into the Pause item (#4 — same feature, two ends), frame-spanning **sequence scripts** (#17, kept distinct from the cut DIV process model), **blend tables** (#18 — index-only translucency/fog/additive, the real capability gap), and a **userdata/offscreen-buffer reframe** folded into the rotation-atlas item (#13 — `sset`/canvas/rotation-cache are one general primitive). Sound comparison corrected: Picotron's audio is a deep node-graph synth + tracker, so the real distinction is code-first vs GUI, not depth). Prior: 2026-06-02 (session 14 — `fps()` shipped as the perf read-out; **one-click profiler shipped** (⏱ profile button, see [`guides/profiler.md`](guides/profiler.md)); **off-screen poly bbox clamp shipped** (item 14) — a cliff guard, ~17× on the synthetic stress cart, modest on real carts; `trifill_stress` regression cart added). Prior: session 13 — `fade()` made immediate-mode, fixing a 27-cart stuck-dim bug._
 
 ---
 
@@ -114,13 +114,23 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
      options menus, which is the gap this closes.
 5. **Sound expansion** — _instrument bank (ADSR/duty/LFO/filter) and **held notes**
    (`note_on`/`note_off` + live setters + slew) now SHIPPED, see above._
-   Still open: the **navkit rich-instrument port** (organ/Rhodes/piano as `INSTR_*` engines —
-   played behind a tiny fixed 3-macro API: harmonics/timbre/morph, §8.1.1) — **queued as the
-   next sound feature, first bite = `INSTR_PLUCK` (Karplus-Strong — smallest engine, proves the
-   per-voice buffer; organ follows as the Leslie package); see audio-notes §8 status note + §8.8
-   port sketch**; zero-setup **preset
-   instruments** (`INSTR_PLUCK`/`PAD`/…); cart-side **SFX/pattern authoring** (banks are
-   hardcoded today). [`design/audio-notes.md`](design/audio-notes.md) §5–8, [`design/held-notes.md`](design/held-notes.md).
+   Still open: the **navkit rich-instrument port** (rich non-chiptune voices as `INSTR_*`
+   engines, each played behind a tiny fixed 3-macro API: harmonics/timbre/morph, §8.1.1) —
+   **queued as the next sound feature, not started.** The agreed bite order (audio-notes §8
+   status note + §8.8 port sketch):
+     1. **`INSTR_PLUCK`** (Karplus-Strong) — first bite: smallest engine, sounds real instantly,
+        proves the per-voice delay buffer (§8.2) the whole buffered family then rides.
+     2. **`INSTR_MALLET`** — buffer-free celesta / music-box voice.
+     3. **`INSTR_ORGAN` + Leslie** — Hammond drawbars → scanner → shared rotary, as one package.
+     4. **EP / acoustic-piano / guitar** family (buffered, on the proven path).
+   Two findings already resolved: the **MT70 presets** (Flute/Bells/Organ/Vibes/JzOrg2…) are
+   **all pure sine + ADSR + filter — not an engine**, so they need *no port* and ship as
+   demo/preset carts on existing API (§8.9); and **`INSTR_SINE` = Additive at harmonics 0**, so
+   it ships now and the future Additive engine subsumes the MT70/sine family via macros.
+   Also still open: zero-setup **preset instruments** (`INSTR_PLUCK`/`PAD`/…) and cart-side
+   **SFX/pattern authoring** (banks are hardcoded today).
+   ⚠️ The port touches `runtime/sound.h`/`studio.c` — shared with the live/libtcc runtime work;
+   sync before starting. [`design/audio-notes.md`](design/audio-notes.md) §5–8, [`design/held-notes.md`](design/held-notes.md).
 6. **Sprite flags** — `fget`/`fset` (per-sprite 8-bit flags; 256 bytes). Pairs with an
    8-checkbox row in the sprite editor. [`design/api-notes.md`](design/api-notes.md) 2026-05-30 review.
 7. **Gamepad** — `gp_axis(slot, axis)`, `gp_present(slot)`, internal `btn()` augment.
@@ -144,6 +154,13 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
     crowds, rich shapes, low-end). Centerline/pivot model, `pal()` recolor for free color
     variety, parts capped at 16px (native slot size). The path to scaling the `bones`
     animator past realtime drawing. [`design/baked-rotation-atlas.md`](design/baked-rotation-atlas.md).
+    - *Reframe (from the Picotron manual):* Picotron collapses "sprite sheet," "offscreen
+      canvas," and "raw memory" into ONE primitive — `userdata(type,w,h)`, a typed 2D buffer
+      that sprites/map/screen all are. Suggests the primitive here should be **general**, not
+      rotation-specific: a draw target you can render into, read/write per-pixel (`sset`/`sget`),
+      and stamp — the offscreen canvas, the rotation cache, and runtime sprite editing are then
+      the *same feature*, not three. Worth designing the buffer primitive first; the rotation
+      atlas becomes one use of it. (Still index-only — no RGB/alpha, unlike Picotron's userdata.)
 14. **Rasterization consistency** *(SHIPPED — every filled primitive on one coverage path)* —
     every filled primitive now shares one pixel-center coverage definition, so the outline is
     exactly the boundary of the fill (no rasterizer drift, dither = solid path):
@@ -217,6 +234,19 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
     for sequencing, not a new way to structure carts. Open question is whether a macro trick fits
     dreamengine's "readable C" ethos, or whether it's better shipped as a documented example cart
     than as core API. Worth prototyping one `sequence`/`wait` helper to feel the ergonomics.
+
+18. **Blend tables** *(idea — from the Picotron manual; the substantive capability gap)* —
+    index-only translucency/fog/tinting/additive via a precomputed lookup `result = blend[src][dst]`,
+    staying entirely in the 32-color palette (**no RGB, no real alpha** — just a table that says
+    "drawing color `a` over existing color `b` resolves to `c`"). Unlocks the things carts fake
+    with `fillp` dither today: translucent water/glass, fog, additive glows, drop shadows. This is
+    a real *capability* dreamengine lacks — `pal()` swaps and `fillp` are the closest, neither
+    blends with what's already on screen. Deliberately framed as a lookup table so it does **not**
+    trip the "splits the color model" concern flagged on the `lerp_color`/`rgb` parked thought
+    (item 2) — the output is always a palette index. Picotron pairs this with stencil clipping;
+    that's a separate, lower-value follow-on. Needs a design note (how tables are authored —
+    preset modes like `BLEND_ADD`/`BLEND_MUL`/`BLEND_AVG`, or cart-defined? where the active table
+    lives; interaction with `pal()`/`fillp`).
 
 > `tritex` (affine textured triangle) shipped in session 8 — it was Open here; now in the API.
 
