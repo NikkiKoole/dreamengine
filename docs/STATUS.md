@@ -7,7 +7,7 @@
 > **here**, then fix the prose in the relevant design doc. If a design doc and this file
 > disagree, this file wins.
 
-_Last updated: 2026-06-02 (session 14 — `fps()` shipped as the perf read-out; **one-click profiler shipped** (⏱ profile button, see [`guides/profiler.md`](guides/profiler.md)); **off-screen poly bbox clamp shipped** (item 14) — a cliff guard, ~17× on the synthetic stress cart, modest on real carts; `trifill_stress` regression cart added). Prior: session 13 — `fade()` made immediate-mode, fixing a 27-cart stuck-dim bug._
+_Last updated: 2026-06-03 (added two ideas from a Picotron API comparison: `menuitem` folded into the Pause item (#4 — same feature, two ends), and frame-spanning **sequence scripts** as new open item #17, kept distinct from the cut DIV process model). Prior: 2026-06-02 (session 14 — `fps()` shipped as the perf read-out; **one-click profiler shipped** (⏱ profile button, see [`guides/profiler.md`](guides/profiler.md)); **off-screen poly bbox clamp shipped** (item 14) — a cliff guard, ~17× on the synthetic stress cart, modest on real carts; `trifill_stress` regression cart added). Prior: session 13 — `fade()` made immediate-mode, fixing a 27-cart stuck-dim bug._
 
 ---
 
@@ -105,6 +105,13 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
    [`design/api-notes.md`](design/api-notes.md) §11.
 4. **Pause + debug** — `pause()`/`paused()`, `voices_active()`. (`fps()` SHIPPED — see
    Shipped above.) [`design/api-notes.md`](design/api-notes.md) §16.
+   - **`menuitem(index, label, callback)`** *(idea — from the Picotron API comparison)* — let a
+     cart hang custom rows ("restart", "toggle music", "easy mode") off a **built-in pause menu**:
+     one line, no layout/input/focus to hand-roll. **Pairs with the pause work above** — it's the
+     same feature from two ends: the runtime grows a pause overlay (own the pause state + render
+     it), and `menuitem` is the cart's hook into it. High "feels like a real console" payoff for
+     the size; the cost is `studio.c` owning the overlay. Today ~30 carts hand-draw their own
+     options menus, which is the gap this closes.
 5. **Sound expansion** — _instrument bank (ADSR/duty/LFO/filter) and **held notes**
    (`note_on`/`note_off` + live setters + slew) now SHIPPED, see above._
    Still open: the **navkit rich-instrument port** (organ/Rhodes/piano as `INSTR_*` engines —
@@ -198,6 +205,18 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
     which a consumer machine doesn't have; web/wasm is the likely public path. Full breakdown:
     [`design/packaging-distribution.md`](design/packaging-distribution.md). Related: browser
     URL-sharing (item 10), iPad runtime (item 11).
+
+17. **Frame-spanning sequence scripts** *(idea — from the Picotron API comparison; needs design)* —
+    the *useful half* of Lua's `yield`/coroutines: write time-based logic (cutscenes, scripted
+    AI, juice sequences, dialog) as **linear top-to-bottom code** — `walk_to(100); wait(30);
+    say("hi"); wait(60); …` — instead of a `switch(state)` shredded across `update()` calls.
+    C has no native coroutines, but the pattern is emulable with **protothreads** (Dunkels'
+    switch/case macro): stackless, so locals that must survive a `wait` go in `de_state()`.
+    **Distinct from the cut "process / coroutine model"** below — that was a full DIV-style
+    Level-2 *execution model* (every entity its own process); this is a *small optional helper*
+    for sequencing, not a new way to structure carts. Open question is whether a macro trick fits
+    dreamengine's "readable C" ethos, or whether it's better shipped as a documented example cart
+    than as core API. Worth prototyping one `sequence`/`wait` helper to feel the ergonomics.
 
 > `tritex` (affine textured triangle) shipped in session 8 — it was Open here; now in the API.
 
