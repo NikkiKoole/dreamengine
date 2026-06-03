@@ -305,6 +305,10 @@ void init(void) {
     int waves[5] = { INSTR_SAW, INSTR_SQUARE, INSTR_TRI, INSTR_SINE, INSTR_NOISE };
     for (int i = 0; i < 5; i++) { instrument(5 + i, waves[i], 6, 120, 4, 300); instrument_filter(5 + i, FILTER_LOW, 800, 8); }
     instrument_duty(6, 0.5f);   // square's pw knob overrides this live
+    // a second bank (10-14): same waves but a FLAT envelope (full sustain, no baked decay).
+    // The VOICE plays from this bank when its amp jack is patched, so the patched ENV fully
+    // shapes the amplitude (a true VCA) instead of fighting the slot's own 120ms decay.
+    for (int i = 0; i < 5; i++) { instrument(10 + i, waves[i], 2, 0, 7, 8); instrument_filter(10 + i, FILTER_LOW, 800, 8); }
     preset_generative();
 }
 
@@ -344,9 +348,9 @@ void eval_mod(int mi) {
             if (cable_into(mi, 0) < 0) {   // gate input unpatched → release (no dangling drone)
                 int h = (int)m->state[1]; if (h > 0) { note_off(h); m->state[1] = 0; }
             }
-            int slot = 5 + (int)m->param[3];   // wav knob picks the waveform (slots 5-9)
             float gate = read_in(mi, 0), pitch = read_in(mi, 1), fcv = read_in(mi, 2);
             bool amp_cv = cable_into(mi, 5) >= 0;   // 'a' patched → ENV shapes the amplitude (a VCA)
+            int slot = (amp_cv ? 10 : 5) + (int)m->param[3];   // wav picks the wave; VCA uses the flat-envelope bank (10-14)
             if (gate > 0.5f && m->state[0] <= 0.5f) {
                 int mm = (int)pitch; if (mm < 1) mm = 48;
                 int h = (int)m->state[1]; if (h > 0) note_off(h);
