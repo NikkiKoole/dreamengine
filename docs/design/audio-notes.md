@@ -327,13 +327,20 @@ rich, respectively, hangs off them.
 ## 8. Borrowing rich instruments from navkit
 
 > **Status: QUEUED — next sound feature, not started (as of 2026-06-03).** The plan below is
-> agreed; the trigger just hasn't been pulled. **First bite when we do:** port the **Hammond
-> organ** as `INSTR_ORGAN` — it's buffer-free (~160 B/voice, no `Voice` struct change), so it
-> drops in with zero architecture risk, and it immediately makes modrack's VOICE `wav` selector
-> (and any cart) sound like a real instrument. Then EP / mallet / additive (still buffer-free),
-> and only later take the buffered (Karplus piano/guitar) decision. **Coordinate:** this touches
-> `runtime/sound.h`/`studio.c`, which the live/libtcc runtime work also lives in — sync before
-> starting. modrack would expose these as a PLAITS-style MACRO voice (or just more `wav` options).
+> agreed; the trigger just hasn't been pulled. **First bite when we do:** port **Karplus-Strong
+> pluck** as `INSTR_PLUCK` — ~20 lines, sounds unmistakably like a real plucked string the moment
+> it runs, needs no companion effect, and drops onto the existing fire-and-forget `note()` path.
+> Crucially it exercises the small per-voice delay buffer (§8.2 — *decided*), proving the riskiest
+> new infrastructure first so the whole buffered family (piano / guitar / strings) then rides a
+> validated path. It ships with the fixed **3-macro surface** (harmonics / timbre / morph —
+> §8.1.1) so it's live-tweakable from frame one, not a frozen preset. Then **`INSTR_MALLET`**
+> (buffer-free, the celesta / music-box voice), then **`INSTR_ORGAN` + Leslie** as a complete
+> package (drawbars → scanner on the proven buffer → shared rotary), then the EP / acoustic-piano /
+> guitar family. (Organ *was* the original first bite for being buffer-free/zero-risk; once the
+> buffer decision landed that risk argument dissolved, and organ's best self needs the Leslie —
+> so it moved to the package bite.) **Coordinate:** this touches `runtime/sound.h`/`studio.c`,
+> which the live/libtcc runtime work also lives in — sync before starting. modrack would expose
+> these as a PLAITS-style MACRO voice (or just more `wav` options). Full sketch: §8.8.
 
 There's a sibling project, **navkit** (`~/Projects/navkit/soundsystem`), with a large,
 mature software synth (~53k LOC of header-only engines). It contains fully-built,
@@ -359,13 +366,97 @@ chord(48, CHORD_MAJ7, INSTR_EPIANO, 5);
 ```
 
 This is the highest-leverage move in the whole doc against the §1 rule: the timbre ceiling
-goes through the roof while the learner-facing surface stays at zero. The §5.4 "instrument
+goes through the roof while the learner-facing surface stays tiny. The §5.4 "instrument
 bank + ADSR" path is about letting carts *build* timbres; this path is about *shipping*
-finished ones. For our audience, shipping finished ones wins — keep the 30 internal params
-of each engine **hidden**, expose them only as fixed presets via id
-(`INSTR_ORGAN_JAZZ`, `INSTR_EPIANO_RHODES`) at most.
+finished ones. For our audience, shipping finished ones wins — keep each engine's ~30 internal
+params out of the API, but **not** behind a wall of frozen presets: expose a *fixed, tiny,
+engine-agnostic* macro set (§8.1.1) so carts can still play the timbre live. Named per-engine
+presets (`INSTR_ORGAN_JAZZ`, `INSTR_EPIANO_RHODES`) then become just baked macro positions.
+
+### 8.1.1 The macro refinement — 3 live knobs per engine, not 0
+
+> Amends §8.1/§8.6's original "expose 0 params, ship frozen presets" stance. The fear that
+> stance guards against is real but narrower than "0 params": it's the *per-engine named param*
+> explosion (`organ_drawbar()`, `epiano_bark()`, `piano_hardness()` …), which grows the API
+> `O(engines × params)`. The escape is to keep the count **fixed and engine-agnostic** — not
+> to expose nothing.
+
+Borrow the discipline from Mutable Instruments **Plaits**: dozens of wildly different synthesis
+engines, and *every one* exposes the **same three normalized controls** — **HARMONICS, TIMBRE,
+MORPH** — and nothing else. Each engine internally maps those 0..1 inputs onto whichever 3–5 of
+its own internal params matter most. The surface for engine #1 and engine #20 is identical.
+
+**This is not theoretical — it's the MicroFreak.** Arturia's MicroFreak digital oscillators are
+built on Mutable's open-source code (the Plaits/Braids lineage; Émilie Gillet's engines are
+MIT-licensed), and the front panel surfaces exactly this idea as three continuous knobs
+(**Wave / Timbre / Shape**) that mean something different per engine. A hardware synth people
+love to *play* settled on three macros per engine — that's the strongest validation we could
+ask for. We'll use the Plaits names (harmonics / timbre / morph). Three it is.
+
+So the rule for the navkit port becomes: **every `INSTR_*` engine exposes the same three
+normalized macros — `harmonics`, `timbre`, `morph` — and no per-engine params.** The surface
+is `O(1)`: it does not grow when the 8th engine lands.
+
+#### The surface (reuses the existing handle + slew + CV path)
+
+We already ship live, slew-smoothed, CV-able setters on held voices (`note_cutoff`, `note_res`,
+`note_duty`, `note_pitch`, …) — modrack's VOICE drives them off a knob and a CV cable today. The
+macros are three more destinations on that *same* machinery; no new plumbing concept:
+
+```c
+// baked into a slot (the instrument template)
+void instrument_harmonics(int slot, float x);   // 0..1
+void instrument_timbre   (int slot, float x);   // 0..1
+void instrument_morph    (int slot, float x);   // 0..1
+
+// live on a held voice — the game / a knob / a CV cable is the modulator
+void note_harmonics(int handle, float x);        // 0..1, slewed
+void note_timbre   (int handle, float x);        // 0..1, slewed
+void note_morph    (int handle, float x);        // 0..1, slewed
+```
+
+Three macros × {slot, live} = six functions, **forever** — bounded, because the count never
+scales with the number of engines. (If even six bites, the `which`-index form already used by
+`instrument_lfo` is an option — `note_macro(h, MACRO_TIMBRE, x)` — but named reads better for
+beginners and there are only ever three.)
+
+#### Where the taste lives
+
+The richness of the ~30 internal params doesn't vanish — it moves from *API* into a tiny
+**per-engine mapping function** the porter writes once, clamped to the good-sounding range so
+the instrument stays "impossible to make ugly":
+
+| Engine | harmonics | timbre | morph |
+|---|---|---|---|
+| **Organ** | drawbar registration (sub / 8′ / 4′ / 2′ mix) | brightness / drawbar tilt | percussion + internal vibrato/chorus scanner depth *(Leslie is a separate shared effect — §8.3, not a macro)* |
+| **Electric piano** | partial spread (Rhodes↔Wurli) | pickup growl / bark amount | bell↔tine balance |
+| **Acoustic piano** | unison detune / string spread | strike hardness | dispersion ("expensive"-ness) + damping |
+| **Strings** | section size (1 player↔ensemble) | bow brightness | bow pressure / attack bite |
+| **Mallet** | inharmonicity (marimba↔bell) | strike position | decay length (celesta↔vibe) |
+
+That table is *code, curated by taste* — not API surface. The beginner gets three knobs that
+always "make it more interesting"; the porter decides which internal params each one sweeps.
+**Infinite internal richness, constant external surface** — the actual middle ground.
+
+#### Composes with the four axes (§10), and with modrack
+
+The macros sit *on the engine/oscillator*; the shipped ADSR / LFO / `instrument_filter` axes
+still wrap *around* it. So an organ can have `note_morph` ramp the Leslie up **and** an
+`LFO_CUTOFF` wah **and** a live `note_cutoff` — all on one handle, all slewed. In modrack the §8
+engines become a Plaits-style **MACRO voice** with three CV inlets (HARMONICS / TIMBRE / MORPH);
+patch an LFO or envelope into MORPH and the organ swells on its own.
+
+This does not change the first-bite plan: `INSTR_ORGAN` still ships buffer-free — it just ships
+*with* its three-macro mapping instead of as a single frozen preset.
 
 ### 8.2 The one architectural decision: buffer-free vs. buffered
+
+> **Decided (2026-06-03): yes — a `Voice` may carry a small per-voice delay line (~2 KB).** The
+> organ's internal vibrato/chorus scanner wants one anyway, and the *same field* is reused across
+> the whole buffered family below (pluck / piano / guitar), so committing once pays for all of
+> them. This retires the "decide one thing first" gate — the §8.5 ordering still holds (ship the
+> buffer-free drawbar/modal cores first), but the buffered engines are no longer blocked on a
+> pending decision.
 
 The only thing that divides "drop in tomorrow" from "decide one thing first" is whether a
 voice has to carry a **delay-line buffer**.
@@ -394,9 +485,17 @@ Say "a Voice may hold a small buffer" once and the whole physical-modeling famil
 ### 8.3 What specifically sells the theatre-organ / silent-film vibe
 
 - **Hammond organ + a simplified Leslie.** The Hammond sound is ~70% Leslie rotary, ~25%
-  drawbars. The organ engine is ~160 B/voice; the Leslie is a **single ~1.5 KB buffer
-  *shared* across all voices** (amplitude + slight Doppler mod, slow/fast speed toggle) —
-  not per-voice. Tiny cost, and it's the line between "9 sines" and "church/theatre organ."
+  drawbars. The organ engine itself is ~160 B/voice. **The Leslie is an *effect*, not part of
+  the oscillator** — that's how navkit factors it (`engines/effects.h`) and it's the right call
+  here too: physically it's a speaker sim that sits *after* the tonewheels, it's a single
+  ~1.5 KB buffer **shared across all voices** (amplitude + slight Doppler mod, slow/fast speed),
+  not per-voice, and it'd run just as well on a Rhodes or a guitar. So: implement it as a
+  standalone shared DSP block, decoupled from the engine.
+  - *The open decision is exposure, not structure.* A general cart-facing **effects bus** is a
+    new concept, and the §8 thesis is "no new concept." So for now the organ slot **auto-routes**
+    through the Leslie and its speed rides a control we already have (a macro, or a dedicated
+    slow/fast flag) — the cart never sees an "effect." When the §8.5-phase-4 character effects
+    (chorus / drive / bitcrush) land as a real layer, this block folds straight into it.
   An organ *wants to sustain*, so it pairs naturally with the held-channel model (§6).
 - **Acoustic piano** (KS + dispersion) for the pianist themselves.
 - **Formant filter** for "singing"/choir/vocal-organ color — 4 bandpass peaks, ~512 B of
@@ -417,21 +516,29 @@ a substitute for the modeled instruments. Aliasing at high notes is acceptable/r
 ### 8.5 How this reframes the roadmap (§7)
 
 A curated instrument set is a *better* first move than the instrument bank, because it needs
-**no new concept** — beginners keep calling `note`/`chord`/`tone`. Suggested ordering, each
-phase independently shippable:
+**no new concept** — beginners keep calling `note`/`chord`/`tone`. The per-voice buffer is now
+decided (§8.2), so the old buffer-free/buffered gate no longer drives the sequence; instead, lead
+with the engine that proves the most for the least code. Suggested ordering, each phase
+independently shippable:
 
-1. **Buffer-free instruments** — `INSTR_ORGAN`, `INSTR_EPIANO`, `INSTR_MALLET`/`INSTR_CELESTA`,
-   `INSTR_STRINGS`. Zero API/architecture change; four characterful instruments.
-2. **Leslie (shared) + resonant SVF filter** — sells the organ; the filter is the reusable
-   primitive that also gives §5.5 and §8.3's formant.
-3. **The per-voice buffer decision** → `INSTR_PIANO`, `INSTR_GUITAR`/`INSTR_HARP`. The pianist.
-4. **Formant filter** + a couple of cheap character effects (chorus, soft drive, bitcrush).
-5. **Optional:** bowed strings; and/or the SCW bank (§8.4).
+1. **`INSTR_PLUCK`** (Karplus-Strong) + the fixed macro surface (§8.1.1 — 6 fns total, independent
+   of engine count). Smallest engine, exercises the per-voice buffer, no companion effect — proves
+   macros + engine-fork + buffer end to end.
+2. **`INSTR_MALLET`/`INSTR_CELESTA`** — buffer-free modal; the music-box / silent-movie voice.
+3. **`INSTR_ORGAN` + Leslie (shared) + resonant SVF filter** — the organ as a complete package
+   (drawbars → scanner on the buffer → shared rotary). The SVF is the reusable primitive that also
+   gives §5.5 and §8.3's formant.
+4. **`INSTR_EPIANO` / `INSTR_PIANO` / `INSTR_GUITAR`/`INSTR_HARP`** — the rest of the buffered
+   family, riding the path pluck validated. The pianist.
+5. **Formant filter** + a couple of cheap character effects (chorus, soft drive, bitcrush).
+6. **Optional:** bowed strings; and/or the SCW bank (§8.4).
 
 ### 8.6 Cons / watch-outs
 
-- **Hide the internal params.** Each engine has many knobs; expose fixed presets via id only.
-  The moment a beginner sees "drawbar 4 = 6", the simplicity is gone.
+- **Don't expose the *named* internal params** (no `organ_drawbar()`), but **do** expose the
+  fixed three-macro set (§8.1.1) — harmonics / timbre / morph, identical across every engine.
+  The moment a beginner sees "drawbar 4 = 6" the simplicity is gone; three normalized "make it
+  more interesting" knobs keep it. Frozen `INSTR_*_JAZZ` presets are just baked macro positions.
 - **Porting = lift the oscillator fn + its tuning constants.** The engines are self-contained
   (no malloc, no dependency on navkit's sequencer/effects bus), so each is a clean
   copy → shrink → rename into `sound.h`. Buffered ones bring their buffer — the only
@@ -451,7 +558,114 @@ phase independently shippable:
 - Calling convention: set `voice.wave`/`frequency`/envelope, then per sample
   `sample = processXxxOscillator(&voice, sampleRate)` — no heap, all state in-struct.
 
----
+### 8.8 Port sketch — macro plumbing + three engines + the Leslie effect
+
+Concrete shape for the first bite, grounded in today's `sound.h` (mix loop ~`:467–550`, the
+stateless `sound_osc` `:176`, ctrl-kind dispatch `:360–437`). **Three touch points; everything
+else is unchanged.**
+
+**(a) Macros** — 3 floats on `Instrument`, current+target on `Voice` (mirrors
+`flt_cutoff`/`cutoff_target`), two new ctrl kinds, six named functions, three lines in the
+existing slew block (`:478`):
+
+```c
+// Instrument:  float harmonics, timbre, morph;            // 0..1, meaning is per-engine
+// Voice:       float harm,timb,mor,  harm_target,timb_target,mor_target;
+// kind 18 = instrument_macro(slot, which 0/1/2, val*1000);  kind 19 = note_macro(handle, which, val*1000)
+void instrument_timbre(int slot, float x);   void note_timbre(int handle, float x);   // + harmonics / + morph
+// slew:  v->harm += (v->harm_target - v->harm) * 0.002f;   // and timb, mor
+```
+
+Named API (only ever six functions), one `which`-indexed code path inside — rides the handle +
+slew + CV machinery `note_cutoff` already uses; modrack gets three CV inlets for free.
+
+**(b) Engine fork** — `sound_osc` keeps the 5 raw waves; engine ids dispatch to stateful
+generators that read the macros. One line at `:534`:
+
+```c
+float s = (v->wave >= INSTR_ENGINE_BASE) ? sound_engine(v, v->harm, v->timb, v->mor)
+                                         : sound_osc(v->wave, v->phase, duty, &v->noise_state);
+```
+
+**Buffer-free engines** (drop in now, no `Voice` growth — phase 1):
+
+```c
+// ORGAN — 9 drawbars derived from v->phase (fixed Hammond ratios). ~25 lines.
+//   harmonics = registration  (mellow 8′  ↔  bright full spread)  — REG_MELLOW→REG_BRIGHT lerp
+//   timbre    = brightness     (per-partial expf rolloff)
+//   morph     = percussion strike + internal vibrato/chorus scanner depth
+//               (drawbar core is buffer-free → ships first; the scanner taps the small per-voice
+//                delay from §8.2 — the same buffer field the pluck/piano engines reuse)
+float sound_organ(Voice *v, float harm, float timb, float mor);
+
+// MALLET (marimba / vibes / celesta) — 4 inharmonic modal sines + a strike-noise transient. ~15 lines.
+//   harmonics = inharmonicity  (wood ratios 1·3.9·9.2  ↔  metal/bell 1·4.1·10.7)
+//   timbre    = strike hardness (weights upper partials + the noise-click amount)
+//   morph     = ring length     (celesta short  ↔  vibe long; the long end adds the vibe motor tremolo)
+float sound_mallet(Voice *v, float harm, float timb, float mor);   // decay from step_samples; reuses v->phase + noise_state
+```
+
+**Buffered engine** — `PLUCK` (the guitar/harp family) is the *first* engine that needs a
+per-voice delay line: **this is the one §8.2 architectural decision, made concrete.**
+Karplus-Strong = excite a delay line of length `SR/freq` with noise, run it through a feedback
+lowpass:
+
+```c
+// Voice gains:  float ks_buf[KS_MAX]; int ks_len, ks_idx; bool ks_init;  // ~2KB/voice (KS_MAX≈1024 caps the low end)
+// PLUCK — pitch comes from the buffer LENGTH, not v->phase.
+//   harmonics = damping / sustain (short pluck  ↔  long ring)  — feedback coefficient
+//   timbre    = pick brightness    (lowpass on the initial noise burst)
+//   morph     = pick position      (comb/allpass tap into the line)
+float sound_pluck(Voice *v, float harm, float timb, float mor);
+```
+
+Modeled engines treat the slot's ADSR as an **optional override, not a replacement** — they bake
+their own decay (mallet ring, pluck damping), and a user ADSR layered on top flattens the very
+motion that sells them (§10).
+
+**(c) Leslie** — a shared *effect*, not per-voice (matches navkit's `engines/effects.h`, per
+§8.3). Split organ voices into a sub-bus, run it through one shared rotary, add back:
+
+```c
+// #define LESLIE_LEN 512   // one shared ~2KB delay line — NOT per voice
+typedef struct { float buf[LESLIE_LEN]; int widx; float horn_ph, drum_ph, speed, speed_target; } Leslie;
+float leslie_process(Leslie *L, float in);   // 2 rotors → amplitude tremolo + doppler delay-mod;
+                                              // speed slews slowly (the ~1s spin-up/down IS the magic)
+// in the voice loop (:540):   if (v->wave == INSTR_ORGAN) organ_bus += out_s; else mix += out_s;
+// after the loop   (:547):    mix += leslie_process(&leslie, organ_bus);
+```
+
+`leslie.speed_target` stays internal (auto, defaults slow) — no cart-facing effects API until the
+§8.5-phase-4 effects layer, into which `leslie_process` folds cleanly (and `organ_bus`
+generalizes to a per-instrument send). Mono today; stereo horn/drum panning is the upgrade when
+§9's stereo question resolves.
+
+**Cost:** macros ≈ 6 floats + 2 ctrl kinds + 6 one-liners; organ drawbars + mallet are
+buffer-free; the organ scanner and the `PLUCK`/piano/guitar family share one small per-voice
+delay line (§8.2 — decided). Leslie is a separate *shared* ~2KB buffer.
+
+### 8.9 Candidate engine catalog (running wishlist)
+
+The set we'd *like*, beyond the first-bite engines (§8.5). Adding one is mostly: port the
+oscillator (§8.7), mark buffer-free vs. buffered (the per-voice delay from §8.2 is only for
+Karplus/waveguide), and define its **3-macro mapping** — because the §8.1.1 discipline holds no
+matter how the engine synthesizes, every row exposes the same `harmonics` / `timbre` / `morph`;
+the table's only job is to say what those three mean for each. Grow it freely.
+
+| Engine | navkit src (§8.7) | buffer | harmonics | timbre | morph | character |
+|---|---|---|---|---|---|---|
+| **Additive / sine** (bell, choir, brass, MT/LA-style) | additive osc | free | # / spread of partials | spectral tilt (brightness) | per-partial decay + inharmonicity | the pure-sine family; glassy → rich. Organ/mallet are specialized cases |
+| **FM** (2–3 op, DX) | `processFm…` | free | carrier:modulator ratio | mod index (FM amount) | feedback / 2nd-op depth | DX bells, chimes, e-pianos, clang. Macros *are* the cure for "expert to dial" |
+| **AM / ring mod** | trivial (≈10 lines native) | free | modulator ratio | AM ↔ ring depth | modulator detune / wave | metallic, robotic, clangorous bells |
+| **Voice / formant** | formant SVF + buzz (§8.3) | free (reuses SVF) | vowel (a→e→i→o→u) | breathiness / brightness | formant shift (size/gender) | choir "aah", vocal-organ, talkbox. Comes near-free with the §8.3 filter |
+
+> **MT-770 — to confirm.** If this is the Roland **LA / MT-32 family**, it's *not* pure sine:
+> PCM-sampled attacks + sine-partial sustains. The sine character lives in the **Additive** row;
+> the sampled-attack flavor (if wanted) is the **SCW** lever (§8.4). If it's a different unit,
+> name it and we'll map it. *(Source/effort/priority TBD — this is a wishlist, not a commitment.)*
+
+*Format for adding more:* just name the sound + a reference patch/track if you have one; the
+buffer flag, navkit source, and macro mapping get filled in here.
 
 ## 9. Open questions
 
@@ -467,9 +681,9 @@ phase independently shippable:
   with that editor in mind.
 - **Voice budget:** with held channels reserving voices, do we raise `SOUND_VOICES`, or
   is 8 still plenty once some are long-lived?
-- **Per-voice buffers (§8.2):** do we let a `Voice` carry a delay-line buffer (unlocks the
-  whole Karplus-Strong / physical-modeling family at ~2 KB/voice), or stay buffer-free and
-  ship only the additive/modal instruments? This is the gate for a real acoustic piano.
+- ~~**Per-voice buffers (§8.2):**~~ **Resolved (2026-06-03): yes** — a `Voice` may carry a small
+  ~2 KB delay-line buffer. Wanted by the organ scanner and reused across the whole Karplus-Strong /
+  physical-modeling family (pluck / piano / guitar). See §8.2.
 - **Curated instruments vs. instrument bank:** ship finished `INSTR_*` presets from navkit
   (§8) *and/or* build the cart-authorable bank (§5.4)? They're complementary, but which is
   the headline for the audience — sounding great out of the box, or authoring your own?
