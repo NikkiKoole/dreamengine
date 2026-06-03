@@ -51,9 +51,9 @@ ModType TYPES[NTYPE] = {
     [MOD_SH]    = { "S&H", CLR_YELLOW, 6, 7, 3, {{2,false,24,16,"in"},{0,false,48,16,"clk"},{2,true,36,72,"cv"}}, 0, {} },
     [MOD_QUANT] = { "QUANT", CLR_GREEN, 6, 7, 2, {{2,false,36,16,"in"},{1,true,36,72,"pit"}},
                    2, {{"scl",0,5.99f,SCALE_PENTA,22,40,FMT_SCALE},{"root",0,11.99f,0,50,40,FMT_NOTE}} },
-    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 5, {{0,false,7,16,"g"},{1,false,21,16,"p"},{2,false,35,16,"f"},{2,false,49,16,"r"},{2,false,63,16,"w"}},
+    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 6, {{0,false,6,16,"g"},{1,false,18,16,"p"},{2,false,30,16,"f"},{2,false,42,16,"r"},{2,false,54,16,"w"},{2,false,66,16,"a"}},
                    6, {{"cut",200,2200,700,20,40,FMT_INT},{"res",0,15,6,52,40,FMT_INT},{"pw",0.05f,0.95f,0.5f,20,60,FMT_F1},{"wav",0,4.99f,0,52,60,FMT_WAVE},
-                       {"fenv",0,3000,0,20,80,FMT_INT},{"penv",-24,24,0,52,80,FMT_INT}} },   // fenv = filter-env depth (Hz), penv = pitch-env depth (semis)
+                       {"fenv",0,3000,0,20,80,FMT_INT},{"penv",-48,48,0,52,80,FMT_INT}} },   // a = amp/VCA CV (patch an ENV for percussive punch); fenv/penv = filter & pitch env depth
     [MOD_EUCLID]= { "EUCLID", CLR_RED, 6, 7, 2, {{0,false,36,16,"clk"},{0,true,36,72,"g"}},
                    2, {{"h",1,8.99f,4,22,40,FMT_INT},{"s",2,16.99f,8,50,40,FMT_INT}} },
     [MOD_ENV]   = { "ENV", CLR_MEDIUM_GREEN, 6, 7, 2, {{0,false,36,16,"g"},{2,true,36,72,"cv"}},
@@ -87,7 +87,7 @@ const char *HELP[NTYPE][3] = {
     [MOD_LFO]    = { "Low-freq oscillator: a slow 0..1 wave.", "rate sets speed. Patch the cv out into", "any cv input to modulate it." },
     [MOD_SH]     = { "Sample & Hold. On each clk pulse it", "grabs the cv at 'in' and holds it until", "the next clk -> a stepped, random-ish cv." },
     [MOD_QUANT]  = { "Quantizer. Snaps any cv to the nearest", "note of a scale (scl/root) so it's always", "in key. cv in -> pitch out." },
-    [MOD_VOICE]  = { "The voice. g=gate p=pitch; f/r/w CV sweep", "cut/res/pw; wav picks the wave. fenv/penv =", "per-note filter & pitch punch (mod-envelopes)." },
+    [MOD_VOICE]  = { "Voice. g=gate p=pitch; f/r/w/a CV =", "cutoff/res/pw/amp. Patch an ENV into 'a' for", "a percussive VCA. fenv/penv = filter+pitch punch." },
     [MOD_EUCLID] = { "Euclidean rhythm: h hits spread evenly", "over s steps. Advances on clk, fires a", "gate on each hit. Patch 'o' into DRUM." },
     [MOD_ENV]    = { "AD envelope. A gate makes a 0->1->0 cv", "ramp (atk up, dec down). Patch cv into a", "filter for a pluck on every note." },
     [MOD_DRUM]   = { "Three drum voices. A gate at k/s/h", "fires kick / snare / hat. Patch gates", "(from EUCLID or CLOCK) into them." },
@@ -257,9 +257,24 @@ void preset_zaplead(void) {      // VOICE's onboard PITCH env = a zappy lead (ea
     mod[eu].param[0] = 4; mod[eu].param[1] = 8;
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
 }
-const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead" };
-void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead };
-#define NPRESET 11
+void preset_punch(void) {        // ENV -> VCA (amp) + a big pitch env = the kick/zap the VOICE couldn't make before
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
+    int en = spawn(MOD_ENV, bayx(2), bayy(2)), vo = spawn(MOD_VOICE, bayx(3), bayy(3));
+    int e2 = spawn(MOD_EUCLID, bayx(4), bayy(4)), dr = spawn(MOD_DRUM, bayx(5), bayy(5));
+    mod[ck].param[0] = 120;
+    mod[en].param[0] = 0.005f; mod[en].param[1] = 0.13f;             // fast attack, short decay = a percussive amp
+    mod[vo].param[0] = 480; mod[vo].param[1] = 3; mod[vo].param[3] = 3;   // sine, low-ish cut
+    mod[vo].param[5] = 36;                                           // PITCH ENV: +36 st = the kick "donk"
+    mod[eu].param[0] = 4; mod[eu].param[1] = 8;
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0); add_cable(eu, 1, en, 0);   // one gate fires VOICE + ENV together
+    add_cable(en, 1, vo, 5);                                                      // ENV -> 'a' (VCA): the percussive punch
+    mod[e2].param[0] = 3; mod[e2].param[1] = 8;
+    add_cable(ck, 0, e2, 0); add_cable(e2, 1, dr, 2); add_cable(ck, 0, dr, 1);   // hats + snare on top
+}
+const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)" };
+void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch };
+#define NPRESET 12
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[6]; } SaveMod;
@@ -331,10 +346,11 @@ void eval_mod(int mi) {
             }
             int slot = 5 + (int)m->param[3];   // wav knob picks the waveform (slots 5-9)
             float gate = read_in(mi, 0), pitch = read_in(mi, 1), fcv = read_in(mi, 2);
+            bool amp_cv = cable_into(mi, 5) >= 0;   // 'a' patched → ENV shapes the amplitude (a VCA)
             if (gate > 0.5f && m->state[0] <= 0.5f) {
                 int mm = (int)pitch; if (mm < 1) mm = 48;
                 int h = (int)m->state[1]; if (h > 0) note_off(h);
-                h = note_on(mm, slot, 5);
+                h = note_on(mm, slot, amp_cv ? 0 : 5);   // VCA-driven → start silent, the amp CV opens it
                 m->state[1] = h;
                 // onboard mod-envelopes — fire per note: filter "pew" + pitch punch (fixed
                 // snappy decays; the knobs set the depth, 0 = off). This is the audio-rate
@@ -350,6 +366,7 @@ void eval_mod(int mi) {
                 note_cutoff(h, (int)m->state[2]);
                 note_res(h, (int)clamp(m->param[1] + read_in(mi, 3) * 15.0f, 0, 15));        // resonance = res knob + 'r' CV
                 note_duty(h, clamp(m->param[2] + read_in(mi, 4) * 0.5f, 0.05f, 0.95f));      // pulse width = pw knob + 'w' CV
+                if (amp_cv) note_vol(h, (int)(clamp(read_in(mi, 5), 0, 1) * 7.0f + 0.5f));   // VCA: amp = 'a' CV (ENV → percussive punch)
             }
             break; }
         case MOD_EUCLID: {
@@ -509,7 +526,7 @@ const char *knob_str(int fmt, float v) {
 int jack_at(int mx, int my) {
     for (int mi = 0; mi < nmod; mi++)
         for (int j = 0; j < TYPES[mod[mi].type].njack; j++)
-            if (distance(mx, my, jackpos_x(mi, j), jackpos_y(mi, j)) < 6) return mi * 4 + j;
+            if (distance(mx, my, jackpos_x(mi, j), jackpos_y(mi, j)) < 6) return mi * 8 + j;   // *8: up to 8 jacks/module
     return -1;
 }
 int knob_at(int mx, int my) {   // any knob under (mx,my)? (used to keep panning off knobs)
@@ -668,16 +685,16 @@ void edit_cables(int mx, int my) {
     if (mouse_pressed(MOUSE_LEFT)) {
         int h = jack_at(mx, my);
         if (h >= 0) {
-            int mi = h / 4, j = h % 4;
+            int mi = h / 8, j = h % 8;
             if (TYPES[mod[mi].type].jack[j].out) drag_jack = h;
-            else { int c = cable_into(mi, j); if (c >= 0) { drag_jack = cable[c].sm * 4 + cable[c].sj; remove_cable(c); } }
+            else { int c = cable_into(mi, j); if (c >= 0) { drag_jack = cable[c].sm * 8 + cable[c].sj; remove_cable(c); } }
         }
     }
     if (mouse_released(MOUSE_LEFT)) {
         if (drag_jack >= 0) {
-            int h = jack_at(mx, my), sm = drag_jack / 4, sj = drag_jack % 4;
+            int h = jack_at(mx, my), sm = drag_jack / 8, sj = drag_jack % 8;
             if (h >= 0) {
-                int dm = h / 4, dj = h % 4;
+                int dm = h / 8, dj = h % 8;
                 if (!TYPES[mod[dm].type].jack[dj].out && TYPES[mod[dm].type].jack[dj].type == TYPES[mod[sm].type].jack[sj].type)
                     add_cable(sm, sj, dm, dj);
             }
@@ -778,7 +795,7 @@ void draw(void) {
                            sig_col(TYPES[mod[cable[c].sm].type].jack[cable[c].sj].type), true);
 
     if (drag_jack >= 0) {
-        int sm = drag_jack / 4, sj = drag_jack % 4, c = sig_col(TYPES[mod[sm].type].jack[sj].type);
+        int sm = drag_jack / 8, sj = drag_jack % 8, c = sig_col(TYPES[mod[sm].type].jack[sj].type);
         draw_cable_between(jackpos_x(sm, sj), jackpos_y(sm, sj), wmx, wmy, c, false);
         for (int mi = 0; mi < nmod; mi++)
             for (int j = 0; j < TYPES[mod[mi].type].njack; j++)
