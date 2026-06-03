@@ -675,9 +675,14 @@ void draw_module(int mi) {
         float v = jd.out ? m->jackval[j] : read_in(mi, j);
         bool lit = jd.type == 0 && v > 0.5f;
         int c = sig_col(jd.type);
+        // the VOICE amp jack pulses + reads "env" while empty — a hint to patch an ENV for punch
+        bool hint = m->type == MOD_VOICE && j == 5 && cable_into(mi, j) < 0;
+        int pc = blink(18) ? CLR_LIGHT_PEACH : CLR_DARK_PEACH;
         if (jd.out) { circ(jx, jy, 3, c); if (lit) circfill(jx, jy, 1, CLR_WHITE); }
-        else          circfill(jx, jy, 3, lit ? CLR_WHITE : c);
-        print(jd.label, jx - text_width(jd.label) / 2, jy + 5, near_col(jx, jy));
+        else          circfill(jx, jy, 3, hint ? pc : (lit ? CLR_WHITE : c));
+        if (hint) circ(jx, jy, 5, pc);
+        const char *lbl = hint ? "env" : jd.label;
+        print(lbl, jx - text_width(lbl) / 2, jy + 5, hint ? pc : near_col(jx, jy));
     }
 }
 
