@@ -45,8 +45,10 @@ variants and odd corners.
   (→ `decisions/` if cut).
 - **Gradient asymmetry**: `vgradient` 6 carts, `gradient` 3, `hgradient` 1 —
   vertical sky gradients are the real use case.
-- **`printh` is in only 3 carts but 44 calls** — smells like leftover debug
-  prints worth sweeping.
+- **`printh` is in only 3 carts but 44 calls** — *not* leftover debug (first
+  guess was wrong): the 3 carts are the sound tools (`sfxed`/`sfxgen`/`waveed`)
+  and `printh` is their **export-as-code mechanism** — press E, the generated
+  paste-ready C prints to the editor's log panel. The decision-0003 flow.
 - **`sfx()` is really a stop button**: 8 of its 11 call sites are `sfx(-1)`
   ("silence ringing sounds before a dramatic note"); only the `soundcheck`
   self-test plays a slot. The 6 demo slots stay for first contact, but the bank
