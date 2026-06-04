@@ -486,6 +486,15 @@
     "genre": "maze"
   },
   {
+    "title": "thrust (inertia)",
+    "description": "The fourth movement paradigm: steering & inertia. The ship has a FACING and a VELOCITY and they are not the same thing — turning moves nothing, thrusting pushes along the facing, momentum carries you, drag bleeds it off. The green line shows where you are GOING while the nose shows where you are POINTING: watch them disagree mid-drift. Press X for tank mode (velocity = facing, release stops dead) and feel how much of the asteroids sensation IS the inertia. Collect the stars; the screen wraps. LEFT/RIGHT turn, UP thrusts, X toggles inertia, Z restarts.",
+    "file": "thrust.cart.png",
+    "kind": [
+      "tutorial"
+    ],
+    "genre": "space"
+  },
+  {
     "title": "lunar lander",
     "description": "Physics-based lander. Rotate and thrust your way onto the lit green pad slowly enough to survive. Levels get harder — pads get narrower. Left/right to rotate, up or Z to thrust.",
     "file": "lander.cart.png",
@@ -1960,7 +1969,9 @@
     "title": "galerijflat",
     "description": "A generative Dutch gallery-access apartment block at dusk. Each re-roll randomises the concrete scheme, railing style, and every household's archetype — vitrage + symmetrical plants = elderly, bare glass + TV flicker = student. SPACE re-rolls.",
     "file": "galerijflat.cart.png",
-    "kind": ["generative"]
+    "kind": [
+      "generative"
+    ]
   },
   {
     "title": "dutch sky",
@@ -1993,7 +2004,10 @@
     "title": "line rider",
     "description": "Draw a track with the mouse, hit Space and watch Bosh slide. Verlet physics — gravity, rolling friction, crash detection. Left drag: draw lines. Right click: erase. Space: play / pause. R: reset rider (or clear track while in draw mode). Arrow keys: pan. The rider's scarf trails behind when moving fast enough.",
     "file": "linerider.cart.png",
-    "kind": ["toy", "sandbox"]
+    "kind": [
+      "toy",
+      "sandbox"
+    ]
   },
   {
     "title": "blend lab",
@@ -2002,5 +2016,15 @@
     "kind": [
       "tech-demo"
     ]
+  },
+  {
+    "title": "monster mix lab",
+    "description": "Assemble the monster the customer ordered, then STAMP it with the piston press. The sprite side is the show: tools/sprite-draw.js draws 9 parts (3 heads, 3 bodies, 3 legs) and stamp()-composites all 27 combos at bake time; the magic pal() indices (28/29) recolor them into 4 schemes at draw time — 108 monsters from 9 drawn parts. Also: a 32-wide machine split() across two slots, a concave polyfill star, noise() speckle tiles, mirror()ed symmetric parts and outlined() borders. Right order = points + a streak of climbing chords; wrong or too slow = a lost heart. LEFT/RIGHT choose a slot, UP/DOWN change the part, Z stamps.",
+    "file": "monstermix.cart.png",
+    "kind": [
+      "game",
+      "tech-demo"
+    ],
+    "genre": "arcade"
   }
 ]
