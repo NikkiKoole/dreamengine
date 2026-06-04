@@ -53,8 +53,9 @@ eventually2/
 │   │                   #   also a library module: play.js requires it for buildSpriteSheet/buildMap/etc.
 │   ├── play.js         #   debug harness driver (record/replay/script + trace)
 │   ├── sprite-draw.js  #   reusable 2D pixel-canvas API for programmatic .cart.js sprites
-│   │                   #   exports: blank, pixel, rectfill, line, circlefill, trifill,
-│   │                   #            outlined, mirror, stamp, flat, split, OUT
+│   │                   #   exports: blank, pixel, rectfill, rrectfill, line,
+│   │                   #            circlefill, ovalfill, trifill, polyfill, ngonfill,
+│   │                   #            noise, outlined, mirror, stamp, flat, split, OUT
 │   │                   #   require('../sprite-draw.js') from any .cart.js in tools/carts/
 │   ├── tag-carts.js    #   one-shot: merge kind[]/genre/homage tags into index.json
 │   │                   #   validates against a controlled vocabulary; run after adding carts
