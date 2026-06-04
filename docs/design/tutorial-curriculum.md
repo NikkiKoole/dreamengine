@@ -128,8 +128,8 @@ paradigm map and where each cluster stands:
 |---|---|---|
 | **solid-space** | free 2D + gravity; collision discovers ground | ✅ `platform-rects`, `platform-paint`, `platform-tiles` |
 | **rail / graph** | which edge + how far along it | ✅ `platform-rails`, `platform-loop` |
-| **grid / discrete** | which cell (+ a tween to the next) | 🔨 `grid-move` shipped; rest below |
-| **steering / inertia** | position + heading + velocity | ❌ not started |
+| **grid / discrete** | which cell (+ a tween to the next) | ✅ `grid-move`, `zelda-walk` (+ sokoban/boulderdash as the rule references) |
+| **steering / inertia** | position + heading + velocity | ✅ `thrust`, `steer` |
 
 **Grid cluster — remaining:**
 - ✅ **`zelda-walk` (grid-nudge)** — SHIPPED 2026-06-04. The hybrid the original *Legend of Zelda* used: Link
@@ -139,16 +139,29 @@ paradigm map and where each cluster stands:
   A/B cart: same room, toggle the nudge off and feel corner-snagging appear. (Spotted
   by Nikki — the secret middle ground between `grid-move` and `platform-rects`-style
   free movement.)
-- **`grid-push`** — sokoban pushing: grid games are *rules over a data structure*
-  ("can I move" = what's in the next cell; a push = two cells change).
-- **`grid-fall`** — boulderdash/sand: gravity as a *cellular rule* (scan the grid,
-  things fall into empty cells) — a whole physics in ~20 lines.
+- ~~`grid-push`~~ / ~~`grid-fall`~~ — **COVERED, not building** (decided 2026-06-04):
+  the shelf already proves both, cleanly. `sokoban.c` (193 lines) is the reference
+  push-rule implementation — and carries a bonus teachable pattern, its undo history.
+  `boulderdash.c` (341 lines) is the reference settle-pass, self-documented ("gravity
+  is one bottom-up settle pass (the sand.c idiom), pushing is the sokoban rule").
+  Per the library-direction rule: don't duplicate what the shelf already proves —
+  point learners at those sources. Grid cluster complete:
+  `grid-move` (feel) → `zelda-walk` (hybrid) → sokoban/boulderdash (rules applied).
 
-**Steering cluster — queued after grid:**
-- **`thrust`** — asteroids ship done well: *facing ≠ velocity*, thrust adds along the
-  heading, drag, screen wrap.
-- **`steer`** — car model: speed + turn-rate-scaled-by-speed, drift. The basis of every
-  racing cart.
+**Steering cluster:**
+- ✅ **`thrust`** — SHIPPED 2026-06-04. Asteroids ship done well: *facing ≠ velocity*,
+  thrust adds along the heading, drag, screen wrap, exhaust puffs that shoot backward
+  from the nozzle. The velocity vector is drawn as a green line so the facing/velocity
+  disagreement is visible mid-drift; X toggles "tank mode" (velocity = facing,
+  release stops dead) as the A/B.
+- ✅ **`steer`** — SHIPPED 2026-06-04. The car model: speed-scaled steering (a parked
+  car can't turn), gas along the heading, and GRIP as a velocity→heading lerp — fast
+  lerp carves, slow lerp drifts. Skid marks fire exactly when lateral slide exceeds
+  the threshold (harness-validated: racing tires peak at lat 0.51 vs the 0.55
+  threshold; drift tires hit 1.40 on identical input). X swaps tire types.
+
+**With this, all four movement-paradigm clusters are COVERED** (solid-space, rail,
+grid, steering) — the taxonomy that began with the platformer carts is complete.
 
 **Smaller candidates:** `drag-and-drop` done well (pick-up threshold, hover, drop
 targets, spring-back — every toy hand-rolls this); waypoint followers (tower-defense
