@@ -43,40 +43,40 @@ typedef struct {
 } ModType;
 
 ModType TYPES[NTYPE] = {
-    // ── big modules (6x7 cells = 72x84) ──
-    [MOD_CLOCK] = { "CLOCK", CLR_ORANGE, 6, 7, 3, {{0,true,16,72,"1"},{0,true,36,72,"2"},{0,true,56,72,"4"}},
-                   1, {{"bpm",60,240,112,40,34,FMT_INT}} },
-    [MOD_LFO]   = { "LFO", CLR_PINK, 6, 7, 1, {{2,true,36,72,"cv"}},
-                   1, {{"rate",0.1f,8,0.37f,24,36,FMT_F1}} },
-    [MOD_SH]    = { "S&H", CLR_YELLOW, 6, 7, 3, {{2,false,24,16,"in"},{0,false,48,16,"clk"},{2,true,36,72,"cv"}}, 0, {} },
-    [MOD_QUANT] = { "QUANT", CLR_GREEN, 6, 7, 2, {{2,false,36,16,"in"},{1,true,36,72,"pit"}},
-                   2, {{"scl",0,5.99f,SCALE_PENTA,22,40,FMT_SCALE},{"root",0,11.99f,0,50,40,FMT_NOTE}} },
-    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 6, {{0,false,6,16,"g"},{1,false,18,16,"p"},{2,false,30,16,"f"},{2,false,42,16,"r"},{2,false,54,16,"w"},{2,false,66,16,"a"}},
-                   6, {{"cut",200,2200,700,20,40,FMT_INT},{"res",0,15,6,52,40,FMT_INT},{"pw",0.05f,0.95f,0.5f,20,60,FMT_F1},{"wav",0,4.99f,0,52,60,FMT_WAVE},
-                       {"fenv",0,3000,0,20,80,FMT_INT},{"penv",-48,48,0,52,80,FMT_INT}} },   // a = amp/VCA CV (patch an ENV for percussive punch); fenv/penv = filter & pitch env depth
-    [MOD_EUCLID]= { "EUCLID", CLR_RED, 6, 7, 2, {{0,false,36,16,"clk"},{0,true,36,72,"g"}},
-                   2, {{"h",1,8.99f,4,22,40,FMT_INT},{"s",2,16.99f,8,50,40,FMT_INT}} },
-    [MOD_ENV]   = { "ENV", CLR_MEDIUM_GREEN, 6, 7, 2, {{0,false,36,16,"g"},{2,true,36,72,"cv"}},
-                   2, {{"atk",0.005f,0.5f,0.01f,26,40,FMT_MS},{"dec",0.02f,1,0.25f,52,40,FMT_MS}} },
-    [MOD_DRUM]  = { "DRUM", CLR_DARK_ORANGE, 6, 7, 3, {{0,false,18,16,"k"},{0,false,36,16,"s"},{0,false,54,16,"h"}}, 0, {} },
+    // 4-cell (48px): LFO S&H ENV DRUM  |  5-cell (60px): CLOCK QUANT EUCLID TURING MARBLES MATHS  |  6-cell (72px): VOICE KEYS SCOPE GRIDS
+    [MOD_CLOCK] = { "CLOCK", CLR_ORANGE, 5, 6, 3, {{0,true,12,60,"1"},{0,true,30,60,"2"},{0,true,48,60,"4"}},
+                   1, {{"bpm",60,240,112,30,28,FMT_INT}} },
+    [MOD_LFO]   = { "LFO", CLR_PINK, 4, 6, 1, {{2,true,24,60,"cv"}},
+                   1, {{"rate",0.1f,8,0.37f,24,28,FMT_F1}} },
+    [MOD_SH]    = { "S&H", CLR_YELLOW, 4, 6, 3, {{2,false,8,60,"in"},{0,false,24,60,"clk"},{2,true,40,60,"cv"}}, 0, {} },
+    [MOD_QUANT] = { "QUANT", CLR_GREEN, 5, 7, 2, {{2,false,18,72,"in"},{1,true,42,72,"pit"}},
+                   2, {{"scl",0,5.99f,SCALE_PENTA,18,40,FMT_SCALE},{"root",0,11.99f,0,42,40,FMT_NOTE}} },
+    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 6, {{0,false,6,84,"g"},{1,false,18,84,"p"},{2,false,30,84,"f"},{2,false,42,84,"r"},{2,false,54,84,"w"},{2,false,66,84,"a"}},
+                   6, {{"cut",200,2200,700,20,30,FMT_INT},{"res",0,15,6,52,30,FMT_INT},{"pw",0.05f,0.95f,0.5f,20,48,FMT_F1},{"wav",0,4.99f,0,52,48,FMT_WAVE},
+                       {"fenv",0,3000,0,20,66,FMT_INT},{"penv",-48,48,0,52,66,FMT_INT}} },   // a = amp/VCA CV (patch an ENV for percussive punch); fenv/penv = filter & pitch env depth
+    [MOD_EUCLID]= { "EUCLID", CLR_RED, 5, 7, 2, {{0,false,18,72,"clk"},{0,true,42,72,"g"}},
+                   2, {{"h",1,8.99f,4,18,40,FMT_INT},{"s",2,16.99f,8,42,40,FMT_INT}} },
+    [MOD_ENV]   = { "ENV", CLR_MEDIUM_GREEN, 4, 6, 2, {{0,false,14,60,"g"},{2,true,34,60,"cv"}},
+                   2, {{"atk",0.005f,0.5f,0.01f,14,32,FMT_MS},{"dec",0.02f,1,0.25f,34,32,FMT_MS}} },
+    [MOD_DRUM]  = { "DRUM", CLR_DARK_ORANGE, 4, 5, 3, {{0,false,8,48,"k"},{0,false,24,48,"s"},{0,false,40,48,"h"}}, 0, {} },
     // ── tiny utilities (3x5 = 36x60, LOGIC 4x5 = 48x60) ──
-    [MOD_SLEW]  = { "SLEW", CLR_INDIGO, 3, 5, 2, {{2,false,18,12,"in"},{2,true,18,52,"out"}},
+    [MOD_SLEW]  = { "SLEW", CLR_INDIGO, 3, 5, 2, {{2,false,9,48,"in"},{2,true,27,48,"out"}},
                    1, {{"ms",1,500,80,18,32,FMT_INT}} },
-    [MOD_ATTN]  = { "ATTN", CLR_MAUVE, 3, 5, 2, {{2,false,18,12,"in"},{2,true,18,52,"out"}},
+    [MOD_ATTN]  = { "ATTN", CLR_MAUVE, 3, 5, 2, {{2,false,9,48,"in"},{2,true,27,48,"out"}},
                    1, {{"amt",0,1,1,18,32,FMT_F1}} },
-    [MOD_LOGIC] = { "LOGIC", CLR_LIGHT_YELLOW, 4, 5, 3, {{0,false,14,14,"a"},{0,false,34,14,"b"},{0,true,24,52,"o"}},
+    [MOD_LOGIC] = { "LOGIC", CLR_LIGHT_YELLOW, 4, 5, 3, {{0,false,10,48,"a"},{0,false,24,48,"b"},{0,true,38,48,"o"}},
                    1, {{"mod",0,2.99f,0,24,34,FMT_LOGIC}} },
-    [MOD_SCOPE] = { "SCOPE", CLR_LIGHT_GREY, 6, 4, 1, {{2,false,8,13,"in"}}, 0, {} },
+    [MOD_SCOPE] = { "SCOPE", CLR_LIGHT_GREY, 6, 4, 1, {{2,false,36,38,"in"}}, 0, {} },
     [MOD_KEYS]  = { "KEYS", CLR_LIGHT_PEACH, 6, 5, 2, {{0,true,24,52,"g"},{1,true,48,52,"p"}}, 0, {} },
-    // ── famous-module-inspired (generative) ──
-    [MOD_TURING]= { "TURING", CLR_TRUE_BLUE, 6, 7, 2, {{0,false,36,16,"clk"},{2,true,36,72,"cv"}},
-                   2, {{"rnd",0,1,0.4f,22,40,FMT_F1},{"len",2,16.99f,8,50,40,FMT_INT}} },
-    [MOD_GRIDS] = { "GRIDS", CLR_DARK_ORANGE, 6, 7, 4, {{0,false,36,16,"clk"},{0,true,16,72,"k"},{0,true,36,72,"s"},{0,true,56,72,"h"}},
+    // ── famous-module-inspired ──
+    [MOD_TURING]= { "TURING", CLR_TRUE_BLUE, 5, 7, 2, {{0,false,18,72,"clk"},{2,true,42,72,"cv"}},
+                   2, {{"rnd",0,1,0.4f,18,40,FMT_F1},{"len",2,16.99f,8,42,40,FMT_INT}} },
+    [MOD_GRIDS] = { "GRIDS", CLR_DARK_ORANGE, 6, 7, 4, {{0,false,10,72,"clk"},{0,true,26,72,"k"},{0,true,44,72,"s"},{0,true,62,72,"h"}},
                    2, {{"map",0,1,0.3f,22,40,FMT_F1},{"fill",0,1,0.5f,50,40,FMT_F1}} },
-    [MOD_MARBLES]={ "MARBLES", CLR_LIME_GREEN, 6, 7, 3, {{0,false,36,16,"clk"},{0,true,22,72,"g"},{2,true,50,72,"cv"}},
-                   2, {{"dens",0,1,0.6f,22,40,FMT_F1},{"sprd",0,1,0.7f,50,40,FMT_F1}} },
-    [MOD_MATHS] = { "MATHS", CLR_BLUE_GREEN, 6, 7, 3, {{0,false,36,16,"t"},{2,true,24,72,"cv"},{0,true,50,72,"eoc"}},
-                   3, {{"rise",0.005f,2,0.1f,16,40,FMT_MS},{"fall",0.005f,2,0.3f,36,40,FMT_MS},{"cyc",0,1,0,56,40,FMT_F1}} },
+    [MOD_MARBLES]={ "MARBLES", CLR_LIME_GREEN, 5, 7, 3, {{0,false,10,72,"clk"},{0,true,30,72,"g"},{2,true,50,72,"cv"}},
+                   2, {{"dens",0,1,0.6f,16,40,FMT_F1},{"sprd",0,1,0.7f,44,40,FMT_F1}} },
+    [MOD_MATHS] = { "MATHS", CLR_BLUE_GREEN, 5, 7, 3, {{0,false,10,72,"t"},{2,true,30,72,"cv"},{0,true,50,72,"eoc"}},
+                   3, {{"rise",0.005f,2,0.1f,12,40,FMT_MS},{"fall",0.005f,2,0.3f,30,40,FMT_MS},{"cyc",0,1,0,48,40,FMT_F1}} },
 };
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -156,6 +156,9 @@ void wire_default(void) {
 }
 
 // ── preset patches (the top "PRESETS" dropdown) ──
+void preset_empty(void) {        // blank canvas
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+}
 void preset_generative(void) {   // the default: in-key melody over a euclidean beat
     note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     for (int i = 0; i < 8; i++) spawn(i, bayx(i), bayy(i));
@@ -272,9 +275,9 @@ void preset_punch(void) {        // ENV -> VCA (amp) + a big pitch env = the kic
     mod[e2].param[0] = 3; mod[e2].param[1] = 8;
     add_cable(ck, 0, e2, 0); add_cable(e2, 1, dr, 2); add_cable(ck, 0, dr, 1);   // hats + snare on top
 }
-const char *PRESET_NAMES[] = { "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)" };
-void (*PRESET_FN[])(void) = { preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch };
-#define NPRESET 12
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch };
+#define NPRESET 13
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[6]; } SaveMod;
@@ -530,7 +533,7 @@ const char *knob_str(int fmt, float v) {
 int jack_at(int mx, int my) {
     for (int mi = 0; mi < nmod; mi++)
         for (int j = 0; j < TYPES[mod[mi].type].njack; j++)
-            if (distance(mx, my, jackpos_x(mi, j), jackpos_y(mi, j)) < 6) return mi * 8 + j;   // *8: up to 8 jacks/module
+            if (distance(mx, my, jackpos_x(mi, j), jackpos_y(mi, j)) < (zoom < 1.0f ? 6.0f / zoom : 6.0f)) return mi * 8 + j;
     return -1;
 }
 int knob_at(int mx, int my) {   // any knob under (mx,my)? (used to keep panning off knobs)
@@ -589,58 +592,58 @@ float knob_dial(int id, int cx, int cy, float v, float lo, float hi, const char 
 
 // per-type extra visuals (meters, LEDs, dots) drawn after the generic frame
 void draw_extras(int mi) {
-    Module *m = &mod[mi]; int x = m->x, y = m->y, cx = x + GW / 2;
+    Module *m = &mod[mi]; int x = m->x, y = m->y; int W = TYPES[m->type].cw * CELL, cx = x + W / 2;
     switch (m->type) {
         case MOD_CLOCK: circfill(x + 12, y + 14, 3, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_ORANGE); break;   // per-clock step flash
-        case MOD_LFO:   meter(x + 48, y + 18, 6, 46, m->jackval[0], CLR_PINK); break;
-        case MOD_SH:    meter(x + 10, y + 30, 6, 36, m->state[1], CLR_YELLOW); print(str("%d%%", (int)(m->state[1] * 99)), x + 26, y + 40, CLR_DARK_GREY); break;
+        case MOD_LFO:   meter(x + W - 14, y + 16, 6, 36, m->jackval[0], CLR_PINK); break;
+        case MOD_SH:    meter(x + 10, y + 20, 6, 30, m->state[1], CLR_YELLOW); print(str("%d%%", (int)(m->state[1] * 99)), x + 26, y + 36, CLR_DARK_GREY); break;
         case MOD_QUANT: print(NOTES[((int)m->jackval[1]) % 12], cx - text_width(NOTES[((int)m->jackval[1]) % 12]) / 2, y + 54, CLR_WHITE); break;
-        case MOD_VOICE: if (m->state[3] < 8) circfill(x + GW / 2, y + 30, 5 - (int)m->state[3] / 2, CLR_LIGHT_PEACH); break;   // trigger pulse
+        case MOD_VOICE: if (m->state[3] < 8) circfill(cx, y + 30, 5 - (int)m->state[3] / 2, CLR_LIGHT_PEACH); break;   // trigger pulse
         case MOD_EUCLID: {
             int hits = (int)m->param[0], steps = (int)m->param[1];
             for (int s = 0; s < steps; s++) {
-                int dx = x + 8 + (int)(s * (56.0f / steps));
+                int dx = x + 6 + (int)(s * ((W - 12.0f) / steps));
                 bool on = euclid(hits, steps, s);
                 circfill(dx, y + 56, on ? 2 : 1, on ? CLR_RED : CLR_DARK_GREY);
                 if (s == (((int)m->state[1] % steps) + steps) % steps && m->state[2] < 6) circ(dx, y + 56, 3, CLR_WHITE);
             }
             break; }
-        case MOD_ENV:   meter(x + 8, y + 30, 6, 36, m->state[3], CLR_MEDIUM_GREEN); break;
+        case MOD_ENV:   meter(x + 8, y + 20, 6, 30, m->state[3], CLR_MEDIUM_GREEN); break;
         case MOD_DRUM:
-            circfill(x + 18, y + 48, 5, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_RED);
-            circfill(x + 36, y + 48, 4, m->state[4] < 5 ? CLR_WHITE : CLR_BROWN);
-            circfill(x + 54, y + 48, 3, m->state[5] < 5 ? CLR_WHITE : CLR_DARK_GREY);
-            print("kik sn hat", x + 8, y + 64, CLR_DARK_GREY);
+            circfill(x + 8,  y + 20, 5, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_RED);
+            circfill(x + 24, y + 20, 4, m->state[4] < 5 ? CLR_WHITE : CLR_BROWN);
+            circfill(x + 40, y + 20, 3, m->state[5] < 5 ? CLR_WHITE : CLR_DARK_GREY);
+            print("kik sn hat", x + 4, y + 32, CLR_DARK_GREY);
             break;
         case MOD_SCOPE: {   // moving trace of the recorded cv history
             int head = (int)m->state[0];
-            rectfill(x + 3, y + 16, GW - 6, 28, CLR_BLACK);
+            rectfill(x + 3, y + 13, W - 6, 20, CLR_BLACK);
             for (int i = 0; i < 20; i++) {
                 int idx = (head - i + 20) % 20;
-                pset(x + GW - 5 - i * 3, y + 42 - (int)(m->state[2 + idx] * 24), CLR_LIME_GREEN);
+                pset(x + W - 5 - i * 3, y + 31 - (int)(m->state[2 + idx] * 16), CLR_LIME_GREEN);
             }
             break; }
         case MOD_TURING: {  // the looping ring: dot brightness = value, current head ringed
             int len = (int)m->param[1]; if (len < 2) len = 2; if (len > 16) len = 16;
             for (int i = 0; i < len; i++) {
-                int dx = x + 6 + (int)(i * (58.0f / len));
+                int dx = x + 4 + (int)(i * ((W - 8.0f) / len));
                 circfill(dx, y + 58, 2, m->state[2 + i] > 0.5f ? CLR_TRUE_BLUE : CLR_DARKER_GREY);
                 if (i == (int)m->state[1]) circ(dx, y + 58, 3, CLR_WHITE);
             }
             break; }
-        case MOD_GRIDS:     // 3 drum LEDs flashing on their hits
-            circfill(x + 16, y + 56, 4, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_RED);
-            circfill(x + 36, y + 56, 3, m->state[3] < 5 ? CLR_WHITE : CLR_BROWN);
-            circfill(x + 56, y + 56, 2, m->state[4] < 5 ? CLR_WHITE : CLR_DARK_GREY);
+        case MOD_GRIDS:     // 3 drum LEDs flashing on their hits — aligned with k/s/h jacks
+            circfill(x + 22, y + 56, 4, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_RED);
+            circfill(x + 40, y + 56, 3, m->state[3] < 5 ? CLR_WHITE : CLR_BROWN);
+            circfill(x + 58, y + 56, 2, m->state[4] < 5 ? CLR_WHITE : CLR_DARK_GREY);
             break;
         case MOD_MARBLES:   // gate flash + cv meter
-            circfill(x + 18, y + 56, 4, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_GREEN);
-            meter(x + 44, y + 30, 6, 30, m->state[1], CLR_LIME_GREEN);
+            circfill(x + 26, y + 56, 4, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_GREEN);
+            meter(x + 42, y + 30, 6, 30, m->state[1], CLR_LIME_GREEN);
             break;
         case MOD_MATHS:     // level bar + EOC flash
-            rectfill(x + 8, y + 58, GW - 16, 3, CLR_BLACK);
-            rectfill(x + 8, y + 58, (int)(clamp(m->state[3], 0, 1) * (GW - 16)), 3, CLR_BLUE_GREEN);
-            if (m->state[4] < 5) circfill(x + 50, y + 52, 3, CLR_WHITE);
+            rectfill(x + 8, y + 58, W - 16, 3, CLR_BLACK);
+            rectfill(x + 8, y + 58, (int)(clamp(m->state[3], 0, 1) * (W - 16)), 3, CLR_BLUE_GREEN);
+            if (m->state[4] < 5) circfill(x + 46, y + 52, 3, CLR_WHITE);
             break;
         case MOD_KEYS: {    // 7 white keys; lit while held
             const char KK[7] = { 'A','S','D','F','G','H','J' }; const int OFF[7] = { 0,2,4,5,7,9,11 };
@@ -663,7 +666,9 @@ void draw_module(int mi) {
     bool hhot = drag_mod == mi || (wmx >= x && wmx < x + W - 18 && wmy >= y && wmy < y + 9);
     rectfill(x, y, W, 9, hhot ? CLR_DARK_GREY : CLR_DARKER_GREY);   // title bar = drag handle (lights up on hover)
     rect(x, y, W, H, t->col);
+    font(FONT_NORMAL);
     print(t->name, x + 3, y + 2, t->col);
+    font(FONT_SMALL);
     print("?", x + W - 16, y + 2, distance(wmx, wmy, x + W - 15, y + 4) < 5 ? CLR_LIGHT_PEACH : CLR_DARK_GREY);
     print("x", x + W - 8, y + 2, distance(wmx, wmy, x + W - 6, y + 4) < 5 ? CLR_RED : CLR_DARK_GREY);
 
@@ -676,15 +681,8 @@ void draw_module(int mi) {
     for (int j = 0; j < t->njack; j++) {
         JackDef jd = t->jack[j];
         int jx = x + jd.dx, jy = y + jd.dy;
-        float v = jd.out ? m->jackval[j] : read_in(mi, j);
-        bool lit = jd.type == 0 && v > 0.5f;
-        int c = sig_col(jd.type);
-        // the VOICE amp jack pulses + reads "env" while empty — a hint to patch an ENV for punch
         bool hint = m->type == MOD_VOICE && j == 5 && cable_into(mi, j) < 0;
         int pc = blink(18) ? CLR_LIGHT_PEACH : CLR_DARK_PEACH;
-        if (jd.out) { circ(jx, jy, 3, c); if (lit) circfill(jx, jy, 1, CLR_WHITE); }
-        else          circfill(jx, jy, 3, hint ? pc : (lit ? CLR_WHITE : c));
-        if (hint) circ(jx, jy, 5, pc);
         const char *lbl = hint ? "env" : jd.label;
         print(lbl, jx - text_width(lbl) / 2, jy + 5, hint ? pc : near_col(jx, jy));
     }
@@ -736,7 +734,83 @@ void draw_cable_between(int sx, int sy, int dx, int dy, int c, bool pulse) {
     if (pulse && tick_flash < 10) {
         float t = tick_flash / 10.0f, u = 1.0f - t;
         int hx = (int)(u * u * sx + 2 * u * t * mx + t * t * dx), hy = (int)(u * u * sy + 2 * u * t * my + t * t * dy);
-        rectfill(hx - 1, hy - 1, 3, 3, CLR_WHITE);   // rectfill (scales) instead of circfill (dots when zoomed)
+        int pd = zoom < 1.0f ? (int)(1.0f / zoom) : 1;
+        rectfill(hx - pd, hy - pd, pd * 2 + 1, pd * 2 + 1, CLR_WHITE);
+    }
+}
+
+// world coord → screen pixel (matches camera_ex centred at SCREEN_W/2, SCREEN_H/2)
+int wsx(float wx) { return (int)((wx - cam_x - SCREEN_W * 0.5f) * zoom + SCREEN_W * 0.5f); }
+int wsy(float wy) { return (int)((wy - cam_y - SCREEN_H * 0.5f) * zoom + SCREEN_H * 0.5f); }
+
+// draws jacks and hover tooltip in screen space — called after camera(0,0)
+void draw_jacks_ss(void) {
+    int jr = 3;
+    for (int i = 0; i < nmod; i++) {
+        Module *m = &mod[i];
+        ModType *t = &TYPES[m->type];
+        for (int j = 0; j < t->njack; j++) {
+            JackDef jd = t->jack[j];
+            int sx = wsx(m->x + jd.dx), sy = wsy(m->y + jd.dy);
+            if (sx < SIDEBAR_W || sx >= SCREEN_W || sy < 0 || sy >= SCREEN_H) continue;
+            float v = jd.out ? m->jackval[j] : read_in(i, j);
+            bool lit = jd.type == 0 && v > 0.5f;
+            int c = sig_col(jd.type);
+            bool hint = m->type == MOD_VOICE && j == 5 && cable_into(i, j) < 0;
+            int pc = blink(18) ? CLR_LIGHT_PEACH : CLR_DARK_PEACH;
+            if (jd.out) {
+                circfill(sx, sy, jr, c);
+                circfill(sx, sy, jr - 2, CLR_DARKER_GREY);
+                if (lit) circfill(sx, sy, 1, CLR_WHITE);
+            } else {
+                circfill(sx, sy, jr, hint ? pc : (lit ? CLR_WHITE : c));
+            }
+            if (hint) circ(sx, sy, jr + 2, pc);
+        }
+    }
+    // compatible-jack highlight rings while dragging a cable
+    if (drag_jack >= 0) {
+        int sm = drag_jack / 8, sj = drag_jack % 8;
+        for (int mi = 0; mi < nmod; mi++)
+            for (int j = 0; j < TYPES[mod[mi].type].njack; j++)
+                if (!TYPES[mod[mi].type].jack[j].out && TYPES[mod[mi].type].jack[j].type == TYPES[mod[sm].type].jack[sj].type) {
+                    int sx = wsx(jackpos_x(mi, j)), sy = wsy(jackpos_y(mi, j));
+                    if (sx >= SIDEBAR_W && sx < SCREEN_W && sy >= 0 && sy < SCREEN_H)
+                        circ(sx, sy, jr + 2, CLR_WHITE);
+                }
+    }
+    // screen-space tooltip when zoomed out — unreadable world text replaced with a legible label
+    if (zoom < 1.0f && !preset_open && help_type < 0 && mouse_x() >= SIDEBAR_W) {
+        const char *tip = 0;
+        int jh = jack_at(wmx, wmy);
+        if (jh >= 0) {
+            int mi = jh / 8, j2 = jh % 8;
+            JackDef jd = TYPES[mod[mi].type].jack[j2];
+            const char *sig = jd.type == 0 ? "gate" : jd.type == 1 ? "pit" : "cv";
+            tip = str("%s %s %s", TYPES[mod[mi].type].name, jd.label, sig);
+        } else {
+            int kk = -1, km = -1;
+            for (int mi = 0; mi < nmod && km < 0; mi++)
+                for (int k = 0; k < TYPES[mod[mi].type].nknob; k++)
+                    if (distance(wmx, wmy, mod[mi].x + TYPES[mod[mi].type].knob[k].dx, mod[mi].y + TYPES[mod[mi].type].knob[k].dy) < 7.0f / zoom)
+                        { km = mi; kk = k; break; }
+            if (km >= 0) {
+                KnobDef kd = TYPES[mod[km].type].knob[kk];
+                tip = str("%s %s: %s", TYPES[mod[km].type].name, kd.label, knob_str(kd.fmt, mod[km].param[kk]));
+            } else {
+                int mm = module_at(wmx, wmy);
+                if (mm >= 0) tip = TYPES[mod[mm].type].name;
+            }
+        }
+        if (tip) {
+            font(FONT_SMALL);
+            int tw = text_width(tip) + 6, tx = mouse_x() + 8, ty = mouse_y() - 14;
+            if (tx + tw > SCREEN_W) tx = mouse_x() - tw - 2;
+            if (ty < 14) ty = mouse_y() + 6;
+            rectfill(tx - 2, ty - 1, tw, 8, CLR_BLACK);
+            rect(tx - 2, ty - 1, tw, 8, CLR_DARKER_GREY);
+            print(tip, tx, ty, CLR_WHITE);
+        }
     }
 }
 
@@ -806,10 +880,6 @@ void draw(void) {
     if (drag_jack >= 0) {
         int sm = drag_jack / 8, sj = drag_jack % 8, c = sig_col(TYPES[mod[sm].type].jack[sj].type);
         draw_cable_between(jackpos_x(sm, sj), jackpos_y(sm, sj), wmx, wmy, c, false);
-        for (int mi = 0; mi < nmod; mi++)
-            for (int j = 0; j < TYPES[mod[mi].type].njack; j++)
-                if (!TYPES[mod[mi].type].jack[j].out && TYPES[mod[mi].type].jack[j].type == TYPES[mod[sm].type].jack[sj].type)
-                    circ(jackpos_x(mi, j), jackpos_y(mi, j), 5, CLR_WHITE);
     }
     if (palette_drag >= 0) {   // ghost snaps to the cell grid where it'll land
         int W = tw(palette_drag), H = th(palette_drag);
@@ -820,6 +890,7 @@ void draw(void) {
 
     // ===== SCREEN SPACE — palette sidebar + HUD =====
     camera(0, 0);
+    draw_jacks_ss();
     rectfill(0, 0, SIDEBAR_W, SCREEN_H, CLR_BROWNISH_BLACK);
     font(FONT_SMALL);
     print("ADD", 8, 4, CLR_MEDIUM_GREY);
