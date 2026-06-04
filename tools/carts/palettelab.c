@@ -13,13 +13,19 @@
 // tables (AVG/ADD/MUL, blendlab's trio) are rebuilt from the candidate's RGB
 // on every switch — candidates with more/denser colors visibly band less.
 //
-// Four candidates (keys 1-4):
+// Seven candidates (keys 1-7):
 //   1  PICO-8 (shipped)     — the baseline we're trying to replace
 //   2  ENDESGA 32           — 32 role-mapped, upper half mirrors
 //   3  RESURRECT 64 (full)  — 32 role-mapped + the other 32 in slots 32-63
 //   4  E32 + 32 DERIVED     — the "blended in-betweens" idea: slots 32-63 are
 //      sRGB midpoints of ramp neighbours + hue bridges, computed here
 //      (OKLab mixing would be kinder — judging that muddiness is the point)
+//   5  ENDESGA 64           — E32's big sibling by the same author: candidate 4
+//      vs 5 is GENERATE vs CURATE with the same taste, head to head
+//   6  AAP-64               — the other canonical long-ramp 64 (vs Resurrect)
+//   7  FAMICUBE             — the opposite philosophy: a fictional CONSOLE's
+//      identity palette — distinct hues over dense ramps. Tests whether dense
+//      ramps are even the right goal for a fantasy console.
 //
 // NOTE the derived/upper colors only show where something SAMPLES them — the
 // dither scenes (sunset/portrait) reference indices 0-31 and are identical for
@@ -34,7 +40,7 @@
 // CAVEAT while a custom palette is active: pal(c0,c1) would inject the SHIPPED
 // c1 color (base_palette stays the texel-matching key) — scenes avoid pal().
 //
-// CONTROLS: 1-4 palette · LEFT/RIGHT scene · D dither-fake vs real blend ·
+// CONTROLS: 1-7 palette · LEFT/RIGHT scene · D dither-fake vs real blend ·
 // C glass color · T cycle AVG/ADD/MUL in the table view · mouse = glow/pane.
 
 // ---- the shipped palette, for the blend tables + completeness -----------
@@ -69,6 +75,51 @@ static const int PAL_R64X[32] = {   // the other 32 of Resurrect 64
     0x8fd3ff, 0x905ea9, 0xa884f3, 0xeaaded, 0xcf657f, 0x831c5d, 0xc32454, 0xf04f78,
 };
 
+// ENDESGA 64 (by ENDESGA, lospec.com/palette-list/endesga-64), pico-role order
+// + the other 32 upper. The same author's own curated expansion of E32.
+static const int PAL_E64[32] = {
+    0x131313, 0x2a2f4e, 0x622461, 0x1e6f50, 0x8a4836, 0x5d5d5d, 0xb4b4b4, 0xffffff,
+    0xff0040, 0xffa214, 0xffeb57, 0x5ac54f, 0x0098dc, 0x657392, 0xf389f5, 0xf6ca9f,
+    0x1c121c, 0x1a1932, 0x3b1443, 0x134c4c, 0x5d2c28, 0x3d3d3d, 0x858585, 0xf9e6cf,
+    0xc42430, 0xed7614, 0x99e65f, 0x33984b, 0x0069aa, 0x93388f, 0xf5555d, 0xf68187,
+};
+static const int PAL_E64X[32] = {
+    0x1b1b1b, 0x272727, 0xc7cfdd, 0x92a1b9, 0x424c6e, 0x0e071b, 0x391f21, 0xbf6f4a,
+    0xe69c69, 0xedab50, 0xe07438, 0xc64524, 0x8e251d, 0xff5000, 0xffc825, 0xd3fc7e,
+    0x0c2e44, 0x00396d, 0x00cdf9, 0x0cf1ff, 0x94fdff, 0xfdd2ed, 0xdb3ffd, 0x7a09fa,
+    0x3003d9, 0x0c0293, 0x03193f, 0xca52c9, 0xc85086, 0xea323c, 0x891e2b, 0x571c27,
+};
+
+// AAP-64 (by Adigun A. Polack, lospec.com/palette-list/aap-64), pico-role order
+// + the other 32 upper. The other canonical long-ramp 64.
+static const int PAL_A64[32] = {
+    0x060608, 0x143464, 0x73172d, 0x1a7a3e, 0xbb7547, 0x5a4e44, 0xb3b9d1, 0xffffff,
+    0xb4202a, 0xfa6a0a, 0xffd541, 0x14a02e, 0x249fde, 0x8b93af, 0xbc4a9b, 0xfad6b8,
+    0x141013, 0x242234, 0x422433, 0x23674e, 0x71413b, 0x333941, 0xa08662, 0xfef3c0,
+    0x3b1725, 0xf9a31b, 0x9cdb43, 0x328464, 0x285cc4, 0x8e5252, 0xe86a73, 0xf5a097,
+};
+static const int PAL_A64X[32] = {
+    0xdf3e23, 0xfffc40, 0xd6f264, 0x59c135, 0x24523b, 0x122020, 0x20d6c7, 0xa6fcdb,
+    0x793a80, 0x403353, 0x221c1a, 0x322b28, 0xdba463, 0xf4d29c, 0xdae0ea, 0x6d758d,
+    0x4a5462, 0x5b3138, 0xba756a, 0xe9b5a3, 0xe3e6ff, 0xb9bffb, 0x849be4, 0x588dbe,
+    0x477d85, 0x5daf8d, 0x92dcba, 0xcdf7e2, 0xe4d2aa, 0xc7b08b, 0x796755, 0x423934,
+};
+
+// FAMICUBE (by Arne Niklas Jansson), pico-role order + the other 32 upper.
+// Designed as a fictional console's identity palette — distinct hues over ramps.
+static const int PAL_FC[32] = {
+    0x000000, 0x00177d, 0x871646, 0x004e00, 0xae6c37, 0x343434, 0xa8a8a8, 0xffffff,
+    0xe03c28, 0xf68f37, 0xffe737, 0x58d332, 0x5ba8ff, 0x9ba0ef, 0xff82ce, 0xf5b784,
+    0x231712, 0x0d2030, 0x211640, 0x00604b, 0x5c3c0d, 0x151515, 0xc59782, 0xeeffa9,
+    0xcf3c71, 0xad4e1a, 0x8cd612, 0x20b562, 0x024aca, 0x823c3d, 0xda655e, 0xe18289,
+};
+static const int PAL_FCX[32] = {
+    0xd7d7d7, 0x7b7b7b, 0x415d66, 0x71a6a1, 0xbdffca, 0x25e2cd, 0x0a98ac, 0x005280,
+    0x139d08, 0x172808, 0x376d03, 0x6ab417, 0xbeeb71, 0xb6c121, 0x939717, 0xcc8f15,
+    0xffbb31, 0xe2d7b5, 0x4f1507, 0xffe9c5, 0xa328b3, 0xcc69e4, 0xd59cfc, 0xfec9ed,
+    0xe2c9ff, 0xa675fe, 0x6a31ca, 0x5a1991, 0x3d34a5, 0x6264dc, 0x98dcff, 0x0a89ff,
+};
+
 // candidate 4: E32 + derived in-betweens — midpoint pairs (ramp neighbours +
 // hue bridges so cross-ramp blends have somewhere to land)
 static const int MIX_PAIRS[32][2] = {
@@ -82,8 +133,8 @@ static const int MIX_PAIRS[32][2] = {
     {8,12},{9,12},{11,12},{10,7},     // hue bridges (glow-over-water class)
 };
 
-#define NPAL 4
-static int cur_pal;        // 0 pico, 1 e32, 2 r64 full, 3 e32+derived
+#define NPAL 7
+static int cur_pal;        // 0 pico, 1 e32, 2 r64, 3 e32+derived, 4 e64, 5 aap64, 6 famicube
 static int pal_n;          // how many DISTINCT colors the candidate brings (32 or 64)
 static int cur_hex[64];    // active palette as hexes — feeds the blend tables
 static int scene;
@@ -129,11 +180,12 @@ static void build_tables(void) {
 
 static void apply_palette(int which) {
     cur_pal = which;
-    const int *lo = which == 0 ? PAL_PICO : which == 2 ? PAL_R32 : PAL_E32;
-    for (int i = 0; i < 32; i++) cur_hex[i] = lo[i];
-    if (which == 2)      { for (int i = 0; i < 32; i++) cur_hex[32 + i] = PAL_R64X[i]; pal_n = 64; }
+    static const int *LO[NPAL] = { PAL_PICO, PAL_E32, PAL_R32, PAL_E32, PAL_E64, PAL_A64, PAL_FC };
+    static const int *HI[NPAL] = { 0, 0, PAL_R64X, 0 /*derived*/, PAL_E64X, PAL_A64X, PAL_FCX };
+    for (int i = 0; i < 32; i++) cur_hex[i] = LO[which][i];
+    if (HI[which])       { for (int i = 0; i < 32; i++) cur_hex[32 + i] = HI[which][i]; pal_n = 64; }
     else if (which == 3) { for (int i = 0; i < 32; i++) cur_hex[32 + i] = mix_hex(PAL_E32[MIX_PAIRS[i][0]], PAL_E32[MIX_PAIRS[i][1]]); pal_n = 64; }
-    else                 { for (int i = 0; i < 32; i++) cur_hex[32 + i] = lo[i]; pal_n = 32; }
+    else                 { for (int i = 0; i < 32; i++) cur_hex[32 + i] = LO[which][i]; pal_n = 32; }
     for (int i = 0; i < 64; i++) palette_hex(i, cur_hex[i]);
     build_tables();
 }
@@ -359,7 +411,8 @@ void draw(void) {
         case 4: scene_glass();    break;
         case 5: scene_table();    break;
     }
-    static const char *pnames[NPAL] = { "1 PICO-8 (shipped)", "2 ENDESGA 32", "3 RESURRECT 64", "4 E32+32 DERIVED" };
+    static const char *pnames[NPAL] = { "1 PICO-8 (shipped)", "2 ENDESGA 32", "3 RESURRECT 64", "4 E32+32 DERIVED",
+                                        "5 ENDESGA 64", "6 AAP-64", "7 FAMICUBE" };
     static const char *snames[NSCENES] = { "SWATCHES+RAMPS", "SUNSET", "PORTRAIT", "NIGHT GLOW", "GLASS+FOG", "BLEND TABLE" };
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
     print(pnames[cur_pal], 4, 2, CLR_WHITE);
@@ -367,6 +420,6 @@ void draw(void) {
                     snames[scene], scene + 1, NSCENES), 316, 2, CLR_LIGHT_GREY);
     font(FONT_SMALL);
     rectfill(0, 193, SCREEN_W, 7, CLR_BLACK);
-    print("1-4 palette  LEFT/RIGHT scene  D fake/real  C glass  T table", 4, 194, CLR_MEDIUM_GREY);
+    print("1-7 palette  LEFT/RIGHT scene  D fake/real  C glass  T table", 4, 194, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 }

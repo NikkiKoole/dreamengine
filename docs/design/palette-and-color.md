@@ -122,6 +122,18 @@ corpus worst cases (glow over water, fog over a sunset gradient, skin tones)
 next to plain ENDESGA 32. Note the dependency: if 64 wins, Layer 3's table is
 64×64 (4KB — still nothing) and `blendlab`'s math ports unchanged.
 
+*(2026-06-04, candidates 5–7 added)* — the lab now also carries the principled
+trio of 64s, each testing a different theory of what a 64-palette is for:
+- **ENDESGA 64** — E32's big sibling *by the same author*: candidate 4 vs 5 is
+  generate-vs-curate with the same taste, head to head.
+- **AAP-64** (Adigun A. Polack) — the other canonical long-ramp 64 beside
+  Resurrect; warmer, painterly, famously good hue bridges.
+- **Famicube** (Arne Niklas Jansson) — the opposite philosophy: a fictional
+  *console's* identity palette, distinct hues over dense ramps. First look
+  already shows the trade-off: its additive glows ring in the wrong hue family
+  (the snap has neighbors, but from other clusters) — evidence that for a
+  console whose carts lean on blends/gradients, ramp density beats hue count.
+
 Migration cost (the honest part): every existing cart's *art* shifts hue —
 sprites store indices, so nothing breaks structurally, but all ~215 thumbnails
 need a re-bake and some carts' color choices will read differently (the closer
