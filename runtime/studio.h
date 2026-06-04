@@ -247,7 +247,6 @@ void map_scale(int n);                                  // integer zoom for map 
 #define INSTR_USER3   8
 
 void sfx(int n);                              // play sfx slot n; -1 stops all sfx
-void music(int n);                            // play music pattern n; -1 stops music
 void note(int midi, int instr, int vol);                  // one-shot note (250ms). vol 0..7. `instr` is an instrument slot (0..4 are the waves above; define 5..31 yourself)
 void hit(int midi, int instr, int vol, int dur_ms);       // note with custom duration — closed hihat ~30ms, open ~200ms
 

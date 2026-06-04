@@ -37,22 +37,23 @@ Three corollaries:
 ## 2. Where we are now (in code)
 
 > **Refreshed 2026-06-04**, after the §11 mod-envelopes shipped (same-day additions:
-> `schedule_hit`, `wave_set` + `INSTR_USER0..3`). This is the authoritative map of the
-> shipped sound surface: **34 functions + 36 constants**. §5–§11 hold the rationale for
-> how it got here; STATUS item 5 holds what's next (engines, SFX authoring).
+> `schedule_hit`, `wave_set` + `INSTR_USER0..3`; same-day cut: `music()` —
+> [decision 0013](../decisions/0013-cut-music-api.md)). This is the authoritative map of
+> the shipped sound surface: **33 functions + 36 constants**. §5–§11 hold the rationale
+> for how it got here; STATUS item 5 holds what's next (engines, SFX authoring).
 
 **Engine**
 - 8 voices (`SOUND_VOICES`), 44.1 kHz, **mono**, software-mixed (sum × 0.2 gain each,
   hard-clipped to [-1, 1]). Runs on raylib's audio-stream callback (the **audio thread**).
-- Voice allocation: first free → else a non-music **non-held** voice → else any non-music
-  → voice 0. Held notes are stolen last — they're meant to last.
+- Voice allocation: first free → else a **non-held** voice → else voice 0. Held notes
+  are stolen last — they're meant to last.
 - Held-note **handles** pack slot (low 3 bits) + generation; a stale handle (its voice was
   stolen or the slot reused) silently no-ops. 8 handle slots. See `held-notes.md`.
 
 **The surface, in four layers**
 
 1. **Just make sound — zero setup.** `note` `hit` `chord`(+9 `CHORD_*`) `strum`
-   `tone`(+6 `SCALE_*`) `schedule` `schedule_hit` `sfx` `music`. Slots 0–4 come pre-filled
+   `tone`(+6 `SCALE_*`) `schedule` `schedule_hit` `sfx`. Slots 0–4 come pre-filled
    with the raw waves (`INSTR_SQUARE/SAW/TRI/NOISE/SINE`), so the first
    `note(60, INSTR_SAW, 5)` needs nothing else. `schedule_hit` (delay **+** duration) fills
    the note-call quadrant that lets a cart sequence sub-frame sfx steps sample-accurately.
@@ -83,10 +84,14 @@ Three corollaries:
 
 **Data model**
 - **SFX**: 32 slots × up to 32 steps `{pitch (MIDI), instr, vol 0..7}`; `step_dur` in
-  10ms units; per-SFX loop flag. **Music**: 16 patterns × 4 channels of SFX indices + loop.
-- ⚠️ **The SFX/music banks are still hardcoded** in `sound_load_demo_data()` — no
-  cart-side authoring yet. The oldest open gap (STATUS #5); real carts use the live calls.
-  A live-performance answer (play music in, capture it as control events) is explored in
+  10ms units; per-SFX loop flag. (**Music patterns are gone** — `music()` cut 2026-06-04,
+  [decision 0013](../decisions/0013-cut-music-api.md): zero cart users, the generative
+  beat-clock path won.)
+- ⚠️ **The SFX bank is still hardcoded** in `sound_load_demo_data()` (6 demo slots) — no
+  cart-side authoring. Settled direction: carts author sound *as code* (the sfx-editor /
+  sfx-generator carts export paste-ready C); `sfx(n)` exists for first-contact demos and
+  `sfx(-1)` as the "silence ringing sounds" verb. A live-performance answer (play music
+  in, capture it as control events) is explored in
   [`input-recording-looper.md`](input-recording-looper.md).
 
 **Thread-safe control (the important architectural fact)**
@@ -232,11 +237,14 @@ filter(FILTER_LOW, 400 + (int)(noise(now()) * 3000), 10);
 - **Risks:** hits everything (drums/noise too); resonance self-oscillation must be
   clamped; the one feature that can "sound broken" for beginners.
 
-### 5.6 Expose the SFX/pattern banks to carts — *fills a current hole*
-Independently of the above, carts can't author `sfx`/`music` data today. A small
-`sfx_def(slot, steps…)` / pattern-builder API would make the existing bank machinery
-actually usable from a cart. Low-glamour, decent leverage (unlocks all data-driven
-sound + a future tracker UI to match the sprite editor — already a stated VISION goal).
+### 5.6 Expose the SFX bank to carts — *fills a current hole*
+Independently of the above, carts can't author `sfx` data today. A small
+`sfx_def(slot, steps…)` API would make the existing bank machinery actually usable
+from a cart. Low-glamour, decent leverage (unlocks data-driven sound + a future
+tracker UI to match the sprite editor — already a stated VISION goal).
+(The *pattern* half of this idea is dead: `music()` was cut 2026-06-04,
+[decision 0013](../decisions/0013-cut-music-api.md) — any future pattern playback is
+an export-as-code editor cart, not engine banks.)
 
 > **Direction (2026-06-04, leaning — not locked):** prototype this as a **PICO-8-style
 > editor CART first, with zero new engine API.** Draw the pitch contour over steps with

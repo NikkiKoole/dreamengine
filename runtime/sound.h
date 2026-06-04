@@ -21,7 +21,6 @@
 #define SOUND_VOICES       8
 #define SOUND_SFX_STEPS    32
 #define SOUND_SFX_SLOTS    32
-#define SOUND_MUSIC_SLOTS  16
 #define SOUND_INSTR_SLOTS  32   // 0-4 = the raw waves; 5-31 cart-defined (rich patch carts like modrack want banks per wave)
 
 // Waveform IDs (INSTR_*) come from studio.h.
@@ -39,12 +38,6 @@ typedef struct {
     uint8_t length;     // 1..32
     uint8_t loop;       // 1 = repeat when SFX ends
 } Sfx;
-
-// Music pattern: each channel plays one SFX simultaneously. -1 = silent.
-typedef struct {
-    int8_t  channels[4];
-    uint8_t loop;
-} Pattern;
 
 // An instrument = a waveform + an ADSR envelope + pulse duty. `instr` ids in
 // note()/hit()/chord()/tone() index this bank. Slots 0..4 are pre-filled with the
@@ -80,7 +73,6 @@ typedef struct {
     float  vol;                // 0..1
     int    wave;
     int    noise_state;
-    bool   from_music;
     // ADSR + LFO snapshot (one-shot notes only; copied from the instrument at note-on)
     int    a_samp, d_samp, r_samp;
     float  sustain;
@@ -115,19 +107,18 @@ static int           held_voice[SOUND_VOICES];  // audio thread: handle slot →
 #define SOUND_HELD_GATE 0x7FFFFFFF               // "infinite" gate length for a sustained note
 static AudioStream   sound_stream;
 static Sfx           sfx_bank[SOUND_SFX_SLOTS];
-static Pattern       music_bank[SOUND_MUSIC_SLOTS];
 static Instrument    instr_bank[SOUND_INSTR_SLOTS];
 #define SOUND_USER_WAVES 4
 #define SOUND_WAVE_LEN   64
 static float         user_wave[SOUND_USER_WAVES][SOUND_WAVE_LEN];   // INSTR_USER0..3 single-cycle tables (filled via wave_set)
-static int           music_current = -1;
 
 // request ring buffer (main thread pushes → audio thread drains)
-// kind: 0=sfx, 1=music, 2=note, 3=define instrument, 4=set duty, 5=set lfo, 6=set filter,
+// kind: 0=sfx, 1=(retired: music — cut 2026-06, see decisions/), 2=note, 3=define instrument,
+//       4=set duty, 5=set lfo, 6=set filter,
 //       7=note_on, 8=note_off, 9=note_pitch, 10=note_vol, 11=note_cutoff, 12=note_duty,
 //       13=note_off_all, 14=note_res, 15=note_lfo, 16=note_filter, 17=note_glide,
 //       18=instrument_env, 19=note_env, 20=wave_set (4 samples/request).
-//       -1 in a/b/c slots = "stop" for sfx/music.
+//       -1 in the a slot = "stop" for sfx.
 // delay_samples: 0 = fire immediately; >0 = audio thread holds it in `delayed[]` and fires when countdown expires.
 // e0/e1/e2: extra payload (instrument attack/decay/release samples).
 // ⚠ ORDERING SUBTLETY: define kinds (3-6, 18, 20) apply when DRAINED (next callback), but a
@@ -285,11 +276,10 @@ static void sound_unclaim_held(int vi) {
 
 static int sound_find_voice(void) {
     int vi = 0;
-    // prefer fully free; else a non-music non-held voice; else any non-music; else voice 0.
+    // prefer fully free; else a non-held voice; else voice 0.
     // (held notes are stolen only after plain event voices — they're meant to last.)
-    for (int i = 0; i < SOUND_VOICES; i++) if (!voices[i].active)                          { vi = i; goto done; }
-    for (int i = 0; i < SOUND_VOICES; i++) if (!voices[i].from_music && !voices[i].held)    { vi = i; goto done; }
-    for (int i = 0; i < SOUND_VOICES; i++) if (!voices[i].from_music)                       { vi = i; goto done; }
+    for (int i = 0; i < SOUND_VOICES; i++) if (!voices[i].active)  { vi = i; goto done; }
+    for (int i = 0; i < SOUND_VOICES; i++) if (!voices[i].held)    { vi = i; goto done; }
 done:
     sound_unclaim_held(vi);
     return vi;
@@ -320,7 +310,6 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) slot = 0;
     Instrument *ins = &instr_bank[slot];
     v->active     = true;
-    v->from_music = false;
     v->held       = false;
     v->owner_slot = -1;
     v->sfx_idx    = -1;
@@ -356,7 +345,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->rel_start        = sound_adsr_gated(gate_samples, v->a_samp, v->d_samp, v->sustain);
 }
 
-// Configure a voice to play one SFX step. Does not touch active / sfx_idx / step / from_music.
+// Configure a voice to play one SFX step. Does not touch active / sfx_idx / step.
 static void sound_set_step(Voice *v, SfxStep step, int step_dur_units) {
     v->phase            = 0.0f;
     v->step_samples     = 0;
@@ -380,36 +369,14 @@ static void sound_fire_req(SoundReq r) {
         int n = r.a;
         if (n == -1) {
             for (int i = 0; i < SOUND_VOICES; i++)
-                if (!voices[i].from_music && !voices[i].held) voices[i].active = false;  // held notes survive sfx(-1)
+                if (!voices[i].held) voices[i].active = false;  // held notes survive sfx(-1)
         } else if (n >= 0 && n < SOUND_SFX_SLOTS) {
             int vi = sound_find_voice();
             Voice *v = &voices[vi];
             v->active     = true;
-            v->from_music = false;
             v->sfx_idx    = n;
             v->step       = 0;
             sound_set_step(v, sfx_bank[n].steps[0], sfx_bank[n].step_dur);
-        }
-    } else if (r.kind == 1) {       // music
-        int n = r.a;
-        for (int i = 0; i < SOUND_VOICES; i++)
-            if (voices[i].from_music) voices[i].active = false;
-        if (n == -1) {
-            music_current = -1;
-        } else if (n >= 0 && n < SOUND_MUSIC_SLOTS) {
-            music_current = n;
-            Pattern *m = &music_bank[n];
-            for (int ch = 0; ch < 4; ch++) {
-                int s = m->channels[ch];
-                if (s < 0 || s >= SOUND_SFX_SLOTS) continue;
-                sound_unclaim_held(ch);   // music claims voices 0..3 — drop any held note there
-                Voice *v = &voices[ch];
-                v->active     = true;
-                v->from_music = true;
-                v->sfx_idx    = s;
-                v->step       = 0;
-                sound_set_step(v, sfx_bank[s].steps[0], sfx_bank[s].step_dur);
-            }
         }
     } else if (r.kind == 2) {       // note (one-shot)
         int gate = r.dur_samples > 0 ? r.dur_samples : SOUND_SAMPLE_RATE / 4;
@@ -565,7 +532,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
 
             // per-param slew: note voices glide toward their targets so live writes
             // (note_pitch/vol/cutoff/duty) don't stairstep or zipper. One-shots keep
-            // target == current, so this is a no-op for them; SFX/music set freq/vol
+            // target == current, so this is a no-op for them; SFX set freq/vol
             // directly and are skipped.
             if (v->sfx_idx < 0) {
                 v->freq       += (v->freq_target   - v->freq)       * v->freq_slew;  // glide rate (note_glide)
@@ -575,12 +542,12 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 v->duty       += (v->duty_target   - v->duty)       * 0.003f;
             }
 
-            // step advance? (SFX/music walk their step list; one-shots fall through to ADSR release)
+            // step advance? (SFX walk their step list; one-shots fall through to ADSR release)
             if (v->step_samples >= v->step_len_samples && v->sfx_idx >= 0) {
                 Sfx *s = &sfx_bank[v->sfx_idx];
                 v->step++;
                 if (v->step >= s->length) {
-                    if (s->loop || v->from_music) {
+                    if (s->loop) {
                         v->step = 0;
                     } else {
                         v->active = false;
@@ -654,7 +621,10 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
     }
 }
 
-// ───────── demo data (replaces eventually with cart-authored data) ─────────
+// ───────── built-in demo sfx ─────────
+// Slots 0–5 ship pre-filled so sfx(0) makes a sound on first contact. Carts don't
+// author these banks — cart sound is written as code (note/hit/schedule, or the
+// "sfx editor" cart's export-as-C). That's settled: see decisions/ (music() cut).
 
 static void sound_load_demo_data(void) {
     // sfx 0 — ascending blip (coin pickup)
@@ -677,19 +647,16 @@ static void sound_load_demo_data(void) {
         .step_dur = 4, .length = 5, .loop = 0,
         .steps = { {60, INSTR_NOISE, 7}, {60, INSTR_NOISE, 6}, {60, INSTR_NOISE, 5}, {60, INSTR_NOISE, 3}, {60, INSTR_NOISE, 1} },
     };
-    // sfx 4 — bass loop (music)
+    // sfx 4 — bass loop (loop-flag demo)
     sfx_bank[4] = (Sfx){
         .step_dur = 12, .length = 4, .loop = 1,
         .steps = { {36, INSTR_TRI, 5}, {36, INSTR_TRI, 5}, {43, INSTR_TRI, 5}, {41, INSTR_TRI, 5} },
     };
-    // sfx 5 — hihat loop (music)
+    // sfx 5 — hihat loop (loop-flag demo)
     sfx_bank[5] = (Sfx){
         .step_dur = 6, .length = 4, .loop = 1,
         .steps = { {60, INSTR_NOISE, 3}, {0,0,0}, {60, INSTR_NOISE, 3}, {0,0,0} },
     };
-
-    // music 0 — bass + hihat
-    music_bank[0] = (Pattern){ .channels = { 4, 5, -1, -1 }, .loop = 1 };
 }
 
 // ───────── public API ─────────
@@ -697,11 +664,6 @@ static void sound_load_demo_data(void) {
 void sfx(int n) {
     if (n < -1 || n >= SOUND_SFX_SLOTS) return;
     sound_push_req(0, n, 0, 0, 0, 0);
-}
-
-void music(int n) {
-    if (n < -1 || n >= SOUND_MUSIC_SLOTS) return;
-    sound_push_req(1, n, 0, 0, 0, 0);
 }
 
 // Look up chord intervals (used by chord() and strum()).
@@ -989,11 +951,8 @@ bool every(int n) {
 static void sound_init(void) {
     memset(voices,     0, sizeof(voices));
     memset(sfx_bank,   0, sizeof(sfx_bank));
-    memset(music_bank, 0, sizeof(music_bank));
     for (int i = 0; i < SOUND_VOICES;     i++) { voices[i].noise_state = 12345 + i; voices[i].owner_slot = -1; }
     for (int i = 0; i < SOUND_VOICES;     i++) held_voice[i] = -1;
-    for (int i = 0; i < SOUND_MUSIC_SLOTS; i++)
-        for (int c = 0; c < 4; c++) music_bank[i].channels[c] = -1;
 
     // Instrument bank defaults: slots 0..4 are the raw waves with a near-instant
     // declick-style envelope (so existing carts sound the same); 5..15 start as a

@@ -18,7 +18,7 @@ It also cross-checks the "four places" rule (`studio.h` ↔ `studioDocs.js` ↔
 | function | reading |
 |---|---|
 | `tap`, `touch_controls`, `stick_x`, `stick_y` (+ `touch_x`/`touch_y` at 1 cart each) | touch/gamepad input — nothing exercises it on desktop. Fair, but untested code. |
-| `music` | **can't do anything useful**: the only pattern in `music_bank` is the built-in demo (`music 0` = bass+hihat, `sound.h`), and there's no cart-facing API to author patterns. Carts build music from `note`/`schedule`/`strum`/`bpm` instead — the direction `guides/game-music.md` teaches. Candidate: cut it, or give it a real pattern-authoring API. |
+| `music` | **CUT same day** ([decision 0013](../decisions/0013-cut-music-api.md)): the only pattern in `music_bank` was the built-in demo (`music 0` = bass+hihat), and there was no cart-facing API to author patterns. Carts build music from `note`/`schedule`/`strum`/`bpm` instead — the direction `guides/game-music.md` teaches. |
 | `bezier_cubic` | quadratic `bezier` covers the need; even that is only in 2 carts |
 | `map_scale` | every map cart runs at default scale |
 | `bounce_at_edges` | the helper exists but carts hand-roll bouncing — the helper's signature (4 pointer args) may be the friction |
@@ -47,6 +47,10 @@ variants and odd corners.
   vertical sky gradients are the real use case.
 - **`printh` is in only 3 carts but 44 calls** — smells like leftover debug
   prints worth sweeping.
+- **`sfx()` is really a stop button**: 8 of its 11 call sites are `sfx(-1)`
+  ("silence ringing sounds before a dramatic note"); only the `soundcheck`
+  self-test plays a slot. The 6 demo slots stay for first contact, but the bank
+  was never cart-authorable — see [decision 0013](../decisions/0013-cut-music-api.md).
 - **The sound API's "live voice" tier is healthy**: `note_on`/`note_off`/
   `note_pitch`/`note_vol` all land in 8–14 carts; the deep modulation tier
   (`note_res`, `note_filter`, `note_env`) sits at 2–3 carts — used, barely.
