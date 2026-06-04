@@ -58,11 +58,22 @@ static Home  homes[MAXF][MAXB];
 static float tod;
 
 static const int CURT[][2] = {
-    { CLR_RED,        CLR_DARK_RED    }, { CLR_ORANGE,     CLR_DARK_ORANGE },
-    { CLR_GREEN,      CLR_DARK_GREEN  }, { CLR_BLUE,       CLR_TRUE_BLUE   },
-    { CLR_PINK,       CLR_MAUVE       }, { CLR_LIGHT_PEACH, CLR_MEDIUM_GREY },
+    { CLR_RED,          CLR_DARK_RED      },
+    { CLR_ORANGE,       CLR_DARK_ORANGE   },
+    { CLR_GREEN,        CLR_DARK_GREEN    },
+    { CLR_BLUE,         CLR_TRUE_BLUE     },
+    { CLR_PINK,         CLR_MAUVE         },
+    { CLR_LIGHT_PEACH,  CLR_MEDIUM_GREY   },
+    { CLR_YELLOW,       CLR_DARK_ORANGE   },
+    { CLR_LIME_GREEN,   CLR_DARK_GREEN    },
+    { CLR_PEACH,        CLR_DARK_PEACH    },
+    { CLR_LIGHT_YELLOW, CLR_BROWN         },
+    { CLR_WHITE,        CLR_LIGHT_GREY    },
+    { CLR_INDIGO,       CLR_DARKER_PURPLE },
+    { CLR_MEDIUM_GREEN, CLR_BLUE_GREEN    },
+    { CLR_TRUE_BLUE,    CLR_DARKER_BLUE   },
 };
-#define NCURT 6
+#define NCURT 14
 
 // fillp pattern sets per treatment type
 static const int VITRAGE_PATS[] = {
