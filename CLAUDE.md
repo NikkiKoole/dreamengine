@@ -432,6 +432,37 @@ To make a cart legible to the trace, wrap `watch()` calls in `#ifdef DE_TRACE`
 example). A typical loop: author a `.beats` script for the exact moment, run it
 `--headless` with `--trace`, then `grep` the trace to see the engine's decision.
 
+**Live inspection** — while any cart runs (editor ▶ run or `play.js`) you can pull a
+screenshot and state snapshot without stopping it. As an agent, do this yourself with
+the Bash tool — don't ask the user to run these commands:
+
+```bash
+# 1. write trigger files with absolute paths
+echo "/abs/path/build/.bake/screen.png"  > /abs/path/build/.bake/screenshot_request
+echo "/abs/path/build/.bake/state.json"  > /abs/path/build/.bake/state_request
+
+# 2. wait one frame for the game to pick them up
+sleep 0.5
+
+# 3. verify the request files are gone (handshake: deleted = captured)
+ls /abs/path/build/.bake/screenshot_request 2>&1   # should say "No such file"
+```
+
+Then use the **Read tool** on the PNG — Claude can see images directly. The state JSON
+has `f` (frame), `t` (seconds), and `w` (all active `watch()` values). The game creates
+`build/.bake/` on startup so the directory always exists once a cart has been launched.
+
+Real example — asking the user which cart they're running, then capturing live:
+```bash
+echo "$(pwd)/build/.bake/snap.png"  > build/.bake/screenshot_request
+echo "$(pwd)/build/.bake/snap.json" > build/.bake/state_request
+sleep 0.5
+# then: Read build/.bake/snap.png  →  you see exactly what's on screen right now
+```
+
+Before/after pairs: write state_request twice at different moments, diff the two JSON
+files. Full recipe: `docs/guides/debug-harness.md` → "Live inspection".
+
 ## Key things to know
 
 - `node_modules` requires Node 22 — use `nvm use 22` before any npm commands

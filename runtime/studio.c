@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <time.h>
+#include <sys/stat.h>
 #include "dos_8x8_font.h"
 #include "font4x6_data.h"
 #include "font3x5_data.h"
@@ -639,6 +640,51 @@ static void harness_dump(int fno) {
     ExportImage(shot, path);
     UnloadImage(shot);
 }
+
+// on-demand inspection: poll .bake/screenshot_request and .bake/state_request each
+// frame. each file contains the desired output path; we capture, write, then delete
+// the request file as the handshake — gone means fresh and ready to read.
+static void harness_inspect(int fno) {
+    // screenshot
+    FILE *f = fopen(".bake/screenshot_request", "r");
+    if (f) {
+        char out[512] = {0};
+        if (fgets(out, sizeof out, f)) out[strcspn(out, "\n\r")] = '\0';
+        fclose(f);
+        remove(".bake/screenshot_request");
+        if (out[0]) {
+            Image shot = LoadImageFromTexture(canvas.texture);
+            ImageFlipVertical(&shot);
+            ExportImage(shot, out);
+            UnloadImage(shot);
+        }
+    }
+    // state
+    f = fopen(".bake/state_request", "r");
+    if (f) {
+        char out[512] = {0};
+        if (fgets(out, sizeof out, f)) out[strcspn(out, "\n\r")] = '\0';
+        fclose(f);
+        remove(".bake/state_request");
+        if (out[0]) {
+            FILE *w = fopen(out, "w");
+            if (w) {
+                fprintf(w, "{\"f\":%d,\"t\":%.4f,\"beat\":%d,\"bpos\":%.4f,\"w\":{",
+                        fno, clk(), beat(), beat_pos());
+                int first = 1;
+                for (int i = 0; i < watch_count; i++) {
+                    if (!first) fputc(',', w);
+                    first = 0;
+                    json_str(w, watches[i].name);
+                    fputc(':', w);
+                    json_str(w, watches[i].value);
+                }
+                fputs("}}\n", w);
+                fclose(w);
+            }
+        }
+    }
+}
 #endif
 
 // ── profiler instrumentation (compiled in only with -DDE_PROFILE) ─────────
@@ -840,6 +886,7 @@ static void loop_step(void) {
 #ifndef PLATFORM_WEB
     harness_trace(fno);                    // structured state for this frame (before aging)
     harness_dump(fno);                     // filmstrip PNG every Nth frame
+    harness_inspect(fno);                  // on-demand screenshot + state (trigger-file)
     if (det_mode) det_clock += DET_DT;     // advance the synthetic clock for now()/timer()
 #endif
     age_watches();   // frame-end: expire watches whose branch stopped firing
@@ -977,6 +1024,7 @@ int main(int argc, char **argv) {
     signal(SIGFPE,  crash_handler);   // divide by zero, etc.
     signal(SIGABRT, crash_handler);   // abort()/assert
     signal(SIGBUS,  crash_handler);   // misaligned / bad memory access
+    mkdir(".bake", 0755);             // ensure inspect request dir exists (silent if already there)
 #endif
 #ifdef PLATFORM_WEB
     SetTraceLogLevel(LOG_ERROR);     // suppress NPOT/extension warnings — harmless on web

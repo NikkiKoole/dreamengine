@@ -123,6 +123,67 @@ replayable — `mouse_x/y/mouse_pressed` all read the injected pointer under rep
 
 ---
 
+## Live inspection — on-demand snapshot
+
+While any cart runs (any mode, any backend), you can pull a screenshot or state
+snapshot at the exact moment you care about. Write the desired output path into a
+trigger file; the game captures the current frame on its next tick, then deletes
+the request as the handshake — **gone = fresh and ready to read.**
+
+```bash
+# screenshot at the exact moment you want
+echo "/abs/path/to/frame.png"  > build/.bake/screenshot_request
+
+# state snapshot (frame + time + all active watch() values as JSON)
+echo "/abs/path/to/state.json" > build/.bake/state_request
+```
+
+Both work simultaneously. The game creates `build/.bake/` on startup, so the
+directory always exists.
+
+### Before/after diff
+
+```bash
+# launch (compile takes ~1-2s before the game actually starts)
+node tools/play.js <name> run --headless --frames 600 &
+
+sleep 2.5   # wait for compilation + a few frames to run
+echo "$(pwd)/build/.bake/before.json" > build/.bake/state_request
+
+# ... let the interesting event happen ...
+sleep 1.0
+echo "$(pwd)/build/.bake/after.json"  > build/.bake/state_request
+
+wait
+diff build/.bake/before.json build/.bake/after.json
+```
+
+The two files have different `f` values — proof they were captured at distinct
+moments in the same live run.
+
+### Pre-staged (frame 0)
+
+Write the request files *before* launching — they survive until the game picks them
+up, so frame 0 is always captured even if compilation is slow:
+
+```bash
+echo "$(pwd)/build/.bake/snap.png"  > build/.bake/screenshot_request
+echo "$(pwd)/build/.bake/snap.json" > build/.bake/state_request
+node tools/play.js <name> run --headless --frames 3
+```
+
+### What the state JSON contains
+
+```json
+{"f": 38, "t": 0.6333, "beat": 2, "bpos": 0.8, "w": {"px": "160", "py": "88"}}
+```
+
+`w` holds all currently active `watch()` values — not just those set this exact
+frame, but everything still alive (age < 60 frames). For carts without `#ifdef
+DE_TRACE` instrumentation `w` will be empty, but `f`/`t` still land correctly.
+
+---
+
 ## Worked example — the smooch-lounge hold mechanic
 
 The question: *"do I press when the ribbon touches and release when it leaves?"*
@@ -220,6 +281,16 @@ the cart's chart (read it from the source). A flawless run that *doesn't* earn t
 grade/award the code promises is a real bug. (Demonstrated on smooch's verse: 16
 notes + 1 hold → combo 17, all SMOOCH — the engine delivered exactly what the chart
 implied.) This is the seed of the fuzz/autoplay driver in the growth doc.
+
+### Recipe 8 — live visual check (no filmstrip needed)
+Run the cart, trigger a screenshot at the moment you're curious about, read it:
+```bash
+node tools/play.js <name> run &
+# ... play until the suspicious frame ...
+echo "$(pwd)/build/.bake/suspicious.png" > build/.bake/screenshot_request
+wait
+```
+No `--dump` needed. One PNG, the exact frame you asked for, nothing wasted.
 
 > If `jq` is available, it makes traces far nicer to slice, e.g.
 > `jq -c 'select(.w.press) | {f, p:.w.press}' build/<name>.trace.jsonl`.
