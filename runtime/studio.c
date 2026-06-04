@@ -2164,8 +2164,8 @@ static void gradient_band(int bx, int by, int bw, int bh, int ca, int cb, float 
     int bits = (int)(t * 16.0f + 0.5f);
     if (bits < 0) bits = 0; if (bits > 16) bits = 16;
     int pat = thresholds[bits];
-    fillp(pat, ca);
-    rectfill(bx, by, bw, bh, cb);
+    fillp(pat, cb);
+    rectfill(bx, by, bw, bh, ca);
     fillp_reset();
 }
 
