@@ -99,6 +99,7 @@ Current experiments:
 | Hook | Probe | Sunset |
 |---|---|---|
 | `palette_hex(i, hex)` | `palettelab` | becomes `palette_set()` ([`palette-and-color.md`](palette-and-color.md) Layer 2) or is deleted with the palette decision |
+| `PALETTE_SIZE` 32→64 (slots 32–63 mirror 0–31 by default; byte-identical for existing carts, `raster_test`-verified) | `palettelab` | kept if a 64-color default wins Layer 1b, reverted to 32 otherwise |
 
 ## Housekeeping rules
 

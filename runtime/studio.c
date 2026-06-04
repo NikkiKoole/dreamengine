@@ -106,7 +106,11 @@ static void cart_reload_if_changed(void) {
 // internal state
 // ------------------------------------------------------------
 
-#define PALETTE_SIZE 32
+// 64 since the palette experiment (palette-and-color.md Layer 1b): slots 32-63
+// default to a MIRROR of 0-31, so every existing cart renders byte-identically
+// (color % 64 lands on the copy; pget/shader nearest-match scan low-first).
+// Only palette_hex() writes the upper half today. The named CLR_* stay 0-31.
+#define PALETTE_SIZE 64
 #define SPRITE_SIZE  16
 #define SPRITE_COUNT 64   // 8×8 grid of 16×16 sprites = 128×128 sheet
 #ifndef SCALE
@@ -462,6 +466,8 @@ static void load_palette() {
     palette[29] = (Color){ 117, 70,  101, 255 }; // CLR_MAUVE          #754665
     palette[30] = (Color){ 255, 110, 89,  255 }; // CLR_DARK_PEACH     #ff6e59
     palette[31] = (Color){ 255, 157, 129, 255 }; // CLR_PEACH          #ff9d81
+
+    for (int i = 32; i < PALETTE_SIZE; i++) palette[i] = palette[i - 32];  // upper half mirrors 0-31 (see PALETTE_SIZE note)
 
     for (int i = 0; i < PALETTE_SIZE; i++) base_palette[i] = palette[i];   // keep an unmodified copy for pal_reset()
 }
@@ -1425,13 +1431,13 @@ static const char *PAL_FS =
     "varying vec4 fragColor;\n"
     "uniform sampler2D texture0;\n"
     "uniform vec4 colDiffuse;\n"
-    "uniform vec3 basePal[32];\n"
-    "uniform vec3 curPal[32];\n"
+    "uniform vec3 basePal[64];\n"
+    "uniform vec3 curPal[64];\n"
     "void main() {\n"
     "    vec4 texel = texture2D(texture0, fragTexCoord);\n"
     "    float bestD = 1e20;\n"
     "    vec3 outc = curPal[0];\n"
-    "    for (int i = 0; i < 32; i++) {\n"
+    "    for (int i = 0; i < 64; i++) {\n"
     "        vec3 dd = texel.rgb - basePal[i];\n"
     "        float dist = dot(dd, dd);\n"
     "        if (dist < bestD) { bestD = dist; outc = curPal[i]; }\n"
@@ -1446,13 +1452,13 @@ static const char *PAL_FS =
     "out vec4 finalColor;\n"
     "uniform sampler2D texture0;\n"
     "uniform vec4 colDiffuse;\n"
-    "uniform vec3 basePal[32];\n"
-    "uniform vec3 curPal[32];\n"
+    "uniform vec3 basePal[64];\n"
+    "uniform vec3 curPal[64];\n"
     "void main() {\n"
     "    vec4 texel = texture(texture0, fragTexCoord);\n"
     "    float bestD = 1e20;\n"
     "    vec3 outc = curPal[0];\n"
-    "    for (int i = 0; i < 32; i++) {\n"
+    "    for (int i = 0; i < 64; i++) {\n"
     "        vec3 dd = texel.rgb - basePal[i];\n"
     "        float dist = dot(dd, dd);\n"
     "        if (dist < bestD) { bestD = dist; outc = curPal[i]; }\n"

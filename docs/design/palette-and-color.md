@@ -168,17 +168,28 @@ What this doc adds to the ADR's inputs:
 
 1. **Palette contact-sheet probe cart** (Layer 1's evidence; tag `probe`) —
    render candidate palettes against worst-case corpus scenes.
-   **✅ Shipped** — `tools/carts/palettelab.c`: 1/2/3 swaps the live palette
-   (shipped / ENDESGA 32 / Resurrect-32 cut, role-mapped), LEFT/RIGHT walks
-   swatches+ramps / sunset / night-glow / portrait. Built on an
-   **experimental** `palette_hex(i, hex)` in the runtime (the `EXPERIMENTAL`
-   banner at the bottom of `studio.h`; rides the `pal()` shader path, so
-   existing sprite art recolors too; deliberately absent from
-   docs/autocomplete; sunset rule: becomes Layer 2's `palette_set()` or is
-   deleted). First finding from the role-mapping work itself: **E32 lacks a
-   lime, a second dark plum, and a near-black navy pair** (three slots dup),
-   while the Resurrect cut filled every role — the curated-64 advantage
-   showing up before any scene was even rendered.
+   **✅ Shipped** — `tools/carts/palettelab.c`: keys 1–4 swap the live palette
+   (shipped PICO-8 / ENDESGA 32 / **full Resurrect 64** / **E32 + 32 derived
+   in-betweens**), LEFT/RIGHT walks five scenes: 64-swatch grid + corpus
+   ramps / sunset / night-glow / portrait / **blend test** (glass + shadow +
+   additive glow mixed per-pixel and snapped to the nearest active color —
+   blendlab's math against the live candidate). Built on two **experimental**
+   runtime hooks: `palette_hex(i, hex)` (the `EXPERIMENTAL` banner at the
+   bottom of `studio.h`; rides the `pal()` shader path, so existing sprite art
+   recolors too; deliberately absent from docs/autocomplete; sunset rule:
+   becomes Layer 2's `palette_set()` or is deleted) and **`PALETTE_SIZE` 32→64
+   with slots 32–63 mirroring 0–31 by default** — byte-identical for every
+   existing cart (`color % 64` lands on the copy; `pget`/shader nearest-match
+   scan low-first; verified: `raster_test` 46/46 frames `mismatches:0`,
+   `eq total=0`). Findings so far:
+   - From the role-mapping work itself: **E32 lacks a lime, a second dark
+     plum, and a near-black navy pair** (three dup slots), while the Resurrect
+     cut filled every role — the curated-64 advantage showed up before any
+     scene was rendered.
+   - From the blend scene: **under the shipped 32, glass-over-orange snaps to
+     pink and the additive glow vanishes over white** (nowhere to land);
+     E32+derived tints coherently; full Resurrect 64 is smoothest. Palette
+     density *is* blend fidelity — measured, not argued.
 2. Decide + ship the new default (Layer 1). Re-bake thumbnails.
 3. `palette_set` + `de:palette` chunk (Layer 2) — independently useful even if
    blending waited forever.
