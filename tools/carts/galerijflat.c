@@ -1,16 +1,14 @@
 #include "studio.h"
 
-// GALERIJFLAT — step 1: the static facade.
+// GALERIJFLAT — sys 6 starter: slow day/night clock + archetype-driven light schedules.
 //
-// The archetypal Dutch gallery-access apartment slab, gallery side, straight
-// on, at dusk. No clock, no people yet — this step is the canvas: roll a
-// building (storeys, bays, concrete tints, railing style), roll a household
-// for every dwelling (archetype FIRST, then curtains/sill/light as correlated
-// traits of it — see docs/design/galerijflat.md, systems 2/3/5), and render
-// the grid of lives. A stranger should be able to read the facade: vitrage +
-// symmetrical plants = elderly, bare glass + blue TV flicker = student.
+// Each dwelling has a wake/sleep schedule correlated with their archetype. Lights
+// switch on when dark + the household is home; off when asleep or during daytime.
+// The building reads very differently at dusk (warm scattered lights) vs 2am (dark
+// except the student) vs 8am (dead — everyone at work).
 //
-//   SPACE — re-roll the building
+//   SPACE   — re-roll the building
+//   T       — jump forward 1 hour (for testing)
 
 #define GROUND_H 12
 #define PLINTH_H 14
@@ -26,6 +24,11 @@
 #define MAXF     12
 #define MAXB     12
 
+// sys 6: clock speed — one full day in DAY_REAL_SECS real seconds (tune here)
+#define DAY_REAL_SECS  300.0f
+#define TOD_START      20.0f   // start at 20:00 — building lit up at launch
+#define TOD_RATE       (24.0f / (DAY_REAL_SECS * 60.0f))
+
 enum { A_VACANT, A_ELDER, A_COUPLE, A_FAMILY, A_STUDENT };
 enum { TR_NONE, TR_VITRAGE, TR_CURTAIN, TR_ROLLER, TR_VENETIAN };
 enum { SI_EMPTY, SI_SYMM, SI_RANDOM };
@@ -33,25 +36,25 @@ enum { RAIL_BARS, RAIL_PANEL };
 
 typedef struct {
     int   arch;
-    int   lit, tv;             // dusk snapshot of the lights
-    int   treat;               // window treatment (system 2)
-    int   tBright, tDark;      // its color when lit / unlit behind it
-    float roller;              // 0..1 how far down the roller blind hangs
-    int   curtOpen;            // curtains pulled aside?
-    int   sill, nIt;           // vensterbank (system 3)
+    int   treat;               // window treatment (sys 2)
+    int   tBright, tDark;      // curtain color lit / unlit
+    float roller;              // 0..1 how far down roller blind hangs
+    int   curtOpen;            // daytime curtain preference; overridden at night
+    int   sill, nIt;           // vensterbank (sys 3)
     int   itX[4], itPlant[4], itCol[4];
     int   doorCol;
-    int   bike;                // a bike leans on the railing at this bay
+    int   bike;
+    float wake_h, sleep_h;     // schedule in hours; sleep_h may exceed 24 (past midnight)
 } Home;
 
-static int  NF, NB, BW;                       // floors, bays, bay width
-static int  baysX, towerX, towerLeft;         // layout
-static int  baseY, wallTop;                   // plinth top, wall top
-static int  wallC, slabC, towerC, railStyle, panelC, doorBase;
-static int  liftFloor, lampX[3], nLamp;
-static Home homes[MAXF][MAXB];
+static int   NF, NB, BW;
+static int   baysX, towerX, towerLeft;
+static int   baseY, wallTop;
+static int   wallC, slabC, towerC, railStyle, panelC, doorBase;
+static int   liftFloor, lampX[3], nLamp;
+static Home  homes[MAXF][MAXB];
+static float tod;              // time of day, hours 0..24
 
-// curtain fabric: {lit-behind, unlit-behind} palette pairs
 static const int CURT[][2] = {
     { CLR_RED,        CLR_DARK_RED    }, { CLR_ORANGE,     CLR_DARK_ORANGE },
     { CLR_GREEN,      CLR_DARK_GREEN  }, { CLR_BLUE,       CLR_TRUE_BLUE   },
@@ -59,7 +62,38 @@ static const int CURT[][2] = {
 };
 #define NCURT 6
 
-// ── rolling one household (archetype first, traits derived) ──────────────────
+// ── schedule helpers ──────────────────────────────────────────────────────────
+
+// lights only visible when it's dark enough outside to need them
+static int is_dark(float t) { return (t < 7.5f || t >= 17.5f); }
+
+static int home_lit(Home *h, float t) {
+    if (h->arch == A_VACANT || !is_dark(t)) return 0;
+    float s = h->sleep_h;
+    if (s > 24.0f)                          // student wraps past midnight
+        return (t >= h->wake_h) || (t < s - 24.0f);
+    return (t >= h->wake_h && t < s);
+}
+
+static int home_tv(Home *h, float t) {
+    if (!home_lit(h, t)) return 0;
+    switch (h->arch) {
+    case A_ELDER:   return (t >= 15.0f && t < h->sleep_h);
+    case A_COUPLE:  return (t >= 19.5f);
+    case A_FAMILY:  return (t >= 17.5f && t < 21.5f);
+    case A_STUDENT: return (t >= 18.0f || (h->sleep_h > 24.0f && t < h->sleep_h - 24.0f));
+    default:        return 0;
+    }
+}
+
+// curtains: daytime preference, but always drawn for privacy at night
+static int home_curt_open(Home *h, float t) {
+    if (h->treat != TR_CURTAIN) return h->curtOpen;
+    return (t < 6.0f || t > 22.0f) ? 0 : h->curtOpen;
+}
+
+// ── rolling one household ─────────────────────────────────────────────────────
+
 static void roll_home(Home *h) {
     *h = (Home){0};
     int r = rnd(100);
@@ -68,19 +102,21 @@ static void roll_home(Home *h) {
     int c = rnd(NCURT);
     h->tBright = CURT[c][0]; h->tDark = CURT[c][1];
     { int dc = chance(15) ? CURT[rnd(NCURT)][1] : doorBase;
-      h->doorCol = (dc == wallC) ? doorBase : dc; }             // never same as wall
+      h->doorCol = (dc == wallC) ? doorBase : dc; }
 
     switch (h->arch) {
     case A_VACANT:
-        h->treat = TR_NONE; h->sill = SI_EMPTY; h->lit = 0;
+        h->treat = TR_NONE; h->sill = SI_EMPTY;
+        h->wake_h = 0; h->sleep_h = 0;
         break;
     case A_ELDER:
         h->treat = chance(60) ? TR_VITRAGE : chance(70) ? TR_CURTAIN : TR_VENETIAN;
-        h->curtOpen = 1;                       // elderly curtains stay open at dusk
+        h->curtOpen = 1;
         h->sill = chance(82) ? SI_SYMM : SI_RANDOM;
         h->nIt  = 2 + rnd(3);
-        h->lit  = chance(72);
         h->bike = chance(6);
+        h->wake_h  = rnd_float_between(5.5f, 7.0f);
+        h->sleep_h = rnd_float_between(21.0f, 22.5f);
         break;
     case A_COUPLE:
         h->treat = chance(40) ? TR_VENETIAN : chance(50) ? TR_CURTAIN
@@ -88,45 +124,45 @@ static void roll_home(Home *h) {
         h->curtOpen = chance(60);
         h->sill = chance(55) ? SI_SYMM : SI_EMPTY;
         h->nIt  = 1 + rnd(2);
-        h->lit  = chance(68); h->tv = h->lit && chance(25);
         h->bike = chance(16);
+        h->wake_h  = rnd_float_between(6.5f, 8.0f);
+        h->sleep_h = rnd_float_between(22.5f, 24.0f);
         break;
     case A_FAMILY:
         h->treat = chance(50) ? TR_CURTAIN : chance(60) ? TR_ROLLER : TR_VITRAGE;
-        h->curtOpen = chance(35);              // mostly drawn by dusk, kids
+        h->curtOpen = chance(35);
         h->roller = rnd_float_between(0.25f, 0.6f);
-        h->sill = chance(70) ? SI_RANDOM : SI_EMPTY;   // toys, not vases
+        h->sill = chance(70) ? SI_RANDOM : SI_EMPTY;
         h->nIt  = 2 + rnd(3);
-        h->lit  = chance(85); h->tv = h->lit && chance(35);
         h->bike = chance(30);
+        h->wake_h  = rnd_float_between(6.0f, 7.5f);
+        h->sleep_h = rnd_float_between(21.5f, 23.0f);
         break;
     case A_STUDENT:
         h->treat = chance(50) ? TR_NONE : chance(70) ? TR_ROLLER : TR_VENETIAN;
-        h->roller = rnd_float_between(0.3f, 0.7f);     // half-stuck
+        h->roller = rnd_float_between(0.3f, 0.7f);
         h->sill = chance(50) ? SI_EMPTY : SI_RANDOM;
         h->nIt  = 1 + rnd(2);
-        h->lit  = chance(60); h->tv = h->lit && chance(60);
         h->bike = chance(34);
+        h->wake_h  = rnd_float_between(9.0f, 12.0f);
+        h->sleep_h = rnd_float_between(24.0f, 27.0f);  // past midnight
         break;
     }
 
-    // vensterbank item layout (positions in 0..7 inside the 10px window)
     if (h->sill == SI_EMPTY) h->nIt = 0;
     for (int i = 0; i < h->nIt && i < 4; i++) {
         h->itPlant[i] = (h->arch == A_ELDER) ? chance(80)
                       : (h->arch == A_FAMILY) ? chance(25) : chance(45);
         h->itCol[i] = h->itPlant[i] ? (chance(60) ? CLR_BROWN : CLR_LIGHT_GREY)
-            : (h->arch == A_FAMILY) ? CURT[rnd(NCURT)][0]                  // toys
-            : (h->arch == A_STUDENT) ? (chance(50) ? CLR_BROWN : CLR_LIGHT_GREY) // bottles
-            : CLR_LIGHT_GREY;                                              // vases
+            : (h->arch == A_FAMILY) ? CURT[rnd(NCURT)][0]
+            : (h->arch == A_STUDENT) ? (chance(50) ? CLR_BROWN : CLR_LIGHT_GREY)
+            : CLR_LIGHT_GREY;
     }
     if (h->sill == SI_SYMM) {
-        // mirrored around the window center — the deliberate household
         int pos2[2] = { 1, 6 }, pos3[3] = { 1, 3, 6 }, pos4[4] = { 0, 2, 5, 7 };
         int *p = h->nIt <= 2 ? pos2 : h->nIt == 3 ? pos3 : pos4;
         if (h->nIt == 1) h->itX[0] = 3;
         else for (int i = 0; i < h->nIt && i < 4; i++) h->itX[i] = p[i];
-        // symmetry includes the items themselves: mirror plant/color
         for (int i = 0; i < h->nIt / 2; i++) {
             h->itPlant[h->nIt - 1 - i] = h->itPlant[i];
             h->itCol[h->nIt - 1 - i]   = h->itCol[i];
@@ -150,7 +186,6 @@ static void roll_building(void) {
     baseY   = SCREEN_H - GROUND_H - PLINTH_H;
     wallTop = baseY - NF * FH;
 
-    // concrete scheme
     {
         static const int WP[] = {
             CLR_DARK_GREY, CLR_MEDIUM_GREY, CLR_DARKER_GREY,
@@ -177,33 +212,40 @@ static void roll_building(void) {
             roll_home(&homes[f][b]);
 }
 
-void init(void) { roll_building(); }
+void init(void) { tod = TOD_START; roll_building(); }
 
-void update(void) { if (keyp(KEY_SPACE)) roll_building(); }
+void update(void) {
+    tod += TOD_RATE;
+    if (tod >= 24.0f) tod -= 24.0f;
+    if (keyp(KEY_SPACE)) roll_building();
+    if (keyp('T')) { tod += 1.0f; if (tod >= 24.0f) tod -= 24.0f; }
+}
 
-// ── drawing ──────────────────────────────────────────────────────────────────
+// ── drawing ───────────────────────────────────────────────────────────────────
 
-// one kitchen window: glass + light + treatment shaping it + vensterbank
 static void draw_window(Home *h, int f, int b, int wx, int wy) {
-    // wy = top of the WW×WH glass
-    int glass = h->lit ? (h->tv ? CLR_TRUE_BLUE : CLR_LIGHT_YELLOW)
-                       : (h->arch == A_VACANT ? CLR_DARKER_PURPLE : CLR_DARKER_BLUE);
+    int lit  = home_lit(h, tod);
+    int tv   = home_tv(h, tod);
+    int curt = home_curt_open(h, tod);
+
+    int glass = lit ? (tv ? CLR_TRUE_BLUE : CLR_LIGHT_YELLOW)
+                    : (h->arch == A_VACANT ? CLR_DARKER_PURPLE : CLR_DARKER_BLUE);
     rectfill(wx, wy, WW, WH, glass);
-    if (h->tv && h->lit && ((frame() / 3 + f * 13 + b * 7) & 7) < 3)
-        rectfill(wx + 2 + ((frame() / 5 + b) & 3), wy + WH/2, 3, 2, CLR_BLUE);  // flicker
+    if (tv && lit && ((frame() / 3 + f * 13 + b * 7) & 7) < 3)
+        rectfill(wx + 2 + ((frame() / 5 + b) & 3), wy + WH/2, 3, 2, CLR_BLUE);
 
     switch (h->treat) {
     case TR_VITRAGE:
         fillp(0xA5A5, -1);
-        rectfill(wx, wy, WW, WH, h->lit ? CLR_LIGHT_PEACH : CLR_LIGHT_GREY);
+        rectfill(wx, wy, WW, WH, lit ? CLR_LIGHT_PEACH : CLR_LIGHT_GREY);
         fillp_reset();
         break;
     case TR_CURTAIN:
-        if (h->curtOpen) {
-            rectfill(wx, wy, 2, WH, h->lit ? h->tBright : h->tDark);
-            rectfill(wx + WW - 2, wy, 2, WH, h->lit ? h->tBright : h->tDark);
+        if (curt) {
+            rectfill(wx, wy, 2, WH, lit ? h->tBright : h->tDark);
+            rectfill(wx + WW - 2, wy, 2, WH, lit ? h->tBright : h->tDark);
         } else {
-            rectfill(wx, wy, WW, WH, h->lit ? h->tBright : h->tDark);
+            rectfill(wx, wy, WW, WH, lit ? h->tBright : h->tDark);
         }
         break;
     case TR_ROLLER: {
@@ -216,54 +258,47 @@ static void draw_window(Home *h, int f, int b, int wx, int wy) {
         break;
     }
 
-    // vensterbank
-    int closedOff = (h->treat == TR_CURTAIN && !h->curtOpen) ||
+    int closedOff = (h->treat == TR_CURTAIN && !curt) ||
                     (h->treat == TR_ROLLER && h->roller > 0.75f);
     if (!closedOff)
         for (int i = 0; i < h->nIt && i < 4; i++) {
             int ix = wx + 1 + h->itX[i], iy = wy + WH - 1;
-            int sil = h->lit;
-            pset(ix, iy, sil ? CLR_BROWNISH_BLACK : h->itCol[i]);
+            pset(ix, iy, lit ? CLR_BROWNISH_BLACK : h->itCol[i]);
             if (h->itPlant[i])
-                pset(ix, iy - 1, sil ? CLR_BROWNISH_BLACK : CLR_DARK_GREEN);
+                pset(ix, iy - 1, lit ? CLR_BROWNISH_BLACK : CLR_DARK_GREEN);
         }
 }
 
 static void draw_band(int f) {
-    int yb = baseY - f * FH;                       // band bottom
-    // shadow cast by the slab above — dithered strip at band top
+    int yb = baseY - f * FH;
     rectfill(baysX, yb - FH, NB * BW, 1, CLR_DARKER_GREY);
     fillp(0x8888, -1);
     rectfill(baysX, yb - FH + 1, NB * BW, 2, CLR_DARKER_GREY);
     fillp_reset();
-    // gallery slab — the signature horizontal
     rectfill(baysX, yb - SLAB_H, NB * BW, SLAB_H, slabC);
 
     for (int b = 0; b < NB; b++) {
         Home *h = &homes[f][b];
         int x = baysX + b * BW;
-        // front door: SPANDREL gap at top, door height = FH - SLAB_H - SPANDREL
         rectfill(x + BAY_PAD, yb - FH + SPANDREL, DW, FH - SLAB_H - SPANDREL, h->doorCol);
-        pset(x + BAY_PAD + DW - 2, yb - 9, CLR_BROWNISH_BLACK); // letter slot
-        rectfill(x + BAY_PAD + 1, yb - FH + SPANDREL + 1, DW - 2, 3, h->arch == A_VACANT ? h->doorCol : CLR_DARKER_BLUE); // door glass (1px frame at top)
-        // kitchen window
+        pset(x + BAY_PAD + DW - 2, yb - 9, CLR_BROWNISH_BLACK);
+        rectfill(x + BAY_PAD + 1, yb - FH + SPANDREL + 1, DW - 2, 3,
+                 h->arch == A_VACANT ? h->doorCol : CLR_DARKER_BLUE);
         draw_window(h, f, b, x + BAY_PAD + DW + WIN_GAP, yb - FH + SPANDREL);
     }
 
-    // railing in front of everything
     if (railStyle == RAIL_BARS) {
-        rectfill(baysX, yb - 7, NB * BW, 1, CLR_DARK_GREY);      // handrail
+        rectfill(baysX, yb - 7, NB * BW, 1, CLR_DARK_GREY);
         for (int x = baysX; x < baysX + NB * BW; x += 3)
             rectfill(x, yb - 6, 1, 4, CLR_DARK_GREY);
     } else {
-        rectfill(baysX, yb - 7, NB * BW, 1, CLR_LIGHT_GREY);     // handrail
-        rectfill(baysX, yb - 6, NB * BW, 4, panelC);             // corrugated panel
+        rectfill(baysX, yb - 7, NB * BW, 1, CLR_LIGHT_GREY);
+        rectfill(baysX, yb - 6, NB * BW, 4, panelC);
         fillp(0xAAAA, -1);
-        rectfill(baysX, yb - 6, NB * BW, 4, CLR_DARKER_GREY);    // corrugation shading
+        rectfill(baysX, yb - 6, NB * BW, 4, CLR_DARKER_GREY);
         fillp_reset();
     }
 
-    // bikes lean on the railing, in front of it
     for (int b = 0; b < NB; b++)
         if (homes[f][b].bike) {
             int bx = baysX + b * BW + 14 + (b * 7) % 8;
@@ -277,7 +312,6 @@ static void draw_band(int f) {
 static void draw_tower(void) {
     int top = wallTop - 6, bot = SCREEN_H - GROUND_H;
     rectfill(towerX, top, TW, bot - top, towerC);
-    // glazed stairwell strip: the zigzag of flights
     int sx = towerX + 4;
     rectfill(sx, wallTop, 5, baseY - wallTop, CLR_DARKER_BLUE);
     for (int f = 0; f < NF; f++) {
@@ -285,13 +319,11 @@ static void draw_tower(void) {
         if (f & 1) line(sx, yb - 4, sx + 4, yb - FH + 4, CLR_DARK_GREY);
         else       line(sx, yb - FH + 4, sx + 4, yb - 4, CLR_DARK_GREY);
     }
-    // landing windows; the lit one is where the lift car waits
     for (int f = 0; f < NF; f++) {
         int yb = baseY - f * FH;
         rectfill(towerX + 12, yb - 10, 4, 4,
                  f == liftFloor ? CLR_LIGHT_YELLOW : CLR_DARKER_BLUE);
     }
-    // machine room + antenna with its slow red light
     rectfill(towerX + 3, top - 9, TW - 6, 9, CLR_DARKER_GREY);
     line(towerX + TW - 7, top - 9, towerX + TW - 7, top - 17, CLR_DARK_GREY);
     pset(towerX + TW - 7, top - 18, blink(40) ? CLR_RED : CLR_DARK_RED);
@@ -299,30 +331,44 @@ static void draw_tower(void) {
 
 static void draw_plinth(void) {
     rectfill(baysX, baseY, NB * BW, PLINTH_H, CLR_DARKER_GREY);
-    // entrance beside the tower, lit from inside
     int ex = towerLeft ? baysX + 2 : baysX + NB * BW - 14;
-    // bergingen: the row of little storage doors
     for (int x = baysX + 3; x < baysX + NB * BW - 8; x += 10) {
-        if (x > ex - 8 && x < ex + 14) continue;                 // skip the entrance
+        if (x > ex - 8 && x < ex + 14) continue;
         rectfill(x, baseY + 4, 6, 9, CLR_BROWNISH_BLACK);
-        pset(x + 4, baseY + 6, CLR_DARK_GREY);                   // vent
+        pset(x + 4, baseY + 6, CLR_DARK_GREY);
     }
-    rectfill(ex - 1, baseY + 2, 14, 1, slabC);                   // canopy
-    rectfill(ex, baseY + 3, 12, 11, CLR_LIGHT_YELLOW);           // glass doors
-    rectfill(ex + 5, baseY + 3, 1, 11, CLR_DARK_GREY);           // door split
+    rectfill(ex - 1, baseY + 2, 14, 1, slabC);
+    rectfill(ex, baseY + 3, 12, 11, CLR_LIGHT_YELLOW);
+    rectfill(ex + 5, baseY + 3, 1, 11, CLR_DARK_GREY);
     rect    (ex, baseY + 3, 12, 11, CLR_DARK_GREY);
+}
+
+// minimal sky — conveys time of day without distraction; sys 1 is the full treatment
+static void draw_sky(float t) {
+    int horizon = SCREEN_H - GROUND_H;
+    int top, bot;
+    if      (t <  5.5f)  { top = CLR_BLACK;       bot = CLR_DARKER_BLUE;   }  // deep night
+    else if (t <  7.5f)  { top = CLR_DARKER_BLUE;  bot = CLR_DARK_ORANGE;  }  // dawn
+    else if (t < 18.0f)  { top = CLR_BLUE;         bot = CLR_TRUE_BLUE;    }  // day
+    else if (t < 20.5f)  { top = CLR_DARKER_BLUE;  bot = CLR_DARK_PEACH;   }  // dusk
+    else if (t < 22.5f)  { top = CLR_DARK_BLUE;    bot = CLR_DARKER_PURPLE;}  // evening
+    else                 { top = CLR_BLACK;         bot = CLR_DARKER_BLUE;  }  // night
+    gradient(0, 0, SCREEN_W, horizon, top, bot, 90);
 }
 
 void draw(void) {
     cls(0);
     int horizon = SCREEN_H - GROUND_H;
-    gradient(0, 0, SCREEN_W, horizon, CLR_DARKER_BLUE, CLR_DARK_PEACH, 90);
-    for (int i = 0; i < 26; i++)                                  // first stars
-        pset((i * 73 + 19) % SCREEN_W, (i * 41 + 7) % wallTop, i % 4 ? CLR_INDIGO : CLR_LIGHT_GREY);
+    draw_sky(tod);
 
-    // the slab: wall, then the bands of dwellings
+    // stars only at night / dusk
+    if (tod < 7.5f || tod > 19.5f)
+        for (int i = 0; i < 26; i++)
+            pset((i * 73 + 19) % SCREEN_W, (i * 41 + 7) % wallTop,
+                 i % 4 ? CLR_INDIGO : CLR_LIGHT_GREY);
+
+    // wall + tower shadow
     rectfill(baysX, wallTop, NB * BW, baseY - wallTop, wallC);
-    // dithered shadow on facade next to the tower, fading away from it
     {
         int sx = towerLeft ? baysX : baysX + NB * BW - 4;
         int pat[4] = { 0x4444, 0x8888, 0xCCCC, 0xEEEE };
@@ -334,22 +380,28 @@ void draw(void) {
         fillp_reset();
     }
     for (int f = 0; f < NF; f++) draw_band(f);
-    rectfill(baysX - 1, wallTop - 3, NB * BW + 2, 3, slabC);      // roof edge
+    rectfill(baysX - 1, wallTop - 3, NB * BW + 2, 3, slabC);
     draw_tower();
     draw_plinth();
 
-    // ground: pavement + grass strip
+    // ground
     rectfill(0, horizon, SCREEN_W, 5, CLR_DARKER_GREY);
     rectfill(0, horizon + 5, SCREEN_W, GROUND_H - 5, CLR_DARK_GREEN);
-    for (int i = 0; i < nLamp; i++) {                             // lampposts
+    for (int i = 0; i < nLamp; i++) {
         rectfill(lampX[i], horizon - 13, 1, 13, CLR_DARK_GREY);
         pset(lampX[i] + 1, horizon - 13, CLR_DARK_GREY);
         pset(lampX[i] + 2, horizon - 13, CLR_LIGHT_YELLOW);
         pset(lampX[i] + 2, horizon - 12, CLR_LIGHT_YELLOW);
     }
 
-    font(FONT_TINY);
-    print("GALERIJFLAT", 4, SCREEN_H - 6, CLR_MEDIUM_GREY);
-    print_right("SPACE = re-roll", SCREEN_W - 3, SCREEN_H - 6, CLR_DARK_GREY);
-    font(FONT_NORMAL);
+    // HUD — clock + controls
+    {
+        int h24 = (int)tod % 24, m = (int)((tod - (int)tod) * 60.0f);
+        char buf[6] = { '0'+h24/10, '0'+h24%10, ':', '0'+m/10, '0'+m%10, 0 };
+        font(FONT_TINY);
+        print(buf, 4, SCREEN_H - 6, CLR_DARK_GREY);
+        print("GALERIJFLAT", 28, SCREEN_H - 6, CLR_MEDIUM_GREY);
+        print_right("SPACE=re-roll  T=+1h", SCREEN_W - 3, SCREEN_H - 6, CLR_DARK_GREY);
+        font(FONT_NORMAL);
+    }
 }
