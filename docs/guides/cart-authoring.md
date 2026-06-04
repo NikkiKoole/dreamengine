@@ -309,8 +309,18 @@ needed.
 {
   "title": "X. short title",
   "description": "One sentence. What the student learns.",
-  "file": "XX-name.cart.png"
+  "file": "XX-name.cart.png",
+  "kind": ["tutorial"]
 }
+```
+
+Tags are required: `kind[]` always (`tutorial`, `game`, `tech-demo`, `toy`, …),
+`genre` for anything with kind `game` (and optional elsewhere when it aids
+browsing — the platformer tutorials carry `"genre": "platformer"`). The
+vocabulary and rules live in `tools/lint-carts.js`; validate with:
+
+```bash
+node tools/lint-carts.js
 ```
 
 The tutorials panel picks it up automatically on next reload — no code changes needed.

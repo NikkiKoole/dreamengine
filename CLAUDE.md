@@ -72,8 +72,9 @@ eventually2/
 │   │                   #            OUT, RAMP_DARKER, RAMP_LIGHTER
 │   │                   #   require('../sprite-draw.js') from any .cart.js in tools/carts/
 │   │                   #   showcases: foundry (watch each op draw), monstermix (stamp composition)
-│   ├── tag-carts.js    #   one-shot: merge kind[]/genre/homage tags into index.json
-│   │                   #   validates against a controlled vocabulary; run after adding carts
+│   ├── lint-carts.js   #   validate index.json: every cart tagged (kind[] from the
+│   │                   #   vocabulary, genre required for games) + every .cart.png
+│   │                   #   registered. Owns the tag vocabulary; run after adding carts
 │   ├── gen-tcc-symbols.js  # auto-generate runtime/studio_tcc_symbols.h from studio.h
 │   │                   #   the editor's live-host build re-runs it automatically; after
 │   │                   #   editing studio.h, also run it manually so the regenerated
@@ -227,10 +228,18 @@ Source-of-truth files live in `tools/carts/`; the build tool sits beside that fo
    ```bash
    node tools/make-cart.js --run editor/public/carts/<name>.cart.png
    ```
-5. Register it — add an entry to `editor/public/carts/index.json`:
+5. Register it — add an entry to `editor/public/carts/index.json`, **tags included**:
    ```json
-   { "title": "...", "description": "... + controls", "file": "<name>.cart.png" }
+   { "title": "...", "description": "... + controls", "file": "<name>.cart.png",
+     "kind": ["game"], "genre": "arcade" }
    ```
+   `kind[]` is required; games also need a `genre`; optional `homage` credits the
+   original ("Space Invaders (1978)"). Then validate:
+   ```bash
+   node tools/lint-carts.js
+   ```
+   The vocabulary lives at the top of `tools/lint-carts.js` — extending it is fine,
+   in the same commit as the first cart that uses the new value.
 
 **Other `make-cart.js` commands:**
 ```bash
