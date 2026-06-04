@@ -223,6 +223,17 @@ Independently of the above, carts can't author `sfx`/`music` data today. A small
 actually usable from a cart. Low-glamour, decent leverage (unlocks all data-driven
 sound + a future tracker UI to match the sprite editor — already a stated VISION goal).
 
+> **Direction (2026-06-04, leaning — not locked):** prototype this as a **PICO-8-style
+> editor CART first, with zero new engine API.** Draw the pitch contour over steps with
+> the mouse, toggle wave/vol per step (instrument slots 5–15 give each "column" a full
+> voice — richer than PICO-8's fixed waves). Everything needed already ships:
+> **playback** = the cart sequences its own steps with `hit()`, `schedule()`-ed ahead for
+> sample-accurate timing off the beat clock; **persistence** = `save_bytes`/`load_bytes`
+> (the modrack pattern); **into a game** = export-as-C-code (a step array + a ~10-line
+> player), which is the decision-0003 "code-first" answer anyway. Only if the prototype
+> proves the *engine* should own banks (determinism for play.js, a real tracker UI) does
+> `sfx_def()` get built — and the prototype then informs its shape.
+
 ### 5.7 Quick effort/payoff table
 | Idea | Effort | Payoff | New concept? |
 |---|---|---|---|
@@ -744,16 +755,21 @@ where width lives — so resolve stereo before or alongside this layer.
 
 ## 9. Open questions
 
-- **Channels vs. handles** for real-time: commit to fixed channels for simplicity, or
-  pay for handles to support unbounded controllable emitters?
-- **Filter scope:** global-only (simple, SID-like) forever, or eventually per-channel?
-- **Where does duty live** once both exist — an `INSTR_PULSE_*` shortcut *and* an
-  instrument/channel field? (Probably both: constant for the easy path, field for control.)
+- ~~**Channels vs. handles** for real-time~~ — **Resolved (shipped): handles won.**
+  `note_on()` returns a slot+generation handle; stale handles silently no-op. See
+  [`held-notes.md`](held-notes.md).
+- ~~**Filter scope:** global-only or per-channel?~~ — **Resolved (shipped): per-instrument.**
+  Each slot carries its own SVF (`instrument_filter`); 8 SVFs are negligible on desktop.
+- ~~**Where does duty live?**~~ — **Resolved (shipped): on the instrument** (`instrument_duty`)
+  **+ live** (`note_duty`). The `INSTR_PULSE_*` named shortcuts were not added — folded into
+  the zero-setup preset-bank idea (§5.3) if it ever ships.
 - **Stereo?** Everything is mono today. Panning is cheap to add but doubles the mix and
   raises "is it worth the surface?" — likely low leverage for this audience.
-- **Tracker UI**: VISION mentions a sound tracker to match the sprite editor. The
-  instrument bank + cart SFX authoring (§5.4, §5.6) are its prerequisites — design them
-  with that editor in mind.
+- **Tracker UI**: VISION mentions a sound tracker to match the sprite editor.
+  *Direction (2026-06-04):* leaning **PICO-8-style and prototyped as a CART** — draw the
+  pitch contour over steps, toggle wave/vol per step — which needs **no new engine API**
+  (see §5.6). The cart prototype is the cheap way to find out if the editor earns a place
+  before any engine-side bank API is built.
 - **Voice budget:** with held channels reserving voices, do we raise `SOUND_VOICES`, or
   is 8 still plenty once some are long-lived?
 - ~~**Per-voice buffers (§8.2):**~~ **Resolved (2026-06-03): yes** — a `Voice` may carry a small

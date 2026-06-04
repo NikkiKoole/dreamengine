@@ -7,7 +7,7 @@
 > **here**, then fix the prose in the relevant design doc. If a design doc and this file
 > disagree, this file wins.
 
-_Last updated: 2026-06-03 (**sound: modulation envelopes decided as the next feature**, built before the navkit instrument engines — a routable second EG (`instrument_env`, dests `ENV_CUTOFF`/`ENV_PITCH`), the one-shot twin of the LFO; surfaced ear-testing navkit's pluck (filter-env + pitch-env are one primitive). New audio-notes §11; item #5 reordered. Prior same day: Picotron API comparison — added four ideas: `menuitem` folded into the Pause item (#4 — same feature, two ends), frame-spanning **sequence scripts** (#17, kept distinct from the cut DIV process model), **blend tables** (#18 — index-only translucency/fog/additive, the real capability gap), and a **userdata/offscreen-buffer reframe** folded into the rotation-atlas item (#13 — `sset`/canvas/rotation-cache are one general primitive). Sound comparison corrected: Picotron's audio is a deep node-graph synth + tracker, so the real distinction is code-first vs GUI, not depth). Prior: 2026-06-02 (session 14 — `fps()` shipped as the perf read-out; **one-click profiler shipped** (⏱ profile button, see [`guides/profiler.md`](guides/profiler.md)); **off-screen poly bbox clamp shipped** (item 14) — a cliff guard, ~17× on the synthetic stress cart, modest on real carts; `trifill_stress` regression cart added). Prior: session 13 — `fade()` made immediate-mode, fixing a 27-cart stuck-dim bug._
+_Last updated: 2026-06-04 (**sound: mod-envelopes SHIPPED** — `instrument_env`/`note_env` (ENV_CUTOFF/PITCH/DUTY, kinds 18/19) + demo carts `filterenv`/`pitchenv`, wired into modrack (onboard fenv/penv, VCA `a` jack + flat bank, independent clocks, crisp zoom, scaling cables) and the dream synth (AMP/FILTER/PITCH envelope tabs). audio-notes §2 refreshed as the current surface map (32 fns + 32 consts, the 3-way mod matrix); §9 resolved entries struck (handles won, per-instrument filter, duty placement). **SFX authoring direction:** prototype as a PICO-8-style editor cart, zero new engine API (§5.6). Prior 2026-06-03: **modulation envelopes decided as the next feature**, built before the navkit instrument engines — a routable second EG (`instrument_env`, dests `ENV_CUTOFF`/`ENV_PITCH`), the one-shot twin of the LFO; surfaced ear-testing navkit's pluck (filter-env + pitch-env are one primitive). New audio-notes §11; item #5 reordered. Prior same day: Picotron API comparison — added four ideas: `menuitem` folded into the Pause item (#4 — same feature, two ends), frame-spanning **sequence scripts** (#17, kept distinct from the cut DIV process model), **blend tables** (#18 — index-only translucency/fog/additive, the real capability gap), and a **userdata/offscreen-buffer reframe** folded into the rotation-atlas item (#13 — `sset`/canvas/rotation-cache are one general primitive). Sound comparison corrected: Picotron's audio is a deep node-graph synth + tracker, so the real distinction is code-first vs GUI, not depth). Prior: 2026-06-02 (session 14 — `fps()` shipped as the perf read-out; **one-click profiler shipped** (⏱ profile button, see [`guides/profiler.md`](guides/profiler.md)); **off-screen poly bbox clamp shipped** (item 14) — a cliff guard, ~17× on the synthetic stress cart, modest on real carts; `trifill_stress` regression cart added). Prior: session 13 — `fade()` made immediate-mode, fixing a 27-cart stuck-dim bug._
 
 ---
 
@@ -137,7 +137,11 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
    demo/preset carts on existing API (§8.9); and **`INSTR_SINE` = Additive at harmonics 0**, so
    it ships now and the future Additive engine subsumes the MT70/sine family via macros.
    Also still open: zero-setup **preset instruments** (`INSTR_PLUCK`/`PAD`/…) and cart-side
-   **SFX/pattern authoring** (banks are hardcoded today).
+   **SFX/pattern authoring** (banks are hardcoded today) — *direction 2026-06-04: prototype
+   as a PICO-8-style editor CART first (draw the pitch contour, toggle per step), zero new
+   engine API — hit()/schedule() + beat clock for playback, save_bytes for persistence,
+   export-as-C-code into games; `sfx_def()` only if the prototype proves the engine should
+   own banks. See audio-notes §5.6 direction note.*
    ⚠️ The port touches `runtime/sound.h`/`studio.c` — shared with the live/libtcc runtime work;
    sync before starting. [`design/audio-notes.md`](design/audio-notes.md) §5–8, [`design/held-notes.md`](design/held-notes.md).
 6. **Sprite flags** — `fget`/`fset` (per-sprite 8-bit flags; 256 bytes). Pairs with an
@@ -154,8 +158,10 @@ Ordered by leverage. Section refs point at the design doc that specs each item.
    [`guides/sharing.md`](guides/sharing.md).
 11. **iPad runtime** — touch is wired in the runtime; needs a build path. [`VISION.md`](VISION.md).
 12. **Sound tracker UI** — open question; depends on whether code-first sound proves
-    sufficient. Prereq is cart-side SFX authoring (the instrument bank itself shipped).
-    [`VISION.md`](VISION.md), [`design/audio-notes.md`](design/audio-notes.md) §5.6.
+    sufficient. *Direction 2026-06-04: leaning PICO-8-style, prototyped as a CART with
+    zero new engine API (see #5 + audio-notes §5.6) — the cheap way to find out if the
+    editor earns a place before any engine-side bank API exists.*
+    [`VISION.md`](VISION.md), [`design/audio-notes.md`](design/audio-notes.md) §5.6, §9.
 
 13. **Baked rotation atlas** *(exploratory — full design note, not yet started)* — an
     offscreen-canvas primitive (`make_canvas`/`target`/`blit`) plus pre-rotated sprite/shape
