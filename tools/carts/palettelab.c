@@ -47,7 +47,8 @@
 // c1 color (base_palette stays the texel-matching key) — scenes avoid pal().
 //
 // CONTROLS: 1-9 palette · LEFT/RIGHT scene · D dither-fake vs real blend ·
-// C glass color · T cycle AVG/ADD/MUL in the table view · mouse = glow/pane.
+// C glass presets, MOUSE WHEEL scrubs the pane through every live slot (incl.
+// the upper 32) · T cycle AVG/ADD/MUL in the table view · mouse = glow/pane.
 
 // ---- the shipped palette, for the blend tables + completeness -----------
 static const int PAL_PICO[32] = {
@@ -178,7 +179,8 @@ static int cur_hex[64];    // active palette as hexes — feeds the blend tables
 static int scene;
 #define NSCENES 6
 static int dither_fake;    // D — draw the blend shapes the way carts fake them today
-static int glass_i;        // C — which glass color
+static int glass_i;        // C — jump between glass color presets
+static int glass_c = CLR_WHITE;  // the pane's actual color — WHEEL scrubs it through every live slot
 static int table_i;        // T — which table the grid shows
 
 static const int  GLASS_CLR[6] = { CLR_RED, CLR_TRUE_BLUE, CLR_YELLOW, CLR_MEDIUM_GREEN, CLR_WHITE, CLR_BLACK };
@@ -400,11 +402,14 @@ static void scene_glass(void) {
     if (dither_fake) { fillp(FILL_CHECKER, -1); rectfill(0, 150, SCREEN_W, 36, CLR_LIGHT_GREY); fillp_reset(); }
     else             brect(0, 150, SCREEN_W, 36, CLR_LIGHT_GREY, t_avg, day_at);   // fog band
     int mx = clamp(mouse_x(), 40, SCREEN_W - 40), my = clamp(mouse_y(), 50, SCREEN_H - 50);
-    int gc = GLASS_CLR[glass_i];                              // the pane on your mouse
+    int gc = glass_c;                                         // the pane on your mouse
     if (dither_fake) { fillp(FILL_CHECKER, -1); rectfill(mx - 38, my - 28, 76, 56, gc); fillp_reset(); }
     else             brect(mx - 38, my - 28, 76, 56, gc, t_avg, day_at);
     rect(mx - 38, my - 28, 76, 56, gc);
-    print(GLASS_NM[glass_i], mx - 34, my - 24, gc == CLR_BLACK ? CLR_WHITE : gc);
+    // label: slot number (+ preset name when it matches one); swatch beside it
+    const char *nm = "";
+    for (int i = 0; i < 6; i++) if (GLASS_CLR[i] == gc) nm = GLASS_NM[i];
+    print(str("%d %s", gc, nm), mx - 34, my - 24, gc == CLR_BLACK ? CLR_WHITE : gc);
 }
 
 // ---- scene 5: the raw table — eyeball where the snap bands --------------
@@ -436,8 +441,14 @@ void update(void) {
     if (keyp(KEY_RIGHT)) scene = (scene + 1) % NSCENES;
     if (keyp(KEY_LEFT))  scene = (scene + NSCENES - 1) % NSCENES;
     if (keyp('D')) dither_fake = !dither_fake;
-    if (keyp('C')) glass_i = (glass_i + 1) % 6;
+    if (keyp('C')) { glass_i = (glass_i + 1) % 6; glass_c = GLASS_CLR[glass_i]; }
     if (keyp('T')) table_i = (table_i + 1) % 3;
+    // mouse wheel scrubs the pane through EVERY live slot (incl. the upper 32) —
+    // the quick "what does each palette color do as glass?" tour
+    float w = mouse_wheel();
+    if (w > 0.01f)  glass_c = (glass_c + 1) % pal_n;
+    if (w < -0.01f) glass_c = (glass_c + pal_n - 1) % pal_n;
+    if (glass_c >= pal_n) glass_c = pal_n - 1;   // palette switch 64 -> 32
 }
 
 void draw(void) {
@@ -458,6 +469,6 @@ void draw(void) {
                     snames[scene], scene + 1, NSCENES), 316, 2, CLR_LIGHT_GREY);
     font(FONT_SMALL);
     rectfill(0, 193, SCREEN_W, 7, CLR_BLACK);
-    print("1-9 palette  LEFT/RIGHT scene  D fake/real  C glass  T table", 4, 194, CLR_MEDIUM_GREY);
+    print("1-9 palette  LEFT/RIGHT scene  D fake/real  C/WHEEL glass  T table", 4, 194, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 }
