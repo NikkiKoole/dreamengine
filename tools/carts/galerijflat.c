@@ -45,7 +45,6 @@ typedef struct {
     int   sill, nIt;
     int   itX[4], itPlant[4], itCol[4];
     int   doorCol;
-    int   bike;
     float wake_h, sleep_h;
 } Home;
 
@@ -196,7 +195,7 @@ static void roll_home(Home *h) {
         h->curtOpen = 1;
         h->sill = chance(82) ? SI_SYMM : SI_RANDOM;
         h->nIt  = 2 + rnd(3);
-        h->bike = chance(6);
+
         h->wake_h  = rnd_float_between(5.5f, 7.0f);
         h->sleep_h = rnd_float_between(21.0f, 22.5f);
         break;
@@ -206,7 +205,7 @@ static void roll_home(Home *h) {
         h->curtOpen = chance(60);
         h->sill = chance(55) ? SI_SYMM : SI_EMPTY;
         h->nIt  = 1 + rnd(2);
-        h->bike = chance(16);
+
         h->wake_h  = rnd_float_between(6.5f, 8.0f);
         h->sleep_h = rnd_float_between(22.5f, 24.0f);
         break;
@@ -216,7 +215,7 @@ static void roll_home(Home *h) {
         h->roller = rnd_float_between(0.25f, 0.6f);
         h->sill = chance(70) ? SI_RANDOM : SI_EMPTY;
         h->nIt  = 2 + rnd(3);
-        h->bike = chance(30);
+
         h->wake_h  = rnd_float_between(6.0f, 7.5f);
         h->sleep_h = rnd_float_between(21.5f, 23.0f);
         break;
@@ -225,7 +224,7 @@ static void roll_home(Home *h) {
         h->roller = rnd_float_between(0.3f, 0.7f);
         h->sill = chance(50) ? SI_EMPTY : SI_RANDOM;
         h->nIt  = 1 + rnd(2);
-        h->bike = chance(34);
+
         h->wake_h  = rnd_float_between(9.0f, 12.0f);
         h->sleep_h = rnd_float_between(24.0f, 27.0f);
         break;
@@ -389,14 +388,6 @@ static void draw_band(int f) {
         fillp_reset();
     }
 
-    for (int b = 0; b < NB; b++)
-        if (homes[f][b].bike) {
-            int bx = baysX + b * BW + 14 + (b * 7) % 8;
-            pset(bx, yb - 3, CLR_BROWNISH_BLACK); pset(bx + 4, yb - 3, CLR_BROWNISH_BLACK);
-            line(bx, yb - 3, bx + 2, yb - 5, CLR_BROWNISH_BLACK);
-            line(bx + 2, yb - 5, bx + 4, yb - 3, CLR_BROWNISH_BLACK);
-            pset(bx + 2, yb - 6, CLR_BROWNISH_BLACK);
-        }
 }
 
 static void draw_tower(void) {
