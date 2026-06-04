@@ -2219,5 +2219,15 @@
       "instrument"
     ],
     "homage": "King Tubby / Augustus Pablo (dub)"
+  },
+  {
+    "title": "ymo radio",
+    "description": "Endless techno-kayo - the Yellow Magic Orchestra homage (Hosono/Sakamoto/Takahashi), eighth of the radio family, and the one genre where the synth isn't imitating anything: square waves and white noise ARE the original instruments. Sakamoto harmony as templates (the chromatic mediant 'Tong Poo' pull, maj7 planing in whole steps, the kayo minor cadence with its harmonic-minor V), a HOSONO BASSLINE GENERATOR (melodic 8th-note counterpoint with directional inertia and octave leaps - the bassline is a second melody), yonanuki pentatonic lead, a sequencer arp ticking chord tones, and drum voices ON LOAN FROM THE CR-78 CART (cr78.c's circuit recipes: soft round kick, two-layer snare, the swishy hats, the metallic clang) driven by machine-tight pattern strings. No swing, no lag - it's 1979 and the machine is the point. Seed on display (YMO_SEED / R / [ ] history), T tone, H help. Worked example #8 for docs/guides/game-music.md.",
+    "file": "ymo.cart.png",
+    "kind": [
+      "toy",
+      "instrument"
+    ],
+    "homage": "Yellow Magic Orchestra (techno-kayo)"
   }
 ]

@@ -428,6 +428,7 @@ What changes between styles is mostly **data** — the engine above carries over
 | **boom-bap (ATCQ)** | 88–97 | full groove template (hats −8ms, snare +22ms, bass +12ms, swing 57%), NO tempo drift | sampled loop: modal-mixture maj9 pool, 9sus dominant, 2/3/4-bar cut, rotated | voice-led upright bass (the star), layered snare, dusty kick, tremolo rhodes, vinyl dust | ✅ `lowend.c` |
 | **city pop (Yamashita)** | 104–118 | session-TIGHT (±2ms only); the anti-lowend | stolen playbook: royal road (IV–V–iii–vi), JTTOU loops, borrowed iv; final chorus +2 gear change | octave-pop disco bass w/ chromatic runs, 16th gtr chucks (lay out at bar turns!), saw brass anticipations, bright kit w/ open hat | ✅ `citypop.c` |
 | **dub (King Tubby)** | 66–80 | one-drop/rockers/steppers; echo as scheduled notes (dotted-8th taps) | 1-2 minor chords (i, iv, bVII); the seeded pentatonic RIDDIM bassline is the song | deep sine bass, skank chops, organ bubble, echoed melodica, rim throws, siren; THE DESK rides layers per phrase (performance, not seed) | ✅ `dub.c` |
+| **techno-kayō (YMO)** | 112–132 | machine-tight ±2ms, pattern strings (cr78.c format) | Sakamoto templates: chromatic mediant pull, maj7 planing, kayō minor cadence (harmonic-minor V), bright I–bVII–IV–V | Hosono bassline GENERATOR (melodic counterpoint w/ inertia + octave leaps), yonanuki pent lead, sequencer arp, CR-78 drum circuits on loan from `cr78.c` | ✅ `ymo.c` |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
@@ -450,12 +451,10 @@ and Sakamoto unprompted.
 1. ~~**Dub reggae**~~ — ✅ shipped as `dub.c`, and the engine-fit prediction held:
    echo via `schedule_hit` and the desk-as-instrument both worked first try.
    Kept here as the reference case for what "best engine fit" means.
-2. **YMO / techno-kayō synthpop** — the Hosono/Sakamoto thread. The only genre
-   where our synth isn't *imitating* the source instruments — square waves and
-   white noise ARE the original instruments. Sakamoto harmony is codifiable
-   (chromatic mediant moves, maj7 planing, the "Tong Poo" pull), Hosono basslines
-   are melodic counterpoint (a real bassline *generator*, not patterns), drums
-   are a literal drum machine — tight, dry, iconic. Pairs with the CR-78 cart.
+2. ~~**YMO / techno-kayō synthpop**~~ — ✅ shipped as `ymo.c`, with the drum
+   circuits on loan from `cr78.c` exactly as hoped. The native-timbre prediction
+   held too; the Hosono bassline generator (counterpoint with inertia) is the
+   reusable new block.
 3. **Ethio-jazz (Mulatu Astatke)** — the deepest crate. The whole genre is
    **scales as data**: tizita, bati, anchihoye — pentatonic modes that sound like
    nothing else on the dial, over hypnotic minor vamps with horns and
