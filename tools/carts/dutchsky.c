@@ -38,10 +38,6 @@ static float sky_dark(float t) {
     return d > 0.55f ? (d - 0.55f) / 0.45f : 0.0f;
 }
 
-static int sky_col_at(float rt, const SkyKey *k) {
-    return rt < 0.40f ? k->top : rt < 0.65f ? k->mid : k->bot;
-}
-
 static void sky_find(float t, int *ai, int *bi, float *frac) {
     *ai = 0;
     for (int i = 0; i < NK - 2; i++) if (t >= SK[i+1].t) *ai = i + 1;
@@ -52,12 +48,13 @@ static void sky_find(float t, int *ai, int *bi, float *frac) {
     if (*frac > 1.0f) *frac = 1.0f;
 }
 
-// ── draw_atm: 3-stop sky gradient, scanline-blended between keyframes ─────────
+// ── draw_atm: A's smooth gradient + B overlaid via fillp ─────────────────────
 //
-// vgradient() sets its own fillp per-row internally, so overlaying a second
-// vgradient with an external fillp has no effect. Workaround: draw the dominant
-// keyframe's full gradient via vgradient, then paint every Nth row with the
-// other keyframe's color using plain rectfill — no fillp interaction.
+// vgradient() overrides fillp internally per-row, so we can't blend two
+// vgradients with an external fillp. Fix: draw A with vgradient (smooth),
+// then overlay B as 3 solid rectfills (top/mid/bot zones) with fillp(-1) as
+// the hole colour — the transparent holes show A's gradient underneath.
+// 5 dither steps cover 12%→87% B coverage; frac≥0.97 switches to full B.
 
 static void draw_atm(int y0, int h, float t) {
     if (h <= 1) return;
@@ -69,30 +66,38 @@ static void draw_atm(int y0, int h, float t) {
     if (mid_y <= y0)   mid_y = y0 + 1;
     if (mid_y >= y0+h) mid_y = y0 + h - 1;
 
-    if (frac <= 0.5f) {
-        vgradient(0, y0, SCREEN_W, mid_y - y0,   a->top, a->mid);
-        vgradient(0, mid_y, SCREEN_W, y0+h-mid_y, a->mid, a->bot);
-        if (frac > 0.05f) {
-            int skip = (int)(0.5f / frac + 0.5f);
-            if (skip < 1) skip = 1;
-            for (int r = 0; r < h; r += skip) {
-                float rt = (float)r / (h > 1 ? (float)(h-1) : 1.0f);
-                rectfill(0, y0+r, SCREEN_W, 1, sky_col_at(rt, b));
-            }
-        }
-    } else {
+    if (frac >= 0.97f) {
         vgradient(0, y0, SCREEN_W, mid_y - y0,   b->top, b->mid);
         vgradient(0, mid_y, SCREEN_W, y0+h-mid_y, b->mid, b->bot);
-        float inv = 1.0f - frac;
-        if (inv > 0.05f) {
-            int skip = (int)(0.5f / inv + 0.5f);
-            if (skip < 1) skip = 1;
-            for (int r = 0; r < h; r += skip) {
-                float rt = (float)r / (h > 1 ? (float)(h-1) : 1.0f);
-                rectfill(0, y0+r, SCREEN_W, 1, sky_col_at(rt, a));
-            }
-        }
+        return;
     }
+
+    // A's smooth gradient — always the base
+    vgradient(0, y0, SCREEN_W, mid_y - y0,   a->top, a->mid);
+    vgradient(0, mid_y, SCREEN_W, y0+h-mid_y, a->mid, a->bot);
+
+    if (frac < 0.03f) return;
+
+    // B overlay: 3 solid colour zones with fillp holes showing A through.
+    // 0-bits = draw col_b, 1-bits = -1 = transparent (A gradient shows).
+    // Steps:  ~12%     25%     50%     75%     87%  B coverage
+    // 0x7DBE / 0x8241 are dispersed complements — one B pixel per row per col,
+    // no vertical or horizontal stripes. 0xA5A5 = canonical PICO-8 checker.
+    static const int BPAT[5] = { 0xF7F7, 0x7DBE, 0xA5A5, 0x8241, 0x0808 };
+    int pi = (int)(frac * 5.0f);
+    if (pi > 4) pi = 4;
+
+    int z1 = y0 + h * 31 / 100;   // top→mid zone boundary
+    int z2 = y0 + h * 75 / 100;   // mid→bot zone boundary
+    if (z1 <= y0)   z1 = y0 + 1;
+    if (z2 <= z1)   z2 = z1 + 1;
+    if (z2 >= y0+h) z2 = y0 + h - 1;
+
+    fillp(BPAT[pi], -1);
+    rectfill(0, y0, SCREEN_W, z1 - y0,    b->top);
+    rectfill(0, z1, SCREEN_W, z2 - z1,    b->mid);
+    rectfill(0, z2, SCREEN_W, y0+h - z2,  b->bot);
+    fillp_reset();
 }
 
 // ── stars ─────────────────────────────────────────────────────────────────────
