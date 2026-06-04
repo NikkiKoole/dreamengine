@@ -205,6 +205,61 @@ behind them. A stranger reading the facade should be able to guess.
 - **Day rhythm per archetype**: who's lit at 7:00 (family kitchen) vs 01:00
   (student) — the facade patchwork becomes *legible* once you know the codes.
 
+### 6. The daily round — residents on the clock
+
+The inhabitants (sys 5) aren't decor states; they're **little agents on the
+day clock (sys 1), going about their business** — and the building's state
+changes because *they* change it.
+
+- **A routine per resident** (state machine, archetype-flavored): asleep →
+  wake → kitchen → out the door → **walk the gallery** → **lift down** →
+  away → lift up → gallery walk home → living room / TV → **sit on the
+  balcony** (other side, nice weather) → curtains closed → bed.
+- **Visible behaviors** (the full vocabulary so far):
+  - *moving inside* — a figure silhouette crossing a lit window, room to
+    room (kitchen ↔ living room = the two faces of sys 4)
+  - *opening/closing curtains & blinds* — sys 2's state changes get an
+    actor: a figure at the window just before it happens
+  - *turning lights on/off* — ditto; rooms go lit/dark because someone did it
+  - *gallery walks* — out the front door, along the band, to the lift
+  - *balcony sitting* — the back-side counterpart; a chair, a still figure
+  - *entering/leaving the building* — at the plinth, via the **elevator**;
+    the lift indicator climbing to floor 7 *means someone is coming home*
+- **Causality as the design law**: ideally no light flips and no curtain
+  moves without a resident plausibly there. The patchwork stops being random
+  twinkle and becomes *testimony* — you saw her walk the gallery, the door
+  closed, the kitchen lit up.
+- **Engine gap, parked**: lights/glow want some kind of **blend / additive
+  API** for soft light falloff — none exists yet; another agent is looking
+  into it. Until then: hard palette fills + fillp dithers (which may be
+  plenty, and is period-appropriate anyway).
+
+### 7. The elevator — a real one
+
+Promoted out of sys 6 because it **has to actually work**: a simulated lift,
+not an animation. People **queue for it, wait, board, and ride to the floor
+they want** — it's the building's circulation pump and its metronome.
+
+- **A real state machine**: the car has a floor, a direction, a door state
+  (opening/open/closing/closed), and a **call queue**. Residents press a
+  call; the car serves calls in a sane order (classic elevator algorithm:
+  keep going in one direction while there are calls ahead, then reverse).
+- **Queueing is visible**: residents wait *at the lift door on their floor*
+  (gallery side) or at the plinth — one figure standing, then two, a little
+  cluster at 8:00 rush. Boarding: doors open, waiters step in, doors close.
+  Someone arriving as doors close waits for the next round trip.
+- **Riding**: a boarded resident is *in* the car (invisible), gets out at
+  their destination floor and continues their routine (gallery walk home,
+  or out the plinth into the world).
+- **Readable from the facade**: the indicator light climbing the tower, the
+  pause at floor 7, the cluster dissolving — regulars (the player) learn to
+  read who's coming and going. Morning down-rush and evening up-rush emerge
+  from sys 5 schedules for free.
+- **Sound hooks**: the ding, door rumble, the hum while travelling (sys 1's
+  audio bed). The ding at night when everything is quiet = pure atmosphere.
+- Capacity, a second car, or a broken-lift day ("DEFECT" sign, everyone
+  takes the stairs) are flavor options, not core.
+
 *(list to be continued in a future session)*
 
 ## Open questions (for the next sessions)
