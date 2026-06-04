@@ -142,6 +142,7 @@ static int    melPitch   = 79;       // melody walker position
 static bool   melOn      = true;     // does the cell play this 2-bar instance?
 static float  vu         = 0;        // VU needle drive
 static char   nowChord[3][8];        // prev / current / next chord names for the display
+static bool   showHelp   = false;    // H or the ? button
 
 static int iabs(int v) { return v < 0 ? -v : v; }
 
@@ -400,6 +401,11 @@ void update(void) {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;        // rejoin the broadcast mid-song
     }
+    if (keyp('H')) showHelp = !showHelp;
+    if (mouse_pressed(MOUSE_LEFT)) {       // the little ? button on the chassis
+        int hx = mouse_x() - 288, hy = mouse_y() - 172;
+        if (hx * hx + hy * hy < 81) showHelp = !showHelp;
+    }
 
     if (radioOn) {
         long target = (long)pos + 1;       // schedule one step ahead of the clock
@@ -506,6 +512,33 @@ void draw(void) {
     knob(270, 148, 11, vt > 1 ? 1 : vt, "vu", CLR_RED);
     circfill(282, 28, 2, radioOn && beat_pos() < 0.25f ? CLR_RED : CLR_DARK_RED);
 
-    if (blink(180)) print("SPACE next  R again  [] hist  M power", 8, 190, CLR_DARK_GREY);
-    else            print("<> feel  ^v tempo  #seed pins the tune", 8, 190, CLR_DARK_GREY);
+    // help button + bottom hint
+    circfill(288, 172, 6, CLR_DARK_BROWN);
+    circ(288, 172, 6, CLR_BLACK);
+    print("?", 285, 169, CLR_LIGHT_PEACH);
+    print("SPACE next song   H help", 8, 190, CLR_DARK_GREY);
+
+    if (showHelp) {
+        rectfill(44, 40, 232, 122, CLR_BLACK);
+        rect(44, 40, 232, 122, CLR_LIGHT_PEACH);
+        print("BOSSA RADIO", 52, 46, CLR_LIGHT_PEACH);
+        font(FONT_SMALL);
+        static const char *HELP[7][2] = {
+            { "SPACE",      "next song (rolls a new seed)" },
+            { "R",          "same song again - a fresh take" },
+            { "[ / ]",      "back / forward through history" },
+            { "LEFT/RIGHT", "feel - how many layers play" },
+            { "UP/DOWN",    "tempo of this tune" },
+            { "M",          "radio power on / off" },
+            { "H or ?",     "show / hide this help" },
+        };
+        for (int i = 0; i < 7; i++) {
+            print(HELP[i][0], 52, 60 + i * 9, CLR_YELLOW);
+            print(HELP[i][1], 106, 60 + i * 9, CLR_WHITE);
+        }
+        print("the #number on the display IS the song.", 52, 128, CLR_PEACH);
+        print("pin it for good: #define BOSSA_SEED 0x...", 52, 137, CLR_PEACH);
+        print("seeded composition, played fresh every time", 52, 146, CLR_PEACH);
+        font(FONT_NORMAL);
+    }
 }

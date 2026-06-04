@@ -69,6 +69,7 @@ static int    chordIdx  = 0;
 static double changeAt  = 0;     // beat position of the next chord change
 static int    songCount = 0;
 static char   nowChord[2][8];    // current / next chord names
+static bool   showHelp  = false; // H or the ? button
 
 // held-voice state
 static int   padH[4] = { -1, -1, -1, -1 }, subH = -1, windH = -1;
@@ -279,6 +280,11 @@ void update(void) {
         if (!radioOn) stop_voices();
         else { changeAt = pos; if (chordIdx >= 0) chordIdx--; }   // re-enter on a change
     }
+    if (keyp('H')) showHelp = !showHelp;
+    if (mouse_pressed(MOUSE_LEFT)) {       // the little ? button on the chassis
+        int hx = mouse_x() - 288, hy = mouse_y() - 172;
+        if (hx * hx + hy * hy < 81) showHelp = !showHelp;
+    }
 
     if (radioOn && pos >= changeAt) {
         chordIdx++;
@@ -380,11 +386,38 @@ void draw(void) {
     // knobs + slow-breathing power LED (no beat to blink to)
     static const char *FEEL[4] = { "void", "night", "dawn", "aurora" };
     knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_BLUE);
-    knob(226, 148, 9, (pace - 0.55f) / 1.2f, "pace", CLR_BLUE);
+    knob(218, 148, 9, (pace - 0.55f) / 1.2f, "pace", CLR_BLUE);
     float breathe = 0.5f + 0.5f * sinf(t * 0.8f);
-    knob(270, 148, 11, radioOn ? breathe : 0, "drift", CLR_RED);
+    knob(262, 148, 11, radioOn ? breathe : 0, "drift", CLR_RED);
     circfill(282, 28, 2, radioOn && breathe > 0.5f ? CLR_RED : CLR_DARK_RED);
 
-    if (blink(180)) print("SPACE next  R again  [] hist  M power", 8, 190, CLR_DARK_GREY);
-    else            print("<> feel  ^v pace  #seed pins the dream", 8, 190, CLR_DARK_GREY);
+    // help button + bottom hint
+    circfill(288, 172, 6, CLR_DARK_PURPLE);
+    circ(288, 172, 6, CLR_BLACK);
+    print("?", 285, 169, CLR_LIGHT_GREY);
+    print("SPACE next song   H help", 8, 190, CLR_DARK_GREY);
+
+    if (showHelp) {
+        rectfill(44, 40, 232, 122, CLR_BLACK);
+        rect(44, 40, 232, 122, CLR_INDIGO);
+        print("AMBIENT RADIO", 52, 46, CLR_BLUE);
+        font(FONT_SMALL);
+        static const char *HELP[7][2] = {
+            { "SPACE",      "next song (rolls a new seed)" },
+            { "R",          "same dream again - a fresh night" },
+            { "[ / ]",      "back / forward through history" },
+            { "LEFT/RIGHT", "feel - void/night/dawn/aurora" },
+            { "UP/DOWN",    "pace - how fast chords drift" },
+            { "M",          "radio power on / off" },
+            { "H or ?",     "show / hide this help" },
+        };
+        for (int i = 0; i < 7; i++) {
+            print(HELP[i][0], 52, 60 + i * 9, CLR_BLUE);
+            print(HELP[i][1], 106, 60 + i * 9, CLR_LIGHT_GREY);
+        }
+        print("the #number on the display IS the song.", 52, 128, CLR_INDIGO);
+        print("pin it for good: #define AMBIENT_SEED 0x...", 52, 137, CLR_INDIGO);
+        print("seeded composition, plays fresh every night", 52, 146, CLR_INDIGO);
+        font(FONT_NORMAL);
+    }
 }
