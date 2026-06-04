@@ -1,7 +1,7 @@
 # galerijflat — an experimental/arty cart (design seed)
 
-**Status: building — step 1 (static facade) is WIP.** Cart:
-`tools/carts/galerijflat.c` (unregistered, debug guards in). This doc is the
+**Status: building — step 4 (facade detail pass) complete.** Cart:
+`tools/carts/galerijflat.c`, registered in `index.json`, clean. This doc is the
 shared understanding for a cart designed/built across multiple sessions.
 Decisions are marked ✓. **Next agent: start at "Handoff" at the bottom.**
 
@@ -275,21 +275,20 @@ they want** — it's the building's circulation pump and its metronome.
 
 ## Open questions (for the next sessions)
 
-1. **Time**: a real slow day/night cycle (the facade as a clock — dawn greys,
-   dusk patchwork of lights, deep-night near-dark)? Or fixed golden-hour/dusk?
-   Dusk-into-night is where the window-patchwork shines.
-2. **Simulation depth**: pure stochastic twinkle vs. tiny resident agents with
-   schedules (leave for work, return, TV, bed). Agents give the lift/gallery
-   walks meaning; trafficjam shows the per-entity-struct pattern.
+1. ✓ **Time**: implemented — `tod` clock, archetype wake/sleep schedules,
+   `t_avg` global tint per time slot. Building reads very differently at 02:00
+   vs 08:00 vs 20:00.
+2. **Simulation depth**: schedules are in; the next layer is tiny resident
+   agents actually walking — gallery walkers are the main "alive" signal still
+   missing (next build step).
 3. **Interactivity**: pure ambient watch-piece, or light mouse play — hover a
    window to hear/see a hint of that household, click to ring a doorbell?
    (Mouse API is in: `mouse_x/y`, `mouse_pressed`; see orion for patterns.)
 4. **Sound**: wind (the galerij is windy!), distant traffic, doors, lift ding,
    snippets of TV/radio from lit windows. The audio API has instruments +
    filters (see trafficjam's engine drone for the ambient-bed pattern).
-5. **Generativity**: re-roll the building (storeys, bays, railing style,
-   concrete tint, which households exist) on SPACE, like trafficjam re-rolls
-   the fleet?
+5. ✓ **Generativity**: SPACE re-rolls the building (bays, wall palette, railing
+   colour, door colour, household identities).
 6. **Title**: working name `galerijflat`. Alternatives: `galerij`, `de flat`,
    `tien hoog` ("ten storeys up").
 
@@ -445,7 +444,7 @@ drawn before vensterbank items so plants/vases sit on top.
 ## Handoff — next agent starts here (2026-06-04, session 4 complete)
 
 **Repo state.** `tools/carts/galerijflat.c`, in `index.json`, clean.
-Latest commit: `e54d940`.
+Latest commit: `e54d940` (cart) / `f950d4a` (doc).
 
 **The bake loop** (~10s per iteration):
 ```bash
