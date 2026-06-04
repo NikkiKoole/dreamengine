@@ -348,6 +348,26 @@ their `kind[]` tags.
     OCT/ACC/SLD flag rows, and an N-key random acid-line generator (root-heavy minor
     pentatonic). The classic-machine family is now cr78 + tr808 + tb303.
 
+21. **More classic boxes — the museum shortlist** *(cart-space, zero engine API — parked
+    2026-06-05; the family so far is cr78 + tr808 + tb303, all in `tools/carts/`)*. Curated by
+    API fit; the curatorial line is **analog-circuit machines only** — sample/tape boxes
+    (LinnDrum, DMX, SP-1200, Mellotron) would be caricatures since the engine has no sample
+    playback. Ranked:
+    - **TR-606 Drumatix (1981)** — first pick: the TB-303's actual companion (sold as a silver
+      pair, sync'd together); all-analog, same six-oscillator metal-bank trick as the 808, both
+      cart templates already exist. An afternoon.
+    - **TR-909 (1983)** — analog kick/snare/toms doable (house kick = pitch-swept sine + click);
+      hats/cymbals are 6-bit samples → honest fakes. Completes the swing-knob saga: the 909 is
+      where real shuffle arrived at Roland.
+    - **EKO ComputeRhythm (1972)** — Jarre's punch-card programmable box; UI gimmick = draw the
+      punch card. Pre-dates the CR-78's "first programmable" claim by six years.
+    - **Wurlitzer Sideman (1959)** — the FIRST rhythm machine: tubes + rotating contact wheel;
+      UI = a circular playhead instead of left-to-right. Oldest piece by two decades.
+    - **Casio VL-1 (1979)** — "Da Da Da"; calculator keys + the 8-digit ADSR number code you
+      literally type to design a sound.
+    - **Maestro Rhythm King (1970)** — Sly Stone's funk preset box; simpler/weirder than CR-78.
+    - **Stylophone (1968)** — mouse-as-stylus, ~20 lines, instant Bowie.
+
 > `tritex` (affine textured triangle) shipped in session 8 — it was Open here; now in the API.
 
 **Smaller open items (no design doc yet):** looping ambience (`drone`)/`volume`/mute. Noted
