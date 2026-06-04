@@ -528,6 +528,33 @@ and Sakamoto unprompted.
    knob; face = gong rack vs a wayang shadow puppet dancing the cycle.
    Taste-fit: the Hosono thread again (*Cochin Moon*), Nonesuch Explorer
    crate-digging.
+6. **The Doors / modal psych-rock** — owner-requested 2026-06-05, with the
+   theory homework already done. The vamp side we mostly own (mixolydian
+   one-/two-chord drones, "L.A. Woman" A–G over an A center that never
+   resolves — jangle's vamp brain, slowed and darkened; modal-mixture
+   excursions for the bridges, "Crystal Ship" color). What earns the slot is
+   **THE IMPROVISER — melody brain #2**: every station so far repeats a cell
+   or a fixed riff; nobody can take a SOLO. Manzarek demands a phrase-based
+   improvisation generator — question/answer phrases with breath rests, a
+   3–4 note motif *developed* (sequenced up/down the mode, rhythm varied),
+   and a tension arc across 16–32 bars (register climbs, density rises,
+   peak, release). Built once, it's reusable for ethio-jazz (#3) and the
+   cocktail trio (#4). Solos are pure PERFORMANCE (engine rnd) — the band
+   never played it the same twice, and neither should the radio.
+   The rest of the kit maps clean:
+   - **major/minor blues duality** — the soloist draws from minor pentatonic
+     OVER the major vamp (a seeded "how blue" knob biasing b3/b7 vs major
+     tones) — deliberate clash, the opposite of jingle's accommodation rule.
+   - **Rhodes piano-bass ostinato** — a seeded 1-bar left-hand riff (dub's
+     riddim, swung); combo-organ held chords above it: two keyboards, one
+     player. Kit rolls shuffle / latin (Densmore's "Break on Through" is
+     nearly a bossa) / straight rock.
+   - **Krieger drone guitar** — open-string pedal tone held UNDER a moving
+     modal line (two-voice guitar), flamenco/phrygian color for "The End"-
+     style excursions — connects to the gamelan/drone interest.
+   - **form** — the Doors essence is head → LONG instrumental middle (organ
+     solo → guitar solo, each with its own arc) → head out. The arrangement
+     curve finally gets to model a JAM.
 
 **Also very doable:**
 
