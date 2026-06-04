@@ -279,14 +279,15 @@ static void roll_building(void) {
     slabC  = chance(60) ? CLR_LIGHT_GREY : CLR_WHITE;
     towerC = (wallC == CLR_INDIGO) ? CLR_DARKER_PURPLE : CLR_DARK_GREY;
     railStyle = chance(55) ? RAIL_BARS : RAIL_PANEL;
-    {
-        int pc[4] = { CLR_BLUE_GREEN, CLR_MAUVE, CLR_DARK_GREEN, CLR_TRUE_BLUE };
-        panelC = pc[rnd(4)];
-    }
-    // door must stay distinct from wall under all tint filters, not just at day
+    // panel must stay distinct from wall
+    { static const int pc[4] = { CLR_BLUE_GREEN, CLR_MAUVE, CLR_DARK_GREEN, CLR_TRUE_BLUE };
+      int tries = 0;
+      do { panelC = pc[rnd(4)]; tries++; }
+      while (tries < 30 && tint_clash(panelC, wallC)); }
+    // door must stay distinct from wall AND panel
     { int tries = 0;
       do { doorBase = DOOR_COLORS[rnd(N_DOOR_COLORS)]; tries++; }
-      while (tries < 30 && tint_clash(doorBase, wallC)); }
+      while (tries < 30 && (tint_clash(doorBase, wallC) || tint_clash(doorBase, panelC))); }
     liftFloor = rnd(NF);
     nLamp = rnd_between(2, 4);
     for (int i = 0; i < nLamp; i++)
