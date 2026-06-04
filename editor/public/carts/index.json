@@ -1691,7 +1691,7 @@
   },
   {
     "title": "Donkey Kong",
-    "description": "The arcade 25m girder stage, rebuilt from pure primitives: a tower of slanted red girders strung together with peach ladders, Kong thumping barrels off the top, and the princess blinking HELP at the summit. Run up the slopes, climb the ladders, and time your jumps as barrels tumble down and randomly peel off onto a ladder — clear one for +100, or grab the blinking hammer for six seconds of barrel-smashing frenzy. Touch a barrel without the hammer (or fall too far) and the screen flashes red and shakes as you lose one of three lives; reach the top and she's saved. Hi-score persists between runs. Left/Right run along the girder, Up/Down climb ladders, Z to jump (and to restart).",
+    "description": "The arcade 25m girder stage, rebuilt from pure primitives: a tower of slanted red girders strung together with peach ladders, Kong thumping barrels off the top, and the princess blinking HELP at the summit. Run up the slopes, climb the ladders, and time your jumps as barrels tumble down and randomly peel off onto a ladder — clear one for +100, or grab the blinking hammer for six seconds of barrel-smashing frenzy. Touch a barrel without the hammer and the screen flashes red and shakes as you lose one of three lives; reach the top and she's saved. Hi-score persists between runs. Left/Right run along the girder, Up/Down climb ladders, Z to jump (and to restart).",
     "file": "donkeykong.cart.png",
     "kind": [
       "game"

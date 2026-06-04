@@ -4,7 +4,7 @@
 // ── DONKEY KONG — the 25m girder stage ────────────────────────
 // Climb slanted girders and ladders to the princess at the top
 // while Kong rolls barrels down. Jump barrels for points, or grab
-// the hammer to smash them. Touch a barrel or fall too far = a life.
+// the hammer to smash them. Touch a barrel without it = a life.
 //
 //   LEFT / RIGHT — run along the girder (follows the slope)
 //   UP / DOWN     — climb a ladder you're lined up with
@@ -21,12 +21,15 @@
 typedef struct { int x0, x1; float y0; float slope; } Girder;
 static Girder gird[NG] = {
     //  x0   x1    y0     slope (rise per px; +down)
-    {   8, 312, 184.0f,  -0.055f },  // 0 bottom, rises to the right
-    {   8, 296, 156.0f,   0.050f },  // 1
-    {  24, 312, 128.0f,  -0.050f },  // 2
-    {   8, 296, 100.0f,   0.050f },  // 3
-    {  24, 312,  72.0f,  -0.050f },  // 4
-    {   8, 220,  46.0f,   0.000f },  // 5 top — flat, princess sits here
+    // Gentle ±0.020 slants over the full width: ~6px of tilt — clearly slanted
+    // for the barrels to follow, but never enough to converge with the floor
+    // above (29px apart), so adjacent girders never cross or visually merge.
+    {   8, 312, 185.0f, -0.020f },  // 0 bottom — drops to the left
+    {   8, 312, 156.0f,  0.020f },  // 1        — drops to the right
+    {   8, 312, 127.0f, -0.020f },  // 2        — drops to the left
+    {   8, 312,  98.0f,  0.020f },  // 3        — drops to the right
+    {   8, 312,  69.0f, -0.020f },  // 4        — drops to the left
+    {   8, 240,  44.0f,  0.000f },  // 5 top — flat, Kong + princess
 };
 
 static float gird_y(int g, float x) {
@@ -40,13 +43,14 @@ static float gird_y(int g, float x) {
 #define NL 7
 typedef struct { int x, lo; } Ladder;
 static Ladder lad[NL] = {
-    { 280, 0 },   // 0->1 right side
-    {  40, 1 },   // 1->2 left
+    // the main path zig-zags up: right, left, right, left, then up to the princess
+    { 270, 0 },   // 0->1 right side
+    {  50, 1 },   // 1->2 left
     { 270, 2 },   // 2->3 right
-    {  60, 3 },   // 3->4 left
-    { 250, 4 },   // 4->5 right
-    { 150, 1 },   // a couple of mid shortcuts
-    { 180, 3 },
+    {  50, 3 },   // 3->4 left
+    { 200, 4 },   // 4->5 — tops out beside the princess
+    { 150, 1 },   // a couple of mid shortcuts (barrels take these too)
+    { 160, 3 },
 };
 
 #define LAD_W 10
@@ -62,8 +66,8 @@ static int   climb_lad;     // index of ladder being climbed
 static bool  jumping;
 static float jvy;           // jump vertical vel
 static float jbase;         // surface y at jump start
-#define RUN_SPD 46.0f
-#define CLIMB_SPD 40.0f
+#define RUN_SPD 70.0f
+#define CLIMB_SPD 52.0f
 #define JUMP_V0 -118.0f
 #define GRAV 380.0f
 
@@ -100,16 +104,20 @@ static float fabsf_(float v) { return v < 0 ? -v : v; }
 static int ladder_top_girder(int li)   { return lad[li].lo + 1; }
 static int ladder_bot_girder(int li)   { return lad[li].lo; }
 
+// which way is downhill on this girder? slope is "rise per px, +down", so a
+// positive slope means the surface drops to the RIGHT (+1); negative drops LEFT (-1).
+static int downhill_dir(int g) { return gird[g].slope < 0 ? -1 : 1; }
+
 // is the man within reach of a ladder going UP from his girder?
 static int ladder_up_here(void) {
     for (int i = 0; i < NL; i++)
-        if (ladder_bot_girder(i) == pg && fabsf_(px - lad[i].x) < 6)
+        if (ladder_bot_girder(i) == pg && fabsf_(px - lad[i].x) < 9)
             return i;
     return -1;
 }
 static int ladder_down_here(void) {
     for (int i = 0; i < NL; i++)
-        if (ladder_top_girder(i) == pg && fabsf_(px - lad[i].x) < 6)
+        if (ladder_top_girder(i) == pg && fabsf_(px - lad[i].x) < 9)
             return i;
     return -1;
 }
@@ -184,6 +192,9 @@ void update(void) {
         if (hammer_t <= 0) hammer_t = 0;
     }
 
+#ifdef DE_TRACE
+    watch("pl", "pg=%d px=%.0f py=%.0f climb=%d jump=%d", pg, px, py, climbing, jumping);
+#endif
     // ---- player movement ----
     if (climbing) {
         float cspd = CLIMB_SPD * d;
@@ -281,7 +292,8 @@ void update(void) {
             float by = gird_y(ladder_bot_girder(b->lad), b->x);
             if (b->y >= by) {
                 b->y = by; b->g = ladder_bot_girder(b->lad);
-                b->state = B_ROLL;            // keep rolling same dir
+                b->dir = downhill_dir(b->g);  // resume rolling downhill on the lower girder
+                b->state = B_ROLL;
             }
         } else if (b->state == B_FALL) {
             b->vy += GRAV * 0.6f * d;
@@ -291,11 +303,14 @@ void update(void) {
             float ny = gird_y(ng, b->x);
             if (b->y >= ny) {
                 b->y = ny; b->g = ng;
-                b->dir = (gird[ng].slope < 0) ? 1 : -1; // roll downhill
+                b->dir = downhill_dir(ng);    // roll downhill on the new girder
                 b->state = B_ROLL;
             }
         }
 
+#ifdef DE_TRACE
+        if (i == 0) watch("b0", "st=%d g=%d x=%.0f y=%.0f dir=%d", b->state, b->g, b->x, b->y, b->dir);
+#endif
         // ---- collision with player ----
         if (state == 0 && !climbing) {
             float dxp = fabsf_(b->x - px);
