@@ -36,6 +36,32 @@ static int   res = 6;             // filter resonance 0..15 (applies when a step
 static bool  loop_on = false;
 static int   sched_k = 0;         // rotating-slot counter (slots 10-15)
 
+// scale snap — painted pitches land on in-key notes; OFF = chromatic freehand.
+// Interval tables match the engine's SCALE_* (sound.h), root transposes them.
+static int scl = 0;               // 0 = OFF, then major/minor/penta/penta-/blues/hexa/whole
+static int root = 0;              // 0 = C .. 11 = B
+#define NSCL 8
+static const char *SCLNAME[NSCL] = { "OFF", "MAJOR", "MINOR", "PENTA", "PENTA-", "BLUES", "HEXA", "WHOLE" };
+static const unsigned char SCL_IV[NSCL][7] = { {0}, {0,2,4,5,7,9,11}, {0,2,3,5,7,8,10},
+                                               {0,2,4,7,9}, {0,3,5,7,10}, {0,3,5,6,7,10},
+                                               {0,2,4,5,7,9},            // major hexatonic (no 7th)
+                                               {0,2,4,6,8,10} };         // whole-tone
+static const int SCL_LEN[NSCL] = { 0, 7, 7, 5, 5, 6, 6, 6 };
+
+static bool in_scale(int m) {
+    if (!scl) return true;
+    int pc = ((m - root) % 12 + 12) % 12;
+    for (int i = 0; i < SCL_LEN[scl]; i++) if (SCL_IV[scl][i] == pc) return true;
+    return false;
+}
+static int snap_midi(int m) {                     // nearest in-scale pitch; ties prefer down
+    for (int d = 0; d < 12; d++) {
+        if (m - d >= P_LO && in_scale(m - d)) return m - d;
+        if (m + d <= P_HI && in_scale(m + d)) return m + d;
+    }
+    return m;
+}
+
 // CUT level 0..14 → lowpass Hz (exponential); 15 = FILTER_OFF
 static int cut_hz(int c) { return (int)(150.0f * powf(2.0f, c / 15.0f * 5.0f)); }
 
@@ -57,18 +83,21 @@ static int step_at(int x) { int i = (x - GX) / SW; return (x >= GX && i >= 0 && 
 static int in_box(int x, int y, int w, int h) { return mouse_x() >= x && mouse_x() < x + w && mouse_y() >= y && mouse_y() < y + h; }
 
 // ---- persistence ----
-typedef struct { int version, spd, loop, res; Step st[NSTEP]; } SaveData;
+typedef struct { int version, spd, loop, res; Step st[NSTEP]; int scl, root; } SaveData;
+#define SAVE_V2_SIZE (sizeof(SaveData) - 2 * sizeof(int))   // v2 lacked the trailing scl/root
 static void save_it(void) {
-    SaveData d = { 2, spd_ms, loop_on, res, {{0}} };
+    SaveData d = { 3, spd_ms, loop_on, res, {{0}}, scl, root };
     for (int i = 0; i < NSTEP; i++) d.st[i] = st[i];
     save_bytes(&d, sizeof d);
     msg = "SAVED"; msg_t = 80;
 }
 static void load_it(void) {
     SaveData d;
-    if (load_bytes(&d, sizeof d) == (int)sizeof d && d.version == 2) {
+    int got = load_bytes(&d, sizeof d);
+    if ((got == (int)sizeof d && d.version == 3) || (got == (int)SAVE_V2_SIZE && d.version == 2)) {
         spd_ms = d.spd; loop_on = d.loop; res = d.res;
         for (int i = 0; i < NSTEP; i++) st[i] = d.st[i];
+        if (d.version == 3) { scl = d.scl; root = d.root; }
         msg = "LOADED";
     } else msg = "no save";
     msg_t = 80;
@@ -179,7 +208,7 @@ void update(void) {
     if (ui_held == 0) {
         int i = step_at(mouse_x());
         if (i >= 0 && in_box(GX, GY, NSTEP * SW, GH)) {
-            if (mouse_down(MOUSE_LEFT))  { st[i].pitch = (unsigned char)y_midi(mouse_y()); st[i].wave = (unsigned char)pen; if (!st[i].vol) st[i].vol = 5; }
+            if (mouse_down(MOUSE_LEFT))  { st[i].pitch = (unsigned char)snap_midi(y_midi(mouse_y())); st[i].wave = (unsigned char)pen; if (!st[i].vol) st[i].vol = 5; }
             if (mouse_down(MOUSE_RIGHT))   st[i].vol = 0;
         }
         if (i >= 0 && in_box(GX, VY, NSTEP * SW, VH) && mouse_down(MOUSE_LEFT))
@@ -206,6 +235,24 @@ void draw(void) {
     else           print_right("draw a sound, export it as code", 312, 6, CLR_MAUVE);
     font(FONT_NORMAL);
 
+    // ---- scale picker (L = next, R = previous; KEY transposes the root) ----
+    font(FONT_SMALL);
+    bool sc_hot = in_box(8, 13, 62, 10);
+    rectfill(8, 13, 62, 10, scl ? CLR_DARK_GREEN : CLR_BLACK);
+    rect(8, 13, 62, 10, sc_hot ? CLR_WHITE : CLR_DARK_GREY);
+    print(str("SCALE:%s", SCLNAME[scl]), 12, 15, scl ? CLR_WHITE : CLR_MEDIUM_GREY);
+    if (sc_hot && mouse_pressed(MOUSE_LEFT))  scl = (scl + 1) % NSCL;
+    if (sc_hot && mouse_pressed(MOUSE_RIGHT)) scl = (scl + NSCL - 1) % NSCL;
+    if (scl) {                                             // root only matters with a scale on
+        bool k_hot = in_box(74, 13, 24, 10);
+        rectfill(74, 13, 24, 10, CLR_BLACK);
+        rect(74, 13, 24, 10, k_hot ? CLR_WHITE : CLR_DARK_GREY);
+        print(str("KEY%s", NN[root]), 77, 15, CLR_LIGHT_PEACH);
+        if (k_hot && mouse_pressed(MOUSE_LEFT))  root = (root + 1) % 12;
+        if (k_hot && mouse_pressed(MOUSE_RIGHT)) root = (root + 11) % 12;
+    }
+    font(FONT_NORMAL);
+
     // ---- pitch grid ----
     rectfill(GX, GY, NSTEP * SW, GH, CLR_BROWNISH_BLACK);
     for (int m = P_LO; m <= P_HI; m += 12) {               // octave guides at each C
@@ -213,6 +260,12 @@ void draw(void) {
         for (int x = GX; x < GX + NSTEP * SW; x += 4) pset(x, y, CLR_DARKER_GREY);
         font(FONT_SMALL); print(str("C%d", m / 12 - 1), GX + NSTEP * SW + 3, y - 2, CLR_DARK_GREY); font(FONT_NORMAL);
     }
+    if (scl)                                               // faint guides on in-scale rows
+        for (int m = P_LO; m <= P_HI; m++)
+            if (m % 12 != 0 && in_scale(m)) {
+                int y = midi_y(m);
+                for (int x = GX + 2; x < GX + NSTEP * SW; x += 8) pset(x, y, CLR_DARKER_GREY);
+            }
     for (int i = 0; i < NSTEP; i++) {                      // the bars
         int x = GX + i * SW;
         if (i % 4 == 0) line(x, GY, x, GY + GH, CLR_DARKER_GREY);
@@ -225,9 +278,9 @@ void draw(void) {
     }
     rect(GX, GY, NSTEP * SW, GH, CLR_DARK_GREY);
 
-    // hovered note readout
+    // hovered note readout (snapped — shows the note a click would actually paint)
     if (in_box(GX, GY, NSTEP * SW, GH)) {
-        int m = y_midi(mouse_y());
+        int m = snap_midi(y_midi(mouse_y()));
         print_right(str("%s%d", NN[m % 12], m / 12 - 1), 312, 16, CLR_LIGHT_GREY);
     }
 
