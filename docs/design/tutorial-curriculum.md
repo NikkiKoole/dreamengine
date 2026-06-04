@@ -101,7 +101,7 @@ Modeled on their Bitesize set, scaled to teachable size.
 
 | # | cart | teaches |
 |---|---|---|
-| 47 | text animations | typewriter / wipe / shine reveals (their text-wipe + text-shine) |
+| 47 | ✅ text animations | SHIPPED 2026-06-04 as `text-fx`: typewriter (+tick), wave, shine, wipe, shake, rainbow, bounce — per-char print() + clip()-as-reveal |
 | 48 | advanced movement | acceleration + friction; 8-way top-down vs platformer feel |
 
 ## Sequencing note

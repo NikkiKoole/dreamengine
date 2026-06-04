@@ -565,6 +565,24 @@
     "genre": "lab"
   },
   {
+    "title": "text fx",
+    "description": "Animated text — the dialogue/title/HUD toolkit, eight effects each a 5-15 line technique you can lift straight into a game: typewriter (with the tick sound that sells it — X toggles), per-char wave, shine sweep, wipe reveal, damage-number shake, rainbow, and an outlined bounce. Two tools do most of the work: print() returns the x after what it drew, so printing one character at a time gives every char its own offset/color; and clip() turns into a reveal machine — a growing window wipes text in, a narrow moving window sweeps a shine across it. All effects loop forever; watch, then steal the one you need.",
+    "file": "text-fx.cart.png",
+    "kind": [
+      "tutorial"
+    ],
+    "genre": "lab"
+  },
+  {
+    "title": "ink runner",
+    "description": "THE GROUND IS WHEREVER YOU HAVE PAINTED — the touching_color/pget showcase. An endless scroller: a tiny verlet walker trots along procedural ledges while you paint bridges and ramps with the mouse, racing the ever-faster scroll. There is no terrain data for the feet — each step scans the canvas downward for the first solid-colored pixel (ledge brown or your wet peach ink) and really stands on it. The walk cycle is emergent: planted feet are pinned in world space, so the scroll drags them back under the body like a treadmill. And the rescue: a runner that walks off an edge FALLS, but its dangling feet keep scanning — scribble under it and the feet catch the ink mid-air. Ink is metered and regenerates. Hold left mouse to paint, Z restarts, best distance saved.",
+    "file": "inkrunner.cart.png",
+    "kind": [
+      "game"
+    ],
+    "genre": "platformer"
+  },
+  {
     "title": "lunar lander",
     "description": "Physics-based lander. Rotate and thrust your way onto the lit green pad slowly enough to survive. Levels get harder — pads get narrower. Left/right to rotate, up or Z to thrust.",
     "file": "lander.cart.png",
