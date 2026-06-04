@@ -429,6 +429,7 @@ What changes between styles is mostly **data** — the engine above carries over
 | **city pop (Yamashita)** | 104–118 | session-TIGHT (±2ms only); the anti-lowend | stolen playbook: royal road (IV–V–iii–vi), JTTOU loops, borrowed iv; final chorus +2 gear change | octave-pop disco bass w/ chromatic runs, 16th gtr chucks (lay out at bar turns!), saw brass anticipations, bright kit w/ open hat | ✅ `citypop.c` |
 | **dub (King Tubby)** | 66–80 | one-drop/rockers/steppers; echo as scheduled notes (dotted-8th taps) | 1-2 minor chords (i, iv, bVII); the seeded pentatonic RIDDIM bassline is the song | deep sine bass, skank chops, organ bubble, echoed melodica, rim throws, siren; THE DESK rides layers per phrase (performance, not seed) | ✅ `dub.c` |
 | **techno-kayō (YMO)** | 112–132 | machine-tight ±2ms, pattern strings (cr78.c format) | Sakamoto templates: chromatic mediant pull, maj7 planing, kayō minor cadence (harmonic-minor V), bright I–bVII–IV–V | Hosono bassline GENERATOR (melodic counterpoint w/ inertia + octave leaps), yonanuki pent lead, sequencer arp, CR-78 drum circuits on loan from `cr78.c` | ✅ `ymo.c` |
+| **Satie (gymnopédie)** | 56–70, **3/4** | twelve-step bars; bass on 1, chord on 2, beat 3 empty; rubato in gnossienne mode | chord brain #6, the ALTERNATING PAIR: rock two chords for bars on end, drift the pair per section; gnossienne = phrygian-dominant minor | SOLO PIANO (two tri slots) — density curve shapes touch/ornament, not layers; mordents; melody enters late, stepwise, held over barlines | ✅ `satie.c` |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
@@ -474,7 +475,8 @@ and Sakamoto unprompted.
 - **Afrobeat** — 2–3 interlocking single-note guitar ostinatos (`euclid()` was
   made for this), one chord for eleven minutes, horn riffs as call-and-response.
 - **French house / disco edits** — a 2-bar loop ridden with `note_cutoff` filter
-  sweeps over 16 bars. The filter ride IS the song.
+  sweeps over 16 bars. The filter ride IS the song. *(IN PROGRESS — claimed by
+  another agent, 2026-06-05.)*
 - **Steve Reich minimalism** — two voices, same pattern, slightly different step
   lengths → phasing. The most experimental station possible, nearly free to build.
 - **Lofi hip-hop jazz** — still in the cheat-sheet above; most of its parts
