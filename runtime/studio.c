@@ -534,43 +534,39 @@ static void draw_watch_overlay(void) {
 
 bool paused(void) { return pause_active; }
 
-static void draw_pause_overlay(void) {
+// draw the pause overlay into the canvas (native resolution) so it scales up
+// with the game and looks pixel-perfect — same renderer, same font, same pixels.
+static void draw_pause_canvas(void) {
     if (!pause_active) return;
-    int ww = SCREEN_W * SCALE, wh = SCREEN_H * SCALE;
+    const int fs = 8;   // native font glyph size
+    const int bw = 120, bh = 50;
+    const int bx = (SCREEN_W - bw) / 2, by = (SCREEN_H - bh) / 2;
 
     // dim the whole scene
-    DrawRectangle(0, 0, ww, wh, (Color){ 0, 0, 0, 160 });
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){ 0, 0, 0, 140 });
 
-    // centered box
-    int bw = 160 * SCALE / 2, bh = 80 * SCALE / 2;
-    int bx = (ww - bw) / 2,   by = (wh - bh) / 2;
-    DrawRectangle(bx, by, bw, bh, (Color){ 10, 10, 30, 230 });
-    DrawRectangleLines(bx, by, bw, bh, (Color){ 200, 200, 220, 200 });
-
-    float fs = 8.0f * SCALE / 2;   // font size: native 8px scaled to window
-    float lh = fs + fs * 0.5f;
-    const char *items[] = { "CONTINUE", "RESTART" };
-    int n = 2;
-    float total_h = fs * 1.5f + n * lh;   // title + items
-    float ty = by + (bh - total_h) / 2.0f;
+    // box: filled dark + 1-game-pixel border
+    DrawRectangle(bx, by, bw, bh, (Color){ 8, 8, 28, 240 });
+    DrawRectangleLines(bx, by, bw, bh, (Color){ 200, 200, 220, 220 });
 
     // title
     const char *title = "PAUSED";
     float tw = MeasureTextEx(game_font, title, fs, 1).x;
-    DrawTextEx(game_font, title, (Vector2){ bx + (bw - tw) / 2.0f, ty }, fs, 1,
-               (Color){ 180, 180, 255, 255 });
-    ty += fs * 1.5f;
+    DrawTextEx(game_font, title,
+               (Vector2){ bx + (bw - tw) * 0.5f, by + 5 }, fs, 1,
+               (Color){ 160, 160, 255, 255 });
 
-    for (int i = 0; i < n; i++) {
+    // menu items
+    const char *items[] = { "CONTINUE", "RESTART" };
+    for (int i = 0; i < 2; i++) {
         bool sel = (pause_sel == i);
-        Color col = sel ? WHITE : (Color){ 160, 160, 160, 255 };
+        Color col = sel ? (Color){ 255, 255, 255, 255 } : (Color){ 140, 140, 140, 255 };
         float iw = MeasureTextEx(game_font, items[i], fs, 1).x;
-        float ix  = bx + (bw - iw) / 2.0f;
-        if (sel) {
-            DrawTextEx(game_font, "\x10", (Vector2){ ix - fs * 1.2f, ty }, fs, 1, WHITE);
-        }
-        DrawTextEx(game_font, items[i], (Vector2){ ix, ty }, fs, 1, col);
-        ty += lh;
+        float ix  = bx + (bw - iw) * 0.5f;
+        float iy  = by + 20 + i * 12;
+        if (sel)
+            DrawTextEx(game_font, "\x10", (Vector2){ ix - 10, iy }, fs, 1, col);
+        DrawTextEx(game_font, items[i], (Vector2){ ix, iy }, fs, 1, col);
     }
 }
 
@@ -844,22 +840,22 @@ static void loop_step(void) {
 #endif
     poll_virtual_touches();
     update_stick();
-    if (IsKeyPressed(KEY_F1)) watch_show = !watch_show;
+    if (inp_pressed(KEY_F1)) watch_show = !watch_show;
 
     // pause overlay — P or ENTER toggles; when open ESC resumes instead of closing the window
     SetExitKey(pause_active ? KEY_NULL : KEY_ESCAPE);
-    if (IsKeyPressed(KEY_P) || (!pause_active && IsKeyPressed(KEY_ENTER))) {
+    if (inp_pressed(KEY_P) || (!pause_active && inp_pressed(KEY_ENTER))) {
         pause_active = !pause_active;
         pause_sel = 0;
         SetMasterVolume(pause_active ? 0.0f : 1.0f);
     }
     if (pause_active) {
-        if (IsKeyPressed(KEY_ESCAPE)) {
+        if (inp_pressed(KEY_ESCAPE)) {
             pause_active = false;
             SetMasterVolume(1.0f);
-        } else if (IsKeyPressed(KEY_UP))   { pause_sel = (pause_sel + 1) % 2; }
-        else if (IsKeyPressed(KEY_DOWN))   { pause_sel = (pause_sel + 1) % 2; }
-        else if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_Z)) {
+        } else if (inp_pressed(KEY_UP))   { pause_sel = (pause_sel + 1) % 2; }
+        else if (inp_pressed(KEY_DOWN))   { pause_sel = (pause_sel + 1) % 2; }
+        else if (inp_pressed(KEY_ENTER) || inp_pressed(KEY_Z)) {
             if (pause_sel == 0) {           // Continue
                 pause_active = false;
                 SetMasterVolume(1.0f);
@@ -868,6 +864,7 @@ static void loop_step(void) {
             }
         }
     }
+    frame_count++;                        // advance even while paused so --frames and dump filenames still work
     if (pause_active) goto draw_window;   // skip update() + draw() — last frame stays frozen
 
     // snapshot last frame's canvas so pget() has stable pixels to read
@@ -898,7 +895,6 @@ static void loop_step(void) {
 #else
     update();
 #endif
-    frame_count++;
 
     // draw into the low-res canvas, under the camera matrix (handles scroll + zoom +
     // rotation on the GPU). camera()/camera_ex() called inside draw() re-apply via
@@ -932,6 +928,11 @@ static void loop_step(void) {
     if (clip_active) { EndScissorMode(); clip_active = false; }
 
     draw_window:;   // pause skips update+draw above; canvas shows last frozen frame
+    if (pause_active) {
+        BeginTextureMode(canvas);   // draw overlay at native resolution — scales up with the game
+            draw_pause_canvas();
+        EndTextureMode();
+    }
     // scale up to the window — RenderTexture is flipped in Y
     float sox = 0, soy = 0;
     if (shake_amt > 0.2f) {
@@ -952,7 +953,6 @@ static void loop_step(void) {
                           (Color){ 0, 0, 0, (unsigned char)(fade_amt * 255) });
         draw_touch_overlay();
         draw_watch_overlay();
-        draw_pause_overlay();
     EndDrawing();
     if (shake_amt > 0) { shake_amt *= 0.85f; if (shake_amt < 0.2f) shake_amt = 0; }
 
