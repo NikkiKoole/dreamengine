@@ -117,3 +117,39 @@ C) are the payoff and the most shareable; Track A is the foundation that makes t
 ~24 net-new (25–48) on top of the existing 24 → a ~48-cart course. "About 30" is the right
 order of magnitude; trim Track D or fold a couple of Track C games if it runs long. Suggested
 first build, per the direction memo: **#40 flappy**.
+
+## Addendum (2026-06-04) — movement-paradigm clusters
+
+A pattern emerged while building: pick a *movement paradigm*, distill it to a minimal
+colored-rects cart, verify the feel with the debug harness, then ship variants. The
+paradigm map and where each cluster stands:
+
+| paradigm | position is… | carts |
+|---|---|---|
+| **solid-space** | free 2D + gravity; collision discovers ground | ✅ `platform-rects`, `platform-paint`, `platform-tiles` |
+| **rail / graph** | which edge + how far along it | ✅ `platform-rails`, `platform-loop` |
+| **grid / discrete** | which cell (+ a tween to the next) | 🔨 `grid-move` shipped; rest below |
+| **steering / inertia** | position + heading + velocity | ❌ not started |
+
+**Grid cluster — remaining:**
+- ✅ **`zelda-walk` (grid-nudge)** — SHIPPED 2026-06-04. The hybrid the original *Legend of Zelda* used: Link
+  moves freely (feels analog), but while walking, the **perpendicular axis gently eases
+  back onto the half-grid** — walk any longer distance and you're aligned again. The
+  payoff is you almost never snag on block corners: free feel, grid forgiveness. Great
+  A/B cart: same room, toggle the nudge off and feel corner-snagging appear. (Spotted
+  by Nikki — the secret middle ground between `grid-move` and `platform-rects`-style
+  free movement.)
+- **`grid-push`** — sokoban pushing: grid games are *rules over a data structure*
+  ("can I move" = what's in the next cell; a push = two cells change).
+- **`grid-fall`** — boulderdash/sand: gravity as a *cellular rule* (scan the grid,
+  things fall into empty cells) — a whole physics in ~20 lines.
+
+**Steering cluster — queued after grid:**
+- **`thrust`** — asteroids ship done well: *facing ≠ velocity*, thrust adds along the
+  heading, drag, screen wrap.
+- **`steer`** — car model: speed + turn-rate-scaled-by-speed, drift. The basis of every
+  racing cart.
+
+**Smaller candidates:** `drag-and-drop` done well (pick-up threshold, hover, drop
+targets, spring-back — every toy hand-rolls this); waypoint followers (tower-defense
+creeps — conceptually *rails for enemies*).
