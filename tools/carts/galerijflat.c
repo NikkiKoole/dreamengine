@@ -14,7 +14,7 @@
 
 #define GROUND_H 12
 #define PLINTH_H 14
-#define FH       14          // floor band height
+#define FH       24          // floor band height
 #define TW       20          // lift tower width
 #define MAXF     12
 #define MAXB     12
@@ -129,7 +129,7 @@ static void roll_home(Home *h) {
 }
 
 static void roll_building(void) {
-    NF = rnd_between(8, 11);
+    NF = 6;
     BW = rnd_between(26, 30);
     NB = (SCREEN_W - 16 - TW) / BW;
     towerLeft = chance(50);
@@ -299,23 +299,20 @@ static void draw_plinth(void) {
 }
 
 void draw(void) {
-    // dusk sky, fixed for step 1 (the clock is system 1, a later session)
+    cls(0);
     int horizon = SCREEN_H - GROUND_H;
-    vgradient(0, 0, SCREEN_W, 110, CLR_DARKER_BLUE, CLR_MAUVE);
-    vgradient(0, 110, SCREEN_W, horizon - 110, CLR_MAUVE, CLR_DARK_PEACH);
+    gradient(0, 0, SCREEN_W, horizon, CLR_DARKER_BLUE, CLR_DARK_PEACH, 90);
     for (int i = 0; i < 26; i++)                                  // first stars
-        pset((i * 73 + 19) % SCREEN_W, (i * 41 + 7) % 52, i % 4 ? CLR_INDIGO : CLR_LIGHT_GREY);
+        pset((i * 73 + 19) % SCREEN_W, (i * 41 + 7) % wallTop, i % 4 ? CLR_INDIGO : CLR_LIGHT_GREY);
     if (moonX >= 0) {                                             // thin crescent
-        circfill(moonX, 18, 5, CLR_LIGHT_GREY);
-        circfill(moonX - 3, 17, 5, CLR_DARKER_BLUE);
+        circfill(moonX, wallTop / 2, 5, CLR_LIGHT_GREY);
+        circfill(moonX - 3, wallTop / 2 - 1, 5, CLR_DARKER_BLUE);
     }
 
     // the slab: wall, then the bands of dwellings
     rectfill(baysX, wallTop, NB * BW, baseY - wallTop, wallC);
     for (int f = 0; f < NF; f++) draw_band(f);
     rectfill(baysX - 1, wallTop - 3, NB * BW + 2, 3, slabC);      // roof edge
-    print(str("NF%d NB%d BW%d base%d top%d", NF, NB, BW, baseY, wallTop), 2, 2, CLR_GREEN); // DEBUG
-    if (1) { font(FONT_NORMAL); return; }  // DEBUG: bands only — remove after bug hunt
     draw_tower();
     draw_plinth();
 
