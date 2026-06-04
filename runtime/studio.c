@@ -541,10 +541,7 @@ static void draw_pause_canvas(void) {
     const int bw = 120, bh = 50;
     const int bx = (SCREEN_W - bw) / 2, by = (SCREEN_H - bh) / 2;
 
-    // dim using a checkerboard — no RGBA blending needed, pure palette pixels
-    fillp(0xAAAA, -1);
-    rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK);
-    fillp_reset();
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){ 0, 0, 0, 140 });
 
     rectfill(bx, by, bw, bh, CLR_DARKER_BLUE);
     rect(bx, by, bw, bh, CLR_INDIGO);
