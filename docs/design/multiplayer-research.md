@@ -335,6 +335,44 @@ forever — mitigated by it being ~100 lines, stateless, and free-tier-sized;
 (4) iOS claims in §5 are the least verified — stage 3 starts with a spike, not
 a plan.
 
+### The rung ladder — lowest-hanging fruit first (code-level)
+
+A follow-up pass against the actual `studio.c` sharpened the staged plan into
+smaller rungs, each independently shippable. Two findings move work *off* the
+critical path:
+
+1. **The input seam already exists.** Every `btn()`/`key()`/`mouse_*()` read
+   funnels through the `inp_*()` indirection layer (`studio.c`, "input
+   indirection" comment) so the replay harness can inject state. Lockstep is
+   just a *third* input source besides keyboard and replay-file — the
+   architecture was already paid for by the debug harness.
+2. **Native↔native needs no determinism work.** The same binary on two Macs is
+   bit-identical by construction. The clang-vs-emcc float problem (stage 0
+   above) only gates *wasm cross-play*, not the first playable rungs.
+
+| Rung | What | Effort | Needs |
+|---|---|---|---|
+| **1. Localhost lockstep** | `--net-host` / `--net-join 127.0.0.1` flags on the native binary; UDP loopback; per frame each side sends **1 byte** of packed `btn()` bits, waits for the peer's byte; host sends seed + go. Two windows, one Mac, pong. ~200 lines behind a `-DDE_NET`-style gate (mirroring the harness). A `play.js netdemo` mode spawns both windows. | ~1–2 days | nothing |
+| **2. LAN by IP** | Same UDP code across two machines. Host calls `getifaddrs()`, overlays "HOSTING — 192.168.1.23"; joiner types it. **This is already the wished-for "click host → get an address" UX** for the home/classroom case — no NAT, no servers. Most of the effort is the join-screen UI in the shell. | ~1 day | rung 1 |
+| **3. "Open to LAN"** | UDP multicast announce every ~1 s; joiners pick from a session list instead of typing an IP (Minecraft-style). Pure polish on rung 2. | ~1–2 days | rung 2 |
+| **4. Determinism proof** | Per-frame CRC of the `de_state()` block in the existing trace; record native → replay under wasm → diff. Note the web build currently compiles the harness out (`#else // web build: harness is a no-op`), so enabling replay under emcc is part of this rung. Gates rung 5, **not** rungs 1–3; can run in parallel. | days | nothing |
+| **5. Internet + browser** | Stage 2 / 2b above (join codes + signaling + libdatachannel, or the WebSocket input-relay shortcut). The first rung needing infrastructure. Decide after rungs 1–3 have proven the model and the input-delay feel is tuned. | weeks | rungs 1 + 4 |
+
+The one real refactor lives in rung 1: today `btn(player, …)` means "which
+*keymap* on this keyboard" (`P0_*`/`P1_*` defines + touch UI). Under netplay it
+must mean "which *machine*" — all local input methods (any keymap, touch)
+produce *my* bits; remote bits come off the wire. The existing per-frame
+`btn_curr`/`btn_prev` snapshot (which powers `btnp()`) already happens at the
+frame boundary, so edge detection works unchanged once `btn()` reads from the
+per-player frame buffers. Scope note: v1 lockstep syncs `btn()` only — carts
+using `mouse()`/`key()` stay single-machine until those are added to the input
+packet.
+
+Net: rungs 1–3 need **no servers, no NAT traversal, no determinism work, no
+wasm** — BSD sockets plus a seam the debug harness already built. Two Macs
+playing pong over wifi is roughly a week of part-time work from a standing
+start.
+
 ---
 
 ## Sources
