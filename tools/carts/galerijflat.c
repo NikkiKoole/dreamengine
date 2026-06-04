@@ -164,8 +164,7 @@ static void roll_home(Home *h) {
             : r < 82 ? A_FAMILY : A_STUDENT;
     int c = rnd(NCURT);
     h->tBright = CURT[c][0]; h->tDark = CURT[c][1];
-    { int dc = chance(15) ? CURT[rnd(NCURT)][1] : doorBase;
-      h->doorCol = (dc == wallC) ? doorBase : dc; }
+    h->doorCol = doorBase;
 
     switch (h->arch) {
     case A_VACANT:
