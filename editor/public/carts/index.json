@@ -1963,6 +1963,15 @@
     "kind": ["generative"]
   },
   {
+    "title": "dutch sky",
+    "description": "A day/night sky cycle over a flat Dutch horizon. 10 keyframes — midnight, pre-dawn, dawn, morning, noon, afternoon, golden hour, dusk, twilight — blended with a scanline dither. ← → scrub time of day. ↑ ↓ fly up through the atmosphere into space: sky compresses below, stars fill the black above. A toggles auto-advance.",
+    "file": "dutchsky.cart.png",
+    "kind": [
+      "toy",
+      "tech-demo"
+    ]
+  },
+  {
     "title": "blend lab",
     "description": "Can 32 colors fake real translucency? A cart-space prototype of BLEND TABLES (result = table[src][dst], always a palette index — the VGA/Doom/Picotron trick). 1: a night street where additive glows light the building behind them, 2: a draggable glass pane + cloud shadows + fog over a swatch sweep of all 32 colors, 3: the raw 32x32 tables. D shows the same shapes as today's fillp dither-fake for comparison; P reads dst via pget to demonstrate the one-frame feedback artifact. Arrows switch glass color / table. Zero new engine API — the experiment behind STATUS item 18.",
     "file": "blendlab.cart.png",
