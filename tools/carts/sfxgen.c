@@ -20,7 +20,12 @@ static const char *PNAME[NP] = {
     "WAVE START", "WAVE END", "WAVE HOLD", "WAVE DECAY", "WAVE LFO RATE", "WAVE LFO DEPTH",
 };
 static float P[NP];
-static int   spd_ms = 70;
+// step speeds in ms. Game sfx are FAST — sfxp's default is ~8ms/step (a 32-step sound is a
+// quarter-second zap). 16ms is our floor: steps fire from the 60fps frame loop, so anything
+// under one frame would collide. 16-30 = sfx land, 45+ = jingle land.
+static const int SPDS[6] = { 16, 22, 30, 45, 70, 100 };
+static int spd_i = 1;
+#define SPD_MS (SPDS[spd_i])
 
 // the baked sound (what plays + what exports) + the curves for drawing
 static unsigned char SP[NSTEP], SWV[NSTEP], SV[NSTEP];
@@ -80,17 +85,20 @@ static void randomize(bool mutate) {
         float r = rnd_float();
         P[i] = mutate ? 0.9f * P[i] + 0.1f * r : r;
     }
-    if (!mutate) { P[A_ATK] *= P[A_ATK] * P[A_ATK]; P[A_HOLD] *= P[A_HOLD]; P[P_DEC] *= P[P_DEC]; P[W_HOLD] *= P[W_HOLD]; }  // bias short/snappy
+    if (!mutate) { P[A_ATK] *= P[A_ATK] * P[A_ATK]; P[A_HOLD] *= P[A_HOLD]; P[P_DEC] *= P[P_DEC]; P[W_HOLD] *= P[W_HOLD];  // bias short/snappy
+                   spd_i = rnd(3); }                                                                                        // 16/22/30ms — sfx land (sfxp rolls spd too)
     replay();
     msg = mutate ? "mutated" : "random!"; msg_t = 60;
 }
 
 // ---- save / export (same code format as the sfx editor cart) ----
 typedef struct { int version, spd; float p[NP]; } SaveData;
-static void save_it(void) { SaveData d = { 1, spd_ms, {0} }; for (int i = 0; i < NP; i++) d.p[i] = P[i]; save_bytes(&d, sizeof d); msg = "SAVED"; msg_t = 80; }
+static void save_it(void) { SaveData d = { 1, SPD_MS, {0} }; for (int i = 0; i < NP; i++) d.p[i] = P[i]; save_bytes(&d, sizeof d); msg = "SAVED"; msg_t = 80; }
 static void load_it(void) {
     SaveData d;
-    if (load_bytes(&d, sizeof d) == (int)sizeof d && d.version == 1) { spd_ms = d.spd; for (int i = 0; i < NP; i++) P[i] = d.p[i]; replay(); msg = "LOADED"; }
+    if (load_bytes(&d, sizeof d) == (int)sizeof d && d.version == 1) {
+        spd_i = 0; for (int i = 1; i < 6; i++) if (SPDS[i] <= d.spd) spd_i = i;   // nearest saved speed
+        for (int i = 0; i < NP; i++) P[i] = d.p[i]; replay(); msg = "LOADED"; }
     else msg = "no save";
     msg_t = 80;
 }
@@ -104,14 +112,14 @@ static void export_code(void) {
     gen();
     printh("// ---- sfx (from the sfx generator cart) — paste into your cart ----");
     export_array("SFX_P", SP); export_array("SFX_W", SWV); export_array("SFX_V", SV);
-    printh("#define SFX_SPD %d   // ms per step", spd_ms);
+    printh("#define SFX_SPD %d   // ms per step", SPD_MS);
     printh("static int sfx_i = -1; static float sfx_t;");
     printh("void sfx_start(void) { sfx_i = 0; sfx_t = 0; }   // call to play the sound");
     printh("void sfx_tick(void) {                            // call every frame in update()");
     printh("    if (sfx_i < 0) return;");
     printh("    sfx_t -= dt();");
     printh("    while (sfx_i >= 0 && sfx_t <= 0) {");
-    printh("        if (SFX_V[sfx_i]) hit(SFX_P[sfx_i], SFX_W[sfx_i], SFX_V[sfx_i], SFX_SPD + 25);");
+    printh("        if (SFX_V[sfx_i]) hit(SFX_P[sfx_i], SFX_W[sfx_i], SFX_V[sfx_i], SFX_SPD + 5);");
     printh("        sfx_t += SFX_SPD / 1000.0f;");
     printh("        if (++sfx_i >= %d) sfx_i = -1;", NSTEP);
     printh("    }");
@@ -154,9 +162,9 @@ void update(void) {
     // playback — hit() per baked step, exactly what the exported player does
     play_t -= dt();
     while (play_i >= 0 && play_t <= 0) {
-        if (SV[play_i]) hit(SP[play_i], SWV[play_i], SV[play_i], spd_ms + 25);
+        if (SV[play_i]) hit(SP[play_i], SWV[play_i], SV[play_i], SPD_MS + 5);   // +5: gate just past the next step; the 20ms release declicks
         head = play_i;
-        play_t += spd_ms / 1000.0f;
+        play_t += SPD_MS / 1000.0f;
         play_i = play_i + 1 >= NSTEP ? -1 : play_i + 1;
     }
     if (play_i < 0 && play_t < -0.3f) head = -1;
@@ -195,7 +203,7 @@ void draw(void) {
 
     // bottom bar: buttons + speed
     int by = RY + NP * RH + 3;
-    const char *bn[4] = { "PLAY (Z)", "RANDOM (R)", "MUTATE (M)", str("SPD %dms", spd_ms) };
+    const char *bn[4] = { "PLAY (Z)", "RANDOM (R)", "MUTATE (M)", str("SPD %dms", SPD_MS) };
     for (int b = 0; b < 4; b++) {
         int x = 8 + b * 78;
         bool hot = mouse_x() >= x && mouse_x() < x + 72 && mouse_y() >= by && mouse_y() < by + 11;
@@ -206,7 +214,7 @@ void draw(void) {
             if (b == 0) replay();
             if (b == 1) randomize(false);
             if (b == 2) randomize(true);
-            if (b == 3) { spd_ms = spd_ms >= 130 ? 40 : spd_ms + 30; replay(); }
+            if (b == 3) { spd_i = (spd_i + 1) % 6; replay(); }
         }
         if (b == 1 && hot && mouse_pressed(MOUSE_RIGHT)) randomize(true);   // sfxp tradition: rclick random = mutate
     }
