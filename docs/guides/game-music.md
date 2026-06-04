@@ -116,9 +116,21 @@ static const int WALK[] = { 3,3,3, -3,-3,-3, 2,2, -2,-2, 1,-1 };  // weighted st
 
 No cadence forcing, no form — 16 chords, 8–16 beats each, then the next song.
 Verified from trace (C lydian): `Cmaj7 D7 F#m7b5 Em7 Gmaj7 …` — every chord
-in-mode, nothing resolving. **Pick the brain by what the music is for:** pull
-(action, songs) → functions + cadences; float (menus, exploration, night) → one
-mode + drift.
+in-mode, nothing resolving.
+
+### The third chord brain: the vamp (jangle.c)
+
+Simplest of all, and the right one for song-like background music: pick **2–4
+in-mode chords once** (weighted pool, always opening on I — verified trace output:
+`Bb Ab` looping, i.e. I–bVII in Bb mixolydian) and loop them the entire song.
+Harmony carries no form at all; **the arrangement is the form** — layers enter and
+exit per vamp-loop (intro: gtr+bass → groove: +drums → solo: +lead → outro: drums
+drop). This is also the game-friendliest brain: a vamp tolerates being ducked,
+paused, and intensity-swept without losing its place.
+
+**Pick the brain by what the music is for:** pull (action, songs) → functions +
+cadences; float (menus, exploration, night) → one mode + drift; sit (background,
+overworld, menus you stay in) → vamp + arrangement.
 
 ## 3. Voice leading — the single biggest "sounds composed" trick
 
@@ -311,7 +323,7 @@ What changes between styles is mostly **data** — the engine above carries over
 |---|---|---|---|---|---|
 | **bossa** | 112–140 | straight, clave masks, anticipation | maj7/9, ii-V chains, tritone subs, iv | nylon gtr, surdo bass, shaker, rim, flute | ✅ `bossa.c` |
 | **lofi jazz** | 70–85 | swing 56–60%, melody very late | m9/maj9, slower changes (2 bars/chord), pentatonic noodle | rhodes, soft kick/snare, dusty hats, crackle | idea |
-| **jangle pop (DeMarco)** | 85–110 | straight + loose (kit +0..10ms vs bass), tempo wobble | mixolydian I–bVII–IV vamps, 2–4 chords, NO bridge | chorus-wobble gtr (pitch-LFO pluck), round bass, CR-78-ish kit, whistle lead w/ glide | next |
+| **jangle pop (DeMarco)** | 86–109 | straight + loose (kit +2..10ms vs bass), tempo wobble ±1 at bar lines | mixolydian vamp: 2–4 chords looped, NO bridge — arrangement is the form | chorus-wobble gtr (5.5Hz pitch-LFO pluck), round bass, CR-78-ish kit, legato whistle lead w/ glide | ✅ `jangle.c` |
 | **boom-bap (ATCQ)** | 88–96 | groove template: hats −8ms, snare +22ms, bass +12ms | jazzy ii–V loops 2 bars long, m9 stabs, walking-ish bass fragments | dusty kick (pitch-env sine), cracky snare, ride, upright-ish bass, rhodes stabs | after jangle |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
