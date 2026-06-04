@@ -89,6 +89,13 @@ ModType TYPES[NTYPE] = {
     [MOD_CHANCE]  = { "CHANCE", CLR_BROWN, 4, 5, 2, {{0,false,14,48,"in"},{0,true,34,48,"out"}},
                      1, {{"prob",0,1,0.5f,24,28,FMT_F1}} },
 };
+// knob-index names for the multi-knob sound modules — MUST stay in the same order as the
+// knob arrays in TYPES[] above. Use these instead of raw numbers in eval/presets: a
+// reordered or inserted knob then fails loudly at the compiler instead of silently
+// cross-wiring (the fenv/flt/penv mixup of 2026-06-04).
+enum { VK_CUT, VK_RES, VK_PW, VK_WAV, VK_FLT, VK_FENV, VK_PENV };   // MOD_VOICE knobs
+enum { BK_RATE, BK_DEPTH, BK_DEST };                                // MOD_VIBRATO knobs
+
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
 
@@ -183,7 +190,7 @@ void preset_acid(void) {         // euclid-gated squelch bass, slewed pitch + LF
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
     int lf = spawn(MOD_LFO, bayx(2), bayy(2)), sh = spawn(MOD_SH, bayx(3), bayy(3));
     int sl = spawn(MOD_SLEW, bayx(4), bayy(4)), qt = spawn(MOD_QUANT, bayx(5), bayy(5)), vo = spawn(MOD_VOICE, bayx(6), bayy(6));
-    mod[vo].param[0] = 420; mod[vo].param[1] = 11; mod[vo].param[3] = 1;   // low cutoff, squelchy res, square wave
+    mod[vo].param[VK_CUT] = 420; mod[vo].param[VK_RES] = 11; mod[vo].param[VK_WAV] = 1;   // low cutoff, squelchy res, square wave
     mod[qt].param[0] = SCALE_PENTA_MIN;
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
     add_cable(ck, 0, sh, 1); add_cable(lf, 0, sh, 0);
@@ -202,7 +209,7 @@ void preset_keys(void) {         // play KEYS into a voice with an envelope-pluc
     note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     int kb = spawn(MOD_KEYS, bayx(0), bayy(0)), en = spawn(MOD_ENV, bayx(1), bayy(1)), vo = spawn(MOD_VOICE, bayx(2), bayy(2));
     int ck = spawn(MOD_CLOCK, bayx(4), bayy(4)), eu = spawn(MOD_EUCLID, bayx(5), bayy(5)), dr = spawn(MOD_DRUM, bayx(6), bayy(6));
-    mod[vo].param[3] = 2;   // triangle — mellow, rounded; a warm played pluck distinct from the buzzier presets
+    mod[vo].param[VK_WAV] = 2;   // triangle — mellow, rounded; a warm played pluck distinct from the buzzier presets
     add_cable(kb, 0, vo, 0); add_cable(kb, 1, vo, 1); add_cable(kb, 0, en, 0); add_cable(en, 1, vo, 2);
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
 }
@@ -211,7 +218,7 @@ void preset_pwmpad(void) {       // square voice with a slow LFO sweeping its pu
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), lf = spawn(MOD_LFO, bayx(1), bayy(1));
     int sh = spawn(MOD_SH, bayx(2), bayy(2)), qt = spawn(MOD_QUANT, bayx(3), bayy(3)), vo = spawn(MOD_VOICE, bayx(4), bayy(4));
     mod[ck].param[0] = 90; mod[lf].param[0] = 0.25f; mod[qt].param[0] = SCALE_PENTA_MIN;
-    mod[vo].param[0] = 1100; mod[vo].param[1] = 3; mod[vo].param[2] = 0.5f; mod[vo].param[3] = 1;   // cut/res/pw + wav=square
+    mod[vo].param[VK_CUT] = 1100; mod[vo].param[VK_RES] = 3; mod[vo].param[VK_PW] = 0.5f; mod[vo].param[VK_WAV] = 1;   // cut/res/pw + wav=square
     add_cable(ck, 0, sh, 1); add_cable(ck, 0, vo, 0);
     add_cable(lf, 0, sh, 0); add_cable(sh, 2, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(lf, 0, vo, 4);     // LFO → 'w' = the PWM shimmer
@@ -242,7 +249,7 @@ void preset_maths(void) {        // MATHS cycling as a slow asymmetric filter sw
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), lf = spawn(MOD_LFO, bayx(1), bayy(1)), sh = spawn(MOD_SH, bayx(2), bayy(2)), qt = spawn(MOD_QUANT, bayx(3), bayy(3));
     int vo = spawn(MOD_VOICE, bayx(4), bayy(4)), ma = spawn(MOD_MATHS, bayx(5), bayy(5)), eu = spawn(MOD_EUCLID, bayx(6), bayy(6)), dr = spawn(MOD_DRUM, bayx(7), bayy(7));
     mod[ma].param[0] = 0.4f; mod[ma].param[1] = 1.2f; mod[ma].param[2] = 1;   // slow rise, slower fall, cycling
-    mod[vo].param[0] = 500;                                                   // low cutoff so the sweep opens it
+    mod[vo].param[VK_CUT] = 500;                                                   // low cutoff so the sweep opens it
     add_cable(ck, 0, sh, 1); add_cable(ck, 0, vo, 0); add_cable(ck, 0, eu, 0);
     add_cable(lf, 0, sh, 0); add_cable(sh, 2, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(ma, 1, vo, 2);   // MATHS cv → VOICE filter = the slow sweep
@@ -253,8 +260,8 @@ void preset_envpluck(void) {     // VOICE's onboard FILTER env = a punchy pluck 
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
     int tm = spawn(MOD_TURING, bayx(2), bayy(2)), qt = spawn(MOD_QUANT, bayx(3), bayy(3));
     int vo = spawn(MOD_VOICE, bayx(4), bayy(4)), e2 = spawn(MOD_EUCLID, bayx(5), bayy(5)), dr = spawn(MOD_DRUM, bayx(6), bayy(6));
-    mod[vo].param[0] = 280; mod[vo].param[1] = 10; mod[vo].param[3] = 0;   // low cut, squelchy res, saw
-    mod[vo].param[4] = 2400;                                              // FILTER ENV: snaps wide open on each note
+    mod[vo].param[VK_CUT] = 280; mod[vo].param[VK_RES] = 10; mod[vo].param[VK_WAV] = 0;   // low cut, squelchy res, saw
+    mod[vo].param[VK_FENV] = 2400;                                              // FILTER ENV: snaps wide open on each note
     mod[qt].param[0] = SCALE_PENTA_MIN; mod[tm].param[0] = 0.35f;
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);                     // euclid gates the bass
     add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);  // turing melody → quant → pitch
@@ -266,9 +273,9 @@ void preset_zaplead(void) {      // VOICE's onboard PITCH env = a zappy lead (ea
     int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), tm = spawn(MOD_TURING, bayx(1), bayy(1));
     int qt = spawn(MOD_QUANT, bayx(2), bayy(2)), vo = spawn(MOD_VOICE, bayx(3), bayy(3));
     int eu = spawn(MOD_EUCLID, bayx(4), bayy(4)), dr = spawn(MOD_DRUM, bayx(5), bayy(5));
-    mod[vo].param[0] = 1500; mod[vo].param[3] = 1;   // bright, square
-    mod[vo].param[4] = 700;                          // a touch of filter pluck
-    mod[vo].param[5] = 12;                           // PITCH ENV: +12 st — each note zaps up an octave into the note
+    mod[vo].param[VK_CUT] = 1500; mod[vo].param[VK_WAV] = 1;   // bright, square
+    mod[vo].param[VK_FENV] = 700;                          // a touch of filter pluck
+    mod[vo].param[VK_PENV] = 12;                           // PITCH ENV: +12 st — each note zaps up an octave into the note
     mod[tm].param[0] = 0.4f;
     add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1); add_cable(ck, 0, vo, 0);
     mod[eu].param[0] = 4; mod[eu].param[1] = 8;
@@ -281,8 +288,8 @@ void preset_punch(void) {        // ENV -> VCA (amp) + a big pitch env = the kic
     int e2 = spawn(MOD_EUCLID, bayx(4), bayy(4)), dr = spawn(MOD_DRUM, bayx(5), bayy(5));
     mod[ck].param[0] = 120;
     mod[en].param[0] = 0.005f; mod[en].param[1] = 0.13f;             // fast attack, short decay = a percussive amp
-    mod[vo].param[0] = 480; mod[vo].param[1] = 3; mod[vo].param[3] = 3;   // sine, low-ish cut
-    mod[vo].param[5] = 36;                                           // PITCH ENV: +36 st = the kick "donk"
+    mod[vo].param[VK_CUT] = 480; mod[vo].param[VK_RES] = 3; mod[vo].param[VK_WAV] = 3;   // sine, low-ish cut
+    mod[vo].param[VK_PENV] = 36;                                           // PITCH ENV: +36 st = the kick "donk"
     mod[eu].param[0] = 4; mod[eu].param[1] = 8;
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0); add_cable(eu, 1, en, 0);   // one gate fires VOICE + ENV together
     add_cable(en, 1, vo, 5);                                                      // ENV -> 'a' (VCA): the percussive punch
@@ -299,8 +306,8 @@ void preset_glide(void) {        // live pitch tracking: sparse gates + LFO walk
     mod[lf].param[0] = 0.35f;                               // slow LFO drifts through scale degrees
     mod[eu].param[0] = 2; mod[eu].param[1] = 16;            // 2/16 = sparse; long held notes
     mod[qt].param[0] = SCALE_MAJOR;
-    mod[vo].param[0] = 900; mod[vo].param[1] = 4; mod[vo].param[3] = 2;   // tri wave, open filter
-    mod[vo].param[4] = 400;                                  // light filter blip on attack
+    mod[vo].param[VK_CUT] = 900; mod[vo].param[VK_RES] = 4; mod[vo].param[VK_WAV] = 2;   // tri wave, open filter
+    mod[vo].param[VK_FENV] = 400;                                  // light filter blip on attack
     mod[en].param[1] = 0.3f;
     add_cable(lf, 0, qt, 0); add_cable(qt, 1, vo, 1);       // LFO → QUANT → pitch (walks while held)
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
@@ -318,8 +325,8 @@ void preset_bpacid(void) {       // band-pass filter: Turing loop + LFO cutoff s
     mod[qt].param[0] = SCALE_PENTA_MIN;
     mod[eu].param[0] = 5; mod[eu].param[1] = 8;
     mod[lf].param[0] = 0.7f;
-    mod[vo].param[0] = 500; mod[vo].param[1] = 11; mod[vo].param[3] = 0;  // saw, high Q
-    mod[vo].param[6] = 2;                                    // BAND-PASS
+    mod[vo].param[VK_CUT] = 500; mod[vo].param[VK_RES] = 11; mod[vo].param[VK_WAV] = 0;  // saw, high Q
+    mod[vo].param[VK_FLT] = 2;                                    // BAND-PASS
     add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
     add_cable(lf, 0, vo, 2);                                 // LFO sweeps BP cutoff
@@ -335,8 +342,8 @@ void preset_notchphaser(void) {  // notch filter: MATHS cycling slowly sweeps no
     mod[lf].param[0] = 0.5f;
     mod[ma].param[0] = 0.4f; mod[ma].param[1] = 1.8f; mod[ma].param[2] = 1; // cycling ramp = slow notch sweep
     mod[qt].param[0] = SCALE_PENTA;
-    mod[vo].param[0] = 800; mod[vo].param[1] = 13; mod[vo].param[3] = 1;   // sqr, sharp notch Q
-    mod[vo].param[6] = 3;                                    // NOTCH
+    mod[vo].param[VK_CUT] = 800; mod[vo].param[VK_RES] = 13; mod[vo].param[VK_WAV] = 1;   // sqr, sharp notch Q
+    mod[vo].param[VK_FLT] = 3;                                    // NOTCH
     add_cable(ck, 0, sh, 1); add_cable(lf, 0, sh, 0);
     add_cable(sh, 2, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(ck, 0, vo, 0);
@@ -353,7 +360,7 @@ void preset_seq(void) {          // step sequencer: C pentatonic minor phrase �
     mod[sq].param[0]=0; mod[sq].param[1]=0.125f; mod[sq].param[2]=0.375f; mod[sq].param[3]=0.5f;
     mod[sq].param[4]=0.375f; mod[sq].param[5]=0.25f; mod[sq].param[6]=0.125f; mod[sq].param[7]=0;
     mod[qt].param[0] = SCALE_PENTA_MIN;
-    mod[vo].param[0] = 650; mod[vo].param[1] = 6; mod[vo].param[3] = 0; mod[vo].param[4] = 900;
+    mod[vo].param[VK_CUT] = 650; mod[vo].param[VK_RES] = 6; mod[vo].param[VK_WAV] = 0; mod[vo].param[VK_FENV] = 900;
     mod[eu].param[0] = 3; mod[eu].param[1] = 8;
     add_cable(ck, 0, sq, 0); add_cable(sq, 1, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(sq, 2, vo, 0);                             // SEQ gate fires every step
@@ -369,7 +376,7 @@ void preset_vibe(void) {         // audio-rate vibrato: sparse gates hold notes 
     mod[eu].param[0] = 2; mod[eu].param[1] = 16;        // very sparse → long held notes
     mod[tm].param[0] = 0.2f;
     mod[qt].param[0] = SCALE_MAJOR;
-    mod[vo].param[0] = 1200; mod[vo].param[3] = 2;      // tri — smooth, vibrato clearly audible
+    mod[vo].param[VK_CUT] = 1200; mod[vo].param[VK_WAV] = 2;      // tri — smooth, vibrato clearly audible
     mod[vb].param[0] = 5.5f; mod[vb].param[1] = 0.6f;  // 5.5 Hz, moderate depth, dst=pit
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
     add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
@@ -387,7 +394,7 @@ void preset_chance(void) {       // probabilistic gates: dense euclid filtered a
     mod[ch].param[0] = 0.6f;                             // 60% pass rate
     mod[tm].param[0] = 0.3f;
     mod[qt].param[0] = SCALE_PENTA_MIN;
-    mod[vo].param[0] = 700; mod[vo].param[1] = 7; mod[vo].param[3] = 1; mod[vo].param[4] = 900;
+    mod[vo].param[VK_CUT] = 700; mod[vo].param[VK_RES] = 7; mod[vo].param[VK_WAV] = 1; mod[vo].param[VK_FENV] = 900;
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, ch, 0); add_cable(ch, 1, vo, 0);
     add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
     add_cable(ck, 0, dr, 0); add_cable(ck, 0, dr, 2);
@@ -488,7 +495,7 @@ void eval_mod(int mi) {
             }
             float gate = read_in(mi, 0), pitch = read_in(mi, 1), fcv = read_in(mi, 2);
             bool amp_cv = cable_into(mi, 5) >= 0;   // 'a' patched → ENV shapes the amplitude (a VCA)
-            int slot = (amp_cv ? 14 : 5) + (int)m->param[3];   // wav picks the wave (9 incl. user waves); VCA uses the flat-envelope bank (14-22)
+            int slot = (amp_cv ? 14 : 5) + (int)m->param[VK_WAV];   // wav picks the wave (9 incl. user waves); VCA uses the flat-envelope bank (14-22)
             if (gate > 0.5f && m->state[0] <= 0.5f) {
                 int mm = (int)pitch; if (mm < 1) mm = 48;
                 int h = (int)m->state[1]; if (h > 0) note_off(h);
@@ -497,29 +504,29 @@ void eval_mod(int mi) {
                 // onboard mod-envelopes — fire per note: filter "pew" + pitch punch (fixed
                 // snappy decays; the knobs set the depth, 0 = off). This is the audio-rate
                 // upgrade over patching the control-rate ENV module into 'f'.
-                note_env(h, 0, ENV_CUTOFF, 0, 130, m->param[5]);   // fenv → filter sweep   (param 5 = the fenv knob)
-                note_env(h, 1, ENV_PITCH,  0,  45, m->param[6]);   // penv → pitch blip     (param 6 = the penv knob)
+                note_env(h, 0, ENV_CUTOFF, 0, 130, m->param[VK_FENV]);   // fenv → filter sweep
+                note_env(h, 1, ENV_PITCH,  0,  45, m->param[VK_PENV]);   // penv → pitch blip
                 m->state[3] = 0;   // trigger flash
             }
             m->state[0] = gate; m->state[3] += 1;
-            m->state[2] = m->param[0] + clamp(fcv, 0, 1) * 1800.0f;   // cutoff = base knob + 'f' CV
+            m->state[2] = m->param[VK_CUT] + clamp(fcv, 0, 1) * 1800.0f;   // cutoff = base knob + 'f' CV
             int h = (int)m->state[1];
             if (h > 0) {
                 note_pitch(h, pitch < 1 ? 48.0f : pitch);                                     // track pitch CV every frame (enables live vibrato, bends)
-                note_filter(h, 1 + (int)clamp(m->param[4], 0, 3));                           // lp/hp/bp/nt   (param 4 = the flt knob)
+                note_filter(h, 1 + (int)clamp(m->param[VK_FLT], 0, 3));                      // lp/hp/bp/nt
                 note_cutoff(h, (int)m->state[2]);
-                note_res(h, (int)clamp(m->param[1] + read_in(mi, 3) * 15.0f, 0, 15));
-                note_duty(h, clamp(m->param[2] + read_in(mi, 4) * 0.5f, 0.05f, 0.95f));
+                note_res(h, (int)clamp(m->param[VK_RES] + read_in(mi, 3) * 15.0f, 0, 15));
+                note_duty(h, clamp(m->param[VK_PW] + read_in(mi, 4) * 0.5f, 0.05f, 0.95f));
                 if (amp_cv) note_vol(h, (int)(clamp(read_in(mi, 5), 0, 1) * 7.0f + 0.5f));
                 // vb jack (6): if patched to a VIBE, read its params and apply audio-rate LFO
                 int vc = cable_into(mi, 6);
                 if (vc >= 0 && mod[cable[vc].sm].type == MOD_VIBRATO && mod[cable[vc].sm].jackval[1] > 0.5f) {
                     Module *vb = &mod[cable[vc].sm];
-                    int dst = (int)clamp(vb->param[2], 0, 2);
+                    int dst = (int)clamp(vb->param[BK_DEST], 0, 2);
                     int dests[] = { LFO_PITCH, LFO_CUTOFF, LFO_DUTY };
-                    float d = vb->param[1];
+                    float d = vb->param[BK_DEPTH];
                     float dep[] = { d * 2.5f, d * 800.0f, d * 0.35f };
-                    note_lfo(h, 0, dests[dst], vb->param[0], dep[dst]);
+                    note_lfo(h, 0, dests[dst], vb->param[BK_RATE], dep[dst]);
                 }
             }
             break; }
