@@ -81,6 +81,8 @@ Three corollaries:
   10ms units; per-SFX loop flag. **Music**: 16 patterns × 4 channels of SFX indices + loop.
 - ⚠️ **The SFX/music banks are still hardcoded** in `sound_load_demo_data()` — no
   cart-side authoring yet. The oldest open gap (STATUS #5); real carts use the live calls.
+  A live-performance answer (play music in, capture it as control events) is explored in
+  [`input-recording-looper.md`](input-recording-looper.md).
 
 **Thread-safe control (the important architectural fact)**
 - Main thread → audio thread via a 256-entry **request ring buffer**; kinds 0–19 cover

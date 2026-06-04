@@ -367,6 +367,14 @@
     ]
   },
   {
+    "title": "loopstation",
+    "description": "A live-looper pedal — the first cart that RECORDS ITSELF. Four instruments share one 4-bar loop: arm a track, play, and what you played comes back around; layer the next instrument on top and you're a one-person band. Drums (Z/X/C), pentatonic bass (A-K) and lead (Q-I) record as discrete notes quantized to the 16th grid, so sloppy timing comes back tight. The THEREMIN (drag the pad: y=pitch, x=volume) records as a continuous gesture stream — note_pitch/note_vol sampled only when your hand moves — and replays it verbatim, drawing a ghost crosshair where your hand was. The loop ring shows every event as a dot on its track's circle. 1-4 select a track, SPACE arms record, M mutes, BACKSPACE clears, N toggles the click. The cart-land prototype for docs/design/input-recording-looper.md.",
+    "file": "loopstation.cart.png",
+    "kind": [
+      "instrument"
+    ]
+  },
+  {
     "title": "pong",
     "description": "2-player pong. First to 7 wins. Player 1: W/S — Player 2: up/down arrows.",
     "file": "pong.cart.png",
@@ -458,6 +466,24 @@
       "tutorial"
     ],
     "genre": "platformer"
+  },
+  {
+    "title": "grid move",
+    "description": "The third movement paradigm: position is a CELL, motion is a short tween between cells (the player is always logically at a cell, visually sliding to the next). The feel lesson is the TURN BUFFER — the Pac-Man cornering trick: press a turn a few frames before a junction and it's remembered, then fires the moment it's legal. It's the grid world's coyote time. Press X to toggle the buffer and feel every corner go sticky. Also shows bump-against-wall feedback and seamless cell-to-cell chaining. Eat all the dots. Arrows/WASD move, X toggles the buffer, Z restarts.",
+    "file": "grid-move.cart.png",
+    "kind": [
+      "tutorial"
+    ],
+    "genre": "maze"
+  },
+  {
+    "title": "zelda walk (grid nudge)",
+    "description": "The secret middle ground between grid-move and free movement, rebuilt the way NES Zelda 1 actually did it (per the community deconstructions). Three pieces: an 8px HALF-GRID (you are never more than 4px off); PASSIVE REALIGN while walking — the perpendicular axis corrects 1px per pixel walked, so 4px off = realigned after 4px, almost invisible; and CORNER FEELERS — the crosswise hitbox is only 8px wide, so clipping a corner blocks just one feeler and you get shoved around it while you keep walking (your outer pixels may overlap the wall, the classic Link look). Free feel, grid forgiveness. Collect the gems, then press X to switch the assists off and feel the same room become constant corner-snagging. Arrows/WASD move (4-way), X toggles, Z restarts.",
+    "file": "zelda-walk.cart.png",
+    "kind": [
+      "tutorial"
+    ],
+    "genre": "maze"
   },
   {
     "title": "lunar lander",
