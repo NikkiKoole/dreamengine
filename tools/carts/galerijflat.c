@@ -414,7 +414,7 @@ static void draw_band(int f) {
         Home *h = &homes[f][b];
         int x = baysX + b * BW;
         rectfill(x + BAY_PAD, yb - FH + SPANDREL, DW, FH - SLAB_H - SPANDREL - GALLERY_FLOOR, h->doorCol);
-        pset(x + BAY_PAD + DW - 2, yb - 9, CLR_BROWNISH_BLACK);
+        pset(x + BAY_PAD + DW - 2, yb - 12, CLR_BROWNISH_BLACK);
         rectfill(x + BAY_PAD + 1, yb - FH + SPANDREL + 1, DW - 2, 3,
                  h->arch == A_VACANT ? h->doorCol : CLR_DARKER_BLUE);
         draw_window(h, f, b, x + BAY_PAD + DW + WIN_GAP, yb - FH + SPANDREL);
@@ -423,15 +423,16 @@ static void draw_band(int f) {
     // gallery walkway floor — visible through bar gaps, hidden by panel
     rectfill(baysX, yb - SLAB_H - GALLERY_FLOOR, NB * BW, GALLERY_FLOOR, slabC);
 
+    // handrail cap — slabC (light concrete, always contrasts with dark wall)
+    rectfill(baysX, yb - 9, NB * BW, 1, slabC);
     if (railStyle == RAIL_BARS) {
-        rectfill(baysX, yb - 7, NB * BW, 1, CLR_DARK_GREY);
+        // bars in panelC — clash-guarded against wallC like the panel style
         for (int x = baysX; x < baysX + NB * BW; x += 3)
-            rectfill(x, yb - 6, 1, 4, CLR_DARK_GREY);
+            rectfill(x, yb - 8, 1, 6, panelC);
     } else {
-        rectfill(baysX, yb - 7, NB * BW, 1, CLR_LIGHT_GREY);
-        rectfill(baysX, yb - 6, NB * BW, 4, panelC);
+        rectfill(baysX, yb - 8, NB * BW, 6, panelC);
         fillp(0xAAAA, -1);
-        rectfill(baysX, yb - 6, NB * BW, 4, CLR_DARKER_GREY);
+        rectfill(baysX, yb - 8, NB * BW, 6, CLR_DARKER_GREY);
         fillp_reset();
     }
 
