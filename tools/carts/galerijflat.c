@@ -46,6 +46,7 @@ typedef struct {
     int   sill, nIt;
     int   itX[4], itPlant[4], itCol[4];
     int   doorCol;
+    int   fillPat;             // fillp pattern for this household's treatment
     float wake_h, sleep_h;
 } Home;
 
@@ -63,6 +64,34 @@ static const int CURT[][2] = {
     { CLR_PINK,       CLR_MAUVE       }, { CLR_LIGHT_PEACH, CLR_MEDIUM_GREY },
 };
 #define NCURT 6
+
+// fillp pattern sets per treatment type
+static const int VITRAGE_PATS[] = {
+    0xA5A5,      // dense checker (thick net)
+    0x8020,      // sparse dots (delicate lace)
+    FILL_DIAG,   // 0x8421 — diagonal weave
+    FILL_GRID,   // 0xF888 — open grid weave
+    FILL_VLINES, // 0xAAAA — vertical net
+    0x5A5A,      // diagonal variant
+    0xCCCC,      // wide vertical open weave
+    0x3333,      // offset wide vertical
+};
+#define N_VITRAGE_PATS 8
+
+static const int CURTAIN_PATS[] = {
+    0xFFFF,      // plain solid
+    FILL_VLINES, // 0xAAAA — fine vertical weave
+    FILL_DIAG,   // 0x8421 — diagonal texture
+    0xCCCC,      // ribbed (2px stripes)
+    FILL_GRID,   // 0xF888 — grid weave
+};
+#define N_CURTAIN_PATS 5
+
+static const int VENETIAN_PATS[] = {
+    FILL_HLINES, // 0xF0F0 — fine 1px slats
+    0xFF00,      // coarser 2px slats
+};
+#define N_VENETIAN_PATS 2
 
 // door colours — broader than curtains; Dutch housing block palette
 static const int DOOR_COLORS[] = {
@@ -231,6 +260,13 @@ static void roll_home(Home *h) {
         break;
     }
 
+    switch (h->treat) {
+    case TR_VITRAGE:  h->fillPat = VITRAGE_PATS[rnd(N_VITRAGE_PATS)];   break;
+    case TR_CURTAIN:  h->fillPat = CURTAIN_PATS[rnd(N_CURTAIN_PATS)];   break;
+    case TR_VENETIAN: h->fillPat = VENETIAN_PATS[rnd(N_VENETIAN_PATS)]; break;
+    default:          h->fillPat = 0; break;
+    }
+
     if (h->sill == SI_EMPTY) h->nIt = 0;
     for (int i = 0; i < h->nIt && i < 4; i++) {
         h->itPlant[i] = (h->arch == A_ELDER) ? chance(80)
@@ -327,25 +363,28 @@ static void draw_window(Home *h, int f, int b, int wx, int wy) {
 
     switch (h->treat) {
     case TR_VITRAGE:
-        fillp(0xA5A5, -1);
+        fillp(h->fillPat, -1);
         rectfill(wx, wy, WW, WH, lit ? CLR_LIGHT_PEACH : CLR_LIGHT_GREY);
         fillp_reset();
         break;
     case TR_CURTAIN:
+        if (h->fillPat != 0xFFFF) fillp(h->fillPat, -1);
         if (curt) {
             rectfill(wx, wy, 2, WH, lit ? h->tBright : h->tDark);
             rectfill(wx + WW - 2, wy, 2, WH, lit ? h->tBright : h->tDark);
         } else {
             rectfill(wx, wy, WW, WH, lit ? h->tBright : h->tDark);
         }
+        if (h->fillPat != 0xFFFF) fillp_reset();
         break;
     case TR_ROLLER: {
         int rh = (int)(h->roller * (WH - 1.0f)) + 1;
         rectfill(wx, wy, WW, rh, h->tDark);
         break; }
     case TR_VENETIAN:
-        for (int yy = wy; yy < wy + WH; yy += 2)
-            rectfill(wx, yy, WW, 1, CLR_DARK_GREY);
+        fillp(h->fillPat, -1);
+        rectfill(wx, wy, WW, WH, CLR_DARK_GREY);
+        fillp_reset();
         break;
     }
 
