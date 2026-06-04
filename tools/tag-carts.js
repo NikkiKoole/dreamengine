@@ -5,7 +5,10 @@
 const fs = require("fs");
 const path = require("path");
 
-const KINDS  = ["tutorial", "game", "tech-demo", "instrument", "toy", "tool"];
+// "probe" = built to answer an API question (should the engine own X, or can a
+// cart?). The tag only marks the role; the QUESTION and VERDICT live in
+// docs/design/probe-carts.md — update that ledger when a probe resolves.
+const KINDS  = ["tutorial", "game", "tech-demo", "instrument", "toy", "tool", "probe"];
 const GENRES = ["arcade", "shooter", "platformer", "fighting", "puzzle", "racing",
                 "sports", "strategy", "rpg", "adventure", "simulation", "sandbox", "tabletop"];
 

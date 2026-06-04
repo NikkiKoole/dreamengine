@@ -175,7 +175,8 @@
     "description": "Turtle graphics: a loop + a fixed turn angle = a pattern. Change ANGLE at the top to see 91°, 144°, and 97.2° shapes.",
     "file": "16-spirograph.cart.png",
     "kind": [
-      "tutorial"
+      "tutorial",
+      "probe"
     ]
   },
   {
@@ -191,7 +192,8 @@
     "description": "The gamedev workhorse: a pool of tiny structs, each with a position, velocity, and a life that ticks down. Move them, age them, recycle the dead ones — and the SAME system becomes a fountain, an explosion, or a puff of smoke just by changing the spawn numbers. Z = explosion, hold X = smoke.",
     "file": "particles.cart.png",
     "kind": [
-      "tutorial"
+      "tutorial",
+      "probe"
     ]
   },
   {
@@ -307,7 +309,8 @@
     "description": "A playable Moog-style synth that ties the whole sound engine together. Build a patch with the mouse — pick a WAVE, drag the famous ADSR ENVELOPE dots, route THREE LFOs (pitch/duty/volume/cutoff) and dial a resonant FILTER — then play it on the on-screen keyboard with the mouse or your computer keys: the A row is the white keys, W E T Y U O P are the black keys, Z/X shift octave, C/V change velocity. Real hold-to-sustain: a key rings as long as you hold it, and the held chord follows the FILTER and PW sliders LIVE — drag the cutoff while a chord rings and it sweeps under your fingers.",
     "file": "moog.cart.png",
     "kind": [
-      "instrument"
+      "instrument",
+      "probe"
     ]
   },
   {
@@ -315,7 +318,8 @@
     "description": "A tiny modular synth, built in steps. STEP 1: the generative Berlin-school chain is hardcoded in C — CLOCK ticks a SAMPLE & HOLD that freezes a wandering LFO, a QUANTIZER snaps it to a scale (always in key), and a VOICE plays it as a held note whose filter the same LFO sweeps live. Endless in-key melody, zero composition. Later steps draw editable module strips and patch cables. Built on the held-note API (note_on/note_pitch/note_cutoff).",
     "file": "modrack.cart.png",
     "kind": [
-      "instrument"
+      "instrument",
+      "probe"
     ]
   },
   {
@@ -355,7 +359,8 @@
     "description": "The theremin's spooky cousin, and the one cart that drives note_lfo LIVE — the vibrato is something you PLAY, not a fixed setting. One sustained sine voice (note_on) bowed and bent by hand. BOW it: hold the mouse and saw LEFT-RIGHT — your bow speed is the volume (note_vol), so it dies when you stop, like a real bow leaving the blade. BEND it: up/down flexes the steel blade into a deeper or shallower S-curve and the CURVATURE is the pitch (note_pitch + note_glide for the smear). SING it: wobble your hand vertically while bowing and that wrist-shake feeds a live note_lfo vibrato whose depth AND rate climb with how hard you shake — you hear it shiver and watch the blade shimmer. Ethereal, vocal, haunting.",
     "file": "musicalsaw.cart.png",
     "kind": [
-      "instrument"
+      "instrument",
+      "probe"
     ]
   },
   {
@@ -363,7 +368,8 @@
     "description": "The pocket stylus-synth, built to reach two corners of the audio engine no other instrument cart touches. LIVE PULSE-WIDTH: the TONE fader morphs the buzzy square's duty by hand (note_duty), thin/nasal to hollow/fat. THE TRANSPORT: the famous REITER (reiteration) switch retriggers the held note in time with the tempo (bpm + beat + beat_pos) — the cabinet's first tempo-synced instrument; crank RATE up and it machine-guns, flip ARP and the retrigger walks a major arpeggio. Play it with the STYLUS (the mouse): touch the metal keyboard and slide for the classic glissando (note_pitch stepping pad-to-pad). VIBRATO and SUB (sub-octave) are switches, like the real deluxe panel. Watch the BEAT lamp pulse with the transport.",
     "file": "stylophone.cart.png",
     "kind": [
-      "instrument"
+      "instrument",
+      "probe"
     ]
   },
   {
@@ -371,7 +377,8 @@
     "description": "A live-looper pedal — the first cart that RECORDS ITSELF. Four instruments share one 4-bar loop: arm a track, play, and what you played comes back around; layer the next instrument on top and you're a one-person band. Drums (Z/X/C), pentatonic bass (A-K) and lead (Q-I) record as discrete notes quantized to the 16th grid, so sloppy timing comes back tight. The THEREMIN (drag the pad: y=pitch, x=volume) records as a continuous gesture stream — note_pitch/note_vol sampled only when your hand moves — and replays it verbatim, drawing a ghost crosshair where your hand was. The loop ring shows every event as a dot on its track's circle. 1-4 select a track, SPACE arms record, M mutes, BACKSPACE clears, N toggles the click. The cart-land prototype for docs/design/input-recording-looper.md.",
     "file": "loopstation.cart.png",
     "kind": [
-      "instrument"
+      "instrument",
+      "probe"
     ]
   },
   {
@@ -887,7 +894,8 @@
     "description": "A tiny Sims. Build a house and furnish it, then watch your sim look after itself: five needs (food, energy, bladder, hygiene, fun) decay in real time, and it picks the most urgent one, pathfinds (BFS, around your walls) to the object that fixes it, and uses it. WASD/arrows move the build cursor, Z place, X erase, comma toggles BUILD/LIVE, period cycles furniture.",
     "file": "sims.cart.png",
     "kind": [
-      "game"
+      "game",
+      "probe"
     ],
     "genre": "simulation",
     "homage": "The Sims (2000)"
@@ -935,7 +943,8 @@
     "description": "How a game finds its way around walls. A* always expands the most promising cell, scoring f = g + h: steps taken plus a guess (Manhattan distance) of steps remaining — that guess steers it toward the goal instead of flooding everywhere. Closed cells are explored, open cells are the frontier, yellow is the shortest path. Arrows move the cursor, A toggles a wall, B runs the search or returns to editing.",
     "file": "astar.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -959,7 +968,8 @@
     "description": "A flock with no leader, from three little rules. Each boid watches only nearby neighbours and obeys: separation (steer away from anyone too close), alignment (match the flock heading), cohesion (drift toward the flock centre). Nobody is in charge yet the swarm moves like one organism — emergence. Steer the predator with the arrows and watch the flock part and regroup around it.",
     "file": "boids.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -1361,7 +1371,8 @@
     "description": "A pixel-man skeleton animator — pose an 18-bone stick figure and flip-book him to life. Each bone is a 1px line set to one of 16 rotations; you author motion in a sequencer grid (bones down the rows, 16 frames across, every cell a hex digit 0-f for that bone's angle) while a live forward-kinematic preview shows the assembled figure — turn the torso and the whole body swings with it. A playhead loops the frames at an adjustable FPS with eased in-betweens, so it moves smoothly despite the 16-step quantization. TAB flips to a RIG view where you set each body part's length AND line width (odd, 1-9px) (left & right share a value) and watch the figure re-proportion live; the whole animation AND its proportions persist via save_bytes, and it opens on a friendly default wave. Arrows move the cell marker (in RIG: pick a part + resize), Z/X turn the selected bone, C copies the previous frame, SPACE plays/stops, [ ] set FPS, - = set the loop length, S/L save/load — or click a cell and mouse-wheel to turn it, or just drag a limb in the preview to pose it directly (snaps to the nearest of 16).",
     "file": "bones.cart.png",
     "kind": [
-      "tool"
+      "tool",
+      "probe"
     ]
   },
   {
@@ -1758,7 +1769,8 @@
     "description": "Roll a chrome marble down three isometric plateaus to the blinking GOAL before the 30-second clock runs out — then RACE YOUR GHOST: every winning run that sets a new best time is recorded (a position stream, saved between sessions) and replays as a see-through blue marble rolling that exact run alongside you. Real momentum physics: arrows only nudge, gravity does the rest. Ramps are the only way UP a ledge; rolling OFF one gives real airtime — the speedrun tech: a one-unit drop on the east side skips the second ramp, but overshoot it and you fly off the open edge into the void. Acid kills, checkpoints bank progress, a filtered rumble rises with your speed, and a landing thump + screen kick sell every drop. Arrows roll the marble (relative to the iso view); Z or Enter restarts.",
     "file": "marble.cart.png",
     "kind": [
-      "game"
+      "game",
+      "probe"
     ],
     "genre": "arcade",
     "homage": "Marble Madness (1984)"
@@ -1888,7 +1900,8 @@
     "description": "Three tiny Verlet-physics stick figures that struggle to stay upright — connected points, distance constraints, and gravity. Drag any limb to grab and throw: while held a character goes fully limp, and the moment its feet touch the ground again it straightens back up. Z drops a rolling ball at the mouse, X spawns a new character from the sky, R resets the scene.",
     "file": "ragdoll.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -1905,7 +1918,8 @@
     "description": "A tiny verlet physics world you can read end to end — the whole engine is three ideas: a point remembers where it was last frame (so velocity is just now-minus-last), a stick keeps two points a fixed distance apart, and each frame you move every point then relax the sticks a few times. From those two primitives the cart builds a whole showcase: a dangling chain, a draping cloth sheet, a wobbly soft-body blob (a ring of points around a hub), pseudo-solid boxes and a triangle that stack and tumble, and bouncy balls — all colliding as circles and against each other's edges. Left/Right change the substep count live (more substeps = fast/heavy things stop tunnelling through thin surfaces). Drag any point to grab and throw it; Z drops a ball, X drops a box, R resets.",
     "file": "physics.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -1955,7 +1969,8 @@
     "description": "Draw a sound, PICO-8 style. Paint a pitch contour over 32 steps with the mouse (left = draw, right = erase), shape the volume lane and the filter CUT lane (top = wide open, lower = darker; a RES slider adds squelch), pick a wave per step, set the speed, SPACE to hear it. Press E to EXPORT the sound as C code — a step array plus a tiny player function — printed to the log, ready to paste into your game (no engine sound banks needed: playback is just hit() per step). S/L save and load, LOOP toggles looping, BACKSPACE clears. The prototype for cart-authored sfx (audio-notes §5.6).",
     "file": "sfxed.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -1963,7 +1978,8 @@
     "description": "Sliders make the sound — a dreamengine take on sfxp/bfxr. Three lanes (AMP, PITCH, WAVE), each with hold/decay and an LFO: 17 sliders GENERATE a 32-step sound, the colored curves show the result, and every change replays it. RANDOM for instant inspiration, MUTATE to refine what you almost like (the game-jam workflow), arrows undo/redo, Z replays. Press E to export the baked steps as paste-ready C code — the same format as the sfx editor cart, so either feeds your game the same way. S/L save and load.",
     "file": "sfxgen.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -1971,7 +1987,8 @@
     "description": "Draw the actual waveform. The engine has four custom wave slots (INSTR_USER0-3), each a 64-sample single cycle — paint that cycle with the mouse and hear it instantly. The killer trick: SPACE starts a drone, then redraw the shape while it rings — wave_set() is live, so the timbre morphs under your pen. Seed shapes (sine, square, saw, organ, vocal, wobble) plus SMOOTH and NORM, A-K play notes, P toggles an arp. Press E to export wave_set() code; your drawn wave then works everywhere a wave id does: note(), instruments, the other sound carts.",
     "file": "waveed.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {
@@ -2023,7 +2040,8 @@
     "description": "Can 32 colors fake real translucency? A cart-space prototype of BLEND TABLES (result = table[src][dst], always a palette index — the VGA/Doom/Picotron trick). 1: a night street where additive glows light the building behind them, 2: a draggable glass pane + cloud shadows + fog over a swatch sweep of all 32 colors, 3: the raw 32x32 tables. D shows the same shapes as today's fillp dither-fake for comparison; P reads dst via pget to demonstrate the one-frame feedback artifact. Arrows switch glass color / table. Zero new engine API — the experiment behind STATUS item 18.",
     "file": "blendlab.cart.png",
     "kind": [
-      "tech-demo"
+      "tech-demo",
+      "probe"
     ]
   },
   {

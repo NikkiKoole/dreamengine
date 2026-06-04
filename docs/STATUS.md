@@ -105,6 +105,9 @@ demo data only — see "Open" below.)
 ## Open — prioritized
 
 Ordered by leverage. Section refs point at the design doc that specs each item.
+Which *carts* are probing these questions (and every verdict so far) →
+[`design/probe-carts.md`](design/probe-carts.md); probe carts carry `"probe"` in
+their `kind[]` tags.
 
 1. **Cart-pattern helpers** — `hud()` and `game_over_screen()` cut (see Decided-against).
    - **AABB collision already SHIPPED as `boxes_touch()`** (+ `point_in_box`, `circles_touch`,

@@ -580,7 +580,7 @@ function markRanges(text, indices) {
 
 // faceted cart filters (see editor/public/carts/index.json). order is curated,
 // not alphabetical. state is module-level so it survives the panel rebuild-on-open.
-const CART_KIND_ORDER  = ['tutorial', 'game', 'tech-demo', 'instrument', 'toy', 'tool']
+const CART_KIND_ORDER  = ['tutorial', 'game', 'tech-demo', 'instrument', 'toy', 'tool', 'probe']
 const CART_GENRE_ORDER = ['arcade', 'shooter', 'platformer', 'fighting', 'puzzle', 'racing',
                           'sports', 'strategy', 'rpg', 'adventure', 'simulation', 'sandbox', 'tabletop']
 let cartFilter = null   // null = all; else { axis: 'kind'|'genre', value } — flat single-select
