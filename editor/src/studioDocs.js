@@ -226,6 +226,7 @@ export const studioDocs = {
   printh:         { sig: 'void printh(const char *fmt, ...)',                          doc: 'printf-style logging to the editor\'s runtime log panel (not the game window).\nAnswers "what is this value?" and "did this run?".\nExample: printh("score %d", score);' },
   watch:          { sig: 'void watch(const char *name, const char *fmt, ...)',         doc: 'Show a named, live value in the corner of the game window. printf-style, so it works for any type.\nExample: watch("x", "%d", x);  watch("pos", "(%d, %d)", x, y);\nA value fades out about a second after you stop calling watch() for it. Press F1 to hide/show.' },
   watch_visible:  { sig: 'void watch_visible(bool on)',                                doc: 'Show or hide the watch() overlay (default: on). Handy for clean screenshots. F1 toggles it too.' },
+  paused:         { sig: 'bool paused(void)',                                          doc: 'True while the runtime pause overlay is open (P/ENTER to toggle).\nif (paused()) return;' },
 
   timer:          { sig: 'float timer()',                                              doc: 'Seconds since the last timer_reset() (or startup). A resettable stopwatch.\nUse for round timers, "how long did you survive?", cooldowns.' },
   timer_reset:    { sig: 'void timer_reset()',                                          doc: 'Reset timer() back to 0.' },

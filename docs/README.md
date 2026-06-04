@@ -26,6 +26,7 @@ docs/
 │   ├── cart-library-direction.md  snapshot of the ~201-cart shelf + opinionated "what carts to build next" (tutorial on-ramp, more toys, the few missing teachable games; NOT more clones)
 │   ├── tutorial-curriculum.md  plan for the next wave of tutorial carts (25+): the language-fundamentals / collision / whole-game-capstone tracks, adapted from the Nerdy Teachers PICO-8 course (adapt the arc, rewrite in C)
 │   ├── cart-survey-api-priorities.md   cart-evidence-first memo: what real carts prove, filtered through existing decisions
+│   ├── api-usage-audit.md   which API functions the carts actually use (least-used tail, the 11 never-used, doc-coverage gaps); re-runnable via `node tools/api-usage.js`
 │   ├── baked-rotation-atlas.md   pre-rotated sprite/shape atlas: fast blitted bodies, the centerline model, offscreen canvases
 │   ├── font-rendering.md         playful text beyond print: shadow/outline/wave/typewriter, inline codes, PICO-8 comparison; + 2 baked tiny fonts (3×5/4×6) awaiting print_small/print_tiny wiring
 │   ├── rasterization-consistency.md  OPEN: one consistent fill/outline/dither rule so shape edges always agree (seams, off-by-1, outline mismatch)
