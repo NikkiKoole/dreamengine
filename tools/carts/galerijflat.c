@@ -18,7 +18,7 @@
 #define TW       20          // lift tower width
 #define WW       10          // window width
 #define WH       10          // window height
-#define DW        6          // door width
+#define DW        7          // door width
 #define SLAB_H    2          // gallery slab thickness
 #define SPANDREL  4          // wall gap above door/window before next slab
 #define BAY_PAD   3          // left margin inside each bay before the door
@@ -67,7 +67,8 @@ static void roll_home(Home *h) {
             : r < 82 ? A_FAMILY : A_STUDENT;
     int c = rnd(NCURT);
     h->tBright = CURT[c][0]; h->tDark = CURT[c][1];
-    h->doorCol = chance(15) ? CURT[rnd(NCURT)][1] : doorBase;  // the odd repainted door
+    { int dc = chance(15) ? CURT[rnd(NCURT)][1] : doorBase;
+      h->doorCol = (dc == wallC) ? doorBase : dc; }             // never same as wall
 
     switch (h->arch) {
     case A_VACANT:
@@ -150,16 +151,22 @@ static void roll_building(void) {
     wallTop = baseY - NF * FH;
 
     // concrete scheme
-    int s = rnd(3);
-    wallC  = s == 0 ? CLR_MEDIUM_GREY : s == 1 ? CLR_INDIGO : CLR_DARK_GREY;
-    slabC  = s == 2 ? CLR_MEDIUM_GREY : chance(60) ? CLR_LIGHT_GREY : CLR_WHITE;
-    towerC = s == 1 ? CLR_DARKER_PURPLE : CLR_DARK_GREY;
+    {
+        static const int WP[] = {
+            CLR_DARK_GREY, CLR_MEDIUM_GREY, CLR_DARKER_GREY,
+            CLR_INDIGO, CLR_DARKER_PURPLE, CLR_DARK_BROWN,
+            CLR_DARK_GREEN, CLR_DARK_PEACH,
+        };
+        wallC = WP[rnd(8)];
+    }
+    slabC  = chance(60) ? CLR_LIGHT_GREY : CLR_WHITE;
+    towerC = (wallC == CLR_INDIGO) ? CLR_DARKER_PURPLE : CLR_DARK_GREY;
     railStyle = chance(55) ? RAIL_BARS : RAIL_PANEL;
     {
         int pc[4] = { CLR_BLUE_GREEN, CLR_MAUVE, CLR_DARK_GREEN, CLR_TRUE_BLUE };
         panelC = pc[rnd(4)];
     }
-    doorBase = CURT[rnd(NCURT)][1];
+    do { doorBase = CURT[rnd(NCURT)][1]; } while (doorBase == wallC);
     liftFloor = rnd(NF);
     moonX = chance(70) ? rnd_between(16, SCREEN_W - 60) : -1;
     nLamp = rnd_between(2, 4);
@@ -239,7 +246,7 @@ static void draw_band(int f) {
         // front door: SPANDREL gap at top, door height = FH - SLAB_H - SPANDREL
         rectfill(x + BAY_PAD, yb - FH + SPANDREL, DW, FH - SLAB_H - SPANDREL, h->doorCol);
         pset(x + BAY_PAD + DW - 2, yb - 9, CLR_BROWNISH_BLACK); // letter slot
-        rectfill(x + BAY_PAD + 1, yb - FH + SPANDREL, DW - 2, 4, h->arch == A_VACANT ? h->doorCol : CLR_DARKER_BLUE); // door glass
+        rectfill(x + BAY_PAD + 1, yb - FH + SPANDREL + 1, DW - 2, 3, h->arch == A_VACANT ? h->doorCol : CLR_DARKER_BLUE); // door glass (1px frame at top)
         // kitchen window
         draw_window(h, f, b, x + BAY_PAD + DW + WIN_GAP, yb - FH + SPANDREL);
     }
