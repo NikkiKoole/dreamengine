@@ -430,6 +430,7 @@ What changes between styles is mostly **data** — the engine above carries over
 | **dub (King Tubby)** | 66–80 | one-drop/rockers/steppers; echo as scheduled notes (dotted-8th taps) | 1-2 minor chords (i, iv, bVII); the seeded pentatonic RIDDIM bassline is the song | deep sine bass, skank chops, organ bubble, echoed melodica, rim throws, siren; THE DESK rides layers per phrase (performance, not seed) | ✅ `dub.c` |
 | **techno-kayō (YMO)** | 112–132 | machine-tight ±2ms, pattern strings (cr78.c format) | Sakamoto templates: chromatic mediant pull, maj7 planing, kayō minor cadence (harmonic-minor V), bright I–bVII–IV–V | Hosono bassline GENERATOR (melodic counterpoint w/ inertia + octave leaps), yonanuki pent lead, sequencer arp, CR-78 drum circuits on loan from `cr78.c` | ✅ `ymo.c` |
 | **Satie (gymnopédie)** | 56–70, **3/4** | twelve-step bars; bass on 1, chord on 2, beat 3 empty; rubato in gnossienne mode | chord brain #6, the ALTERNATING PAIR: rock two chords for bars on end, drift the pair per section; gnossienne = phrygian-dominant minor | SOLO PIANO (two tri slots) — density curve shapes touch/ornament, not layers; mordents; melody enters late, stepwise, held over barlines | ✅ `satie.c` |
+| **French house (Daft Punk)** | 114–126 | four-on-floor 808, claps on 2+4, machine-straight; THE VOID — last beat before every drop is dead silence | sampled-loop lite: seeded 4-bar disco loop (filtered minor funk / lush maj7), needle-drop rotation, spun forever — harmony never develops, **the FILTER is the form** | THE RIDE: `note_cutoff`/`note_res` swept on held strings per 8-bar arcs + sidechain pump (cutoff ducks at each kick, blooms across the beat); saw stabs, octave disco bass, Da Funk `note_glide` mono lead, 808 circuits on loan from `tr808.c` | ✅ `house.c` |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
@@ -474,9 +475,11 @@ and Sakamoto unprompted.
   depth), minor vamps, güiro 16ths. Crate-digger royalty.
 - **Afrobeat** — 2–3 interlocking single-note guitar ostinatos (`euclid()` was
   made for this), one chord for eleven minutes, horn riffs as call-and-response.
-- **French house / disco edits** — a 2-bar loop ridden with `note_cutoff` filter
-  sweeps over 16 bars. The filter ride IS the song. *(IN PROGRESS — claimed by
-  another agent, 2026-06-05.)*
+- ~~**French house / disco edits**~~ — ✅ shipped as `house.c`, and the
+  prediction held to the letter: the filter ride IS the song (`note_cutoff`/
+  `note_res` on held strings from an arrangement-level curve). Bonus finds: the
+  sidechain pump as a *filter* gesture (cutoff ducks at each kick), and THE
+  VOID — one `return` statement of silence before every drop.
 - **Steve Reich minimalism** — two voices, same pattern, slightly different step
   lengths → phasing. The most experimental station possible, nearly free to build.
 - **Lofi hip-hop jazz** — still in the cheat-sheet above; most of its parts
@@ -510,7 +513,8 @@ mistuning. The other half of the engine's expressiveness, mostly unexplored.
    is a two-voice canon generator ("Avril 14th"). Structural reuse for free.
 5. **Microtonal drift** (`note_pitch` floats — detuned wrong on purpose), odd
    meters (satie.c proved non-16 bars; 7/8 = 14 steps), and acid lines —
-   `note_cutoff`/`note_res` squelch, which NO cart uses yet.
+   `note_cutoff`/`note_res` squelch. house.c now rides those two calls as a
+   slow arrangement gesture; the fast per-step acid squelch is still unclaimed.
 
 **The rest of the wing, by engine fit:**
 
