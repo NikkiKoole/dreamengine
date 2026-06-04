@@ -31,15 +31,16 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 
 // ── module type registry ──
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
-       MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS, NTYPE };
-enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE };
+       MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS,
+       MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, NTYPE };
+enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
 typedef struct { const char *label; float lo, hi, def; int dx, dy, fmt; } KnobDef;
 typedef struct {
     const char *name; int col, cw, ch;   // size in 12px cells
-    int njack; JackDef jack[6];
-    int nknob; KnobDef knob[6];
+    int njack; JackDef jack[8];
+    int nknob; KnobDef knob[8];
 } ModType;
 
 ModType TYPES[NTYPE] = {
@@ -49,13 +50,14 @@ ModType TYPES[NTYPE] = {
     [MOD_LFO]   = { "LFO", CLR_PINK, 4, 6, 1, {{2,true,24,60,"cv"}},
                    1, {{"rate",0.1f,8,0.37f,24,28,FMT_F1}} },
     [MOD_SH]    = { "S&H", CLR_YELLOW, 4, 6, 3, {{2,false,8,60,"in"},{0,false,24,60,"clk"},{2,true,40,60,"cv"}}, 0, {} },
-    [MOD_QUANT] = { "QUANT", CLR_GREEN, 5, 7, 2, {{2,false,18,72,"in"},{1,true,42,72,"pit"}},
-                   2, {{"scl",0,5.99f,SCALE_PENTA,18,40,FMT_SCALE},{"root",0,11.99f,0,42,40,FMT_NOTE}} },
-    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 6, {{0,false,6,84,"g"},{1,false,18,84,"p"},{2,false,30,84,"f"},{2,false,42,84,"r"},{2,false,54,84,"w"},{2,false,66,84,"a"}},
-                   6, {{"cut",200,2200,700,20,30,FMT_INT},{"res",0,15,6,52,30,FMT_INT},{"pw",0.05f,0.95f,0.5f,20,48,FMT_F1},{"wav",0,4.99f,0,52,48,FMT_WAVE},
-                       {"fenv",0,3000,0,20,66,FMT_INT},{"penv",-48,48,0,52,66,FMT_INT}} },   // a = amp/VCA CV (patch an ENV for percussive punch); fenv/penv = filter & pitch env depth
-    [MOD_EUCLID]= { "EUCLID", CLR_RED, 5, 7, 2, {{0,false,18,72,"clk"},{0,true,42,72,"g"}},
-                   2, {{"h",1,8.99f,4,18,40,FMT_INT},{"s",2,16.99f,8,42,40,FMT_INT}} },
+    [MOD_QUANT] = { "QUANT", CLR_GREEN, 5, 6, 2, {{2,false,18,60,"in"},{1,true,42,60,"pit"}},
+                   2, {{"scl",0,5.99f,SCALE_PENTA,18,28,FMT_SCALE},{"root",0,11.99f,0,42,28,FMT_NOTE}} },
+    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 7, {{0,false,3,84,"g"},{1,false,13,84,"p"},{2,false,23,84,"f"},{2,false,33,84,"r"},{2,false,43,84,"w"},{2,false,53,84,"a"},{0,false,63,84,"vb"}},
+                   7, {{"cut",200,2200,700,20,28,FMT_INT},{"res",0,15,6,52,28,FMT_INT},
+                       {"pw",0.05f,0.95f,0.5f,12,46,FMT_F1},{"wav",0,4.99f,0,36,46,FMT_WAVE},{"flt",0,3.99f,0,58,46,FMT_FILTER},
+                       {"fenv",0,3000,0,20,64,FMT_INT},{"penv",-48,48,0,52,64,FMT_INT}} },   // vb = VIBE patch point; a = amp/VCA CV; flt = filter mode
+    [MOD_EUCLID]= { "EUCLID", CLR_RED, 5, 6, 2, {{0,false,18,60,"clk"},{0,true,42,60,"g"}},
+                   2, {{"h",1,8.99f,4,18,26,FMT_INT},{"s",2,16.99f,8,42,26,FMT_INT}} },
     [MOD_ENV]   = { "ENV", CLR_MEDIUM_GREEN, 4, 6, 2, {{0,false,14,60,"g"},{2,true,34,60,"cv"}},
                    2, {{"atk",0.005f,0.5f,0.01f,14,32,FMT_MS},{"dec",0.02f,1,0.25f,34,32,FMT_MS}} },
     [MOD_DRUM]  = { "DRUM", CLR_DARK_ORANGE, 4, 5, 3, {{0,false,8,48,"k"},{0,false,24,48,"s"},{0,false,40,48,"h"}}, 0, {} },
@@ -65,18 +67,26 @@ ModType TYPES[NTYPE] = {
     [MOD_ATTN]  = { "ATTN", CLR_MAUVE, 3, 5, 2, {{2,false,9,48,"in"},{2,true,27,48,"out"}},
                    1, {{"amt",0,1,1,18,32,FMT_F1}} },
     [MOD_LOGIC] = { "LOGIC", CLR_LIGHT_YELLOW, 4, 5, 3, {{0,false,10,48,"a"},{0,false,24,48,"b"},{0,true,38,48,"o"}},
-                   1, {{"mod",0,2.99f,0,24,34,FMT_LOGIC}} },
+                   1, {{"mod",0,2.99f,0,24,26,FMT_LOGIC}} },
     [MOD_SCOPE] = { "SCOPE", CLR_LIGHT_GREY, 6, 4, 1, {{2,false,36,38,"in"}}, 0, {} },
     [MOD_KEYS]  = { "KEYS", CLR_LIGHT_PEACH, 6, 5, 2, {{0,true,24,52,"g"},{1,true,48,52,"p"}}, 0, {} },
     // ── famous-module-inspired ──
-    [MOD_TURING]= { "TURING", CLR_TRUE_BLUE, 5, 7, 2, {{0,false,18,72,"clk"},{2,true,42,72,"cv"}},
-                   2, {{"rnd",0,1,0.4f,18,40,FMT_F1},{"len",2,16.99f,8,42,40,FMT_INT}} },
-    [MOD_GRIDS] = { "GRIDS", CLR_DARK_ORANGE, 6, 7, 4, {{0,false,10,72,"clk"},{0,true,26,72,"k"},{0,true,44,72,"s"},{0,true,62,72,"h"}},
-                   2, {{"map",0,1,0.3f,22,40,FMT_F1},{"fill",0,1,0.5f,50,40,FMT_F1}} },
+    [MOD_TURING]= { "TURING", CLR_TRUE_BLUE, 5, 6, 2, {{0,false,18,60,"clk"},{2,true,42,60,"cv"}},
+                   2, {{"rnd",0,1,0.4f,18,26,FMT_F1},{"len",2,16.99f,8,42,26,FMT_INT}} },
+    [MOD_GRIDS] = { "GRIDS", CLR_DARK_ORANGE, 6, 6, 4, {{0,false,10,60,"clk"},{0,true,26,60,"k"},{0,true,44,60,"s"},{0,true,62,60,"h"}},
+                   2, {{"map",0,1,0.3f,22,26,FMT_F1},{"fill",0,1,0.5f,50,26,FMT_F1}} },
     [MOD_MARBLES]={ "MARBLES", CLR_LIME_GREEN, 5, 7, 3, {{0,false,10,72,"clk"},{0,true,30,72,"g"},{2,true,50,72,"cv"}},
                    2, {{"dens",0,1,0.6f,16,40,FMT_F1},{"sprd",0,1,0.7f,44,40,FMT_F1}} },
-    [MOD_MATHS] = { "MATHS", CLR_BLUE_GREEN, 5, 7, 3, {{0,false,10,72,"t"},{2,true,30,72,"cv"},{0,true,50,72,"eoc"}},
-                   3, {{"rise",0.005f,2,0.1f,12,40,FMT_MS},{"fall",0.005f,2,0.3f,30,40,FMT_MS},{"cyc",0,1,0,48,40,FMT_F1}} },
+    [MOD_MATHS] = { "MATHS", CLR_BLUE_GREEN, 5, 6, 3, {{0,false,10,60,"t"},{2,true,30,60,"cv"},{0,true,50,60,"eoc"}},
+                   3, {{"rise",0.005f,2,0.1f,12,26,FMT_MS},{"fall",0.005f,2,0.3f,30,26,FMT_MS},{"cyc",0,1,0,48,26,FMT_F1}} },
+    // ── new modules ──
+    [MOD_SEQ]     = { "SEQ", CLR_PEACH, 6, 7, 3, {{0,false,14,72,"clk"},{2,true,36,72,"cv"},{0,true,58,72,"g"}},
+                     8, {{"1",0,1,0,    8,26,FMT_F1},{"2",0,1,0.14f,24,26,FMT_F1},{"3",0,1,0.28f,40,26,FMT_F1},{"4",0,1,0.43f,56,26,FMT_F1},
+                         {"5",0,1,0.57f,8,42,FMT_F1},{"6",0,1,0.71f,24,42,FMT_F1},{"7",0,1,0.85f,40,42,FMT_F1},{"8",0,1,1,    56,42,FMT_F1}} },
+    [MOD_VIBRATO] = { "VIBE", CLR_DARK_BLUE, 4, 5, 2, {{0,false,9,48,"g"},{0,true,27,48,"out"}},
+                     3, {{"rate",0.5f,14,5.5f,8,28,FMT_F1},{"dpt",0,1,0.3f,24,28,FMT_F1},{"dst",0,2.99f,0,40,28,FMT_DEST}} },
+    [MOD_CHANCE]  = { "CHANCE", CLR_BROWN, 4, 5, 2, {{0,false,14,48,"in"},{0,true,34,48,"out"}},
+                     1, {{"prob",0,1,0.5f,24,28,FMT_F1}} },
 };
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -100,10 +110,13 @@ const char *HELP[NTYPE][3] = {
     [MOD_GRIDS]  = { "Drum-pattern generator. map morphs the", "groove, fill sets density. k/s/h gate outs", "-> patch into a DRUM. Clock it from CLOCK." },
     [MOD_MARBLES]= { "Shaped randomness. dens = how often the", "random gate (g) fires; sprd = how wide the", "random cv swings. Clock it; cv -> QUANT." },
     [MOD_MATHS]  = { "Function generator (Make Noise Maths).", "rise/fall shape a cv ramp: 't' triggers a", "one-shot; cyc>0 loops it (an LFO). eoc pulses at end." },
+    [MOD_SEQ]    = { "8-step CV sequencer. Knobs set step values", "0-1 (patch cv→QUANT for pitched melody).", "Advances on clk, fires gate on each step." },
+    [MOD_VIBRATO]= { "Audio-rate vibrato via note_lfo(). rate=Hz,", "dpt=depth, dst=pit/cut/pw. 'g' unpatched=", "always on; patched=gate-enable." },
+    [MOD_CHANCE] = { "Gate filter: lets incoming gates through", "with prob chance (0=never 1=always).", "Thins patterns without changing the rhythm." },
 };
 
 // ── module instances + cables ──
-typedef struct { int type, x, y; float param[6], state[24], jackval[4]; } Module;   // param[] up to 6 knobs; state[] holds SCOPE history
+typedef struct { int type, x, y; float param[8], state[24], jackval[4]; } Module;   // param[] up to 8 knobs; state[] holds SCOPE history
 #define MAX_MOD 24
 Module mod[MAX_MOD];
 int    nmod = 0;
@@ -115,7 +128,7 @@ int   ncable = 0;
 
 // global transport + ui state
 int   g_step = 0, g_newstep = 0, last_step = -1, tick_flash = 99;
-int   held_knob = 0, drag_y = 0, drag_jack = -1, msg_flash = 0, dbg_midi = 60;
+int   held_knob = 0, drag_y = 0, drag_x = 0, drag_jack = -1, msg_flash = 0, dbg_midi = 60;
 const char *msg = "";
 
 // ── canvas (pan/zoom) + palette state ──
@@ -275,17 +288,121 @@ void preset_punch(void) {        // ENV -> VCA (amp) + a big pitch env = the kic
     mod[e2].param[0] = 3; mod[e2].param[1] = 8;
     add_cable(ck, 0, e2, 0); add_cable(e2, 1, dr, 2); add_cable(ck, 0, dr, 1);   // hats + snare on top
 }
-const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)" };
-void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch };
-#define NPRESET 13
+void preset_glide(void) {        // live pitch tracking: sparse gates + LFO walks scale while note is held
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), lf = spawn(MOD_LFO, bayx(1), bayy(1));
+    int qt = spawn(MOD_QUANT, bayx(2), bayy(2)), eu = spawn(MOD_EUCLID, bayx(3), bayy(3));
+    int vo = spawn(MOD_VOICE, bayx(4), bayy(4)), en = spawn(MOD_ENV, bayx(5), bayy(5));
+    int dr = spawn(MOD_DRUM, bayx(6), bayy(6));
+    mod[ck].param[0] = 88;
+    mod[lf].param[0] = 0.35f;                               // slow LFO drifts through scale degrees
+    mod[eu].param[0] = 2; mod[eu].param[1] = 16;            // 2/16 = sparse; long held notes
+    mod[qt].param[0] = SCALE_MAJOR;
+    mod[vo].param[0] = 900; mod[vo].param[1] = 4; mod[vo].param[3] = 2;   // tri wave, open filter
+    mod[vo].param[4] = 400;                                  // light filter blip on attack
+    mod[en].param[1] = 0.3f;
+    add_cable(lf, 0, qt, 0); add_cable(qt, 1, vo, 1);       // LFO → QUANT → pitch (walks while held)
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
+    add_cable(eu, 1, en, 0); add_cable(en, 1, vo, 2);        // ENV → filter CV for each attack
+    add_cable(ck, 0, dr, 1); add_cable(ck, 0, dr, 2);
+}
+void preset_bpacid(void) {       // band-pass filter: Turing loop + LFO cutoff sweep = nasal wah
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), tm = spawn(MOD_TURING, bayx(1), bayy(1));
+    int qt = spawn(MOD_QUANT, bayx(2), bayy(2)), eu = spawn(MOD_EUCLID, bayx(3), bayy(3));
+    int vo = spawn(MOD_VOICE, bayx(4), bayy(4)), lf = spawn(MOD_LFO, bayx(5), bayy(5));
+    int dr = spawn(MOD_DRUM, bayx(6), bayy(6));
+    mod[ck].param[0] = 124;
+    mod[tm].param[0] = 0.2f; mod[tm].param[1] = 8;
+    mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[eu].param[0] = 5; mod[eu].param[1] = 8;
+    mod[lf].param[0] = 0.7f;
+    mod[vo].param[0] = 500; mod[vo].param[1] = 11; mod[vo].param[3] = 0;  // saw, high Q
+    mod[vo].param[6] = 2;                                    // BAND-PASS
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
+    add_cable(lf, 0, vo, 2);                                 // LFO sweeps BP cutoff
+    add_cable(ck, 0, dr, 0); add_cable(ck, 0, dr, 2);
+}
+void preset_notchphaser(void) {  // notch filter: MATHS cycling slowly sweeps notch freq = phaser
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), lf = spawn(MOD_LFO, bayx(1), bayy(1));
+    int sh = spawn(MOD_SH, bayx(2), bayy(2)), qt = spawn(MOD_QUANT, bayx(3), bayy(3));
+    int vo = spawn(MOD_VOICE, bayx(4), bayy(4)), ma = spawn(MOD_MATHS, bayx(5), bayy(5));
+    int dr = spawn(MOD_DRUM, bayx(6), bayy(6));
+    mod[ck].param[0] = 95;
+    mod[lf].param[0] = 0.5f;
+    mod[ma].param[0] = 0.4f; mod[ma].param[1] = 1.8f; mod[ma].param[2] = 1; // cycling ramp = slow notch sweep
+    mod[qt].param[0] = SCALE_PENTA;
+    mod[vo].param[0] = 800; mod[vo].param[1] = 13; mod[vo].param[3] = 1;   // sqr, sharp notch Q
+    mod[vo].param[6] = 3;                                    // NOTCH
+    add_cable(ck, 0, sh, 1); add_cable(lf, 0, sh, 0);
+    add_cable(sh, 2, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(ck, 0, vo, 0);
+    add_cable(ma, 1, vo, 2);                                 // MATHS → notch freq sweep
+    add_cable(ck, 0, dr, 0); add_cable(ck, 0, dr, 2);
+}
+
+void preset_seq(void) {          // step sequencer: C pentatonic minor phrase → QUANT → VOICE
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK,  bayx(0), bayy(0)), sq = spawn(MOD_SEQ,    bayx(1), bayy(1));
+    int qt = spawn(MOD_QUANT,  bayx(2), bayy(2)), vo = spawn(MOD_VOICE,  bayx(3), bayy(3));
+    int eu = spawn(MOD_EUCLID, bayx(4), bayy(4)), dr = spawn(MOD_DRUM,   bayx(5), bayy(5));
+    mod[ck].param[0] = 105;
+    mod[sq].param[0]=0; mod[sq].param[1]=0.125f; mod[sq].param[2]=0.375f; mod[sq].param[3]=0.5f;
+    mod[sq].param[4]=0.375f; mod[sq].param[5]=0.25f; mod[sq].param[6]=0.125f; mod[sq].param[7]=0;
+    mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[vo].param[0] = 650; mod[vo].param[1] = 6; mod[vo].param[3] = 0; mod[vo].param[4] = 900;
+    mod[eu].param[0] = 3; mod[eu].param[1] = 8;
+    add_cable(ck, 0, sq, 0); add_cable(sq, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(sq, 2, vo, 0);                             // SEQ gate fires every step
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
+}
+void preset_vibe(void) {         // audio-rate vibrato: sparse gates hold notes long, VIBE always on
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK,   bayx(0), bayy(0)), eu = spawn(MOD_EUCLID,  bayx(1), bayy(1));
+    int tm = spawn(MOD_TURING,  bayx(2), bayy(2)), qt = spawn(MOD_QUANT,   bayx(3), bayy(3));
+    int vo = spawn(MOD_VOICE,   bayx(4), bayy(4)), vb = spawn(MOD_VIBRATO, bayx(5), bayy(5));
+    int dr = spawn(MOD_DRUM,    bayx(6), bayy(6));
+    mod[ck].param[0] = 78;
+    mod[eu].param[0] = 2; mod[eu].param[1] = 16;        // very sparse → long held notes
+    mod[tm].param[0] = 0.2f;
+    mod[qt].param[0] = SCALE_MAJOR;
+    mod[vo].param[0] = 1200; mod[vo].param[3] = 2;      // tri — smooth, vibrato clearly audible
+    mod[vb].param[0] = 5.5f; mod[vb].param[1] = 0.6f;  // 5.5 Hz, moderate depth, dst=pit
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0);
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(vb, 1, vo, 6);                             // VIBE out → VOICE vb (explicit patch)
+    add_cable(ck, 0, dr, 0); add_cable(ck, 0, dr, 2);
+}
+void preset_chance(void) {       // probabilistic gates: dense euclid filtered at 60% by CHANCE
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK,  bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
+    int ch = spawn(MOD_CHANCE, bayx(2), bayy(2)), tm = spawn(MOD_TURING, bayx(3), bayy(3));
+    int qt = spawn(MOD_QUANT,  bayx(4), bayy(4)), vo = spawn(MOD_VOICE,  bayx(5), bayy(5));
+    int dr = spawn(MOD_DRUM,   bayx(6), bayy(6));
+    mod[ck].param[0] = 118;
+    mod[eu].param[0] = 6; mod[eu].param[1] = 8;         // dense 6/8
+    mod[ch].param[0] = 0.6f;                             // 60% pass rate
+    mod[tm].param[0] = 0.3f;
+    mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[vo].param[0] = 700; mod[vo].param[1] = 7; mod[vo].param[3] = 1; mod[vo].param[4] = 900;
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, ch, 0); add_cable(ch, 1, vo, 0);
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(ck, 0, dr, 0); add_cable(ck, 0, dr, 2);
+}
+
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance };
+#define NPRESET 19
 
 // ── persistence ──
-typedef struct { int type, x, y; float param[6]; } SaveMod;
+typedef struct { int type, x, y; float param[8]; } SaveMod;
 typedef struct { int nmod; SaveMod m[MAX_MOD]; int ncable; Cable cable[MAXCABLE]; } Patch;
 
 void save_patch(void) {
     Patch p; p.nmod = nmod; p.ncable = ncable;
-    for (int i = 0; i < nmod; i++) { p.m[i].type = mod[i].type; p.m[i].x = mod[i].x; p.m[i].y = mod[i].y; for (int k = 0; k < 6; k++) p.m[i].param[k] = mod[i].param[k]; }
+    for (int i = 0; i < nmod; i++) { p.m[i].type = mod[i].type; p.m[i].x = mod[i].x; p.m[i].y = mod[i].y; for (int k = 0; k < 8; k++) p.m[i].param[k] = mod[i].param[k]; }
     for (int c = 0; c < ncable; c++) p.cable[c] = cable[c];
     save_bytes(&p, sizeof p);
     msg = "SAVED"; msg_flash = 40;
@@ -294,7 +411,7 @@ void load_patch(void) {
     Patch p;
     if (load_bytes(&p, sizeof p) == (int)sizeof p) {
         nmod = p.nmod < 0 ? 0 : p.nmod > MAX_MOD ? MAX_MOD : p.nmod;
-        for (int i = 0; i < nmod; i++) { mod[i] = (Module){ p.m[i].type, p.m[i].x, p.m[i].y, {0}, {0}, {0} }; for (int k = 0; k < 6; k++) mod[i].param[k] = p.m[i].param[k]; }
+        for (int i = 0; i < nmod; i++) { mod[i] = (Module){ p.m[i].type, p.m[i].x, p.m[i].y, {0}, {0}, {0} }; for (int k = 0; k < 8; k++) mod[i].param[k] = p.m[i].param[k]; }
         ncable = p.ncable < 0 ? 0 : p.ncable > MAXCABLE ? MAXCABLE : p.ncable;
         for (int c = 0; c < ncable; c++) cable[c] = p.cable[c];
         msg = "LOADED";
@@ -370,10 +487,22 @@ void eval_mod(int mi) {
             m->state[2] = m->param[0] + clamp(fcv, 0, 1) * 1800.0f;   // cutoff = base knob + 'f' CV
             int h = (int)m->state[1];
             if (h > 0) {
+                note_pitch(h, pitch < 1 ? 48.0f : pitch);                                     // track pitch CV every frame (enables live vibrato, bends)
+                note_filter(h, 1 + (int)clamp(m->param[6], 0, 3));                           // lp/hp/bp/nt
                 note_cutoff(h, (int)m->state[2]);
-                note_res(h, (int)clamp(m->param[1] + read_in(mi, 3) * 15.0f, 0, 15));        // resonance = res knob + 'r' CV
-                note_duty(h, clamp(m->param[2] + read_in(mi, 4) * 0.5f, 0.05f, 0.95f));      // pulse width = pw knob + 'w' CV
-                if (amp_cv) note_vol(h, (int)(clamp(read_in(mi, 5), 0, 1) * 7.0f + 0.5f));   // VCA: amp = 'a' CV (ENV → percussive punch)
+                note_res(h, (int)clamp(m->param[1] + read_in(mi, 3) * 15.0f, 0, 15));
+                note_duty(h, clamp(m->param[2] + read_in(mi, 4) * 0.5f, 0.05f, 0.95f));
+                if (amp_cv) note_vol(h, (int)(clamp(read_in(mi, 5), 0, 1) * 7.0f + 0.5f));
+                // vb jack (6): if patched to a VIBE, read its params and apply audio-rate LFO
+                int vc = cable_into(mi, 6);
+                if (vc >= 0 && mod[cable[vc].sm].type == MOD_VIBRATO && mod[cable[vc].sm].jackval[1] > 0.5f) {
+                    Module *vb = &mod[cable[vc].sm];
+                    int dst = (int)clamp(vb->param[2], 0, 2);
+                    int dests[] = { LFO_PITCH, LFO_CUTOFF, LFO_DUTY };
+                    float d = vb->param[1];
+                    float dep[] = { d * 2.5f, d * 800.0f, d * 0.35f };
+                    note_lfo(h, 0, dests[dst], vb->param[0], dep[dst]);
+                }
             }
             break; }
         case MOD_EUCLID: {
@@ -484,6 +613,28 @@ void eval_mod(int mi) {
             m->jackval[1] = clamp(m->state[3], 0, 1);
             m->state[4] += 1;
             break; }
+        case MOD_SEQ: {
+            float clk = read_in(mi, 0);
+            m->jackval[2] = 0;
+            if (clk > 0.5f && m->state[1] <= 0.5f) {
+                m->state[0] = ((int)m->state[0] + 1) % 8;
+                m->jackval[2] = 1;
+                m->state[2] = 0;
+            }
+            m->state[1] = clk; m->state[2] += 1;
+            m->jackval[1] = m->param[(int)m->state[0]];   // current step cv
+            break; }
+        case MOD_VIBRATO: {
+            bool en = cable_into(mi, 0) < 0 || read_in(mi, 0) > 0.5f;
+            m->jackval[1] = en ? 1.0f : 0.0f;   // output enable signal; VOICE reads params via cable
+            break; }
+        case MOD_CHANCE: {
+            float g = read_in(mi, 0);
+            m->jackval[1] = 0;
+            if (g > 0.5f && m->state[0] <= 0.5f)
+                if (rnd_float() < m->param[0]) { m->jackval[1] = 1; m->state[1] = 0; }
+            m->state[0] = g; m->state[1] += 1;
+            break; }
     }
 }
 
@@ -522,6 +673,8 @@ int near_col(int x, int y) {
 const char *knob_str(int fmt, float v) {
     if (fmt == FMT_LOGIC) { const char *L[3] = { "AND", "OR", "XOR" }; return L[(int)v]; }
     if (fmt == FMT_WAVE)  { const char *W[5] = { "saw", "sqr", "tri", "sin", "noi" }; return W[(int)v]; }
+    if (fmt == FMT_FILTER){ const char *F[4] = { "lp",  "hp",  "bp",  "nt"  }; return F[(int)clamp(v, 0, 3)]; }
+    if (fmt == FMT_DEST)  { const char *D[3] = { "pit", "cut", "pw"  }; return D[(int)clamp(v, 0, 2)]; }
     if (fmt == FMT_SCALE) return SCALES[(int)v];
     if (fmt == FMT_NOTE)  return NOTES[(int)v];
     if (fmt == FMT_F1)    return str("%.1f", v);
@@ -578,13 +731,22 @@ void meter(int x, int y, int w, int h, float v, int col) {
 }
 
 float knob_dial(int id, int cx, int cy, float v, float lo, float hi, const char *name, const char *val) {
-    if (palette_drag < 0 && !panning && help_type < 0 && drag_mod < 0 && !preset_open && mouse_pressed(MOUSE_LEFT) && distance(wmx, wmy, cx, cy) < 7) { held_knob = id; drag_y = wmy; }
-    if (held_knob == id && mouse_down(MOUSE_LEFT)) { v = clamp(v + (drag_y - wmy) * (hi - lo) / 120.0f, lo, hi); drag_y = wmy; }
-    bool hot = held_knob == id || distance(wmx, wmy, cx, cy) < 7;
-    circfill(cx, cy, 5, CLR_DARKER_GREY);
-    circ(cx, cy, 5, hot ? CLR_WHITE : CLR_MEDIUM_GREY);
+    float hit_r = zoom < 1.0f ? 7.0f / zoom : 7.0f;
+    if (palette_drag < 0 && !panning && help_type < 0 && drag_mod < 0 && !preset_open && mouse_pressed(MOUSE_LEFT) && distance(wmx, wmy, cx, cy) < hit_r)
+        { held_knob = id; drag_y = mouse_y(); drag_x = mouse_x(); }
+    if (held_knob == id && mouse_down(MOUSE_LEFT)) {
+        float dy = drag_y - mouse_y();   // up = positive = increase (coarse)
+        float dx = mouse_x() - drag_x;  // right = positive = increase (fine)
+        v = clamp(v + dy * (hi - lo) / 80.0f + dx * (hi - lo) / 600.0f, lo, hi);
+        drag_y = mouse_y();
+        drag_x = mouse_x();
+    }
+    bool hot = held_knob == id || distance(wmx, wmy, cx, cy) < hit_r;
+    circfill(cx, cy, 5, hot ? CLR_WHITE : CLR_MEDIUM_GREY);
+    circfill(cx, cy, 3, CLR_DARKER_GREY);
     float a = 135.0f + clamp((v - lo) / (hi - lo), 0, 1) * 270.0f;
-    line(cx, cy, cx + (int)(cos_deg(a) * 4), cy + (int)(sin_deg(a) * 4), CLR_WHITE);
+    int nx = cx + (int)(cos_deg(a) * 3), ny = cy + (int)(sin_deg(a) * 3);
+    rectfill(nx, ny, 2, 2, CLR_WHITE);
     print(name, cx - text_width(name) / 2, cy + 7, near_col(cx, cy));
     if (hot) print(val, cx - text_width(val) / 2, cy + 13, CLR_WHITE);
     return v;
@@ -596,19 +758,19 @@ void draw_extras(int mi) {
     switch (m->type) {
         case MOD_CLOCK: circfill(x + 12, y + 14, 3, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_ORANGE); break;   // per-clock step flash
         case MOD_LFO:   meter(x + W - 14, y + 16, 6, 36, m->jackval[0], CLR_PINK); break;
-        case MOD_SH:    meter(x + 10, y + 20, 6, 30, m->state[1], CLR_YELLOW); print(str("%d%%", (int)(m->state[1] * 99)), x + 26, y + 36, CLR_DARK_GREY); break;
-        case MOD_QUANT: print(NOTES[((int)m->jackval[1]) % 12], cx - text_width(NOTES[((int)m->jackval[1]) % 12]) / 2, y + 54, CLR_WHITE); break;
-        case MOD_VOICE: if (m->state[3] < 8) circfill(cx, y + 30, 5 - (int)m->state[3] / 2, CLR_LIGHT_PEACH); break;   // trigger pulse
+        case MOD_SH:    meter(x + 10, y + 18, 6, 34, m->state[1], CLR_YELLOW); print(str("%d%%", (int)(m->state[1] * 99)), x + 26, y + 34, CLR_DARK_GREY); break;
+        case MOD_QUANT: print(NOTES[((int)m->jackval[1]) % 12], cx - text_width(NOTES[((int)m->jackval[1]) % 12]) / 2, y + 44, CLR_WHITE); break;
+        case MOD_VOICE: if (m->state[3] < 8) circfill(cx, y + 14, 5 - (int)m->state[3] / 2, CLR_LIGHT_PEACH); break;   // trigger pulse
         case MOD_EUCLID: {
             int hits = (int)m->param[0], steps = (int)m->param[1];
             for (int s = 0; s < steps; s++) {
                 int dx = x + 6 + (int)(s * ((W - 12.0f) / steps));
                 bool on = euclid(hits, steps, s);
-                circfill(dx, y + 56, on ? 2 : 1, on ? CLR_RED : CLR_DARK_GREY);
-                if (s == (((int)m->state[1] % steps) + steps) % steps && m->state[2] < 6) circ(dx, y + 56, 3, CLR_WHITE);
+                circfill(dx, y + 48, on ? 2 : 1, on ? CLR_RED : CLR_DARK_GREY);
+                if (s == (((int)m->state[1] % steps) + steps) % steps && m->state[2] < 6) circ(dx, y + 48, 3, CLR_WHITE);
             }
             break; }
-        case MOD_ENV:   meter(x + 8, y + 20, 6, 30, m->state[3], CLR_MEDIUM_GREEN); break;
+        case MOD_ENV:   meter(x + 2, y + 20, 4, 30, m->state[3], CLR_MEDIUM_GREEN); break;
         case MOD_DRUM:
             circfill(x + 8,  y + 20, 5, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_RED);
             circfill(x + 24, y + 20, 4, m->state[4] < 5 ? CLR_WHITE : CLR_BROWN);
@@ -627,23 +789,39 @@ void draw_extras(int mi) {
             int len = (int)m->param[1]; if (len < 2) len = 2; if (len > 16) len = 16;
             for (int i = 0; i < len; i++) {
                 int dx = x + 4 + (int)(i * ((W - 8.0f) / len));
-                circfill(dx, y + 58, 2, m->state[2 + i] > 0.5f ? CLR_TRUE_BLUE : CLR_DARKER_GREY);
-                if (i == (int)m->state[1]) circ(dx, y + 58, 3, CLR_WHITE);
+                circfill(dx, y + 48, 2, m->state[2 + i] > 0.5f ? CLR_TRUE_BLUE : CLR_DARKER_GREY);
+                if (i == (int)m->state[1]) circ(dx, y + 48, 3, CLR_WHITE);
             }
             break; }
         case MOD_GRIDS:     // 3 drum LEDs flashing on their hits — aligned with k/s/h jacks
-            circfill(x + 22, y + 56, 4, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_RED);
-            circfill(x + 40, y + 56, 3, m->state[3] < 5 ? CLR_WHITE : CLR_BROWN);
-            circfill(x + 58, y + 56, 2, m->state[4] < 5 ? CLR_WHITE : CLR_DARK_GREY);
+            circfill(x + 22, y + 44, 4, m->state[2] < 5 ? CLR_WHITE : CLR_DARK_RED);
+            circfill(x + 40, y + 44, 3, m->state[3] < 5 ? CLR_WHITE : CLR_BROWN);
+            circfill(x + 58, y + 44, 2, m->state[4] < 5 ? CLR_WHITE : CLR_DARK_GREY);
             break;
         case MOD_MARBLES:   // gate flash + cv meter
             circfill(x + 26, y + 56, 4, m->state[3] < 5 ? CLR_WHITE : CLR_DARK_GREEN);
-            meter(x + 42, y + 30, 6, 30, m->state[1], CLR_LIME_GREEN);
+            meter(x + 30, y + 30, 6, 30, m->state[1], CLR_LIME_GREEN);
             break;
         case MOD_MATHS:     // level bar + EOC flash
-            rectfill(x + 8, y + 58, W - 16, 3, CLR_BLACK);
-            rectfill(x + 8, y + 58, (int)(clamp(m->state[3], 0, 1) * (W - 16)), 3, CLR_BLUE_GREEN);
-            if (m->state[4] < 5) circfill(x + 46, y + 52, 3, CLR_WHITE);
+            rectfill(x + 8, y + 46, W - 16, 3, CLR_BLACK);
+            rectfill(x + 8, y + 46, (int)(clamp(m->state[3], 0, 1) * (W - 16)), 3, CLR_BLUE_GREEN);
+            if (m->state[4] < 5) circfill(x + 46, y + 40, 3, CLR_WHITE);
+            break;
+        case MOD_SEQ: {   // 8 position dots + mini bars showing step values
+            int cur = ((int)m->state[0]) % 8;
+            for (int s = 0; s < 8; s++) {
+                int ddx = x + 4 + s * 9;
+                int bh  = (int)(m->param[s] * 14);
+                rectfill(ddx - 2, y + 62 - bh, 4, bh, s == cur ? CLR_PEACH : CLR_DARKER_GREY);
+                circfill(ddx, y + 64, s == cur && m->state[2] < 8 ? 3 : 2,
+                         s == cur ? CLR_WHITE : CLR_DARK_GREY);
+            }
+            break; }
+        case MOD_VIBRATO:
+            circfill(cx, y + 14, 3, m->jackval[1] > 0.5f ? CLR_DARK_BLUE : CLR_DARKER_GREY);
+            break;
+        case MOD_CHANCE:
+            circfill(cx, y + 18, 4, m->state[1] < 6 ? CLR_WHITE : CLR_BROWN);
             break;
         case MOD_KEYS: {    // 7 white keys; lit while held
             const char KK[7] = { 'A','S','D','F','G','H','J' }; const int OFF[7] = { 0,2,4,5,7,9,11 };
@@ -710,7 +888,7 @@ void edit_cables(int mx, int my) {
     }
     if (mouse_pressed(MOUSE_RIGHT)) {
         int h = jack_at(mx, my);
-        if (h >= 0) { int mi = h / 4, j = h % 4; for (int c = ncable - 1; c >= 0; c--) if ((cable[c].sm == mi && cable[c].sj == j) || (cable[c].dm == mi && cable[c].dj == j)) remove_cable(c); }
+        if (h >= 0) { int mi = h / 8, j = h % 8; for (int c = ncable - 1; c >= 0; c--) if ((cable[c].sm == mi && cable[c].sj == j) || (cable[c].dm == mi && cable[c].dj == j)) remove_cable(c); }
     }
 }
 
@@ -877,6 +1055,17 @@ void draw(void) {
                            jackpos_x(cable[c].dm, cable[c].dj), jackpos_y(cable[c].dm, cable[c].dj),
                            sig_col(TYPES[mod[cable[c].sm].type].jack[cable[c].sj].type), true);
 
+    // highlight cables connected to the hovered jack — redraw on top in white so they stand out
+    int hj = jack_at(wmx, wmy);
+    if (hj >= 0) {
+        int hmi = hj / 8, hjj = hj % 8;
+        for (int c = 0; c < ncable; c++)
+            if ((cable[c].sm == hmi && cable[c].sj == hjj) || (cable[c].dm == hmi && cable[c].dj == hjj))
+                draw_cable_between(jackpos_x(cable[c].sm, cable[c].sj), jackpos_y(cable[c].sm, cable[c].sj),
+                                   jackpos_x(cable[c].dm, cable[c].dj), jackpos_y(cable[c].dm, cable[c].dj),
+                                   CLR_WHITE, false);
+    }
+
     if (drag_jack >= 0) {
         int sm = drag_jack / 8, sj = drag_jack % 8, c = sig_col(TYPES[mod[sm].type].jack[sj].type);
         draw_cable_between(jackpos_x(sm, sj), jackpos_y(sm, sj), wmx, wmy, c, false);
@@ -920,16 +1109,18 @@ void draw(void) {
     print("PRESETS", pbx + 5, 4, CLR_WHITE);
     if (pbh && mouse_pressed(MOUSE_LEFT)) preset_open = !preset_open;
     if (preset_open) {
+        int rows = (NPRESET + 1) / 2;
         for (int i = 0; i < NPRESET; i++) {
-            int iy = 14 + i * 12;
-            bool ih = mouse_x() >= pbx && mouse_x() < pbx + pbw && mouse_y() >= iy && mouse_y() < iy + 12;
-            rectfill(pbx, iy, pbw, 12, ih ? CLR_DARK_GREY : CLR_BLACK);
-            rect(pbx, iy, pbw, 12, CLR_DARKER_GREY);
-            print(PRESET_NAMES[i], pbx + 4, iy + 4, CLR_LIGHT_GREY);
+            int col = i / rows, row = i % rows;
+            int ix = pbx + col * pbw, iy = 14 + row * 12;
+            bool ih = mouse_x() >= ix && mouse_x() < ix + pbw && mouse_y() >= iy && mouse_y() < iy + 12;
+            rectfill(ix, iy, pbw, 12, ih ? CLR_DARK_GREY : CLR_BLACK);
+            rect(ix, iy, pbw, 12, CLR_DARKER_GREY);
+            print(PRESET_NAMES[i], ix + 4, iy + 4, CLR_LIGHT_GREY);
             if (ih && mouse_pressed(MOUSE_LEFT)) { PRESET_FN[i](); preset_open = 0; }
         }
-        bool inside = mouse_x() >= pbx && mouse_x() < pbx + pbw && mouse_y() < 14 + NPRESET * 12;
-        if (mouse_pressed(MOUSE_LEFT) && !inside) preset_open = 0;   // click away to close
+        bool inside = mouse_x() >= pbx && mouse_x() < pbx + pbw * 2 && mouse_y() < 14 + rows * 12;
+        if (mouse_pressed(MOUSE_LEFT) && !inside) preset_open = 0;
     }
     if (msg_flash > 0) print(msg, pbx + pbw + 8, 5, CLR_LIGHT_PEACH);
 
