@@ -266,6 +266,9 @@ static const int PUSH_BASS  = +12;    // bass leans toward the snare's time
 
 Numbers to steal: at 90 BPM a 16th is 167ms — useful offsets are 5–35ms (3–20% of
 a 16th). Drags larger than ~40ms stop feeling laid-back and start feeling late.
+Field note (lowend.c): the maximal template above read as *stumbling* in
+practice — the cart shipped at half strength (−5/+12/+7, swing 54%) and that's
+where the head-nod lives. Start subtle; turn it up only if the groove vanishes.
 Mac DeMarco-style slacker feel = everything straight but the whole kit −0/+10ms
 loose against the bass, tempo slightly unstable (`bpm()` wobbled ±1 every few bars).
 
@@ -303,10 +306,25 @@ This split is free to implement and turns "nice accident" into a shareable artif
 
 ## Wiring it into a game
 
-- **Intensity is the game hook.** Expose one 0–3 level that gates layers
-  (bossa.c: bass+comping → +shaker → +clave+melody → louder/denser). Map it to
-  game state: menu 0, explore 1, action 2, boss/final lap 3. Layers enter on
+- **Intensity is the game hook — but make it a SHIFT, not a gate.** Lesson
+  learned the hard way (jingle.c): if the knob gates layers that the arrangement
+  has already silenced (kit only exists in choruses), it does nothing audible
+  for most of the song. The model that works (jingle.c/lowend.c): the
+  arrangement gives each section a baseline density (intro 0 · verse 1 ·
+  chorus 2) and intensity *shifts the whole curve*:
+  ```c
+  int lvl = sectionBase + intensity - 1;     // clamp 0..3
+  // layers key off lvl, never off intensity directly
+  ```
+  The chorus stays fuller than the verse at every setting — the two dimensions
+  stay orthogonal — and every notch changes something *immediately*, including
+  in the always-on layers (note gaps, touch/velocity). Map intensity to game
+  state: menu 0, explore 1, action 2, boss/final lap 3; let changes land on
   2-bar boundaries, not instantly.
+- **Tone is the cheapest second axis.** A master-brightness knob (re-issue the
+  filter cutoffs ×0.55..1.3, live) reads instantly everywhere and doubles as a
+  game state: caves/underwater/flashback = mellow, daylight = bright.
+  Prototyped in jingle.c (`T` key).
 - **Stay out of the sfx register.** Keep the soundtrack mid-volume (vol 3–5) and
   mid-register; give game events vol 6–7 and the extremes. Hit-sounds read through
   a full mix fine if the music never peaks.
