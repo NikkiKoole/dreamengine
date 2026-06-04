@@ -180,13 +180,42 @@ Three mechanisms, all just milliseconds added to `dly`:
   melody 10–18ms **behind** the beat. Velocity: accent the pattern's anchor step,
   drop ghost notes with `chance()`.
 
-**Swing** (for the future lofi cart): straight 16ths, but delay every off-beat 8th
-by 55–62% of an 8th instead of 50%:
+**Swing**: straight 16ths, but delay every off-beat 8th by 55–62% of an 8th
+instead of 50%:
 
 ```c
 int swing_ms = (step % 2 == 1) ? (int)(stepMs * 2 * (swingPct - 0.50f)) : 0;
 schedule_hit(dly + swing_ms, ...);    // swingPct 0.55 subtle .. 0.62 drunk
 ```
+
+### Groove templates — Dilla time, laid-back, rushed
+
+Swing is one number; a *groove* is a **per-lane timing personality**. The J Dilla /
+boom-bap feel is not "more swing" — it's different lanes disagreeing about where
+the beat is, consistently:
+
+```c
+// ms offsets added to dly, per lane — THE groove template
+static const int PUSH_KICK  = 0;      // kick defines the grid; leave it
+static const int PUSH_HAT   = -8;     // hats rush slightly (eager)
+static const int PUSH_SNARE = +22;    // snare drags hard (the head-nod)
+static const int PUSH_BASS  = +12;    // bass leans toward the snare's time
+// + per-hit jitter: dly + PUSH_X + rnd(5) - 2
+```
+
+Numbers to steal: at 90 BPM a 16th is 167ms — useful offsets are 5–35ms (3–20% of
+a 16th). Drags larger than ~40ms stop feeling laid-back and start feeling late.
+Mac DeMarco-style slacker feel = everything straight but the whole kit −0/+10ms
+loose against the bass, tempo slightly unstable (`bpm()` wobbled ±1 every few bars).
+
+**Engine note (resolved 2026-06-04):** scheduled notes now fire **sample-exact**.
+Before, the delayed pen ticked per audio callback (1024 samples ≈ 23ms), which
+quantized all of the above to block edges — strum staggers collapsed, drags rounded
+to 0 or 23ms. If a groove feels quantized anyway, check you're adding offsets to a
+schedule-ahead `dly` (section 1), not triggering on the frame. No groove API is
+needed or planned: templates are cart data; `schedule_hit` is the delivery vehicle.
+One real limit: the delayed pen holds 64 pending notes — keep the one-step
+lookahead; don't schedule whole bars ahead.
 
 ## 5. Melody — one cell, re-pitched (the One Note Samba trick)
 
@@ -282,6 +311,8 @@ What changes between styles is mostly **data** — the engine above carries over
 |---|---|---|---|---|---|
 | **bossa** | 112–140 | straight, clave masks, anticipation | maj7/9, ii-V chains, tritone subs, iv | nylon gtr, surdo bass, shaker, rim, flute | ✅ `bossa.c` |
 | **lofi jazz** | 70–85 | swing 56–60%, melody very late | m9/maj9, slower changes (2 bars/chord), pentatonic noodle | rhodes, soft kick/snare, dusty hats, crackle | idea |
+| **jangle pop (DeMarco)** | 85–110 | straight + loose (kit +0..10ms vs bass), tempo wobble | mixolydian I–bVII–IV vamps, 2–4 chords, NO bridge | chorus-wobble gtr (pitch-LFO pluck), round bass, CR-78-ish kit, whistle lead w/ glide | next |
+| **boom-bap (ATCQ)** | 88–96 | groove template: hats −8ms, snare +22ms, bass +12ms | jazzy ii–V loops 2 bars long, m9 stabs, walking-ish bass fragments | dusty kick (pitch-env sine), cracky snare, ride, upright-ish bass, rhodes stabs | after jangle |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
