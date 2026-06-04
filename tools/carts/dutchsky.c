@@ -4,23 +4,34 @@
 // dutchsky — day/night sky cycle; fly up through the atmosphere into space.
 // ← → scrub time of day   ↑ ↓ altitude   A toggle auto-advance
 
-#define NK  10
+#define NK  17
 #define NS  90   // stars
 #define GH  16   // ground strip height (px)
 
 typedef struct { float t; int top, mid, bot; } SkyKey;
 
+// More keyframes = smaller snaps = imperceptible transitions without any blending.
+// Each neighbouring pair differs by at most one palette step per channel.
+// The one intentional exception: 0.71→0.75 golden-hour arrival (mid: blue→orange)
+// is a deliberate dramatic snap — golden hour really does arrive fast.
 static const SkyKey SK[NK] = {
     { 0.00f, CLR_BROWNISH_BLACK, CLR_DARKER_BLUE,  CLR_DARKER_BLUE   },  // midnight
-    { 0.17f, CLR_DARKER_BLUE,   CLR_DARKER_BLUE,   CLR_DARKER_PURPLE },  // pre-dawn
+    { 0.09f, CLR_DARKER_BLUE,   CLR_DARKER_BLUE,   CLR_DARK_BLUE     },  // late night
+    { 0.17f, CLR_DARKER_BLUE,   CLR_DARK_BLUE,     CLR_DARKER_PURPLE },  // pre-dawn
+    { 0.20f, CLR_DARKER_BLUE,   CLR_TRUE_BLUE,     CLR_DARK_PEACH    },  // dawn glow
     { 0.24f, CLR_DARKER_BLUE,   CLR_TRUE_BLUE,     CLR_DARK_ORANGE   },  // dawn
-    { 0.32f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_LIGHT_PEACH   },  // morning
-    { 0.50f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_BLUE          },  // noon
-    { 0.66f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_LIGHT_PEACH   },  // afternoon
-    { 0.73f, CLR_DARKER_BLUE,   CLR_DARK_ORANGE,   CLR_ORANGE        },  // golden hour
-    { 0.80f, CLR_DARKER_BLUE,   CLR_MAUVE,         CLR_DARK_PEACH    },  // dusk
-    { 0.87f, CLR_DARKER_BLUE,   CLR_DARK_PURPLE,   CLR_DARKER_GREY   },  // twilight
-    { 1.00f, CLR_BROWNISH_BLACK, CLR_DARKER_BLUE,  CLR_DARKER_BLUE   },  // midnight
+    { 0.28f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_ORANGE        },  // sunrise
+    { 0.33f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_LIGHT_PEACH   },  // morning
+    { 0.50f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_LIGHT_PEACH   },  // noon
+    { 0.64f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_LIGHT_PEACH   },  // afternoon
+    { 0.68f, CLR_TRUE_BLUE,     CLR_BLUE,          CLR_DARK_PEACH    },  // late afternoon
+    { 0.71f, CLR_DARK_BLUE,     CLR_TRUE_BLUE,     CLR_DARK_ORANGE   },  // pre-golden
+    { 0.75f, CLR_DARKER_BLUE,   CLR_DARK_ORANGE,   CLR_ORANGE        },  // golden hour
+    { 0.78f, CLR_DARKER_BLUE,   CLR_MAUVE,         CLR_DARK_PEACH    },  // dusk
+    { 0.81f, CLR_DARKER_BLUE,   CLR_DARK_PURPLE,   CLR_MAUVE         },  // deep dusk
+    { 0.85f, CLR_DARKER_BLUE,   CLR_DARK_PURPLE,   CLR_DARKER_GREY   },  // twilight
+    { 0.91f, CLR_BROWNISH_BLACK,CLR_DARKER_BLUE,   CLR_DARKER_PURPLE },  // late twilight
+    { 1.00f, CLR_BROWNISH_BLACK,CLR_DARKER_BLUE,   CLR_DARKER_BLUE   },  // midnight
 };
 
 static float tod   = 0.78f;   // time of day 0..1 (0 = midnight, 0.5 = noon)
@@ -48,56 +59,20 @@ static void sky_find(float t, int *ai, int *bi, float *frac) {
     if (*frac > 1.0f) *frac = 1.0f;
 }
 
-// ── draw_atm: A's smooth gradient + B overlaid via fillp ─────────────────────
-//
-// vgradient() overrides fillp internally per-row, so we can't blend two
-// vgradients with an external fillp. Fix: draw A with vgradient (smooth),
-// then overlay B as 3 solid rectfills (top/mid/bot zones) with fillp(-1) as
-// the hole colour — the transparent holes show A's gradient underneath.
-// 5 dither steps cover 12%→87% B coverage; frac≥0.97 switches to full B.
+// ── draw_atm ──────────────────────────────────────────────────────────────────
+// Snap to the nearest keyframe (no blending). With 17 tightly-spaced keys,
+// each snap is at most one palette step — imperceptible in motion.
 
 static void draw_atm(int y0, int h, float t) {
     if (h <= 1) return;
     int ai, bi; float frac;
     sky_find(t, &ai, &bi, &frac);
-    const SkyKey *a = &SK[ai], *b = &SK[bi];
-
+    const SkyKey *k = frac < 0.5f ? &SK[ai] : &SK[bi];
     int mid_y = y0 + h * 62 / 100;
     if (mid_y <= y0)   mid_y = y0 + 1;
     if (mid_y >= y0+h) mid_y = y0 + h - 1;
-
-    if (frac >= 0.97f) {
-        vgradient(0, y0, SCREEN_W, mid_y - y0,   b->top, b->mid);
-        vgradient(0, mid_y, SCREEN_W, y0+h-mid_y, b->mid, b->bot);
-        return;
-    }
-
-    // A's smooth gradient — always the base
-    vgradient(0, y0, SCREEN_W, mid_y - y0,   a->top, a->mid);
-    vgradient(0, mid_y, SCREEN_W, y0+h-mid_y, a->mid, a->bot);
-
-    if (frac < 0.03f) return;
-
-    // B overlay: 3 solid colour zones with fillp holes showing A through.
-    // 0-bits = draw col_b, 1-bits = -1 = transparent (A gradient shows).
-    // Steps:  ~12%     25%     50%     75%     87%  B coverage
-    // 0x7DBE / 0x8241 are dispersed complements — one B pixel per row per col,
-    // no vertical or horizontal stripes. 0xA5A5 = canonical PICO-8 checker.
-    static const int BPAT[5] = { 0xF7F7, 0x7DBE, 0xA5A5, 0x8241, 0x0808 };
-    int pi = (int)(frac * 5.0f);
-    if (pi > 4) pi = 4;
-
-    int z1 = y0 + h * 31 / 100;   // top→mid zone boundary
-    int z2 = y0 + h * 75 / 100;   // mid→bot zone boundary
-    if (z1 <= y0)   z1 = y0 + 1;
-    if (z2 <= z1)   z2 = z1 + 1;
-    if (z2 >= y0+h) z2 = y0 + h - 1;
-
-    fillp(BPAT[pi], -1);
-    rectfill(0, y0, SCREEN_W, z1 - y0,    b->top);
-    rectfill(0, z1, SCREEN_W, z2 - z1,    b->mid);
-    rectfill(0, z2, SCREEN_W, y0+h - z2,  b->bot);
-    fillp_reset();
+    vgradient(0, y0, SCREEN_W, mid_y - y0,   k->top, k->mid);
+    vgradient(0, mid_y, SCREEN_W, y0+h-mid_y, k->mid, k->bot);
 }
 
 // ── stars ─────────────────────────────────────────────────────────────────────
