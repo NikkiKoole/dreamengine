@@ -1,11 +1,20 @@
 # Generative game music — recipes
 
-How to give a cart a soundtrack that sounds **composed**, not generated. The worked
-example is **`tools/carts/bossa.c`** (the "bossa radio" cart) — every block below
-exists there as running, listenable code. These blocks are designed to be **copied
-into your cart and tweaked** — there is deliberately no shared music header yet;
-when a second style cart lands and the copying starts to hurt, that's the signal to
-extract one.
+How to give a cart a soundtrack that sounds **composed**, not generated. Two worked
+examples, deliberately opposite in engine shape:
+
+- **`tools/carts/bossa.c`** ("bossa radio") — percussive: a 16th-note step clock,
+  schedule-ahead plucked hits, Markov jazz harmony with forced cadences.
+- **`tools/carts/ambient.c`** ("ambient radio") — beatless: held `note_on` voices
+  that morph via `note_glide`, per-note LFOs for tape wow, modal drift harmony
+  with no cadences at all.
+
+Every block below exists in one or both as running, listenable code. The blocks are
+designed to be **copied into your cart and tweaked** — there is deliberately no
+shared music header yet. Two carts in, the empirical split is: **voice leading, the
+seed/PRNG contract, and the session-history UI copied verbatim**; the clock, the
+chord brain, and every instrument changed completely. The reusable core is real but
+small (~80 lines) — extract it when a third cart confirms the boundary.
 
 The engine already has everything you need: `instrument()` + filters/LFOs/envelopes
 for timbre, `schedule_hit()` for sample-accurate timing, `bpm()/beat()/beat_pos()`
@@ -53,6 +62,11 @@ All feel offsets (strum stagger, swing, behind-the-beat melody) are added to `dl
 in milliseconds. The pattern survives `bpm()` changes mid-song because `pos` is
 derived from the engine's own beat clock.
 
+**Beatless styles don't need any of this.** When nothing is percussive, millisecond
+precision is inaudible — ambient.c just compares `beat() + beat_pos()` against a
+`changeAt` mark in `update()` and retargets its held voices when it passes. Reach
+for the schedule-ahead clock only when onsets have attack.
+
 ## 2. The chord brain — functions, not chords
 
 Don't generate chords; generate **harmonic functions** (I, ii, V7…) in a random
@@ -86,6 +100,26 @@ Verified output from bossa.c (trace, key G):
 `Gmaj7 E7 Am7 D7 Gmaj7 A7 Am7 D7` (A) … `Cmaj7 Cm6 Gmaj7 …` (B) — I–VI7–ii–V and
 a borrowed iv, textbook changes nobody wrote.
 
+### The other chord brain: modal drift (no cadences)
+
+Functional harmony *pulls*; ambient music must *float*. ambient.c uses a different
+generator: pick **one mode** per song (lydian/dorian/mixolydian/aeolian — the mood
+knob), build 7th chords by stacking alternate degrees, and walk the degrees with
+weighted steps (mostly ±3rds/4ths — neighbouring in-mode chords share tones, so
+changes feel like the light shifting, not a progression progressing):
+
+```c
+static const int MODESC[4][7] = { { 0,2,4,6,7,9,11 }, ... };   // lydian, dorian, …
+static const int WALK[] = { 3,3,3, -3,-3,-3, 2,2, -2,-2, 1,-1 };  // weighted steps
+// chord on degree d = pitch classes of degrees d, d+2, d+4, d+6 (all in-mode)
+```
+
+No cadence forcing, no form — 16 chords, 8–16 beats each, then the next song.
+Verified from trace (C lydian): `Cmaj7 D7 F#m7b5 Em7 Gmaj7 …` — every chord
+in-mode, nothing resolving. **Pick the brain by what the music is for:** pull
+(action, songs) → functions + cadences; float (menus, exploration, night) → one
+mode + drift.
+
 ## 3. Voice leading — the single biggest "sounds composed" trick
 
 `chord()` stacks every chord from its root, so progressions leap around like a
@@ -112,6 +146,13 @@ static void lead_voices(int f) {                      // f = harmonic function
     // clamp each voice back into the instrument's register (e.g. 58..82)
 }
 ```
+
+This exact function shipped **unchanged in both carts** (bossa: 3 plucked guitar
+voices; ambient: 4 held pad voices) — it's the most copy-safe block in this guide.
+In ambient.c each `gv[]` move becomes a *slide*: the pads are `note_on` handles
+with `note_glide(h, 900..2200)` set once, so `note_pitch(h, gv[i])` on a chord
+change morphs the chord instead of retriggering it. The sound never stops; only
+the fingers move.
 
 Rootless voicings matter: the comping instrument plays **3rd + 7th + color** (9th,
 6th…) and the bass plays the root. Quality tables from bossa.c:
@@ -210,12 +251,28 @@ instrument_filter(I_RIM, FILTER_BAND, 1800, 9);
 instrument_env(I_RIM, 0, ENV_PITCH, 0, 20, 18);
 ```
 
+And the held-voice kit from ambient.c — set everything once at `note_on`, then the
+engine runs it; no per-frame driving:
+
+```c
+instrument(I_PAD, INSTR_SAW, 1400, 600, 6, 2800);        // slow swell, long fade
+instrument_filter(I_PAD, FILTER_LOW, 750, 2);
+// per voice, once:
+h = note_on(midi, I_PAD, 4);
+note_glide(h, rnd_between(900, 2200));                   // chord changes = slides
+note_lfo(h, 0, LFO_PITCH,  0.05f + drift, 0.04f..0.10f); // tape wow (sub-0.2Hz!)
+note_lfo(h, 1, LFO_CUTOFF, 0.04f..0.09f, 350);           // filter breathing
+note_pitch(h, midi + rnd_float_between(-0.06f, 0.06f));  // constant detune = width
+
+instrument(I_WIND, INSTR_NOISE, 2000, 800, 5, 2500);     // band-passed weather
+instrument_filter(I_WIND, FILTER_BAND, 700, 6);          // + slow LFO_CUTOFF roll
+```
+
 For other styles: **Rhodes/epiano** = SINE or TRI + `LFO_VOLUME` tremolo ~4.5Hz +
 lowpass ~1500 + tiny `ENV_CUTOFF` bark; **vinyl crackle** = `chance(8)` per frame →
 `hit(90+rnd(8), I_NOISE_HP, 1, 15)`; **dusty kick** = SINE + `ENV_PITCH` drop
-(amount ~14, decay 60); **tape wow** = a held pad via `note_on` with slow
-`note_pitch(h, base + sinf(t*0.7f)*0.15f)` drift; **chip lead** = SQUARE +
-`instrument_duty(slot, 0.25f)` + `LFO_DUTY`.
+(amount ~14, decay 60); **chip lead** = SQUARE + `instrument_duty(slot, 0.25f)` +
+`LFO_DUTY`.
 
 ## Style cheat-sheet (the parking lot)
 
@@ -225,7 +282,7 @@ What changes between styles is mostly **data** — the engine above carries over
 |---|---|---|---|---|---|
 | **bossa** | 112–140 | straight, clave masks, anticipation | maj7/9, ii-V chains, tritone subs, iv | nylon gtr, surdo bass, shaker, rim, flute | ✅ `bossa.c` |
 | **lofi jazz** | 70–85 | swing 56–60%, melody very late | m9/maj9, slower changes (2 bars/chord), pentatonic noodle | rhodes, soft kick/snare, dusty hats, crackle | idea |
-| **ambient** | 60–80 | beatless; chords every 2–4 bars via held `note_on`, voice-led with `note_glide` | maj7/sus, modal drift, no cadence forcing | 2 detuned pads, sub bass, sparse bell | idea |
+| **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
 Each future style should land as its own cart (lofi radio, ambient radio…) reusing
