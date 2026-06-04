@@ -498,7 +498,15 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
     return permission === 'clipboard-read' || permission === 'clipboard-write' || permission === 'clipboard-sanitized-write'
   })
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
+  buildAppMenu('')
+  createWindow()
+})
+
+// The app menu is rebuilt whenever the loaded cart changes, so the macOS menu
+// bar shows what's open (" dreamengine  Edit  View  <cart>") — the window's own
+// titlebar is hidden (hiddenInset), so this is the visible "what am I editing".
+function buildAppMenu(cartName) {
+  const template = [
     {
       label: 'dreamengine',
       submenu: [{ role: 'quit' }]
@@ -526,8 +534,20 @@ app.whenReady().then(() => {
         { role: 'toggleDevTools' },
       ]
     }
-  ]))
-  createWindow()
+  ]
+  if (cartName) {
+    // macOS top-level menus must have a submenu; this one is informational
+    template.push({
+      label: cartName,
+      submenu: [{ label: 'loaded cart', enabled: false }],
+    })
+  }
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+// renderer tells us the loaded cart's name (shell.js setCartName)
+ipcMain.on('cart:set-name', (_event, name) => {
+  buildAppMenu(typeof name === 'string' ? name : '')
 })
 
 app.on('window-all-closed', () => {

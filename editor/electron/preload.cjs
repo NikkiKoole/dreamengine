@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld('studio', {
   loadCartFile:   (filePath) => ipcRenderer.invoke('cart:load-file', filePath),
   getFilePath:  (file)     => webUtils.getPathForFile(file),
   buildWeb:     (code, cfg) => ipcRenderer.invoke('studio:build-web', code, cfg),
+  setCartName:  (name)     => ipcRenderer.send('cart:set-name', name),
 })
