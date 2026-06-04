@@ -20,9 +20,10 @@
 #define WW       10
 #define WH       10
 #define DW        7
-#define SLAB_H    2
-#define SPANDREL  4
-#define BAY_PAD   3
+#define SLAB_H        2
+#define SPANDREL      4
+#define GALLERY_FLOOR 2   // visible walkway floor strip between door and railing
+#define BAY_PAD       3
 #define WIN_GAP   3
 #define MAXF     12
 #define MAXB     12
@@ -369,12 +370,15 @@ static void draw_band(int f) {
     for (int b = 0; b < NB; b++) {
         Home *h = &homes[f][b];
         int x = baysX + b * BW;
-        rectfill(x + BAY_PAD, yb - FH + SPANDREL, DW, FH - SLAB_H - SPANDREL, h->doorCol);
+        rectfill(x + BAY_PAD, yb - FH + SPANDREL, DW, FH - SLAB_H - SPANDREL - GALLERY_FLOOR, h->doorCol);
         pset(x + BAY_PAD + DW - 2, yb - 9, CLR_BROWNISH_BLACK);
         rectfill(x + BAY_PAD + 1, yb - FH + SPANDREL + 1, DW - 2, 3,
                  h->arch == A_VACANT ? h->doorCol : CLR_DARKER_BLUE);
         draw_window(h, f, b, x + BAY_PAD + DW + WIN_GAP, yb - FH + SPANDREL);
     }
+
+    // gallery walkway floor — visible through bar gaps, hidden by panel
+    rectfill(baysX, yb - SLAB_H - GALLERY_FLOOR, NB * BW, GALLERY_FLOOR, slabC);
 
     if (railStyle == RAIL_BARS) {
         rectfill(baysX, yb - 7, NB * BW, 1, CLR_DARK_GREY);
