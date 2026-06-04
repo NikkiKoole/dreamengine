@@ -295,119 +295,81 @@ they want** — it's the building's circulation pump and its metronome.
 
 ## Build log
 
-### Step 1 — the static facade (2026-06-04, WIP)
+### Step 1 — the static facade (2026-06-04, session 1 WIP → session 2 current)
 
-Cart: `tools/carts/galerijflat.c` — **exists, renders, deliberately NOT yet
-registered in `index.json`** (stays out of the tutorials panel until it looks
-right). Contains temporary debug guards (a bands-only early return + an
-NF/NB/BW/baseY/wallTop debug print) — remove when finding #2 below is closed.
+**Session 2 state (2026-06-04):** Cart is in `index.json`, renders clean,
+no debug guards. Layout redesigned this session:
+- `NF` fixed at 7, `FH` 14→24px — building fills the frame, tower/antenna
+  poke into the thin sky strip above
+- Two-gradient sky replaced by a single smooth `gradient(..., 90)` call
+- `cls(0)` added at frame start (killed a background-bleed salmon strip)
+- All layout magic numbers are named: `FH/WW/WH/DW/SLAB_H/SPANDREL/BAY_PAD/WIN_GAP`
+- Doors: `DW` 6→7, top frame on door glass (1px), never same color as wall
+- Wall palette: 3 → 8 entries (dark/medium/darker grey, indigo, darker purple,
+  dark brown, dark green, dark peach)
+- `vgradient` engine bug fixed (swapped fillp color roles in `gradient_band`);
+  loveparade grass swapped to `gradient(90)` for smooth result; trafficjam/
+  loveparade/loopstation/shapes thumbnails re-baked
+- Dithered shadow strip under each gallery slab (3px, fades)
+- 4-column dithered shadow on facade adjacent to lift tower
 
-**Validated:** the screen budget holds exactly as designed — debug bake reads
-`NF10 NB10 BW26 base174 top34`. Slab, floor bands (slab line / railing bars or
-colored corrugated panel / door + kitchen window per bay), lift tower with
-glazed stair zigzag + landing lights, berging plinth with lit entrance, ground
-strip, lampposts: all render and the silhouette unmistakably reads
-*galerijflat*. Household roll (archetype-first, correlated treatment/sill/lit
-per sys 5) is in and produces legible variety.
+**Still open for this cart:**
+1. **Muting pass** — too many lit/saturated windows still. Plan: ~40% lit max,
+   curtain *dark* variants dominate at dusk, lit warm (yellow/blue-tv) as
+   accent only. House numbers still print at `baseY-4` — move onto plinth.
+2. **Moon crescent** — cover circle same radius as disc (offset 3px left, 1px
+   up), self-eclipses to near-black blob. Needs smaller/farther cover circle.
+3. **Sky cart** (system 1) — deferred to its own session. Builds on the now-
+   fixed `gradient()` primitive. See sys 1 build plan above.
 
-**Findings — three real issues uncovered, one still open:**
+### Step 1 — session 1 findings (2026-06-04, resolved)
 
-1. **ENGINE BUG (confirmed): `vgradient` renders inverted.** The dithered
-   interior of every vertical gradient puts `c_bot` at the top and `c_top` at
-   the bottom; only the exact first/last rows (early-return paths in
-   `gradient_band`) are correct, leaving a 1px discontinuity nobody noticed.
-   Mechanism: `gradient_band` encodes blend ratio `t` as a dither-threshold
-   pattern but applies the table backwards relative to `fillp`'s
-   bit-semantics (`t→0` yields pattern `0x0000` = all draw-color = `c_bot`).
-   **Evidence it's engine-wide, not this cart:** trafficjam's sky
-   (`vgradient(... CLR_BLUE, CLR_LIGHT_PEACH)`) bakes with peach at the top.
-   Fix is ~one line (use `(1-t)` or swap the fillp/rectfill color roles), BUT
-   it visibly flips every existing vgradient cart → needs a quick audit of
-   `vgradient`/`hgradient` call sites + re-bake of affected thumbnails.
-   Logged in `docs/STATUS.md` (under the shipped geometry-helpers item).
-   **The sky cart (sys 1 build plan) must land after this fix.**
-2. **OPEN MYSTERY: the "phantom band".** The full bake shows a full-width
-   band at y≈3–24 (vitrage-like peach dither + railing-like 3px bars on
-   white + grey checker) that no code on paper draws there. Bisect state:
-   sky-only bake → band absent (not the sky); bands-only bake → absent (not
-   the bands). Remaining suspects: `draw_tower` / `draw_plinth` / ground /
-   title — yet all are coordinate-bounded on paper. Next test: re-enable
-   those one at a time. (Lesson from trafficjam applies: "can't happen on
-   paper" is where the bug lives.)
-3. **Self-bug, trivial: the crescent moon** is a near-total eclipse — the
-   cover circle (same radius, offset 3px) hides almost the whole disc,
-   leaving a black blob. Draw a thinner crescent (smaller/farther cover).
-4. **Look pass needed (not a bug): too confetti for dusk.** Saturated doors/
-   curtains everywhere + too many lit windows read as carnival, washing out
-   at thumbnail scale; wall color barely visible between elements. Muting
-   plan: doors mostly from the dark palette row, fewer lit windows, curtain
-   *dark* variants dominant at dusk, lit warm windows as the scarce accent.
-   Also: house numbers currently print at `baseY-4` (on the floor-0 band) —
-   move them onto the plinth.
+Original findings — all closed:
 
-**Going forward (order):** (a) bisect the phantom band to its source;
-(b) moon + house numbers + muting pass; (c) the `vgradient` engine fix as its
-own commit with cart audit; (d) then the sky cart session builds on the fixed
-primitive; (e) register the cart in `index.json` only when the dusk facade is
-worth a thumbnail.
+1. ✓ **ENGINE BUG: `vgradient` inverted** — fixed (`gradient_band` color roles
+   swapped); 4 carts re-baked. `docs/STATUS.md` updated.
+2. ✓ **Phantom band at y≈3–24** — was the inverted sky gradient drawing the
+   warm end (`CLR_DARK_PEACH`) near y=0. Resolved by vgradient fix + `cls(0)`.
+3. **Moon crescent self-eclipse** — still open (see above).
+4. **Too confetti for dusk** — partially addressed (wall palette expanded, door
+   colors constrained). Full muting pass still open.
 
-## Handoff — next agent starts here (written 2026-06-04)
+## Handoff — next agent starts here (written 2026-06-04, session 2)
 
-Read this doc top to bottom first (it's short); the Build log above has the
-findings in full. Then:
+**Repo state.** Cart at `tools/carts/galerijflat.c`, registered in
+`editor/public/carts/index.json`, no debug guards, renders clean.
+Latest commit: `6349674`.
 
-**Repo state.** Cart at `tools/carts/galerijflat.c` (landed in `7cb9dd9`),
-renders but is mid-bug-hunt. Two debug guards are live in `draw()`:
-the `print(str("NF%d ...` debug line, and `if (1) { font(FONT_NORMAL);
-return; }` right after it (bands-only mode — tower/plinth/ground/title are
-currently skipped). The cart is intentionally **not** in
-`editor/public/carts/index.json` yet.
-
-**The bake loop** (your iteration cycle, ~10s):
+**The bake loop** (~10s per iteration):
 ```bash
 node tools/make-cart.js tools/carts/galerijflat.c editor/public/carts/galerijflat.cart.png
 node tools/make-cart.js --run editor/public/carts/galerijflat.cart.png
 # inspect build/.bake/galerijflat/screenshot.png — NEVER build/screenshot.png
-magick build/.bake/galerijflat/screenshot.png -crop 320x32+0+0 +repage -scale 1280x128 /tmp/top.png  # zoom a region
+magick build/.bake/galerijflat/screenshot.png -scale 960x600 /tmp/gf.png
+magick build/.bake/galerijflat/screenshot.png -crop 160x48+80+80 +repage -scale 960x288 /tmp/gf_zoom.png
 ```
-Both steps every time — step 1 re-embeds source, step 2 bakes the shot.
-`magick` is installed. Plain `node` works (no nvm needed for tools/).
 
-**Task 1 — find the phantom band** (Build log finding 2). Full-width band at
-y≈3–24 (peach dither / 3px-spaced dark bars on white / grey checker) in the
-full bake only. Eliminated so far: the sky (sky-only bake clean), the floor
-bands (bands-only bake clean). Procedure: remove the bands-only `return`,
-bake (band should reappear — debug print will confirm the roll), then
-re-disable `draw_tower` / `draw_plinth` / ground+lamps / title one at a time.
-It looks exactly like a floor band drawn at yb≈16–22, but that's a
-non-integer floor index — which is the puzzle. Worth double-checking
-`rnd_between`'s actual bounds in `runtime/studio.c` against its doc comment,
-and remember the trafficjam lesson: the bug lives where "it can't happen on
-paper". When found: delete both debug guards.
+**Task 1 — muting pass** (the most important remaining visual task):
+The facade reads as carnival — too many lit windows, too many saturated
+door/curtain colors. Fix in `roll_home`:
+- Reduce `h->lit` probability (currently roughly 50% — drop to ~30%)
+- Bias lit windows toward warm yellow/blue-tv, not the full curtain rainbow
+- Curtain treatment: at dusk, `tDark` should dominate — `h->curtOpen`
+  probability should be lower (≤40%)
+Also: house numbers in `draw_plinth` print at `baseY - 4` (landing on the
+floor-0 band's slab area). Move to `baseY + 3` (onto the plinth face).
 
-**Task 2 — small fixes** (after task 1, same session is fine):
-moon crescent self-eclipses (`draw()`, two `circfill`s — cover circle needs
-to be smaller/farther); house numbers print at `baseY-4` (on the floor-0
-band) — move onto the plinth; then the **muting pass** per Build log
-finding 4 (dark doors, scarce lit windows, dark curtain variants at dusk).
+**Task 2 — moon crescent fix** (trivial, 2 lines):
+In `draw()`, the cover circle is `circfill(moonX - 3, wallTop/2 - 1, 5, ...)`.
+Same radius as the disc → near-total eclipse. Change to radius 4, offset 4px
+left: `circfill(moonX - 4, wallTop/2 - 1, 4, CLR_DARKER_BLUE)`. Thinner
+crescent, clearly readable.
 
-**Task 3 — the vgradient engine fix** (separate commit, engine discipline):
-`gradient_band()` in `runtime/studio.c` applies its threshold table backwards
-— either `bits = (int)((1.0f - t) * 16 + 0.5f)` or swap the color roles
-(`fillp(pat, cb); rectfill(..., ca)`). Verify with trafficjam's sky (blue
-must end up on TOP after the fix), check `hgradient` shares the bug, then
-`grep -rn "vgradient\|hgradient" tools/carts/` and re-bake affected carts'
-thumbnails in the same change. Full ledger entry: `docs/STATUS.md`, under
-the geometry-helpers item.
+**Task 3 — sky cart** (own session, deferred):
+See sys 1 build plan above. Only after the dusk facade is visually settled.
 
-**Then:** the sky cart (own session — see the sys 1 build plan above; only
-after task 3). After the facade looks right at dusk: register in
-`index.json`, bake the real thumbnail, update this doc's status line and
-Build log.
-
-House rules that bit this session: commit directly on `master`, per-file
-`git add` (parallel agents share the branch — don't sweep up others' files);
-two-step bake or the editor loads stale embedded source.
+House rules: commit directly on `master`; `git add` per-file; two-step bake
+every time (step 1 re-embeds source, step 2 captures screenshot).
 
 ## References in-repo
 
