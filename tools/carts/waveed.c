@@ -56,6 +56,7 @@ static void seed(int kind) {
             case 4: t[i] = 0.45f * sinf(ph * 6.2831853f) + 0.30f * sinf(ph * 18.85f)           // vocal-ish (odd partials)
                          + 0.18f * sinf(ph * 31.42f) + 0.07f * sinf(ph * 43.98f); break;
             case 5: t[i] = (i == 0) ? 0 : clamp(t[i - 1] + rnd_float_between(-0.45f, 0.45f), -1, 1); break;  // wobble (random walk)
+            case 6: t[i] = (ph < 0.5f ? ph * 4.0f - 1.0f : 3.0f - ph * 4.0f) * 0.85f; break;                 // triangle
         }
     }
     if (kind == 3 || kind == 4 || kind == 5) normalize(t);
@@ -197,17 +198,18 @@ void draw(void) {
     rect(CX, CY, CW, CH, CLR_DARK_GREY);
 
     // ---- seed + tool buttons ----
-    const char *bn[8] = { "SINE", "SQUARE", "SAW", "ORGAN", "VOCAL", "WOBBLE", "SMOOTH", "NORM" };
+    const char *bn[9]   = { "SINE", "TRIANGLE", "SQUARE", "SAW", "ORGAN", "VOCAL", "WOBBLE", "SMOOTH", "NORM" };
+    const int   bseed[7] = { 0, 6, 1, 2, 3, 4, 5 };   // button index -> seed() kind
     font(FONT_SMALL);
-    for (int b = 0; b < 8; b++) {
-        int y = CY + b * 16;
-        bool hot = in_box(208, y, 56, 13);
-        rectfill(208, y, 56, 13, CLR_DARKER_BLUE);
-        rect(208, y, 56, 13, hot ? CLR_WHITE : CLR_DARK_GREY);
-        print(bn[b], 216, y + 4, CLR_LIGHT_GREY);
+    for (int b = 0; b < 9; b++) {
+        int y = CY + b * 14;
+        bool hot = in_box(208, y, 56, 12);
+        rectfill(208, y, 56, 12, CLR_DARKER_BLUE);
+        rect(208, y, 56, 12, hot ? CLR_WHITE : CLR_DARK_GREY);
+        print(bn[b], 216, y + 3, CLR_LIGHT_GREY);
         if (hot && mouse_pressed(MOUSE_LEFT)) {
-            if (b < 6) seed(b);
-            else if (b == 6) smooth_cur();
+            if (b < 7) seed(bseed[b]);
+            else if (b == 7) smooth_cur();
             else { normalize(w[cur]); push_wave(); }
             msg = bn[b]; msg_t = 40;
         }

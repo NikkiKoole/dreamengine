@@ -36,9 +36,10 @@ Three corollaries:
 
 ## 2. Where we are now (in code)
 
-> **Refreshed 2026-06-04**, after the §11 mod-envelopes shipped. This is the authoritative
-> map of the shipped sound surface: **32 functions + 32 constants**. §5–§11 hold the
-> rationale for how it got here; STATUS item 5 holds what's next (engines, SFX authoring).
+> **Refreshed 2026-06-04**, after the §11 mod-envelopes shipped (same-day additions:
+> `schedule_hit`, `wave_set` + `INSTR_USER0..3`). This is the authoritative map of the
+> shipped sound surface: **34 functions + 36 constants**. §5–§11 hold the rationale for
+> how it got here; STATUS item 5 holds what's next (engines, SFX authoring).
 
 **Engine**
 - 8 voices (`SOUND_VOICES`), 44.1 kHz, **mono**, software-mixed (sum × 0.2 gain each,
@@ -51,14 +52,18 @@ Three corollaries:
 **The surface, in four layers**
 
 1. **Just make sound — zero setup.** `note` `hit` `chord`(+9 `CHORD_*`) `strum`
-   `tone`(+6 `SCALE_*`) `schedule` `sfx` `music`. Slots 0–4 come pre-filled with the raw
-   waves (`INSTR_SQUARE/SAW/TRI/NOISE/SINE`), so the first `note(60, INSTR_SAW, 5)` needs
-   nothing else.
+   `tone`(+6 `SCALE_*`) `schedule` `schedule_hit` `sfx` `music`. Slots 0–4 come pre-filled
+   with the raw waves (`INSTR_SQUARE/SAW/TRI/NOISE/SINE`), so the first
+   `note(60, INSTR_SAW, 5)` needs nothing else. `schedule_hit` (delay **+** duration) fills
+   the note-call quadrant that lets a cart sequence sub-frame sfx steps sample-accurately.
 2. **Design an instrument.** A slot (5–15) is the container; one call per axis —
    `instrument` (timbre + **amp ADSR**) · `instrument_duty` (pulse width) ·
    `instrument_lfo` (**×3**, cyclic modulation) · `instrument_env` (**×2**, one-shot AD
    modulation, bipolar amount — §11) · `instrument_filter` (resonant SVF, 5 `FILTER_*`
    modes). Five axes that multiply: timbre × amp-env × LFOs × mod-envs × filter.
+   Timbre itself is extensible: **`wave_set` + `INSTR_USER0..3`** are four DRAWN
+   single-cycle waveforms (64 samples, live-morphable — the §8.4 SCW idea; draw them in
+   the `wave editor` cart) that work anywhere a wave id does.
 3. **Play it live — held notes.** `note_on`→handle, `note_off`, `note_off_all`;
    performance gestures `note_pitch` / `note_vol` / `note_glide`; live twins of the
    defines: `note_duty` `note_lfo` `note_env` `note_filter` `note_cutoff` `note_res`.
@@ -526,6 +531,12 @@ Say "a Voice may hold a small buffer" once and the whole physical-modeling famil
   vowel formants from it.
 
 ### 8.4 SCW tables — a complementary cheap lever (not a replacement)
+
+> **Partially SHIPPED (2026-06-04) as `wave_set` + `INSTR_USER0..3`:** four 64-sample
+> single-cycle tables a cart can fill (and a `wave editor` cart that lets you DRAW them —
+> with a live-morph drone, since the table is read per-sample). That's the cart-authorable
+> half of this idea. The other half — a curated bank of ~600-sample SCWs *sampled from real
+> instruments* (richer, less aliased) — remains open and would slot in the same way.
 
 navkit also embeds **single-cycle waveforms** (one cycle of a real instrument as a small
 float table; ~600 samples ≈ 2.4 KB each). A hand-picked bank of ~6 (≈8–10 KB) plus ~100
