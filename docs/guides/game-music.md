@@ -382,6 +382,30 @@ lowpass ~1500 + tiny `ENV_CUTOFF` bark; **vinyl crackle** = `chance(8)` per fram
 (amount ~14, decay 60); **chip lead** = SQUARE + `instrument_duty(slot, 0.25f)` +
 `LFO_DUTY`.
 
+### The real string — `INSTR_PLUCK` (the first engine, wave ids 16+)
+
+Every guitar recipe above predates the KS engine; the real thing exists now and
+takes the same outboard gear (filter / LFO / env). jangle.c and bossa.c carry a
+live A/B against their TRI fakes (**G** key); per-station upgrade notes live in
+`docs/design/radio-instrument-options.md`:
+
+```c
+instrument(I_GTR, INSTR_PLUCK, 1, 0, 7, 180);        // a real string — it decays on its own
+instrument_filter(I_GTR, FILTER_LOW, 2600, 2);       // outboard gear works as before
+instrument_harmonics(I_GTR, 0.5f);                   // ring time (perceptual: 0.04s thunk → ~2min drone)
+instrument_timbre(I_GTR, 0.75f);                     // pick brightness (felt thumb → hard pick)
+instrument_morph(I_GTR, 0.2f);                       // pick position (bridge=full → mid-string=hollow)
+instrument_lfo(I_GTR, 0, LFO_PITCH, 5.5f, 0.12f);    // chorus warble works VERBATIM — the read
+                                                     //   tap is fractional, all pitch tools bend it
+```
+
+Two rules of thumb: **give it room** — the string sets its own decay, so use long
+`hit()` durations or a long release (a gate end must never chop the ring); and
+**roll the macros per song** — three floats per instrument is exactly what the
+per-song timbre roll wants to seed. The three knobs are the same on every future
+engine (audio-notes §8.1.1); the `pluck` cart is the hands-on tour (grab a string
+to bend it, sweep open space to strum).
+
 ### Drawn waves — `wave_set` + `INSTR_USER0..3` (the lever nobody pulled)
 
 Beyond the five built-in waves there are four **user wave slots**: fill one with a

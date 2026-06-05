@@ -312,8 +312,12 @@ class: notes that never play, `instrument()` defines that never land (the "every
 position sounds like square" incident, 2026-06-04).
 
 `tools/carts/soundcheck.c` is the matching self-test: its `init()` issues the worst-case
-define burst (27 slots × 8 calls + 4 `wave_set` tables in one frame) and `update()` walks
-the whole sound API, including a 40-shot `schedule_hit` burst that stresses the delayed pen.
+define burst (27 slots × 11 calls — ADSR/duty/LFOs/filter/envs **plus the three engine
+macros** — + 4 `wave_set` tables in one frame) and `update()` walks the whole sound API,
+including the `INSTR_PLUCK` engine, the live `note_harmonics/timbre/morph` setters, and a
+40-shot `schedule_hit` burst that stresses the delayed pen. **Grow this cart in the same
+commit as any new sound surface** — a kind the walk never pushes is a kind the tripwire
+never guards.
 
 ```bash
 node tools/play.js soundcheck script /dev/null --headless --frames 900 2>&1 | grep "\[sound\]"
@@ -321,5 +325,5 @@ node tools/play.js soundcheck script /dev/null --headless --frames 900 2>&1 | gr
 ```
 
 Run it after touching `runtime/sound.h` (queue sizes, request kinds, new `instrument_*`/
-`wave_set`-style bulk APIs). Ears version: run the cart normally — the 9 waves it plays in
-sequence must all sound *different*.
+`wave_set`-style bulk APIs). Ears version: run the cart normally — the 10 waves it plays in
+sequence (the last is the KS pluck engine) must all sound *different*.

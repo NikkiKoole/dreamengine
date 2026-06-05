@@ -696,6 +696,40 @@ generalizes to a per-instrument send). Mono today; stereo horn/drum panning is t
 buffer-free; the organ scanner and the `PLUCK`/piano/guitar family share one small per-voice
 delay line (§8.2 — decided). Leslie is a separate *shared* ~2KB buffer.
 
+### 8.8.1 What shipping engine #1 taught (PLUCK, 2026-06-05) — rules for engine #2
+
+Empirical, from one day of building and listening. Each bit of taste below cost a
+"the knob doesn't do anything" or a "what's that pop?" to find:
+
+1. **Macro mappings must be perceptual, not parametric.** The first harmonics
+   mapping was linear in the feedback coefficient (`0.985→0.9999`) — physically
+   reasonable, *audibly dead*: ring time is exponential in feedback, so 3/4 of the
+   knob did nothing. The fix: the knob sets an exponential **target quantity**
+   (T60 ≈ 0.04s → ~2min) and the coefficient is derived per note, frequency-
+   compensated. The test for every future macro: **every quarter-turn must be an
+   audible step**, on every note of the keyboard. (Mallet's "ring length" and
+   "inharmonicity" macros will hit the identical trap — map the *percept*.)
+2. **Pitch is never a macro — engines must consume the pitch machinery.** The
+   pressure to put bends/vibrato on a knob appeared within hours ("can harmonics
+   do the pitch stuff?"). The right move was making the engine honor the
+   per-sample `pitch_mul` (LFOs/envs) and the slewed `v->freq` (`note_pitch`/
+   `note_glide`) — for KS, a fractional-delay read tap. Payoff: jangle's chorus-
+   warble recipe worked on the real string *verbatim*, zero new API. Engine #2's
+   oscillator must take `pitch_mul` from day one.
+3. **Engines that ring expose every hard cut.** Voice-steal pops existed all
+   along; short quiet envelopes hid them. A full-amplitude 30s pluck doesn't. The
+   `steal_tail` declick (~3ms fade paid at steal/`sfx(-1)` time) is now in the mix
+   loop and covers all future ringing engines.
+4. **Self-decaying engines need generous gates.** The engine bakes its own decay
+   (§8.8's "ADSR is an override"), so a short gate/release *chops* it — the pluck
+   cart ships `release 1200ms` and scales `hit()` durations with ring time. Open
+   refinement when polyphony pressure appears: voice self-silence detection (free
+   the voice when buffer energy ≈ 0, instead of holding the full gate).
+5. **Grow `soundcheck.c` in the same commit as the surface.** The walk now plays
+   the engine audibly and pushes the macro kinds (21/22) through the queue at
+   worst-case load — a request kind the self-test never fires is a kind the
+   tripwire never guards.
+
 ### 8.9 Candidate engine catalog (running wishlist)
 
 The set we'd *like*, beyond the first-bite engines (§8.5). Adding one is mostly: port the
@@ -1128,7 +1162,12 @@ how an afternoon lever displaces the week that moves the project.
    concrete) + the full §8.1.1 macro surface (`instrument_harmonics/timbre/
    morph` + `note_*` twins — landed as ctrl kinds 21/22; the sketch's 18/19
    were taken by §11's mod-envelopes by ship time) + the `pluck` showcase
-   cart. The station retrofit is still open.
+   cart. Same-day follow-ups: a **fractional read tap** (the whole pitch
+   system — LFO_PITCH warble, ENV_PITCH, `note_pitch`/`note_glide` — now
+   bends the string live, and pitch is exact instead of length-quantized)
+   and the **steal-declick** tail. jangle.c and bossa.c carry live A/B
+   toggles (G); the listening verdict + macro taste-tuning are the open
+   tail. Porting lessons for engine #2: §8.8.1.
 2. **Choke groups** (§12 gap 1) — tiny surface; ride along with whatever
    drum work happens near the pluck retrofits, no slot of its own.
 3. **Second oscillator / FM** (§12 gap 2) — when the Italo/gamelan/AOR
