@@ -69,6 +69,10 @@ eventually2/
 │   │                   #   build/.site/; gallery lists every cart with a built site/<name>/
 │   ├── publish-cart.sh #   build-site.js + commit site/ + push, one command → live in ~1 min
 │   │                   #   (.github/workflows/pages.yml publishes the committed site/, no CI emcc)
+│   ├── mobile-lint.js  #   static report card: can a phone play this cart? verdicts
+│   │                   #   touch-ready / tap-as-mouse / fixable (add touchControls:true) /
+│   │                   #   keyboard-only; warnings: hover/wheel/right-click/tiny-target/touch>5
+│   │                   #   run `--site` after publishing; see docs/design/mobile-web-notes.md
 │   ├── wav-analyze.js  #   audio metrics from an engine WAV (peak/RMS/crest/clipping, two-file
 │   │                   #   compare with bytes-identical check) — pairs with --wav and the
 │   │                   #   .bake/wav_request live-capture trigger; see guides/debug-harness.md

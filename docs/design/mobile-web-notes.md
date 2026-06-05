@@ -112,9 +112,13 @@ library header may beat engine API (ADR-0006 instinct).
 
 ## 7. Next steps
 
-1. **`tools/mobile-lint.js` v1** — checks 1, 3, 4 from §3 (the grep-grade
-   ones); run it over the 28 published carts and use the output to pick which
-   get `touchControls: true` first.
+1. ~~**`tools/mobile-lint.js` v1**~~ — **SHIPPED 2026-06-05** (checks 1, 3, 4, 5
+   from §3 + hover/wheel/right-click warnings). One design lesson from the first
+   run: verdicts rank by the *best* phone-usable input path (touch > mouse-tap >
+   btn > key), with lesser paths surfaced as `also-reads-keys`-style warnings —
+   ranking by worst path branded mostly-mouse carts (ragdoll) keyboard-only.
+   First `--site` run over 50 published carts: 2 keyboard-only, 5 fixable,
+   34 tap-as-mouse, 3 touch-ready, 6 no-input.
 2. **`fit` setting end-to-end** (§4) — `.cart.js` → `de:settings` → both build
    paths → shell. Radios are the first `"stretch"` customers.
 3. **`touch_available()`** (§5) — 4-place wiring + first self-adapting cart.
