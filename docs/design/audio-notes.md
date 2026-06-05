@@ -1593,3 +1593,71 @@ bytes-identical check — the golden-WAV primitive). The §15 experiment ran on
 this tooling the same day. How-to lives in
 [`guides/debug-harness.md`](../guides/debug-harness.md) → "WAV capture".
 Tier 2 (navkit `audio_analyze.py` / `preset_audition --ref`) remains open.
+
+## 17. Grit, darkness, weight — why everything still sounds clean (2026-06-05)
+
+Modrack grew six modules in a day (MACRO/XPOSE/MIX/CMP/DIV/ADSR) and every patch
+still comes out *polite*. That's not taste, it's an audit-able property of the
+engine. Five findings, all verified against `sound.h`:
+
+1. **Zero nonlinearity in the signal path.** No drive, no waveshaper, no
+   clipper, no bitcrush — the only saturation anywhere is the FM modulator's
+   self-feedback (`morph`). Grit *is* nonlinearity; a 303's squelch is the
+   filter driven into saturation, not the filter. Ours is a clean SVF into a
+   linear sum.
+2. **Bone dry.** No delay, no reverb, no echo. "Dark" is mostly a space
+   property — repeats that get darker each pass. Every patch plays into an
+   anechoic void.
+3. **One oscillator per voice, perfectly in tune.** No detune/unison/chorus.
+   Two VOICEs fed the same pitch sum *louder*, not *fatter* — analog thickness
+   is the beating between near-identical frequencies, and nothing in the
+   system can be "a few cents off" (XPOSE deliberately moves whole octaves).
+4. **The master section is a hard clip.** Voices sum into one float, then
+   `if (mix > 1) mix = 1` (`sound_callback`, end of the mix loop). With
+   SOUND_VOICES now 16, hot mixes will hit that wall harshly. There is no
+   headroom stage, no glue.
+5. **Cart-side: drums are bright ticks** (18ms noise + 90ms tri kick — no 909
+   boom) **and the grid is dead straight** (no swing knob — though the engine
+   already fires delayed requests sample-accurately *specifically* to keep
+   "swing pushes" intact, so this is cart work waiting to happen).
+
+### "So is this effect-bus stuff?" — the taxonomy (the actual design decision)
+
+It looks like one feature ("add FX") but it's **four different layers**, and
+the §4 question — *where does the parameter live?* — answers each differently.
+Only one of the four is genuinely a bus.
+
+| layer | what goes there | why there | API shape |
+|---|---|---|---|
+| **voice insert** | drive (tanh), bitcrush | stateless per-sample math, cheap per-voice; *musically per-part* (drive the bass, not the pad) | the §10 four-axes container grows: `instrument_drive(slot, x)` + live `note_drive(handle, x)`, slewed — exactly the filter/duty/macro pattern |
+| **shared bus + per-slot send** | echo/delay (reverb later) | a delay line is KBs and wants musical coherence (one tempo'd echo per song) — this is why hardware mixers have sends | `echo(time_ms, feedback, tone)` configures the one bus; `instrument_echo(slot, send)` / `note_echo(handle, x)` set how much each part feeds it |
+| **oscillator param** | detune (cents) | not an effect at all — belongs beside duty/glide in `Voice` | `instrument_detune(slot, cents)` + `note_detune`; unison = two notes a few cents apart, suddenly meaningful |
+| **master stage** | soft-clip replacing the hard clip; maybe master drive/crush later | one place, whole-mix glue; also the §15 16-voice headroom answer | internal first (tanh at the sum); a `master_*` API only if carts ask |
+
+Chain order inside a voice, decided by the 303 test: **osc → SVF → drive →
+VCA(env)** — drive *after* the filter so resonance screams into it, *before*
+the envelope so quiet tails don't pump the saturation.
+
+**Modrack mapping** (the reason this section exists): drive/crush/detune become
+VOICE/MACRO knobs or CV inlets — per-module character, no new module. The echo
+bus surfaces as a **DELAY module** that is secretly a *front-end*: its knobs
+write the global bus params, its input-side "send" is per-source. One DELAY in
+the rack is honest (there *is* one bus); a second one fights over it — fine for
+v1, document it on the panel.
+
+### Order of work
+
+1. **Drive** — biggest lever, smallest diff (one tanh + four-place API wiring +
+   the §16 tooling regression-tests it: golden-WAV a driven acid line, crest
+   factor should *drop* while RMS rises).
+2. **Master soft-clip** — three lines, pays for §15's 16 voices immediately.
+3. **Echo bus** — the real architecture step (audio-thread-owned buffer, send
+   field in `Instrument`, bus params via the request ring like everything else).
+4. **Detune** — small, after drive (driven unison is the payoff).
+5. **Bitcrush** — on-brand dessert; decide insert vs master when it lands.
+6. **Cart-side, no engine change: swing knob on CLOCK** (`schedule_hit` already
+   keeps the timing), **darker DRUM voices** (909 kick = longer sine + pitch
+   env — the "Punch (VCA)" preset recipe, baked in).
+
+One-line version: **we built a very good modular synth and forgot to build the
+broken speaker it should play through.**
