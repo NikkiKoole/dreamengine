@@ -33,7 +33,7 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 // ── module type registry ──
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
        MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS,
-       MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, NTYPE };
+       MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, MOD_MIX, NTYPE };
 enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
@@ -98,6 +98,11 @@ ModType TYPES[NTYPE] = {
     // way to reach the bass register; QUANT's root knob is semitones-up within ROOT_OCT)
     [MOD_XPOSE]   = { "XPOSE", CLR_DARK_PEACH, 3, 5, 2, {{1,false,9,48,"in"},{1,true,27,48,"out"}},
                      1, {{"oct",-2,2,0,18,32,FMT_OCT}} },
+    // cv mixer with attenuverters — the only way to COMBINE two modulators into one input
+    // (every input jack holds a single cable). a/b go -1..+1 so it also inverts; off is the
+    // base level an inverted signal swings down from (a=-1, off=1 -> an upside-down LFO).
+    [MOD_MIX]     = { "MIX", CLR_MEDIUM_GREY, 5, 5, 3, {{2,false,12,48,"a"},{2,false,30,48,"b"},{2,true,48,48,"out"}},
+                     3, {{"a",-1,1,1,12,26,FMT_F1},{"b",-1,1,1,30,26,FMT_F1},{"off",0,1,0,48,26,FMT_F1}} },
 };
 // knob-index names for the multi-knob sound modules — MUST stay in the same order as the
 // knob arrays in TYPES[] above. Use these instead of raw numbers in eval/presets: a
@@ -106,6 +111,7 @@ ModType TYPES[NTYPE] = {
 enum { VK_CUT, VK_RES, VK_PW, VK_WAV, VK_FLT, VK_FENV, VK_PENV };   // MOD_VOICE knobs
 enum { BK_RATE, BK_DEPTH, BK_DEST };                                // MOD_VIBRATO knobs
 enum { MK_ENG, MK_HARM, MK_TIMB, MK_MORPH };                        // MOD_MACRO knobs
+enum { MX_A, MX_B, MX_OFF };                                        // MOD_MIX knobs
 
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -134,6 +140,7 @@ const char *HELP[NTYPE][3] = {
     [MOD_CHANCE] = { "Gate filter: lets incoming gates through", "with prob chance (0=never 1=always).", "Thins patterns without changing the rhythm." },
     [MOD_MACRO]  = { "Modeled voice (Plaits-style). eng = plk/mlt/", "fm engine; har/tmb/mor shape it (per-engine", "meaning). h/t/m CV inlets add to the knobs." },
     [MOD_XPOSE]  = { "Octave shifter. Patch a pitch line through", "it (QUANT/KEYS -> VOICE) and oct moves it", "by -2..+2 whole octaves. Basses live here." },
+    [MOD_MIX]    = { "CV mixer: out = a*ka + b*kb + off. Knobs go", "-1..+1 (attenuvert: negative = inverted).", "Sum an LFO + ENV into one filter cutoff." },
 };
 
 // ── module instances + cables ──
@@ -435,9 +442,28 @@ void preset_macro(void) {        // Plaits-style MACRO voice: Turing epiano, LFO
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
 }
 
-const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice" };
-void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro };
-#define NPRESET 20
+void preset_mix(void) {          // THE classic synth patch: slow LFO wah + per-note ENV pluck SUMMED into one cutoff via MIX
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK,  bayx(0), bayy(0)), tm = spawn(MOD_TURING, bayx(1), bayy(1));
+    int qt = spawn(MOD_QUANT,  bayx(2), bayy(2)), lf = spawn(MOD_LFO,    bayx(3), bayy(3));
+    int en = spawn(MOD_ENV,    bayx(4), bayy(4)), mx = spawn(MOD_MIX,    bayx(5), bayy(5));
+    int vo = spawn(MOD_VOICE,  bayx(6), bayy(6)), dr = spawn(MOD_DRUM,   bayx(7), bayy(7));
+    mod[ck].param[0] = 110;
+    mod[tm].param[0] = 0.3f;
+    mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[lf].param[0] = 0.25f;                            // the slow wah half
+    mod[en].param[1] = 0.18f;                            // the per-note pluck half
+    mod[mx].param[MX_A] = 0.5f; mod[mx].param[MX_B] = 1.0f;   // wah underneath, pluck on top
+    mod[vo].param[VK_CUT] = 320; mod[vo].param[VK_RES] = 9;   // low base cutoff so the summed cv does the talking
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(ck, 0, vo, 0); add_cable(ck, 0, en, 0);
+    add_cable(lf, 0, mx, 0); add_cable(en, 1, mx, 1); add_cable(mx, 2, vo, 2);   // LFO + ENV → MIX → cutoff
+    add_cable(ck, 2, dr, 0); add_cable(ck, 0, dr, 2);
+}
+
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix };
+#define NPRESET 21
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[8]; } SaveMod;
@@ -736,6 +762,9 @@ void eval_mod(int mi) {
             float p = read_in(mi, 0);
             m->jackval[1] = p < 1 ? 0 : clamp(p + oct * 12, 1, 127);   // no input → no pitch (downstream default kicks in)
             break; }
+        case MOD_MIX:      // attenuverting mixer: combine two modulators into one cv (invert via negative knobs)
+            m->jackval[2] = clamp(read_in(mi, 0) * m->param[MX_A] + read_in(mi, 1) * m->param[MX_B] + m->param[MX_OFF], 0, 1);
+            break;
     }
 }
 
@@ -937,6 +966,9 @@ void draw_extras(int mi) {
             const char *s = knob_str(FMT_OCT, m->param[0]);
             print(s, cx - text_width(s) / 2, y + 14, CLR_WHITE);
             break; }
+        case MOD_MIX:       // the summed cv, live — watch two modulators braid into one
+            meter(x + 45, y + 12, 6, 10, m->jackval[2], CLR_WHITE);
+            break;
         case MOD_KEYS: {    // 7 white keys; lit while held
             const char KK[7] = { 'A','S','D','F','G','H','J' }; const int OFF[7] = { 0,2,4,5,7,9,11 };
             for (int i = 0; i < 7; i++) {
