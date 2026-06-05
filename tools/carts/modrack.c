@@ -33,8 +33,8 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 // ── module type registry ──
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
        MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS,
-       MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, MOD_MIX, MOD_CMP, NTYPE };
-enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT };
+       MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, MOD_MIX, MOD_CMP, MOD_DIV, MOD_ADSR, NTYPE };
+enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT, FMT_DIV };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
 typedef struct { const char *label; float lo, hi, def; int dx, dy, fmt; } KnobDef;
@@ -107,6 +107,14 @@ ModType TYPES[NTYPE] = {
     // clock whose pulse width IS the threshold; ramps become rhythms, randomness becomes triggers
     [MOD_CMP]     = { "CMP", CLR_DARK_GREEN, 3, 5, 2, {{2,false,9,48,"in"},{0,true,27,48,"out"}},
                      1, {{"thr",0,1,0.5f,18,32,FMT_F1}} },
+    // clock divider — passes every Nth gate; the /3 /8 /16 that CLOCK's fixed /1 /2 /4 can't do
+    [MOD_DIV]     = { "DIV", CLR_ORANGE, 3, 5, 2, {{0,false,9,48,"in"},{0,true,27,48,"out"}},
+                     1, {{"div",2,16.99f,4,18,32,FMT_DIV}} },
+    // full envelope with a SUSTAIN stage — unlike AD-only ENV, a held gate HOLDS at sus and
+    // gate-fall starts the release. Patch into VOICE 'a' and held notes finally breathe.
+    [MOD_ADSR]    = { "ADSR", CLR_DARK_RED, 5, 7, 2, {{0,false,14,72,"g"},{2,true,40,72,"cv"}},
+                     4, {{"atk",0.005f,1,0.05f,15,28,FMT_MS},{"dec",0.02f,1,0.2f,43,28,FMT_MS},
+                         {"sus",0,1,0.7f,15,50,FMT_F1},{"rel",0.02f,2,0.5f,43,50,FMT_MS}} },
 };
 // knob-index names for the multi-knob sound modules — MUST stay in the same order as the
 // knob arrays in TYPES[] above. Use these instead of raw numbers in eval/presets: a
@@ -116,6 +124,7 @@ enum { VK_CUT, VK_RES, VK_PW, VK_WAV, VK_FLT, VK_FENV, VK_PENV };   // MOD_VOICE
 enum { BK_RATE, BK_DEPTH, BK_DEST };                                // MOD_VIBRATO knobs
 enum { MK_ENG, MK_HARM, MK_TIMB, MK_MORPH };                        // MOD_MACRO knobs
 enum { MX_A, MX_B, MX_OFF };                                        // MOD_MIX knobs
+enum { AK_ATK, AK_DEC, AK_SUS, AK_REL };                            // MOD_ADSR knobs
 
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -146,6 +155,8 @@ const char *HELP[NTYPE][3] = {
     [MOD_XPOSE]  = { "Octave shifter. Patch a pitch line through", "it (QUANT/KEYS -> VOICE) and oct moves it", "by -2..+2 whole octaves. Basses live here." },
     [MOD_MIX]    = { "CV mixer: out = a*ka + b*kb + off. Knobs go", "-1..+1 (attenuvert: negative = inverted).", "Sum an LFO + ENV into one filter cutoff." },
     [MOD_CMP]    = { "Comparator: gate high while cv in > thr.", "An LFO through it becomes a clock -- thr", "sets the pulse width. CV -> rhythm, no CLOCK." },
+    [MOD_DIV]    = { "Clock divider: passes every Nth gate.", "CLOCK only speaks /1 /2 /4 -- DIV adds /3,", "/8, /16... two DIVs = instant polymeter." },
+    [MOD_ADSR]   = { "Envelope with SUSTAIN: gate up -> attack,", "decay, then HOLD at sus; gate down ->", "release. Into VOICE 'a' = pads that breathe." },
 };
 
 // ── module instances + cables ──
@@ -482,9 +493,42 @@ void preset_clockless(void) {    // NO CLOCK: two free-running LFOs through two 
     add_cable(l2, 0, qt, 0); add_cable(qt, 1, vo, 1);                             // pitch rides the OTHER lfo — cross-rhythm melody
 }
 
-const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless" };
-void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless };
-#define NPRESET 22
+void preset_polymeter(void) {    // DIV 4-against-3: kick every 4 steps, snare+bass every 3 — the accents drift and realign
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0));
+    int d1 = spawn(MOD_DIV, bayx(1), bayy(1)), d2 = spawn(MOD_DIV, bayx(1) + 48, bayy(1));   // two slim DIVs share a bay
+    int dr = spawn(MOD_DRUM, bayx(2), bayy(2));
+    int tm = spawn(MOD_TURING, bayx(4), bayy(4)), qt = spawn(MOD_QUANT, bayx(5), bayy(5)), vo = spawn(MOD_VOICE, bayx(6), bayy(6));
+    mod[ck].param[0] = 132;
+    mod[d1].param[0] = 4; mod[d2].param[0] = 3;          // the polymeter: 4 against 3
+    mod[tm].param[0] = 0.3f; mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[vo].param[VK_CUT] = 380; mod[vo].param[VK_RES] = 8; mod[vo].param[VK_FENV] = 1200;
+    add_cable(ck, 0, d1, 0); add_cable(ck, 0, d2, 0);
+    add_cable(ck, 0, dr, 2);                             // hats every step
+    add_cable(d1, 1, dr, 0);                             // kick on the 4-cycle
+    add_cable(d2, 1, dr, 1);                             // snare on the 3-cycle — drifts against the kick
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(d2, 1, vo, 0);                             // bass rides the 3 too
+}
+void preset_adsrpad(void) {      // ADSR pad: wide CMP gates + a sustaining VCA — notes swell, hold, and breathe out
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int l1 = spawn(MOD_LFO, bayx(0), bayy(0)), c1 = spawn(MOD_CMP, bayx(1), bayy(1));
+    int ad = spawn(MOD_ADSR, bayx(2), bayy(2));
+    int l2 = spawn(MOD_LFO, bayx(4), bayy(4)), qt = spawn(MOD_QUANT, bayx(5), bayy(5)), vo = spawn(MOD_VOICE, bayx(6), bayy(6));
+    mod[l1].param[0] = 0.22f;                            // slow breath: each cycle is one long note
+    mod[c1].param[0] = 0.35f;                            // low threshold = wide gates for the sustain to live in
+    mod[ad].param[AK_ATK] = 0.35f; mod[ad].param[AK_DEC] = 0.3f; mod[ad].param[AK_SUS] = 0.65f; mod[ad].param[AK_REL] = 1.0f;
+    mod[l2].param[0] = 0.13f;                            // pitch drifts independently of the breathing
+    mod[qt].param[0] = SCALE_MAJOR;
+    mod[vo].param[VK_CUT] = 1000; mod[vo].param[VK_RES] = 3; mod[vo].param[VK_WAV] = 2;   // tri — soft pad tone
+    add_cable(l1, 0, c1, 0); add_cable(c1, 1, vo, 0); add_cable(c1, 1, ad, 0);
+    add_cable(ad, 1, vo, 5);                             // ADSR → 'a': the VCA with a real sustain + release
+    add_cable(l2, 0, qt, 0); add_cable(qt, 1, vo, 1);    // pitch wanders the scale while the note holds
+}
+
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad };
+#define NPRESET 24
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[8]; } SaveMod;
@@ -789,6 +833,36 @@ void eval_mod(int mi) {
         case MOD_CMP:      // comparator: cv → gate (high while above threshold — pulse width is the knob)
             m->jackval[1] = read_in(mi, 0) > m->param[0] ? 1 : 0;
             break;
+        case MOD_DIV: {    // clock divider: one gate out every Nth input pulse
+            float clk = read_in(mi, 0);
+            m->jackval[1] = 0;
+            if (clk > 0.5f && m->state[0] <= 0.5f) {
+                m->state[1] += 1;
+                if ((int)m->state[1] % (int)m->param[0] == 0) { m->jackval[1] = 1; m->state[2] = 0; }
+            }
+            m->state[0] = clk; m->state[2] += 1;
+            break; }
+        case MOD_ADSR: {   // gate-length-aware envelope: attack → decay → HOLD at sus → release
+            float g = read_in(mi, 0);
+            bool gh = g > 0.5f;
+            if (gh && m->state[0] <= 0.5f) m->state[1] = 1;                     // (re)trigger → attack (from current level: legato)
+            if (!gh && m->state[1] > 0.5f && m->state[1] < 2.5f) m->state[1] = 3;   // gate fell mid-env → release
+            if (m->state[1] == 1) {            // attack: rise to 1
+                m->state[2] += dt() / (m->param[AK_ATK] > 0.002f ? m->param[AK_ATK] : 0.002f);
+                if (m->state[2] >= 1) { m->state[2] = 1; m->state[1] = 2; }
+            } else if (m->state[1] == 2) {     // decay toward sus, then HOLD there while the gate stays up
+                float sus = m->param[AK_SUS];
+                if (m->state[2] > sus) {
+                    m->state[2] -= dt() / (m->param[AK_DEC] > 0.002f ? m->param[AK_DEC] : 0.002f);
+                    if (m->state[2] < sus) m->state[2] = sus;
+                } else m->state[2] = sus;
+            } else if (m->state[1] == 3) {     // release: fall to 0
+                m->state[2] -= dt() / (m->param[AK_REL] > 0.002f ? m->param[AK_REL] : 0.002f);
+                if (m->state[2] <= 0) { m->state[2] = 0; m->state[1] = 0; }
+            }
+            m->state[0] = g;
+            m->jackval[1] = clamp(m->state[2], 0, 1);
+            break; }
     }
 }
 
@@ -831,6 +905,7 @@ const char *knob_str(int fmt, float v) {
     if (fmt == FMT_DEST)  { const char *D[3] = { "pit", "cut", "pw"  }; return D[(int)clamp(v, 0, 2)]; }
     if (fmt == FMT_ENGINE){ const char *E[3] = { "plk", "mlt", "fm"  }; return E[(int)clamp(v, 0, 2)]; }   // pluck/mallet/fm modeled engines
     if (fmt == FMT_OCT)   { int o = (int)floorf(v + 0.5f); return o == 0 ? "0" : str("%+d", o); }          // snapped whole octaves
+    if (fmt == FMT_DIV)   return str("/%d", (int)v);                                                       // clock division
     if (fmt == FMT_SCALE) return SCALES[(int)v];
     if (fmt == FMT_NOTE)  return NOTES[(int)v];
     if (fmt == FMT_F1)    return str("%.1f", v);
@@ -995,6 +1070,13 @@ void draw_extras(int mi) {
             break;
         case MOD_CMP:       // gate LED — high while the cv sits above the threshold
             circfill(cx, y + 16, 4, m->jackval[1] > 0.5f ? CLR_GREEN : CLR_DARKER_GREY);
+            break;
+        case MOD_DIV: {     // the division readout flashes white each time it lets a pulse through
+            const char *s = knob_str(FMT_DIV, m->param[0]);
+            print(s, cx - text_width(s) / 2, y + 14, m->state[2] < 6 ? CLR_WHITE : CLR_MEDIUM_GREY);
+            break; }
+        case MOD_ADSR:      // envelope level, live — watch it hold at sus while the gate is up
+            meter(x + 53, y + 16, 5, 48, m->state[2], CLR_DARK_RED);
             break;
         case MOD_KEYS: {    // 7 white keys; lit while held
             const char KK[7] = { 'A','S','D','F','G','H','J' }; const int OFF[7] = { 0,2,4,5,7,9,11 };
