@@ -1,5 +1,13 @@
 # Cart sharing ideas
 
+> **SHIPPED (2026-06-05): the URL exists — <https://nikkikoole.github.io/dreamengine/>.**
+> `node tools/build-site.js <name>` compiles a cart to wasm into `site/<name>/` and
+> regenerates the thumbnail gallery; `tools/publish-cart.sh <name>` does build → commit →
+> push in one command (GitHub Pages publishes the committed `site/` via
+> `.github/workflows/pages.yml` — no emscripten in CI, builds happen locally).
+> This is the "GitHub Pages" option below, chosen because the repo already lives there.
+> The rest of this doc is the original exploration, kept for the options not taken.
+
 Web builds already work — `build/cart.html + cart.js + cart.wasm` runs in any
 browser. What's missing is a URL you can send someone.
 

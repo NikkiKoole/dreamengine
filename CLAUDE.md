@@ -64,6 +64,11 @@ eventually2/
 │   ├── make-cart.js    #   build/bake .cart.png from tools/carts/<name>.c
 │   │                   #   also a library module: play.js requires it for buildSpriteSheet/buildMap/etc.
 │   ├── play.js         #   debug harness driver (record/replay/script + trace + --wav audio render)
+│   ├── build-site.js   #   build playable wasm carts + gallery into site/ for GitHub Pages
+│   │                   #   (https://nikkikoole.github.io/dreamengine/); per-cart workdirs in
+│   │                   #   build/.site/; gallery lists every cart with a built site/<name>/
+│   ├── publish-cart.sh #   build-site.js + commit site/ + push, one command → live in ~1 min
+│   │                   #   (.github/workflows/pages.yml publishes the committed site/, no CI emcc)
 │   ├── wav-analyze.js  #   audio metrics from an engine WAV (peak/RMS/crest/clipping, two-file
 │   │                   #   compare with bytes-identical check) — pairs with --wav and the
 │   │                   #   .bake/wav_request live-capture trigger; see guides/debug-harness.md
