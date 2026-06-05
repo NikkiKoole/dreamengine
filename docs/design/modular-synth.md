@@ -227,35 +227,44 @@ float voice_gate_prev[2];
 
 Modules discussed but not yet built. Rough priority order.
 
-### MIX — CV mixer
-Two CV inputs, one output (summed). Sounds trivial but opens a lot of patching: combine two
-LFOs, add a manual offset to a pitch CV, layer two modulation sources. 2-in version fits in
-3×5 (same size as SLEW/ATTN). A 4-in version at 4×5 would be even more useful.
-
 ### CHORD — chord voice
 Takes a root pitch + gate, plays a full chord via the `chord()` API. One knob for chord type
 (maj/min/dim/aug/maj7/dom7/sus4/power). Strum variant: `strum()` with a delay knob.
 Different character from VOICE — instant harmonic texture on a single gate.
 
-### DIVIDER — clock divider
-Takes any gate input and divides by N (knob: 2–16). Different from CLOCK's built-in /2 /4
-outputs — those are fixed and only from the internal clock. A DIVIDER lets you derive
-slower sub-rhythms from EUCLID, GRIDS, or SEQ's gate output.
+### DELAY (signal) — gate/pitch echo
+Echoes a **gate or CV signal** N beats later — generative echo, very cheap (a ring buffer of
+frames). Distinct from the *audio* echo bus designed in audio-notes §17 (a DELAY module there
+is the front-end to the one shared audio bus); this one delays *control* signals, so an echoed
+gate can fire a *different* voice. Both can exist; name them apart (DELAY vs ECHO).
 
-### OFFSET — CV bias
-Adds a fixed offset to a CV (knob: −1..+1). Transpose a pitch, shift an LFO's range,
-push a CV above a threshold. Tiny — 3×4 or 3×5, one knob, in/out jacks. Pairs naturally
-with ATTN (attenuate then offset = full attenuverter).
+### Shipped ledger
+**2026-06-04** — SEQ (8-step CV sequencer) · VIBE (audio-rate vibrato via `note_lfo()`) ·
+CHANCE (probabilistic gate filter).
 
-### COMPARE — CV-to-gate threshold
-Outputs a gate when input CV exceeds a threshold knob. Extracts rhythmic information from
-continuous CVs (e.g. turn a slow LFO into an irregular gate pattern). Pairs well with MATHS
-cycling: the shape of the ramp determines the gate duty cycle.
+**2026-06-05 — six modules, each with a showcase preset:**
+- **MACRO** — the Plaits-style modeled voice (§"borrowing" above, audio-notes §8): eng knob
+  picks plk/mlt/fm (engine slots 23–25), har/tmb/mor knobs + h/t/m CV inlets that *add* to
+  the knobs. Preset: *Macro voice* (LFO swells FM feedback).
+- **XPOSE** — octave shifter for pitch lines (−2..+2 snapped); the only way to the bass
+  register, since QUANT's root walks semitones-up within ROOT_OCT. Retune: *Acid bass* now
+  runs through XPOSE(−1). Subsumes the parked OFFSET's "transpose a pitch" half.
+- **MIX** — was parked here, now shipped *better* than specced: the knobs are
+  **attenuverters** (−1..+1) + an `off` knob, so it's also the inverter and the full
+  attenuverter the OFFSET entry wanted. Preset: *Mix mod* (LFO wah + ENV pluck → one cutoff).
+- **CMP** — the parked COMPARE: cv→gate while in > thr; threshold = pulse width. Preset:
+  *Clockless* (two free-running LFOs through two CMPs — a groove with no CLOCK module).
+- **DIV** — the parked DIVIDER: every Nth gate (2–16), flashing /N readout. Preset:
+  *Polymeter* (/4 kick against /3 snare+bass off one clock).
+- **ADSR** — envelope with a real SUSTAIN stage (gate-length-aware, legato retrigger);
+  ENV stays as the simple AD. Preset: *ADSR pad* (CMP gates + ADSR into VOICE 'a' — the
+  rack's first ambient patch).
 
-### Already built this session
-- **SEQ** (8-step CV sequencer) — shipped
-- **VIBE** (audio-rate vibrato via `note_lfo()`) — shipped
-- **CHANCE** (probabilistic gate filter) — shipped
+With CMP shipped, the signal-conversion matrix is complete (gate→cv ENV/MATHS, cv→pitch
+QUANT, cv→gate CMP, pitch→pitch XPOSE, cv→cv SLEW/ATTN/S&H/MIX, gate→gate
+LOGIC/CHANCE/EUCLID/DIV). What the rack still can't do is **sound dirty** — that's an
+*engine* gap, not a module gap: see audio-notes §17 (drive → soft-clip → echo bus →
+detune → crush, plus cart-side swing + darker DRUM voices).
 
 ## Existing carts to not duplicate
 
