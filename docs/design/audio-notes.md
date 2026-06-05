@@ -489,6 +489,13 @@ still wrap *around* it. So an organ can have `note_morph` ramp the Leslie up **a
 engines become a Plaits-style **MACRO voice** with three CV inlets (HARMONICS / TIMBRE / MORPH);
 patch an LFO or envelope into MORPH and the organ swells on its own.
 
+> **Shipped (2026-06-05): modrack's MACRO module.** `eng` knob picks plk/mlt/fm (slots 23-25),
+> har/tmb/mor knobs + h/t/m CV inlets (CV *adds* to the knob, full-range — ATTN sets depth).
+> Strike-shaping macros are pushed to the slot just before `note_on` (queue order makes them
+> land per-strike even with several MACROs sharing an engine slot); live macros stream via
+> `note_harmonics/timbre/morph` while the gate is held. "Macro voice" preset = Turing epiano
+> with an LFO swelling MORPH (FM feedback) on its own.
+
 This does not change the first-bite plan: `INSTR_ORGAN` still ships buffer-free — it just ships
 *with* its three-macro mapping instead of as a single frozen preset.
 

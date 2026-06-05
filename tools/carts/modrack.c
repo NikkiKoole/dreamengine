@@ -411,9 +411,9 @@ void preset_chance(void) {       // probabilistic gates: dense euclid filtered a
 void preset_macro(void) {        // Plaits-style MACRO voice: Turing epiano, LFO swells morph (FM feedback) on its own
     note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
     int ck = spawn(MOD_CLOCK,  bayx(0), bayy(0)), tm = spawn(MOD_TURING, bayx(1), bayy(1));
-    int qt = spawn(MOD_QUANT,  bayx(2), bayy(2)), mc = spawn(MOD_MACRO,  bayx(3), bayy(3));
-    int lf = spawn(MOD_LFO,    bayx(4), bayy(4)), eu = spawn(MOD_EUCLID, bayx(5), bayy(5));
-    int dr = spawn(MOD_DRUM,   bayx(6), bayy(6));
+    int qt = spawn(MOD_QUANT,  bayx(2), bayy(2)), mc = spawn(MOD_MACRO,  bayx(4), bayy(4));
+    int lf = spawn(MOD_LFO,    bayx(5), bayy(5)), eu = spawn(MOD_EUCLID, bayx(6), bayy(6));
+    int dr = spawn(MOD_DRUM,   bayx(3), bayy(3));   // MACRO front-and-centre (bay 4); drums take the edge bay
     mod[ck].param[0] = 96;
     mod[tm].param[0] = 0.25f;                            // mostly-locked melody loop
     mod[qt].param[0] = SCALE_PENTA_MIN;
