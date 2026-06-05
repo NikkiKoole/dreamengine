@@ -539,6 +539,7 @@ What changes between styles is mostly **data** — the engine above carries over
 | **exotica (Denny/Baxter)** | 84–100, lazy two-feel | rim clave + conga heartbeat + shaker; vibes 15–25ms behind the beat; tremolo ROLLS on long notes | lounge loops: maj9/6-9 lush, borrowed ivm6 dusk, pagan minor (i–bVI / i–bIII–bVI); melody = re-pitched cell | vibes lead (**MALLET**, motor on), nylon comp (**PLUCK**), glass bell arps (**FM**) — all three engines; upright TRI bass; THE AVIARY: unseeded bird/frog calls per bar (the band improvising the jungle) | ✅ `exotica.c` |
 | **yacht rock (Steely Dan)** | 92–114, session-tight OR Purdie half-time shuffle (swung ghosts vol 1) OR CR-78 machine — rolled per song | citypop anticipations (and-of-4 epiano push), chromatic bass runs INTO changes, +2 gear change in the last chorus | THE MU CHORD (add9 voiced 3-5-9, a named quality) in stolen-playbook loops: two-mu vamp, ii–V13, maj7 planing, dorian i–IV13; mu-ify + sus-melt rolls | **FM epiano** comp (1:1 detent — the tine pings every chord) + tremolo, PLUCK strat 9th-stabs, breathy narrow-pulse sax, soft saw strings, kit circuits swapped per groove (cr78.c on loan) | ✅ `yacht.c` |
 | **modal psych-rock (the Doors)** | 96–122; kit rolls shuffle (swung + ghosts) / latin / rock; ride takes over in the solos | jam form: head → ORGAN SOLO → GUITAR SOLO → head out; **THE IMPROVISER** (melody brain #2): motif → stated/answered/sequenced/doubled per 2-bar phrase, 16-bar tension arc, breath rests — pure performance rnd, never seeded | two-chord modal vamps rocked 2 bars each: mixo I–bVII (B–A forever), dorian i–IV7, phrygian i–bII; seeded "how blue" knob = b3/b7/b5 intrusions | Vox combo organ = **wave_set drawbar cycle** (the lever finally pulled), Rhodes piano bass = **FM** epiano detent low + swung seeded ostinato, Krieger gtr = **PLUCK** line over an open-string drone | ✅ `roadhouse.c` |
+| **cocktail piano trio (Guaraldi/Peterson)** | 96–108 ballads / 116–144 swing; ride "ding ding-ga-ding" + hat on 2&4, swing 62%, feathered kick, brush sweeps | trio set form: head → piano solo (16-bar arc) → **BASS SOLO** (the improviser, low register, 0.62 density — the room leans in) → piano trades back → head out | weighted ii–V–I functional walk with secondary dominants + the tritone sub; cadence FORCED into bars 6–7 of every 8; borrowed ivm6 | **THE WALKING BASS** (the promised ~20-line generator: root → motion → chromatic approach into the next root), satie's TRI piano + felt-attack env, Charleston comp cells; `improv.h` shared with roadhouse | ✅ `cocktail.c` |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
@@ -715,10 +716,13 @@ and Sakamoto unprompted.
    nothing else on the dial, over hypnotic minor vamps with horns and
    vibraphone-ish keys. A new chord-brain variant (modal vamp in a non-Western
    scale) and the accommodation rule doing something genuinely new.
-4. **Swing / cocktail jazz trio** — walking bass as an algorithm (chord tone on
-   1, approach pattern through the bar — a beautiful ~20-line generator),
-   ride-cymbal swing pattern, sparse comping reusing bossa's ii–V tables at 4×
-   the harmonic rate. The guide's swing math finally gets its full workout.
+4. ~~**Swing / cocktail jazz trio**~~ — ✅ shipped as `cocktail.c` (2026-06-05,
+   station #14). The walking-bass prediction held: root → chord/scale motion →
+   chromatic approach, ~20 lines as promised. **And it triggered THE IMPROVISER's
+   graduation**: second customer → extracted to `runtime/improv.h` (the radio.h
+   rule applied to melody); roadhouse.c migrated same-day. Bonus the plan didn't
+   call: the BASS takes a solo too (same brain, register 45, density 0.62 — the
+   brushes drop to a whisper and the piano just nods).
 5. **Gamelan (Java/Bali)** — planned 2026-06-05; the first station to leave
    12-TET entirely. Four new tricks in one cart:
    - **the tuning system as data** — sléndro/pélog as cent tables fed through
