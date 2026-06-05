@@ -770,6 +770,10 @@ buffer flag, navkit source, and macro mapping get filled in here.
 
 > The effects wishlist + the routing model. Still **deferred** to §8.5 phase 4 (after the first
 > engines ship) — begin small. The Leslie (§8.3/§8.8) is the first instance and sets the pattern.
+> **Juno-60 raises the cost of this deferral:** the Juno's BBD chorus is *the* defining sound of
+> the instrument — without it a Juno-60 cart is a dry generic pad, not a Juno. The BBD chorus is a
+> short pitch-modulated delay (same building block as the Leslie's doppler component), so it would
+> fall out of the Leslie/effects layer work rather than requiring its own separate engine. See §14.
 
 **The routing model: unify on "bus"; master is just the default bus.** Rather than two concepts
 (master FX vs. bus FX), there's *one* — a **bus** carrying a small fixed FX chain — and "master"
@@ -1083,7 +1087,7 @@ the wall was hit, and scored against §1's leverage rule.
    others, covering future cymbal-choke and hi-hat-pedal scenarios.
 
 2. **A second oscillator per voice** (detune pair, or 2-op FM). The big
-   timbre unlock, felt three distinct ways:
+   timbre unlock, felt four distinct ways:
    - **Electric piano doesn't exist.** The guide's recipe ("SINE + tremolo")
      is a placeholder, not a Rhodes. Italo disco, Steely Dan/AOR and any
      deeper citypop all *center* on epiano/DX keys — the planned batch runs
@@ -1095,6 +1099,14 @@ the wall was hit, and scored against §1's leverage rule.
      chord; house.c cut its string machine to 2 voices for budget. An
      instrument-level **unison-detune flag** would halve every pad's
      polyphony cost — arguably the cheapest 80% of this item.
+   - **Juno-60 DCO mixer.** The Juno mixes SAW + SQUARE simultaneously per
+     voice — that's a second oscillator with a different waveform, not an
+     FM pair. The unison-detune flag alone doesn't cover it (detune = same
+     wave, slightly offset pitch). A static approximation is possible via a
+     drawn SCW (`INSTR_USER`) blending saw and pulse harmonics into one
+     table; a live-mixable version needs the full second-oscillator path.
+     The Juno is a concrete build target that makes both the unison-detune
+     flag and the second-osc path more urgent (see §14).
 
 3. **A plucked-string wave (Karplus-Strong).** Every guitar on the dial is a
    filtered TRI envelope: bossa's nylon, jangle's chorus-wobble, the planned
@@ -1115,6 +1127,17 @@ the wall was hit, and scored against §1's leverage rule.
    scheduled. satie/ambient/exotica would transform with one fixed mono
    plate + per-slot send level. Counter-argument: dryness IS the chip
    identity. A taste decision, not a clear gap — flagging, not advocating.
+
+**SFX editor as percussion modeler — a partial bridge for gap 2/sample sounds.**
+The SFX editor (`sfxed.c`, §5.6) exports per-step pitch + volume + filter-CUT
+arrays as C code. That's more sculpting power than a single `instrument()` call —
+you can draw the exact filter-close curve and volume shape of a hit. The TR-909
+hihat is a real-world case: ROM samples in the hardware, but the *character* is a
+fast-closing highpass burst. Authoring it in the SFX editor (NOISE wave, steep CUT
+lane, short vol decay) and calling `sfx(n)` in fire() is not a perfect reproduction
+but it's meaningfully closer than a static instrument definition. This is a useful
+technique for any future drum machine that needs sounds more sculpted than a fixed
+ADSR. See §14 for the 909 build-readiness assessment.
 
 **What was NOT missing**, for the record: the per-note modulation system is
 complete in practice — house.c's entire filter ride was `note_cutoff` +
@@ -1191,3 +1214,88 @@ rejected: a JS source of truth + codegen (the `gen-tcc-symbols` pattern
 doesn't apply — waves aren't baked into `.cart.png`, they're set at runtime
 from C, so the JS side would have **no consumer**), and dual hand-written
 JS+C files (sync discipline purchasing nothing).
+
+## 14. Classic Roland machine build readiness (2026-06-05)
+
+Assessed against the current API and the §12/§13 gap map. Three machines that
+fit the existing style of the classic-machine family (cr-78, tr-808, tb-303):
+
+### SH-101 (1982) — monophonic lead/bass synth
+
+**Build it now. No new engine work needed.**
+
+Every SH-101 feature maps directly to the current API:
+
+| SH-101 | Our API |
+|---|---|
+| DCO: saw / square (with PWM) | `INSTR_SAW` / `INSTR_SQUARE` + `instrument_duty()` |
+| Sub oscillator (−12 or −24 st) | Second `note_on` slot at the sub pitch; burns 2 of 8 voices but the SH-101 is monophonic so this is fine |
+| PWM LFO | `instrument_lfo(slot, LFO_DUTY, ...)` |
+| 4-pole resonant LP | `instrument_filter(FILTER_LOW, cutoff, res)` |
+| Filter envelope | `instrument_env(ENV_CUTOFF, ...)` |
+| LFO → pitch, filter, PWM | `instrument_lfo()` to all three destinations |
+| Portamento | `note_glide()` |
+| Arpeggiator | Scheduling logic in `update()`, same pattern as tb-303's sequencer |
+
+The SH-101 is the clearest free win in the classic-machine family — a
+monophonic lead/bass synth with the full ADSR, filter, LFO, and glide surface
+already used by tb-303.c. It would be the first *instrument* cart (rather than
+drum machine) that lets you shape a sound like a real synthesizer.
+
+### TR-909 (1983) — hybrid drum machine
+
+**Build kick/snare/toms now; hihat/cymbal need a workaround or a future gap.**
+
+The 909 is hybrid: kick, snare, toms, clap are analog circuits (same approach
+as tr-808.c, just different component values). Hihat and cymbal are **ROM
+samples** in the real hardware — that gap is noted in the feature comparison
+table (PCM = ❌) and not yet closable via synthesis alone.
+
+| 909 section | Status |
+|---|---|
+| Kick (analog, ENV_PITCH drop) | ✅ same as 808 kick, slightly different tuning |
+| Snare (analog, body + noise) | ✅ same architecture as 808 snare |
+| Toms (analog, sine + pitch drop) | ✅ identical to 808 toms |
+| Clap (noise retriggers) | ✅ identical approach to 808 clap |
+| Hihat / cymbal (ROM samples) | ⚠️ approximation only — see below |
+| Shuffle (909 had it; 808 didn't) | ✅ `beat_pos()` swing, same as our Z/X knob |
+
+**Hihat workaround — SFX editor as percussion modeler.** The SFX editor
+(`sfxed.c`) authors per-step pitch + volume + filter-CUT curves and exports
+them as C arrays called with `sfx(n)`. A 909 hihat is characteristically a
+fast-closing highpass burst — exactly the shape the CUT lane can sculpt. Author
+the sound in the SFX editor (NOISE wave, steep CUT lane decay, short volume
+envelope), embed the exported array in the cart, fire with `sfx(n)`. Not a ROM
+sample reproduction but substantially more shaped than a static `instrument()`
+call. This technique applies to any future drum machine needing sounds beyond
+a fixed ADSR (see §12 SFX modeler note).
+
+### Juno-60 (1982) — 6-voice polyphonic pad/chord synth
+
+**Architecture works; two gaps block authenticity. Build after §12 gap 2 + §8.10.**
+
+The Juno-60's voice architecture (polyphonic `note_on`, LP filter, LFO, ADSR)
+maps fine. Two things stand between a Juno-60 cart and the real instrument:
+
+**Gap A — DCO SAW+PULSE simultaneous mix (§12 gap 2).**
+The Juno mixes saw and square waveforms per voice for thickness — that's a
+second oscillator with a *different* waveform, distinct from both FM and
+unison-detune. Current workaround: draw a blended SCW (`INSTR_USER`) with
+partial saw + partial pulse harmonics — static mix, can't sweep the ratio, but
+costs nothing. The full dynamic mix requires the second-oscillator path in §12
+gap 2. The unison-detune flag (cheapest 80% of gap 2) covers the
+*thickness* aspect but not the waveform blend.
+
+**Gap B — BBD chorus (§8.10).**
+The Juno's chorus is *the* defining sound. Without it the cart is a dry generic
+pad, not a Juno. The BBD chorus is a short pitch-modulated delay — the same
+building block as the Leslie's doppler component (§8.3/§8.10). It falls out of
+the effects-layer work rather than needing its own separate engine. Since §8.10
+is deferred to phase 4 (after the first engine batch), the Juno-60 is blocked
+until then.
+
+**Build order implication:** the Juno-60 is the concrete hardware target that
+makes the unison-detune flag, the second-oscillator path (§12 gap 2), and the
+§8.10 effects layer all more urgent. If and when the Italo/gamelan/AOR batch
+starts and §12 gap 2 opens, design the second-oscillator surface with the
+Juno-60 in mind alongside the Rhodes and the bell engines.
