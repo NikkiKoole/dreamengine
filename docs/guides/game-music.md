@@ -538,6 +538,7 @@ What changes between styles is mostly **data** — the engine above carries over
 | **French house (Daft Punk)** | 114–126 | four-on-floor 808, claps on 2+4, machine-straight; THE VOID — last beat before every drop is dead silence | stolen playbook of the records the genre sampled: Modjo/Chic i9–bVImaj7–iv9–bVII9, Stardust's Neapolitan bIImaj7, One More Time's tonic-avoiding IVmaj7–V–iii7, Digital Love's slash bass; dorian iv→IV9 + 9sus rolls, needle-drop rotation — harmony never develops, **the FILTER is the form** | THE RIDE: `note_cutoff`/`note_res` swept on held strings per 8-bar arcs + sidechain pump (cutoff ducks at each kick, blooms across the beat); saw stabs, octave disco bass, Da Funk `note_glide` mono lead, 808 circuits on loan from `tr808.c` | ✅ `house.c` |
 | **exotica (Denny/Baxter)** | 84–100, lazy two-feel | rim clave + conga heartbeat + shaker; vibes 15–25ms behind the beat; tremolo ROLLS on long notes | lounge loops: maj9/6-9 lush, borrowed ivm6 dusk, pagan minor (i–bVI / i–bIII–bVI); melody = re-pitched cell | vibes lead (**MALLET**, motor on), nylon comp (**PLUCK**), glass bell arps (**FM**) — all three engines; upright TRI bass; THE AVIARY: unseeded bird/frog calls per bar (the band improvising the jungle) | ✅ `exotica.c` |
 | **yacht rock (Steely Dan)** | 92–114, session-tight OR Purdie half-time shuffle (swung ghosts vol 1) OR CR-78 machine — rolled per song | citypop anticipations (and-of-4 epiano push), chromatic bass runs INTO changes, +2 gear change in the last chorus | THE MU CHORD (add9 voiced 3-5-9, a named quality) in stolen-playbook loops: two-mu vamp, ii–V13, maj7 planing, dorian i–IV13; mu-ify + sus-melt rolls | **FM epiano** comp (1:1 detent — the tine pings every chord) + tremolo, PLUCK strat 9th-stabs, breathy narrow-pulse sax, soft saw strings, kit circuits swapped per groove (cr78.c on loan) | ✅ `yacht.c` |
+| **modal psych-rock (the Doors)** | 96–122; kit rolls shuffle (swung + ghosts) / latin / rock; ride takes over in the solos | jam form: head → ORGAN SOLO → GUITAR SOLO → head out; **THE IMPROVISER** (melody brain #2): motif → stated/answered/sequenced/doubled per 2-bar phrase, 16-bar tension arc, breath rests — pure performance rnd, never seeded | two-chord modal vamps rocked 2 bars each: mixo I–bVII (B–A forever), dorian i–IV7, phrygian i–bII; seeded "how blue" knob = b3/b7/b5 intrusions | Vox combo organ = **wave_set drawbar cycle** (the lever finally pulled), Rhodes piano bass = **FM** epiano detent low + swung seeded ostinato, Krieger gtr = **PLUCK** line over an open-string drone | ✅ `roadhouse.c` |
 | **ambient** | 60 fixed, pace knob | beatless; chords hold 8–16 beats, held `note_on` voices morph via `note_glide` | one mode per song, degree walk, no cadences | 4 detuned saw pads, sine sub, band-noise wind, bell arps | ✅ `ambient.c` |
 | **chiptune action** | 140–170 | straight 16ths, driving; euclid() fills | i–bVI–bVII–i loops, power chords | square lead 25% duty, tri bass, noise kit | idea |
 
@@ -740,7 +741,16 @@ and Sakamoto unprompted.
    knob; face = gong rack vs a wayang shadow puppet dancing the cycle.
    Taste-fit: the Hosono thread again (*Cochin Moon*), Nonesuch Explorer
    crate-digging.
-6. **The Doors / modal psych-rock** — owner-requested 2026-06-05, with the
+6. ~~**The Doors / modal psych-rock**~~ — ✅ shipped as `roadhouse.c`
+   (2026-06-05, station #13). **THE IMPROVISER exists**: phrase-based solos
+   (motif stated / answered-inverted / sequenced / doubled at the peak), a
+   16-bar tension arc, breath rests, pure performance rnd — R replays the
+   song, the solos are always new. Also the first station to pull the
+   `wave_set` lever (the Vox drawbar cycle). The improviser lives in the
+   cart for now — it graduates to a shared header when ethio-jazz or the
+   cocktail trio (its other customers) confirm the boundary, same rule as
+   `radio.h`. Original design notes kept below for the next customer:
+   (was: owner-requested 2026-06-05, with the
    theory homework already done. The vamp side we mostly own (mixolydian
    one-/two-chord drones, "L.A. Woman" A–G over an A center that never
    resolves — jangle's vamp brain, slowed and darkened; modal-mixture
