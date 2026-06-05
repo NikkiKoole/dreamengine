@@ -199,10 +199,15 @@ their `kind[]` tags.
         Leslie ships LATER as an add-on, not in the same bite — the drawbar core is buffer-free
         and the morph macro's scanner vibrato gives motion without it; the Leslie is a decoupled
         shared effect (§8.3/§8.8c) and folds into the effects/bus layer (§8.10) when that opens.)*
-     5. **EP / acoustic-piano / guitar** family. *(Corrected 2026-06-05 from navkit source: the
+     5. **`INSTR_EPIANO`** — its own bite now. *(Corrected 2026-06-05 from navkit source: the
         EP is buffer-free — 12-mode modal bank + pickup nonlinearity, mallet-sized port, one
         engine = Rhodes/Wurli/Clav via pickup type; only piano + guitar need the pluck-proven
         buffer path. audio-notes §8.5 step 5 + §8.7.)*
+     Beyond that, the decided queue (2026-06-05, full rationale audio-notes §8.5 steps 6–10):
+     **PD (CZ — the cheap snack, 2 floats) → reed** *(or waveguide brass first, if FM's brass
+     stress test fails)* **→ membrane (hand percussion) → bowed/pipe + the buffered
+     piano/guitar pair → formant + effects layer.** Additive stays deferred (`INSTR_SINE` + FM
+     cover its near corners; it subsumes the MT70/sine family when it lands).
    Two findings already resolved: the **MT70 presets** (Flute/Bells/Organ/Vibes/JzOrg2…) are
    **all pure sine + ADSR + filter — not an engine**, so they need *no port* and ship as
    demo/preset carts on existing API (§8.9); and **`INSTR_SINE` = Additive at harmonics 0**, so

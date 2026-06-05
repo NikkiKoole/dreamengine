@@ -614,22 +614,33 @@ independently shippable:
    (the 14× flicker on strike). This closes the epiano taste loop and greenlights the
    citypop/lowend Rhodes retrofits with confidence. Remaining FM tail: the brass
    stress test (attack-rise question, §8.8.3's follow-amp-env alternative if it bites).
-4. **`INSTR_ORGAN` + Leslie (shared) + resonant SVF filter** — the organ as a complete package
-   (drawbars → scanner on the buffer → shared rotary). The SVF is the reusable primitive that also
-   gives §5.5 and §8.3's formant.
-5. **`INSTR_EPIANO` / `INSTR_PIANO` / `INSTR_GUITAR`/`INSTR_HARP`** — the rest of the family.
-   **Not all buffered (verified in navkit source, 2026-06-05):** piano (`StifKarpSettings` has a
-   `ks2Buffer[2048]` second-string line) and guitar (KS string + body resonator) ride the
-   pluck-validated buffer path, but the **EP is buffer-free** — a pure 12-mode modal bank +
-   pickup nonlinearity (~296 B/voice, no delay line; the §8.5 cost table had this right all
-   along). So the EP port is a *mallet-sized* job, not a pluck-sized one — and one engine
-   covers Rhodes/Wurli/Clav via `pickupType` (see §8.7). The pianist. (If §8.8.3's epiano
-   preset lands well, the dedicated modal `INSTR_EPIANO` may shrink to a nice-to-have — though
-   its case is really the *electromechanical* corner FM can't reach: Wurli reed bark, Clav
-   pickup pluck, mark-I Rhodes growl. The FM tine keeps the DX corner.)
-6. **Formant filter** + the **effects layer** (§8.10 — buses vs. master; reverb / delay / tape /
-   leslie / wah, starting with one master reverb + the formalized bus concept).
-7. **Optional:** bowed strings; and/or the SCW bank (§8.4).
+4. **`INSTR_ORGAN`** — drawbars → scanner, buffer-free core. *(2026-06-05: the Leslie is
+   deferred — ships later as the effects/bus layer's first instance, §8.10; the morph macro's
+   scanner vibrato carries the motion until then.)* Pilots the held-notes + macros-as-CV
+   surface the whole wind family (steps 7/9) will reuse. The resonant SVF still rides along —
+   it's the reusable primitive that also gives §5.5 and §8.3's formant.
+5. **`INSTR_EPIANO`** — promoted to its own step by the navkit verification (2026-06-05):
+   **buffer-free** — a pure 12-mode modal bank + pickup nonlinearity (~296 B/voice, no delay
+   line; the cost table had this right all along), so it's a *mallet-sized* job, not a
+   pluck-sized one — and one engine covers Rhodes/Wurli/Clav via `pickupType` (see §8.7).
+   Its case is the *electromechanical* corner FM can't reach: Wurli reed bark, Clav pickup
+   pluck, mark-I Rhodes growl; the FM tine keeps the DX corner. (Clav + the §8.10 wah is the
+   named endgame combo.)
+6. **`INSTR_PD`** (Casio CZ) — the snack between bigger ports: 2 floats, buffer-free,
+   resonant sweeps with zero filter. Slot it in whenever a small win is wanted.
+7. **`INSTR_REED`** (clarinet↔sax) — first true wind; one bore line fits `ks_buf` as-is,
+   zero architecture work. **Swap with waveguide Brass if FM's brass stress test (§8.8.3)
+   fails — then Brass jumps the queue as the prepared answer.**
+8. **`INSTR_MEMBRANE`** — tabla/conga/djembe, ~100 B mallet-pattern port; hand percussion
+   (strike-pos + pitch-bend) for the world-music stations.
+9. **Bowed / Pipe** — after the organ proves the held-note surface, and pending the
+   one-buffer-pack verification (§8.9 rows). Then **`INSTR_PIANO` (StifKarp) /
+   `INSTR_GUITAR`/`INSTR_HARP`** — the genuinely buffered pair (piano's `ks2Buffer[2048]`
+   second string, guitar's KS string + body resonator) on the pluck-validated path.
+10. **Formant filter** + the **effects layer** (§8.10 — buses vs. master; reverb / delay /
+    tape / leslie / wah, starting with one master reverb + the formalized bus concept).
+    **Additive stays deferred** — `INSTR_SINE` + FM cover its near corners today, and it
+    subsumes the MT70/sine family when it lands (§8.9 note). SCW bank (§8.4) remains optional.
 
 ### 8.6 Cons / watch-outs
 
