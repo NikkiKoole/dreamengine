@@ -309,6 +309,10 @@ void note_harmonics(int handle, float x);      // live macro on a held note, sle
 void note_timbre(int handle, float x);         // live macro on a held note, slewed — strike-shaping macros (PLUCK/MALLET timbre) apply at the next note; FM brightness moves live
 void note_morph(int handle, float x);          // live macro on a held note, slewed — MALLET ring/motor and FM feedback move live; PLUCK position applies at the next note
 
+// drive — saturation AFTER the filter, so resonance screams into it. The grit knob.
+void instrument_drive(int slot, float x);      // overdrive a slot 0.0..1.0 — 0 = clean (default), 0.3 = warm, 1 = fuzz. loudness stays put; character changes
+void note_drive(int handle, float x);          // sweep a held note's drive live, slewed — ride it up mid-phrase for the acid scream
+
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti
 #define SCALE_MINOR      1   // natural minor

@@ -29,6 +29,10 @@
 //   the acid part — you turn CUTOFF and RESO while it plays. Here:
 //     note_cutoff()/note_res() applied live to the ringing voice, plus
 //     instrument_filter() so the next trigger agrees. Grab a knob.
+//   drive — the missing ingredient (audio-notes §17): a real 303's squelch
+//     is the filter driven into saturation. DRV = instrument_drive(), tanh
+//     AFTER the filter so the resonant peak screams into it; note_drive()
+//     moves it on the ringing voice. RES + DRV up = the proper acid bite.
 //
 //   MOUSE   piano roll: click/drag to draw the line, click a note to
 //           erase it. Rows below the roll: OCT (+1 octave), ACC (accent),
@@ -45,9 +49,10 @@
 #define BASE  36         // C2 — the roll's bottom row
 
 // knobs — named indices (house rule). Values all 0..100, mapped per-knob.
-enum { K_CUT, K_RES, K_ENV, K_DEC, K_ACC, NK };
-static const char *KNAME[NK] = { "CUT", "RES", "ENV", "DEC", "ACC" };
-static int knob[NK] = { 45, 70, 60, 40, 60 };
+// K_DRV appended at the END (never insert mid-list — reorders cross-wire saved values).
+enum { K_CUT, K_RES, K_ENV, K_DEC, K_ACC, K_DRV, NK };
+static const char *KNAME[NK] = { "CUT", "RES", "ENV", "DEC", "ACC", "DRV" };
+static int knob[NK] = { 45, 70, 60, 40, 60, 35 };
 
 // per-step pattern data (the real 303's programming model)
 static int  pitches[STEPS];   // semitone 0..12 above BASE
@@ -91,12 +96,14 @@ static int res_q(void)   { return knob[K_RES] * 15 / 100; }
 static int env_hz(void)  { return knob[K_ENV] * 30; }                // 0..3000
 static int dec_ms(void)  { return 30 + knob[K_DEC] * 5; }            // 30..530
 static float acc_mul(void) { return 1.0f + knob[K_ACC] * 0.015f; }   // 1..2.5
+static float drv_x(void)   { return knob[K_DRV] / 100.0f; }          // 0..1
 static float sq_mul(void)  { return 1.0f + squelch * 0.02f; }        // 1..3
 
 static void define_voice(void) {
     instrument(SLOT, wave, 2, 60, 6, 25);
     instrument_duty(SLOT, 0.48f);
     instrument_filter(SLOT, FILTER_LOW, cut_hz(), res_q());
+    instrument_drive(SLOT, drv_x());
 }
 
 static void gen_random(void) {
@@ -147,7 +154,7 @@ void init(void) {
 #define ACCY (OCTY + 9)
 #define SLDY (ACCY + 9)
 
-static const int KX[NK] = { 26, 78, 130, 182, 234 };
+static const int KX[NK] = { 22, 66, 110, 154, 198, 242 };
 #define KY 38
 #define KR 11
 
@@ -155,6 +162,10 @@ static void knob_changed(int k) {
     if (k == K_CUT || k == K_RES) {           // live acid: ringing voice follows
         instrument_filter(SLOT, FILTER_LOW, cut_hz(), res_q());
         if (h >= 0) { note_cutoff(h, cut_hz()); note_res(h, res_q()); }
+    }
+    if (k == K_DRV) {                         // drive too — the squelch screams INTO it
+        instrument_drive(SLOT, drv_x());
+        if (h >= 0) note_drive(h, drv_x());
     }
     // ENV / DEC / ACC apply at the next trigger
 }
@@ -352,13 +363,14 @@ void draw(void) {
             "ACC       ACCENT: LOUD+SHARP",
             "SLD       SLIDE TO NEXT NOTE",
             "KNOBS     DRAG OR WHEEL",
+            "DRV       POST-FILTER GRIT",
             "SQUELCH   FILTER-ENV DEPTH",
             "WAVE BOX  SAW / SQR",
             "N         NEW RANDOM LINE",
             "< >       PATTERN   ^v TEMPO",
             "SPACE     RUN/STOP  H CLOSE",
         };
-        for (int i = 0; i < 11; i++)
-            print(HL[i], 52, 50 + i * 11, i < 8 ? CLR_WHITE : CLR_LIGHT_PEACH);
+        for (int i = 0; i < 12; i++)
+            print(HL[i], 52, 50 + i * 11, i < 9 ? CLR_WHITE : CLR_LIGHT_PEACH);
     }
 }

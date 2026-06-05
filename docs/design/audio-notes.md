@@ -1650,7 +1650,16 @@ v1, document it on the panel.
 1. **Drive** — biggest lever, smallest diff (one tanh + four-place API wiring +
    the §16 tooling regression-tests it: golden-WAV a driven acid line, crest
    factor should *drop* while RMS rises).
+   **✓ SHIPPED 2026-06-05** — `instrument_drive(slot, x)` / `note_drive(handle, x)`,
+   tanh after the SVF, pre-gain `g = x²·24` (so `tanh(s·g)/tanh(g) → s` as x → 0:
+   drive 0 is a true bypass, verified bytes-identical on soundcheck + bossa WAVs),
+   normalized so full-scale stays put. The §16 prediction held exactly: driven
+   acid line crest 13.6 → 6.9 dB, RMS −20.6 → −17.2 dBFS, zero clipping.
+   tb303 grew the DRV knob (live `note_drive` on the ringing voice — RES + DRV
+   is the squelch §17.1 said we were missing).
 2. **Master soft-clip** — three lines, pays for §15's 16 voices immediately.
+   **✓ SHIPPED 2026-06-05** — linear below a ±0.8 knee (quiet mixes bit-identical),
+   tanh-shaped above, slope-continuous, asymptote ±1.0.
 3. **Echo bus** — the real architecture step (audio-thread-owned buffer, send
    field in `Instrument`, bus params via the request ring like everything else).
 4. **Detune** — small, after drive (driven unison is the payoff).

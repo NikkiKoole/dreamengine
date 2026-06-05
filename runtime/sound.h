@@ -62,6 +62,7 @@ typedef struct {
     int   env_d_samp[2];            // decay, in samples
     float env_amount[2];            // 0 = off; bipolar; units depend on dest (Hz / semitones / 0..1)
     float harmonics, timbre, morph; // engine macros 0..1 (INSTR_PLUCK+) — meaning is per-engine; default 0.5
+    float drive;                    // post-filter saturation 0..1; 0 = clean bypass (default — old carts unchanged)
     uint32_t choke_mask;            // bitmask: bit N set = a new note on this slot kills active voices on slot N
 } Instrument;
 
@@ -100,6 +101,7 @@ typedef struct {
     // engine macros (current + slew target, riding the same machinery as cutoff/duty)
     float  harm, timb, mor;
     float  harm_target, timb_target, mor_target;
+    float  drv, drv_target;        // post-filter drive (current + slew target, same machinery)
     int    instr_slot;             // instrument slot this voice was started from (for choke matching)
     float  last_out;               // this voice's previous mixed contribution — feeds the steal-declick tail
     // Karplus-Strong string state (INSTR_PLUCK): a write head + a FRACTIONAL read tap.
@@ -238,6 +240,8 @@ typedef enum {
     SR_INSTR_MACRO  = 21,
     SR_NOTE_MACRO   = 22,
     SR_INSTR_CHOKE  = 23,
+    SR_INSTR_DRIVE  = 24,
+    SR_NOTE_DRIVE   = 25,
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -683,6 +687,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->harm = v->harm_target = ins->harmonics;
     v->timb = v->timb_target = ins->timbre;
     v->mor  = v->mor_target  = ins->morph;
+    v->drv  = v->drv_target  = ins->drive;
     v->last_out = 0.0f;
     v->ks_len = 0;
     v->md_on  = false;
@@ -881,6 +886,19 @@ static void sound_fire_req(SoundReq r) {
     } else if (r.kind == SR_INSTR_CHOKE) {  // a=slot_a, b=slot_b
         if (r.a >= 0 && r.a < SOUND_INSTR_SLOTS && r.b >= 0 && r.b < SOUND_INSTR_SLOTS)
             instr_bank[r.a].choke_mask |= (1u << r.b);
+    } else if (r.kind == SR_INSTR_DRIVE) {  // a=slot, b=val*1000
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        float x = r.b / 1000.0f;
+        if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+        instr_bank[slot].drive = x;
+    } else if (r.kind == SR_NOTE_DRIVE) {   // a=val*1000 (live, slewed)
+        Voice *v = sound_held_voice(r.e0, r.e1);
+        if (v) {
+            float x = r.a / 1000.0f;
+            if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+            v->drv_target = x;
+        }
     }
 }
 
@@ -937,6 +955,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 v->harm       += (v->harm_target   - v->harm)       * 0.002f;   // engine macros (note_harmonics/timbre/morph)
                 v->timb       += (v->timb_target   - v->timb)       * 0.002f;
                 v->mor        += (v->mor_target    - v->mor)        * 0.002f;
+                v->drv        += (v->drv_target    - v->drv)        * 0.002f;   // drive (note_drive)
             }
 
             // step advance? (SFX walk their step list; one-shots fall through to ADSR release)
@@ -1007,6 +1026,15 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
                 s = sound_svf(v, s, cutoff);
             }
+            // drive: post-filter tanh saturation — osc → SVF → drive → VCA, so resonance
+            // screams INTO the saturation and quiet envelope tails don't pump it. The
+            // pre-gain g grows from 0 (tanh(s·g)/tanh(g) → s as g → 0, so drive 0 is a
+            // true bypass and a slewed sweep through 0 stays continuous) to wall-of-fuzz;
+            // normalizing by tanh(g) keeps full-scale at full-scale — character, not volume.
+            if (v->sfx_idx < 0 && v->drv > 0.001f) {
+                float g = v->drv * v->drv * 24.0f;
+                s = tanhf(s * g) / tanhf(g);
+            }
             float contrib = s * v->vol * env * trem * 0.2f;
             v->last_out = contrib;        // remembered so a steal can declick (see steal_tail)
             mix += contrib;
@@ -1023,8 +1051,11 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         steal_tail *= 0.992f;
         if (steal_tail > -1e-5f && steal_tail < 1e-5f) steal_tail = 0.0f;
 
-        if (mix >  1.0f) mix =  1.0f;
-        if (mix < -1.0f) mix = -1.0f;
+        // master soft-clip: linear below the ±0.8 knee (quiet mixes stay bit-identical),
+        // tanh-shaped above, asymptote at ±1.0 — a hot 16-voice sum folds over smoothly
+        // instead of slamming the old hard wall. Slope is continuous at the knee.
+        if      (mix >  0.8f) mix =  0.8f + 0.2f * tanhf((mix - 0.8f) * 5.0f);
+        else if (mix < -0.8f) mix = -0.8f - 0.2f * tanhf((-mix - 0.8f) * 5.0f);
         out[i] = mix;
         if (wavcap_state == 1) {                  // WAV capture tap (wav_request)
             wavcap_buf[wavcap_pos++] = mix;
@@ -1342,6 +1373,18 @@ void note_harmonics(int handle, float x)     { sound_macro_note(handle, 0, x); }
 void note_timbre(int handle, float x)        { sound_macro_note(handle, 1, x); }
 void note_morph(int handle, float x)         { sound_macro_note(handle, 2, x); }
 
+// ── drive: post-filter tanh saturation, per slot (audio-notes §17 — the missing nonlinearity) ──
+
+void instrument_drive(int slot, float x) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_DRIVE, slot, (int)(x * 1000.0f), 0, 0, 0, 0);
+}
+
+void note_drive(int handle, float x) {
+    if (handle <= 0) return;
+    sound_push_ctrl(SR_NOTE_DRIVE, (int)(x * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
+}
+
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {
     if (handle <= 0) return;
     if (which < 0 || which >= SOUND_ENVS) return;
@@ -1416,6 +1459,7 @@ static void sound_init(void) {
         instr_bank[i].harmonics  = 0.5f;   // engine macros: center detent, Plaits-style
         instr_bank[i].timbre     = 0.5f;
         instr_bank[i].morph      = 0.5f;
+        instr_bank[i].drive      = 0.0f;   // clean until instrument_drive() — old carts unchanged
     }
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence
