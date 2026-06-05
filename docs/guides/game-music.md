@@ -386,7 +386,10 @@ lowpass ~1500 + tiny `ENV_CUTOFF` bark; **vinyl crackle** = `chance(8)` per fram
 
 Every guitar recipe above predates the KS engine; the real thing exists now and
 takes the same outboard gear (filter / LFO / env). jangle.c and bossa.c carry a
-live A/B against their TRI fakes (**G** key); per-station upgrade notes live in
+live A/B against their TRI fakes (**G** key); the pattern since generalized into
+**THE BAND panel** (**B** — `radio.h`'s `rad_chair`/`rad_band_input`/
+`rad_band_panel`, every chair's candidates cycling live mid-song; cocktail,
+tango, yacht, roadhouse, exotica are chaired). Per-station upgrade notes live in
 `docs/design/radio-instrument-options.md`:
 
 ```c
@@ -602,6 +605,10 @@ all ten stations:
 - the **input block** (SPACE/R/[ ]/arrows/M/T/H + the mouse ?-button hit test)
 - the **chassis draw**: `knob()`, the dial strip, the display window, the
   boxed-chord readout, the help-panel scaffold, power LED, footer hint
+- **THE BAND panel** (`rad_chair`/`rad_band_input`/`rad_band_panel`): a chair
+  registry + B-key overlay cycling each chair's instrument candidates live —
+  the cart applies each swap in its own `apply_chair()`; the toolkit never
+  calls `rad_srnd`, so pinned seeds survive auditions
 - the **density model** (`level_of = sectionBase + intensity - 1`, clamped),
   the **tone knob** (`TONENAME/TONEMUL` + an `apply_voicing` hook), the vu
   decay, `PCNAME[12]`, `iabs`

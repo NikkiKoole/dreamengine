@@ -356,20 +356,31 @@ drive; early guardia vieja ensembles used flute and guitar instead.
 - Cocktail brushes vs sticks night; tango second violin desk + pizzicato síncopa
 - Exotica vibes→marimba night; the Denny-piano pole as a real A/B
 
-## Where the A/B toggles stand (the G-key pattern)
+## Where the live toggles stand
 
 The evidence-gathering step before a chair's roll goes into the seed: a live
 toggle, mid-song, against the shipped fake.
 
-| Station | Chair | Status |
-|---|---|---|
-| jangle | guitar (TRI chorus vs PLUCK) | shipped |
-| bossa | guitar (TRI vs PLUCK) | shipped |
-| lowend | lead (TRI hook vs MALLET vibes) | shipped 2026-06-05 |
-| everything else | — | open — see per-station tables above |
+**THE BAND panel — SHIPPED 2026-06-05.** The design idea below became
+`runtime/radio.h`'s band registry (`rad_chair` / `rad_band_input` /
+`rad_band_panel`): press **B** for a second overlay besides help where every
+chair lists its candidates — click a row or press its number to cycle, live,
+mid-song. The cart applies each swap in its own `apply_chair()` recipes; the
+toolkit never calls `rad_srnd`, so pinned seeds stay byte-identical. Picked
+chairs re-assert after `new_song`'s per-song rolls; sel 0 keeps the shipped
+sound. It doubles as the audition UI for tuning each station's roll tables.
 
-**Open design idea (owner, 2026-06-05):** instead of one G-key per cart, a
-**band panel** — a second overlay besides help where every chair is listed and
-clickable, cycling its candidates live. Would generalize the G-key pattern,
-live in `radio.h` so all 15 stations get it for free, and double as the
-audition UI for tuning each station's per-song roll tables.
+| Station | Chairs | Status |
+|---|---|---|
+| jangle | guitar (TRI chorus vs PLUCK) | shipped (G key — pre-panel) |
+| bossa | guitar (TRI vs PLUCK) | shipped (G key — pre-panel) |
+| lowend | lead (TRI hook vs MALLET vibes) | shipped 2026-06-05 (G key — pre-panel) |
+| cocktail | piano · solo chair (piano/vibes MJQ/guitar Herb Ellis) · bass · drums (brushes/sticks) | band panel, 2026-06-05 |
+| tango | bandoneón reed (troilo/d'arienzo/pugliese) · violins (arco/pizzicato) · piano (felt/dark) | band panel, 2026-06-05 |
+| yacht | ep (dx tine/soft rhodes/clavinet) · bass (round/sine/saw) · lead (pulse/synth/guitar) · pad | band panel, 2026-06-05 |
+| roadhouse | organ wave (VOX/Gibson G-101) · piano bass (rhodes/upright) · guitar | band panel, 2026-06-05 |
+| exotica | vibes (vibes/marimba/denny piano) · sparkle (fm glass/celesta) | band panel, 2026-06-05 |
+| bossa, jangle, ambient, dub, ymo, citypop, house, jingle, lowend, satie | — | open — chair candidates in the per-station tables above |
+
+The G-key carts (jangle/bossa/lowend) still work; migrating them to the panel
+is the natural move in the same visit as any other touch.
