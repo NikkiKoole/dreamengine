@@ -159,8 +159,13 @@ the card:
 7. **Browser gesture leak.** Pinch, double-tap, drag, swipe from edges — the
    page must not zoom, scroll, rubber-band, or navigate (tests §1's CSS).
    Also long-press: no callout/magnifier.
-8. **(observational) rgestures feel** — not wired into touchlab yet; if §4's
-   question becomes pressing, add a gesture readout page to touchlab then.
+8. **rgestures feel** — *wired 2026-06-05*: touchlab line 8 shows the live
+   `GetGestureDetected()` readout (+ hold duration, drag vector) and a log strip
+   of recent gesture onsets — raw extern decls, no engine API (§4's
+   probe-before-wrapping). *Verify:* swipes/flicks fire reliably in the right
+   direction, pinch in/out are distinguished, HOLD doesn't false-positive on a
+   resting finger, and nothing fires during normal multi-finger play (§4 reason
+   3 — one global gesture at a time is the suspected flaw).
 
 Write verdicts into [`probe-carts.md`](probe-carts.md) (touchlab's row) and fix
 what fails; items 1/6/7 are shell bugs if they fail, 2/3/4/5 are engine bugs.

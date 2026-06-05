@@ -11,10 +11,35 @@
 //   5 LIFT   lift a finger — readout shows its id + last position
 //   6 SOUND  every landing finger blips (iOS audio unlock check)
 //   7 PAGE   pinch / double-tap / drag / edge-swipe must NOT move the page
+//   8 GEST   swipe / flick / pinch / hold — raylib's gesture detector readout:
+//            does each fire when it should, and never when a finger just rests?
 //
-// On desktop the mouse is one finger (id -2) — enough to smoke-test 3/4/5/6.
+// On desktop the mouse is one finger (id -2) — enough to smoke-test 3/4/5/6/8.
 #include "studio.h"
 #include <stdio.h>
+
+// ── test 8: raw raylib rgestures readout (touch-notes §4: probe before wrapping)
+// extern decls instead of #include "raylib.h" — its KEY_* enum members collide
+// with studio.h's KEY_* defines. Struct layout matches raylib's Vector2.
+typedef struct { float x, y; } RlV2;
+extern int   GetGestureDetected(void);
+extern float GetGestureHoldDuration(void);
+extern RlV2  GetGestureDragVector(void);
+
+static int  gest_now = 0;          // gesture this frame (0 = none)
+static int  gest_prev = 0;
+static char gest_hist[40] = "";    // last few onsets, newest first
+
+static const char *gname(int g) {
+    switch (g) {
+        case 1:   return "TAP";   case 2:   return "DTAP";
+        case 4:   return "HOLD";  case 8:   return "DRAG";
+        case 16:  return "SW-R";  case 32:  return "SW-L";
+        case 64:  return "SW-U";  case 128: return "SW-D";
+        case 256: return "PN-IN"; case 512: return "PN-OUT";
+    }
+    return "?";
+}
 
 // ── cart-side finger bookkeeping (the §2 diff pattern, reference copy) ──
 #define MAXF 16
@@ -73,6 +98,15 @@ void update(void) {
             any_lift = true;
         }
     }
+
+    // test 8: log each gesture onset into the history strip
+    gest_now = GetGestureDetected();
+    if (gest_now != 0 && gest_now != gest_prev) {
+        char tmp[40];
+        snprintf(tmp, sizeof tmp, "%s %.30s", gname(gest_now), gest_hist);
+        snprintf(gest_hist, sizeof gest_hist, "%s", tmp);
+    }
+    gest_prev = gest_now;
 
     // snapshot for next frame
     prev_n = n > MAXF ? MAXF : n;
@@ -138,6 +172,15 @@ void draw(void) {
     print(buf, 4, 56, CLR_LIGHT_GREY);
     print("7 PAGE  pinch/dbl-tap/edge-swipe: page", 4, 64, CLR_LIGHT_GREY);
     print("        must not zoom, scroll or bounce", 4, 70, CLR_LIGHT_GREY);
+    if (gest_now) {
+        RlV2 d = GetGestureDragVector();
+        snprintf(buf, sizeof buf, "8 GEST  now:%s hold:%.1f drag:%.2f,%.2f",
+                 gname(gest_now), GetGestureHoldDuration(), d.x, d.y);
+    } else
+        snprintf(buf, sizeof buf, "8 GEST  try: swipe flick pinch hold");
+    print(buf, 4, 78, CLR_YELLOW);
+    snprintf(buf, sizeof buf, "        log: %.32s", gest_hist);
+    print(buf, 4, 86, CLR_LIGHT_GREY);
     print("verdicts -> docs/design/touch-notes.md #5", 4, SCREEN_H - 8, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
