@@ -133,6 +133,67 @@ static bool          hn_used[SOUND_VOICES];     // main thread: slot handed out 
 static int           held_voice[SOUND_VOICES];  // audio thread: handle slot → voice index, or -1
 #define SOUND_HELD_GATE 0x7FFFFFFF               // "infinite" gate length for a sustained note
 static AudioStream   sound_stream;
+
+// ── WAV capture (audio debugging — see docs/design/audio-notes.md §16) ────
+// One tap point: the final `mix` float, captured right before it goes to the
+// device. Two users: the .bake/wav_request trigger file (live capture — the
+// audio thread fills the buffer, the main thread starts/finishes), and the
+// --wav harness flag (synth mode: no audio device stream, the main thread
+// pumps sound_callback synchronously per frame, byte-reproducible under --det).
+static bool          sound_synth_mode = false;   // --wav: skip the device stream; main thread pumps
+static float        *wavcap_buf   = NULL;        // capture buffer (mallocd by wavcap_begin)
+static int           wavcap_total = 0;           // samples wanted
+static volatile int  wavcap_pos   = 0;           // audio thread write cursor
+static volatile int  wavcap_state = 0;           // 0 idle · 1 recording · 2 done (ready to write)
+static char          wavcap_path[512];
+
+// write a 16-bit PCM mono 44.1kHz WAV
+static int sound_wav_write(const char *path, const float *buf, int n) {
+    FILE *w = fopen(path, "wb");
+    if (!w) return -1;
+    int data_bytes = n * 2, riff = 36 + data_bytes;
+    int sr = SOUND_SAMPLE_RATE, byterate = sr * 2;
+    short block = 2, bits = 16, fmt = 1, ch = 1;
+    int fmtlen = 16;
+    fwrite("RIFF", 1, 4, w); fwrite(&riff, 4, 1, w); fwrite("WAVE", 1, 4, w);
+    fwrite("fmt ", 1, 4, w); fwrite(&fmtlen, 4, 1, w);
+    fwrite(&fmt, 2, 1, w); fwrite(&ch, 2, 1, w);
+    fwrite(&sr, 4, 1, w); fwrite(&byterate, 4, 1, w);
+    fwrite(&block, 2, 1, w); fwrite(&bits, 2, 1, w);
+    fwrite("data", 1, 4, w); fwrite(&data_bytes, 4, 1, w);
+    for (int i = 0; i < n; i++) {
+        float s = buf[i];
+        if (s >  1.0f) s =  1.0f;
+        if (s < -1.0f) s = -1.0f;
+        short q = (short)(s * 32767.0f);
+        fwrite(&q, 2, 1, w);
+    }
+    fclose(w);
+    return 0;
+}
+
+// main thread: arm a live capture (audio thread starts filling on its next callback)
+static void sound_wavcap_begin(const char *path, float seconds) {
+    if (wavcap_state != 0) return;
+    int n = (int)(seconds * SOUND_SAMPLE_RATE);
+    if (n <= 0) return;
+    free(wavcap_buf);
+    wavcap_buf = (float *)malloc((size_t)n * sizeof(float));
+    if (!wavcap_buf) return;
+    snprintf(wavcap_path, sizeof wavcap_path, "%s", path);
+    wavcap_total = n;
+    wavcap_pos   = 0;
+    wavcap_state = 1;
+}
+
+// main thread: if the audio thread finished, write the file and go idle
+static void sound_wavcap_poll(void) {
+    if (wavcap_state != 2) return;
+    sound_wav_write(wavcap_path, wavcap_buf, wavcap_total);
+    free(wavcap_buf);
+    wavcap_buf   = NULL;
+    wavcap_state = 0;
+}
 static Sfx           sfx_bank[SOUND_SFX_SLOTS];
 static Instrument    instr_bank[SOUND_INSTR_SLOTS];
 #define SOUND_USER_WAVES 4
@@ -961,6 +1022,10 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         if (mix >  1.0f) mix =  1.0f;
         if (mix < -1.0f) mix = -1.0f;
         out[i] = mix;
+        if (wavcap_state == 1) {                  // WAV capture tap (wav_request)
+            wavcap_buf[wavcap_pos++] = mix;
+            if (wavcap_pos >= wavcap_total) wavcap_state = 2;
+        }
     }
 }
 
@@ -1356,14 +1421,16 @@ static void sound_init(void) {
 
     sound_load_demo_data();
 
-    SetAudioStreamBufferSizeDefault(1024);
-    sound_stream = LoadAudioStream(SOUND_SAMPLE_RATE, 32, 1);
-    SetAudioStreamCallback(sound_stream, sound_callback);
-    PlayAudioStream(sound_stream);
+    if (!sound_synth_mode) {       // --wav: no device stream; the main thread pumps
+        SetAudioStreamBufferSizeDefault(1024);
+        sound_stream = LoadAudioStream(SOUND_SAMPLE_RATE, 32, 1);
+        SetAudioStreamCallback(sound_stream, sound_callback);
+        PlayAudioStream(sound_stream);
+    }
 }
 
 static void sound_shutdown(void) {
-    UnloadAudioStream(sound_stream);
+    if (!sound_synth_mode) UnloadAudioStream(sound_stream);
 }
 
 #endif // SOUND_H

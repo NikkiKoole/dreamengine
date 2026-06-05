@@ -155,6 +155,7 @@ if (opt('--frames', null))     runArgs.push('--frames', opt('--frames'))
 if (opt('--seed', null))       runArgs.push('--seed', opt('--seed'))
 if (opt('--dump', null))     { runArgs.push('--dump', path.resolve(opt('--dump'))); fs.mkdirSync(opt('--dump'), { recursive: true }) }
 if (opt('--dump-every', null)) runArgs.push('--dump-every', opt('--dump-every'))
+if (opt('--wav', null))        runArgs.push('--wav', path.resolve(opt('--wav')))   // deterministic audio render → WAV
 
 console.log('run:', name, mode, runArgs.join(' '))
 spawnSync(BIN, runArgs, { cwd: mk.BUILD_DIR, stdio: 'inherit' })

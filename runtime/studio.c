@@ -758,6 +758,61 @@ static void harness_inspect(int fno) {
         remove(".bake/profiler_request");
         if (out[0]) prof_write(out);
     }
+    // WAV capture: line 1 = output path, optional line 2 = seconds (default 5, cap 60).
+    // The audio thread fills the buffer from its mix tap; we poll for completion below.
+    f = fopen(".bake/wav_request", "r");
+    if (f) {
+        char out[512] = {0}, dur[64] = {0};
+        if (fgets(out, sizeof out, f)) out[strcspn(out, "\n\r")] = '\0';
+        if (fgets(dur, sizeof dur, f)) {}
+        fclose(f);
+        remove(".bake/wav_request");
+        float secs = (float)atof(dur);
+        if (secs <= 0.0f) secs = 5.0f;
+        if (secs > 60.0f) secs = 60.0f;
+        if (out[0]) sound_wavcap_begin(out, secs);
+    }
+    sound_wavcap_poll();   // recording finished → write the WAV, go idle
+}
+
+// ── --wav: deterministic audio render ────────────────────────────────────
+// With --wav the device stream is never started (sound_synth_mode); instead the
+// main loop pumps sound_callback() for exactly 44100/60 = 735 samples per frame
+// and streams them to a WAV. Same frames + same script + same seed → the same
+// bytes, which is what makes golden-WAV regression diffs possible (§16).
+static FILE *wav_out     = NULL;
+static int   wav_samples = 0;
+
+static void wav_stream_open(const char *path) {
+    wav_out = fopen(path, "wb");
+    if (!wav_out) { fprintf(stderr, "harness: cannot open --wav %s\n", path); return; }
+    int z = 0, sr = SOUND_SAMPLE_RATE, byterate = sr * 2, fmtlen = 16;
+    short fmt = 1, ch = 1, block = 2, bits = 16;
+    fwrite("RIFF", 1, 4, wav_out); fwrite(&z, 4, 1, wav_out); fwrite("WAVE", 1, 4, wav_out);
+    fwrite("fmt ", 1, 4, wav_out); fwrite(&fmtlen, 4, 1, wav_out);
+    fwrite(&fmt, 2, 1, wav_out); fwrite(&ch, 2, 1, wav_out);
+    fwrite(&sr, 4, 1, wav_out); fwrite(&byterate, 4, 1, wav_out);
+    fwrite(&block, 2, 1, wav_out); fwrite(&bits, 2, 1, wav_out);
+    fwrite("data", 1, 4, wav_out); fwrite(&z, 4, 1, wav_out);
+}
+
+static void wav_stream_pump(void) {
+    if (!wav_out) return;
+    float scratch[735];
+    short pcm[735];
+    sound_callback(scratch, 735);
+    for (int i = 0; i < 735; i++) pcm[i] = (short)(scratch[i] * 32767.0f);
+    fwrite(pcm, 2, 735, wav_out);
+    wav_samples += 735;
+}
+
+static void wav_stream_close(void) {
+    if (!wav_out) return;
+    int data_bytes = wav_samples * 2, riff = 36 + data_bytes;
+    fseek(wav_out, 4, SEEK_SET);  fwrite(&riff, 4, 1, wav_out);
+    fseek(wav_out, 40, SEEK_SET); fwrite(&data_bytes, 4, 1, wav_out);
+    fclose(wav_out);
+    wav_out = NULL;
 }
 #endif
 
@@ -1002,6 +1057,7 @@ static void loop_step(void) {
     harness_dump(fno);                     // filmstrip PNG every Nth frame
 #ifndef DE_RELEASE
     harness_inspect(fno);                  // on-demand screenshot + state (trigger-file)
+    wav_stream_pump();                     // --wav: render this frame's 735 samples
 #endif
     if (det_mode) det_clock += DET_DT;     // advance the synthetic clock for now()/timer()
 #endif
@@ -1139,6 +1195,7 @@ int main(int argc, char **argv) {
     int         hide_window            = 0;
     unsigned    seed                   = 1;
     const char *rec_path = NULL, *replay_path = NULL, *script_path = NULL, *trace_path = NULL;
+    const char *wav_path = NULL;
 #ifdef DE_TCC
     const char *cart_path = "cart.c";   // libtcc-loaded cart source (--cart <path>)
 #endif
@@ -1156,6 +1213,7 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--dump")   == 0 && i + 1 < argc) { snprintf(dump_dir, sizeof dump_dir, "%s", argv[++i]); if (dump_every <= 0) dump_every = 1; }
         else if (strcmp(argv[i], "--dump-every") == 0 && i + 1 < argc) dump_every = atoi(argv[++i]);
         else if (strcmp(argv[i], "--save-dir") == 0 && i + 1 < argc) save_dir_set(argv[++i]);
+        else if (strcmp(argv[i], "--wav")    == 0 && i + 1 < argc) wav_path = argv[++i];
 #ifdef DE_TCC
         else if (strcmp(argv[i], "--cart") == 0 && i + 1 < argc) cart_path = argv[++i];
 #endif
@@ -1186,6 +1244,7 @@ int main(int argc, char **argv) {
     if (det_mode) { SetRandomSeed(seed); srand(seed); }   // reproducible rnd()/rnd_float()/shake
 #endif
 #ifndef PLATFORM_WEB
+    if (wav_path) { sound_synth_mode = true; wav_stream_open(wav_path); }
     InitAudioDevice();
     sound_init();
 #endif
@@ -1275,6 +1334,7 @@ int main(int argc, char **argv) {
     if (spritesheet_img.data) UnloadImage(spritesheet_img);
     if (pget_snapshot.data) UnloadImage(pget_snapshot);
     UnloadRenderTexture(canvas);
+    wav_stream_close();    // --wav: patch RIFF sizes and finish the file
     sound_shutdown();
     CloseAudioDevice();
     CloseWindow();

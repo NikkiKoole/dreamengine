@@ -1507,7 +1507,25 @@ argument for keeping 8 ("fantasy consoles are scarce") is weak here: with 32
 instrument slots, per-voice filters, and three modeled engines, this is
 SNES/Amiga-class, not NES-class.
 
-## 16. WAV capture + analysis tooling — proposed (2026-06-05)
+**MEASURED 2026-06-05** (via the §16 tooling, same day): deterministic 60 s
+renders of the `house` cart (densest radio station, seed 7) at 8 vs 16 voices:
+
+- **Starvation at 8 voices is real.** The renders diverge from t = 21 s (when
+  the arrangement fills out); 25 of 60 seconds differ audibly, peaking at
+  **+11% RMS restored** at 25 s — at 8 voices that part of the band was being
+  silently voice-stolen. Peak rose only −5.49 → −4.82 dBFS.
+- **No clipping at 16 with the 0.2 scale kept**: 0 clipped samples in the
+  house render *and* in soundcheck's worst-case burst. Envelopes/filters keep
+  real levels far below the theoretical 5-voice rail — the soft-clip is
+  optional insurance, not a prerequisite.
+- Soundcheck tripwire: PASS at both voice counts.
+
+Conclusion: **16 voices is measured-safe and audibly restores starved parts.**
+The remaining gate is the ear test (A/B the 8- vs 16-voice renders of the
+house drop, t ≈ 21–30 s) before flipping the define for real. Still at 8 as
+of this note.
+
+## 16. WAV capture + analysis tooling — SHIPPED (2026-06-05)
 
 Ear tests don't scale and don't diff. The §15 experiment (and mallet/fm macro
 taste-tuning, and any future DSP change) wants: render a cart's audio to a
@@ -1550,3 +1568,11 @@ single float in `sound_render()` — tap `mix` right before `out[i] = mix`:
 
 Order of work: capture (1+2) → tier-1 analyzer → run §15 experiment → golden
 WAVs as a by-product once `--wav` exists.
+
+**Shipped same day, as proposed**: the `wav_request` trigger file, the `--wav`
+flag (verified byte-reproducible: two identical runs → `cmp`-identical WAVs),
+and `tools/wav-analyze.js` (single-file metrics + two-file compare with a
+bytes-identical check — the golden-WAV primitive). The §15 experiment ran on
+this tooling the same day. How-to lives in
+[`guides/debug-harness.md`](../guides/debug-harness.md) → "WAV capture".
+Tier 2 (navkit `audio_analyze.py` / `preset_audition --ref`) remains open.

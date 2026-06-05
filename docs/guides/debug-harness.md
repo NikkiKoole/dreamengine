@@ -160,6 +160,42 @@ All three work simultaneously. The game creates `build/.bake/` on startup, so th
 directory always exists. `profiler_request` works in any native build — you do not
 need `-DDE_PROFILE` or the `⏱ profile` button; the counters run in every normal run.
 
+## WAV capture — hear what the engine actually rendered
+
+Two ways to get the engine's audio output as a WAV (16-bit mono 44.1 kHz), one
+analysis tool. Design + measurements: `docs/design/audio-notes.md` §15–16.
+
+**Live capture** — same trigger-file handshake as the snapshots above. Line 1 =
+output path, optional line 2 = seconds (default 5, cap 60). Records the *next* N
+seconds from the running cart's audio thread:
+
+```bash
+printf "/abs/path/out.wav\n10\n" > build/.bake/wav_request
+# request file vanishes immediately; the WAV appears N seconds later
+```
+
+**Deterministic render** — the `--wav` flag (play.js passes it through). The
+audio device stream is never started; the main loop renders exactly 735 samples
+(44100/60) per frame, so same cart + same script + same seed + same frames →
+**byte-identical WAV**. Headless-safe; this is the golden-WAV primitive:
+
+```bash
+node tools/play.js house script /dev/null --headless --frames 3600 --seed 7 --wav /tmp/a.wav
+```
+
+**Analysis** — `tools/wav-analyze.js` (no deps): peak/RMS/crest dBFS, clipped
+samples + runs, DC offset, per-second RMS envelope. Two files = compare mode
+with a bytes-identical check (regression diffing):
+
+```bash
+node tools/wav-analyze.js /tmp/a.wav            # report (add --json for machines)
+node tools/wav-analyze.js /tmp/a.wav /tmp/b.wav # compare; "bytes identical: true" = no DSP change
+```
+
+The worked example: the §15 voice-budget experiment rendered the house cart at
+8 vs 16 voices with identical scripts — the byte-diff *is* the starvation
+measurement (identical = never starved; different = voices were being stolen).
+
 ### Before/after diff
 
 ```bash
