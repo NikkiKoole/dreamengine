@@ -2182,6 +2182,14 @@
     ]
   },
   {
+    "title": "font bake",
+    "description": "Title text baked from a real TTF (Google Font \"Bungee\") at BUILD time — no font code in the cart at all. tools/font-bake.js parses the TTF with a vendored opentype.js, flattens the glyph outlines and scanline-fills them (3x3 supersampled, optional darker AA edge) straight into sprite-draw canvases; fontbake.cart.js centers each word into a fixed slot-rect so the C side just sspr()s two sheet regions. The title sine-waves in 4px strips at 2x, and because baked text is ordinary pixels, pal() recolors it live. Drop any Google Fonts TTF into tools/fonts/ and bake your own. Z cycles the title color.",
+    "file": "fontbake.cart.png",
+    "kind": [
+      "tech-demo"
+    ]
+  },
+  {
     "title": "sound check",
     "description": "The sound engine self-test. init() slams the request queue with the worst-case burst (all 27 instrument slots defined with envs/LFOs/filters + all 4 user wavetables in one frame), then walks the whole API: every wave id audibly in sequence, chords, a 40-shot schedule_hit machine-gun, and a held note driven by every live setter. PASS = no [sound] WARNING in the log and all 9 waves sound different; the engine now counts dropped requests and screams if any sound call was lost. Headless: node tools/play.js soundcheck run.",
     "file": "soundcheck.cart.png",
