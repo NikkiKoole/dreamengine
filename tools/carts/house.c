@@ -421,6 +421,7 @@ static void play_step(long abs, double pos) {
 static void setup_instruments(void) {
     instrument(I_STAB, INSTR_SAW, 1, 130, 2, 60);            // the chopped sample
     instrument_filter(I_STAB, FILTER_LOW, 1400, 2);          // re-aimed by the ride
+    instrument_drive(I_STAB, 0.25f);                         // sampler grit — a chopped loop is never clean
 
     instrument(I_BASS, INSTR_TRI, 1, 150, 4, 60);            // round disco bass
     instrument_filter(I_BASS, FILTER_LOW, 600, 2);
@@ -430,6 +431,7 @@ static void setup_instruments(void) {
     instrument_duty(I_LEAD, 0.30f);
     instrument_filter(I_LEAD, FILTER_LOW, 2100, 4);
     instrument_lfo(I_LEAD, 0, LFO_PITCH, 5.4f, 0.08f);
+    instrument_drive(I_LEAD, 0.45f);                         // the record's lead is DISTORTED — that's the hook
 
     instrument(I_STR, INSTR_SAW, 320, 500, 6, 900);          // string machine
     instrument_filter(I_STR, FILTER_LOW, 900, 2);            // the ride owns this
@@ -438,6 +440,7 @@ static void setup_instruments(void) {
     instrument(SL_KICK, INSTR_SINE, 0, 480, 0, 60);          // bridged-T boom
     instrument_filter(SL_KICK, FILTER_LOW, 250, 3);
     instrument_env(SL_KICK, 0, ENV_PITCH, 0, 50, 26.0f);
+    instrument_drive(SL_KICK, 0.30f);                        // run hot — the French-house pump is saturation
 
     instrument(SL_CP, INSTR_NOISE, 0, 110, 0, 50);           // handclap noise
     instrument_filter(SL_CP, FILTER_BAND, 1100, 5);

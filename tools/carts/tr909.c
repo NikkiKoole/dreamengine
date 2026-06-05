@@ -19,7 +19,8 @@
 //
 //   kick  — the house kick: sine, FAST +30st sweep over 35ms (the 808
 //           booms, the 909 punches), plus a separate click layer on the
-//           panel's famous ATTACK knob.
+//           panel's famous ATTACK knob — and instrument_drive() running
+//           the body hot, the way every warehouse desk actually had it.
 //   snare — two bridged-T modes (185/330Hz, same as the 808 — different
 //           envelope) under brighter, longer noise. SNPY fades body↔noise.
 //   toms  — sine + pitch drop + a noise CLIK at the attack.
@@ -358,6 +359,11 @@ void init(void) {
     instrument(SL_BD, INSTR_SINE, 0, 300, 0, 50);
     instrument_filter(SL_BD, FILTER_LOW, 380, 2);
     instrument_env(SL_BD, 0, ENV_PITCH, 0, 35, 30.0f);
+    // the warehouse kick: every classic 909 record runs the kick hot into the
+    // desk — tanh on the sine body adds the odd harmonics that read as WEIGHT.
+    // (Baked, not accent-linked: per-hit instrument_drive() would mis-apply to
+    // delayed flam/shuffle hits — they snapshot the slot at fire time.)
+    instrument_drive(SL_BD, 0.35f);
     // kick click — the ATTACK knob layer: a 10ms highpassed noise tick
     instrument(SL_BDC, INSTR_NOISE, 0, 9, 0, 4);
     instrument_filter(SL_BDC, FILTER_HIGH, 2500, 2);

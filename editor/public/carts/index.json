@@ -352,7 +352,7 @@
   },
   {
     "title": "dream synth",
-    "description": "A playable Moog-style synth that ties the whole sound engine together. Build a patch with the mouse — pick a WAVE, drag the famous ADSR ENVELOPE dots, route THREE LFOs (pitch/duty/volume/cutoff) and dial a resonant FILTER — then play it on the on-screen keyboard with the mouse or your computer keys: the A row is the white keys, W E T Y U O P are the black keys, Z/X shift octave, C/V change velocity. Real hold-to-sustain: a key rings as long as you hold it, and the held chord follows the FILTER and PW sliders LIVE — drag the cutoff while a chord rings and it sweeps under your fingers.",
+    "description": "A playable Moog-style synth that ties the whole sound engine together. Build a patch with the mouse — pick a WAVE, drag the famous ADSR ENVELOPE dots, route THREE LFOs (pitch/duty/volume/cutoff) and dial a resonant FILTER with a DRIVE slider (the most Moog control on the panel: the real Minimoog's warmth IS its mixer overdriving the ladder filter — instrument_drive/note_drive recreate that filter-into-saturation bite, live on a ringing chord) — then play it on the on-screen keyboard with the mouse or your computer keys: the A row is the white keys, W E T Y U O P are the black keys, Z/X shift octave, C/V change velocity. Real hold-to-sustain: a key rings as long as you hold it, and the held chord follows the FILTER and PW sliders LIVE — drag the cutoff while a chord rings and it sweeps under your fingers.",
     "file": "moog.cart.png",
     "kind": [
       "instrument",

@@ -7,10 +7,14 @@
 //
 // Real hold-to-sustain: each key starts a HELD note (note_on) that rings as long as
 // you hold it and releases on key-up (note_off) — the ADSR sustain stage finally does
-// something. While a chord rings the FILTER (mode + cutoff + resonance), PW, and all
-// three LFOs follow their sliders LIVE under your fingers — the classic Moog filter
-// sweep and more, the thing a fire-and-forget note() can't do. Only WAVE and the ADSR
-// shape wait for the next note (you can't re-attack a ringing voice).
+// something. While a chord rings the FILTER (mode + cutoff + resonance), DRIVE, PW,
+// and all three LFOs follow their sliders LIVE under your fingers — the classic Moog
+// filter sweep and more, the thing a fire-and-forget note() can't do. Only WAVE and the
+// ADSR shape wait for the next note (you can't re-attack a ringing voice).
+//
+// DRIVE is the most Moog thing on the panel: the real Minimoog's warmth IS saturation —
+// its mixer overdrives the ladder filter when you run levels hot. instrument_drive()/
+// note_drive() sit after the filter here, so resonance bites into it the same way.
 
 #define SLOT 5
 #define NONE -999
@@ -22,6 +26,7 @@ float attack  = 6,  decay = 140, sustain = 5, release = 320;   // ms, sustain 0.
 float duty    = 0.5f;
 int   fmode   = 1;                 // FILTER_LOW
 float cutoff  = 700, res = 7;      // lower base so the FILTER CONTOUR has room to open it (the Moog "wow")
+float drive_v = 0.25f;             // post-filter saturation — a Minimoog runs a little hot by default
 typedef struct { int target; float rate; float depth; } Lfo;   // target 0=OFF,1=PIT,2=DUT,3=VOL,4=CUT
 Lfo   lfos[3] = { {1, 5.0f, 0.25f}, {0, 3.0f, 0.3f}, {0, 0.4f, 0.6f} };
 
@@ -71,6 +76,7 @@ void apply_synth(void) {
         instrument_lfo(SLOT, L, dest, lfos[L].rate, lfo_scaled(dest, lfos[L].depth));
     }
     instrument_filter(SLOT, fmode, (int)cutoff, CLI(res + 0.5f, 0, 15));
+    instrument_drive(SLOT, drive_v);
     instrument_env(SLOT, 0, ENV_CUTOFF, (int)fenv_atk, (int)fenv_dec, fenv_amt);   // filter contour
     instrument_env(SLOT, 1, ENV_PITCH,  (int)penv_atk, (int)penv_dec, penv_amt);   // pitch envelope
 }
@@ -83,6 +89,7 @@ void drive_live(int h) {
     note_filter(h, fmode);
     note_cutoff(h, (int)cutoff);
     note_res(h, CLI(res + 0.5f, 0, 15));
+    note_drive(h, drive_v);
     note_duty(h, duty);
     for (int L = 0; L < 3; L++) {
         if (lfos[L].target == 0) { note_lfo(h, L, LFO_PITCH, 0, 0); continue; }
@@ -281,6 +288,8 @@ void draw() {
     print("RES", 316, 50, CLR_DARK_GREY);                       // up  = more resonance
     print("CUT", 426, 84, CLR_DARK_GREY);                       // right = more cutoff
     print(str("cut %dhz  res %d", (int)cutoff, (int)(res + 0.5f)), 314, 96, CLR_MEDIUM_GREY);
+    print("DRV", 314, 107, CLR_DARK_GREY);                      // the Minimoog warmth: filter into saturation
+    drive_v = ui_slider(3, 340, 107, 100, drive_v, 0.0f, 1.0f, CLR_ORANGE);
 
     // ---- 3 LFOs ----
     const char *tn[5] = { "OFF", "PITCH", "DUTY", "VOL", "CUT" };

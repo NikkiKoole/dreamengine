@@ -18,7 +18,9 @@
 //     oscillators 1+2 (540+800Hz) through a ~2.6kHz bandpass. We fire 2-3
 //     squares per hit (full six would eat the 8-voice polyphony).
 //   kick — bridged-T damped sine ~50Hz with the famous DECAY knob boom;
-//     here: low sine, +26 semitone pitch drop over 50ms, ~500ms tail.
+//     here: low sine, +26 semitone pitch drop over 50ms, ~500ms tail,
+//     plus a touch of instrument_drive() — the saturated 808 sub that
+//     Miami bass ran hot into the desk from day one.
 //   snare — two bridged-T modes at 180Hz + 330Hz under highpassed
 //     "snappy" noise. Three layers, just like the schematic.
 //   rimshot / claves — the same dual bridged-T circuit, switched: rimshot
@@ -304,10 +306,14 @@ static void fire(int v, int boost, int delay) {
 }
 
 void init(void) {
-    // kick — the boom: low sine, lowpassed, +26st pitch drop over 50ms
+    // kick — the boom: low sine, lowpassed, +26st pitch drop over 50ms.
+    // instrument_drive() runs the sub a little hot — the Miami-bass / trap
+    // saturated 808 that's been half of hip-hop's low end since day one
+    // (gentler than the 909's: the 808 booms, it doesn't punch).
     instrument(SL_BD, INSTR_SINE, 0, 480, 0, 60);
     instrument_filter(SL_BD, FILTER_LOW, 250, 3);
     instrument_env(SL_BD, 0, ENV_PITCH, 0, 50, 26.0f);
+    instrument_drive(SL_BD, 0.28f);
 
     // snare body (fired twice: 180Hz + 330Hz modes)
     instrument(SL_SDB, INSTR_SINE, 0, 100, 0, 30);

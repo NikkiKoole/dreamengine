@@ -380,6 +380,7 @@ static void setup_instruments(void) {
     instrument(I_BASS, INSTR_SINE, 4, 220, 5, 120);          // upright-ish
     instrument_filter(I_BASS, FILTER_LOW, 480, 1);
     instrument_env(I_BASS, 0, ENV_PITCH, 0, 35, 4);          // the thump
+    instrument_drive(I_BASS, 0.20f);                         // tape warmth, not fuzz — the Low End is SATURATED low end
 
     instrument(I_LEAD, INSTR_TRI, 10, 180, 4, 200);
     instrument_lfo(I_LEAD, 0, LFO_PITCH, 5.4f, 0.12f);
