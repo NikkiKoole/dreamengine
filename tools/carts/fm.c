@@ -168,6 +168,9 @@ void draw(void) {
     float ratio = RATIO[ri];
     float settle = 0.25f + 0.75f * expf(-(float)scope_age / 54.0f);   // ~0.9s at 60fps
     float beta  = knob[1] * knob[1] * 12.0f * settle;
+    // the DX tine (1:1 detent only) — same containment as the engine: scaled by timbre,
+    // faded by feedback, gone in ~75ms (1.5 frames tau) — a flicker on the strike
+    float tine  = (ri == 1) ? 0.18f * knob[1] * (1.0f - knob[2]) * expf(-(float)scope_age / 1.5f) : 0.0f;
 
     // the scope: the actual FM formula, two carrier cycles, feedback iterated
     int sy = 58, sx0 = 10, sx1 = SCREEN_W - 10, prev_y = sy;
@@ -178,12 +181,14 @@ void draw(void) {
         float t = (float)(x - sx0) / (float)(sx1 - sx0) * 2.0f;       // 2 carrier cycles
         float m = sinf(t * ratio * 6.2831853f + knob[2] * 1.3f * fb_s * 3.14159265f);
         fb_s = m;
-        int y = sy - (int)(sinf(t * 6.2831853f + m * beta) * 28.0f);
+        float s = sinf(t * 6.2831853f + m * beta) + tine * sinf(t * 14.0f * 6.2831853f);
+        int y = sy - (int)(s * 28.0f);
         if (x > sx0) line(x - 1, prev_y, x, y, CLR_BLUE);
         prev_y = y;
     }
     font(FONT_TINY);
-    print(str("ratio 1:%.1f   brightness %.1f   feedback %.2f", ratio, beta, knob[2] * 1.3f),
+    print(str("ratio 1:%.1f%s   brightness %.1f   feedback %.2f", ratio,
+              ri == 1 ? " +tine" : "", beta, knob[2] * 1.3f),
           sx0, 26, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 
