@@ -9,7 +9,14 @@ needs INSTR_PLUCK (shipped) · **mallet** = needs INSTR_MALLET (shipped 2026-06-
 macro taste-tuning still settling in the `mallet` cart) ·
 **FM** = needs INSTR_FM (shipped 2026-06-05; taste-tuning settling in the `fm`
 cart — note this is the FM *engine*, gap 2a; the Juno second-audible-oscillator
-plumbing, gap 2b, is still deferred).
+plumbing, gap 2b, is still deferred) · **wave** = a `wave_set()` table recipe
+(INSTR_USER0 — roadhouse's drawbar organ and tango's bandoneón are the two
+station gigs so far; "rolling the wave" means generating the harmonic mix from
+the song seed).
+
+All four levers are live now, so for the newer stations the question is no
+longer "which engine is missing" but "which alternatives should the seed roll".
+Exotica is the model citizen — it rolled macros per song from day one.
 
 ---
 
@@ -204,6 +211,114 @@ an arrangement.
 
 ---
 
+## exotica
+
+**Current:** vibraphone lead (INSTR_MALLET, motor on), nylon comp guitar
+(INSTR_PLUCK), glass-bell sparkle (INSTR_FM bell detent), upright bass
+(TRI+pitch-thump), latin kit (clave/shaker/conga/finger cymbal), the aviary
+(aleatoric bird/frog calls, never seeded).
+
+**Real genre:** the genre has two poles — Arthur Lyman (vibraphone lead) and
+Martin Denny (he was a *pianist*; vibes were his sideman's). Marimba is the
+other mallet color; celesta appears on Baxter arrangements; percussion is
+latin + "bamboo" novelty instruments; bird calls were the band improvising.
+
+**Already rolls per song:** vibes macros, guitar pick, bird species pair, kit
+dressing — the reference implementation for this whole doc.
+
+| Slot | Current fake | Alternatives to roll |
+|---|---|---|
+| vibe lead | INSTR_MALLET, motor on | **now** — roll `harmonics` toward 0 = marimba night (Lyman's other color); roll `morph` down = drier 50s mallet sound. TRI+felt-env = the *Denny piano* night — the genre's other pole, worth a real A/B. |
+| comp guitar | INSTR_PLUCK nylon | already rolled — leave it. |
+| bell | INSTR_FM bell detent | **now** — vary ratio/brightness slightly per seed; **mallet** celesta (harmonics ≈ 0.5) as an alternate sparkle. |
+| aviary | sine swoops + square croak | leave unseeded — that's the point. Maybe roll the *species pool* (jungle vs shore night). |
+
+---
+
+## yacht
+
+**Current:** FM electric piano (1:1 tine detent + tremolo), round fingered
+bass (TRI+pitch-thump), clean strat stabs (INSTR_PLUCK bright), breathy sax
+(narrow SQUARE+LP+vibrato), soft string pad (SAW+LP), ride + session kit OR
+CR-78 circuits (already rolled per song).
+
+**Real genre:** Rhodes vs Wurlitzer vs DX-tine vs clavinet — the epiano *kind*
+varies per record; bass is P-bass (Chuck Rainey school), tight and round;
+lead chair alternates sax, guitar solo (Carlton), and synth; strings on lush
+cuts, synth brass stabs on funkier ones.
+
+| Slot | Current fake | Alternatives to roll |
+|---|---|---|
+| epiano | INSTR_FM 1:1 detent | **FM** — roll `timbre` (tine brightness) + tremolo depth per song: DX glass vs softer Rhodes night. Clav night: INSTR_PLUCK, narrow + bright, comping the same voicings. |
+| bass | TRI+thump | **now** — SINE+LP = rounder ballad bass; SAW+LP brighter = the slap-adjacent cuts. |
+| chorus lead | SQUARE duty 0.12 = sax | **now** — SQUARE duty 0.3 = synth lead night; **pluck** — guitar solo lead (bright timbre, high register). Roll which session player got the solo. |
+| pad | SAW+LP strings | **now** — SAW+fall-env stabs = synth brass night (citypop's loan repaid). |
+| kit | session vs CR-78 | already rolled (incl. Purdie vs straight) — leave it. |
+
+---
+
+## roadhouse
+
+**Current:** combo organ comp + solo stop (INSTR_USER0 drawbar wave_set +
+vibrato LFO), Rhodes piano bass (INSTR_FM epiano detent, low), Krieger guitar
++ open-string drone (INSTR_PLUCK), trio kit (shuffle/latin/straight already
+rolled per song).
+
+**Real genre:** Manzarek switched organs — Vox Continental early, Gibson G-101
+later (brighter, reedier); piano bass constant until *L.A. Woman* brought in a
+real session bassist (Scheff); Krieger moves between fingerpicked, flamenco
+runs, and fuzz; harpsichord and marimba cameo on *Strange Days*.
+
+| Slot | Current fake | Alternatives to roll |
+|---|---|---|
+| organ | USER0 drawbar recipe | **wave** — roll the footage mix per song: current recipe = Vox night; more 2nd/4th harmonic + brighter filter = Gibson night. Roll vibrato-tab depth with it. |
+| piano bass | INSTR_FM epiano, low | **now** — TRI+LP+thump = the session-bassist night (*L.A. Woman*); keep FM as the default — it's the signature. |
+| guitar | INSTR_PLUCK | **now** — roll `timbre` (fingerpicked vs flatpick) and add `instrument_drive` = the fuzz night. |
+| kit | shuffle/latin/straight | already rolled — leave it. |
+
+---
+
+## cocktail
+
+**Current:** felt piano, comp + solo stop (TRI+cutoff-env ×2, satie's recipe),
+upright bass (TRI+pitch-thumb), brushed ride (SQUARE+HP), hat, brush sweep
+(NOISE slow), feathered kick.
+
+**Real genre:** the piano trio's third chair is the historical variable —
+Oscar Peterson's first trio had *guitar and no drums* (the Nat Cole format);
+Guaraldi used drums; add vibes and it's the MJQ. Brushes vs sticks splits the
+repertoire; the bass solo chorus is constant either way.
+
+| Slot | Current fake | Alternatives to roll |
+|---|---|---|
+| piano | TRI+felt env | **now** — registration roll (env amount 400–900, decay 150–250) like satie; SINE+LP = the closed-lid ballad set. |
+| the guest chair | — (trio is fixed) | **mallet** — vibes guest on some tunes = the MJQ night (improv.h already solos; give it the vibes); **pluck** — guitar trio night (Herb Ellis), comping where the piano LH was. Highest-value addition on this station. |
+| bass | TRI+thumb | **now** — SINE+LP darker; solo chorus already exists. |
+| brushes | NOISE kit, soft | **now** — the sticks night: ride HP up, hat tighter, kick less feathered, sweep dropped. |
+
+---
+
+## tango
+
+**Current:** bandoneón chords + right hand (INSTR_USER0 free-reed wave_set,
+bellows LFO on the RH), violins one desk (SAW, vibrato + scoop already rolled
+per song), felt piano (satie's recipe), upright bass (TRI+thumb), chicharra +
+golpe (no kit — the band is the percussion).
+
+**Real genre:** orquesta típica = bandoneón *section* (up to four), violin
+section, piano, contrabass. The cantabile lead alternates bandoneón and
+violin per tune; Pugliese's sound is darker/heavier than D'Arienzo's bright
+drive; early guardia vieja ensembles used flute and guitar instead.
+
+| Slot | Current fake | Alternatives to roll |
+|---|---|---|
+| bandoneón | USER0 free-reed recipe | **wave** — roll the reed harmonic mix per song: brighter odd-harmonics = D'Arienzo drive night, darker fundamentals = Pugliese yumba night. Roll bellows-tremble depth with it. |
+| violins | SAW one desk | **now** — second desk (same line, slight detune, -2 vol) on the big songs; pizzicato variant (short env, no scoop) for síncopa passages. |
+| B-section lead | violin takes it | **now** — roll WHO sings the cantabile: violin vs bandoneón RH vs **mallet**-celesta-tinted piano. The orquesta's real per-tune variable. |
+| piano | TRI+felt env | **now** — satie registration roll. |
+
+---
+
 ## Summary — highest-value swaps by engine tier
 
 **Now (current API):**
@@ -218,14 +333,43 @@ an arrangement.
 - Jingle guitar: swap in INSTR_PLUCK (not yet done)
 
 **INSTR_MALLET (shipped 2026-06-05 — retrofits now unblocked):**
-- Lowend lead: vibraphone = the Nujabes sound — single highest-value engine swap, do first
+- ~~Lowend lead: vibraphone = the Nujabes sound — single highest-value engine swap, do first~~
+  **DONE 2026-06-05** — G-key A/B in `lowend.c` (TRI hook vs vibes preset from the mallet cart)
+- Cocktail guest chair: vibes = the MJQ night (improv.h takes the solo) — new highest-value mallet item
 - Ambient bell: real bell/vibraphone ring
 - YMO lead: marimba/vibraphone counterpoint (Hosono territory)
 - Bossa lead on ballads: vibraphone
-- (each retrofit: live A/B toggle against the old fake — the G-key pattern from jangle/bossa)
+- (each retrofit: live A/B toggle against the old fake — the G-key pattern from jangle/bossa/lowend)
 
 **INSTR_FM (shipped 2026-06-05 — retrofits now unblocked):**
 - Citypop lead: real Rhodes bell overtone (the epiano preset, ratio 1 + decaying brightness)
 - Lowend Rhodes: candidate A/B against the TRI+tremolo fake
 - House lead: talkbox-adjacent growl via the feedback macro (true formant still needs §8.3)
 - (each retrofit: live A/B toggle against the old fake — the G-key pattern)
+
+**wave_set recipes (USER0 — roll the table itself from the seed):**
+- Roadhouse organ: footage mix = Vox night vs Gibson night
+- Tango bandoneón: reed mix = D'Arienzo drive vs Pugliese yumba
+
+**Newer-station "now" rolls:**
+- Yacht lead chair: sax vs synth vs guitar solo — roll which session player got the call
+- Cocktail brushes vs sticks night; tango second violin desk + pizzicato síncopa
+- Exotica vibes→marimba night; the Denny-piano pole as a real A/B
+
+## Where the A/B toggles stand (the G-key pattern)
+
+The evidence-gathering step before a chair's roll goes into the seed: a live
+toggle, mid-song, against the shipped fake.
+
+| Station | Chair | Status |
+|---|---|---|
+| jangle | guitar (TRI chorus vs PLUCK) | shipped |
+| bossa | guitar (TRI vs PLUCK) | shipped |
+| lowend | lead (TRI hook vs MALLET vibes) | shipped 2026-06-05 |
+| everything else | — | open — see per-station tables above |
+
+**Open design idea (owner, 2026-06-05):** instead of one G-key per cart, a
+**band panel** — a second overlay besides help where every chair is listed and
+clickable, cycling its candidates live. Would generalize the G-key pattern,
+live in `radio.h` so all 15 stations get it for free, and double as the
+audition UI for tuning each station's per-song roll tables.
