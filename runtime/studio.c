@@ -321,6 +321,9 @@ static int btn_b_cx, btn_b_cy;
 static int     vt_count = 0;
 static Vector2 vt_pos[VT_MAX];
 static int     vt_id[VT_MAX];
+// previous frame's ids — lets tapp() spot a touch that BEGAN this frame
+static int     vt_prev_count = 0;
+static int     vt_prev_id[VT_MAX];
 
 // camera + clip state
 // the camera is a raylib Camera2D applied via BeginMode2D, so zoom/rotation are GPU
@@ -352,7 +355,15 @@ static bool point_in_circle(float px, float py, float cx, float cy, float r) {
     return dx*dx + dy*dy <= r*r;
 }
 
+static bool vt_was_down(int id) {
+    for (int i = 0; i < vt_prev_count; i++)
+        if (vt_prev_id[i] == id) return true;
+    return false;
+}
+
 static void poll_virtual_touches(void) {
+    vt_prev_count = vt_count;
+    for (int i = 0; i < vt_count; i++) vt_prev_id[i] = vt_id[i];
     int n = GetTouchPointCount();
     if (n > VT_MAX - 1) n = VT_MAX - 1;
     for (int i = 0; i < n; i++) {
@@ -1451,9 +1462,22 @@ int touch_y(int i) {
     if (i < 0 || i >= vt_count) return -1;
     return (int)(vt_pos[i].y / SCALE);
 }
+int touch_id(int i) {
+    if (i < 0 || i >= vt_count) return -1;
+    return vt_id[i];
+}
 
 bool tap(int x, int y, int w, int h) {
     for (int i = 0; i < vt_count; i++) {
+        int cx = (int)(vt_pos[i].x / SCALE), cy = (int)(vt_pos[i].y / SCALE);
+        if (cx >= x && cx < x + w && cy >= y && cy < y + h) return true;
+    }
+    return false;
+}
+
+bool tapp(int x, int y, int w, int h) {
+    for (int i = 0; i < vt_count; i++) {
+        if (vt_was_down(vt_id[i])) continue;   // finger was already down last frame
         int cx = (int)(vt_pos[i].x / SCALE), cy = (int)(vt_pos[i].y / SCALE);
         if (cx >= x && cx < x + w && cy >= y && cy < y + h) return true;
     }

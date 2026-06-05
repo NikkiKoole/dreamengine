@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>dreamengine</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: #1b1c1f; }
+    html, body { width: 100%; height: 100%; background: #1b1c1f;
+                 overscroll-behavior: none; }    /* no pull-to-refresh */
     body { display: flex; justify-content: center; align-items: center; }
     #canvas {
       display: block;
@@ -14,6 +15,12 @@
       /* canvas is sized by Raylib to SCREEN_W*SCALE × SCREEN_H*SCALE */
       max-width: 100%;
       max-height: 100%;
+      /* keep iOS Safari from hijacking touches as scroll / pinch-zoom /
+         double-tap-zoom / long-press-callout — the cart wants them raw */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
   </style>
 </head>

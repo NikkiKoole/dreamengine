@@ -87,7 +87,9 @@ bool btnr(int player, int button);  // true only on the frame the button was rel
 int  touch_count(void);                  // active touches (0..10)
 int  touch_x(int i);                     // canvas-space x, or -1 if i invalid
 int  touch_y(int i);                     // canvas-space y, or -1
+int  touch_id(int i);                    // stable id of touch i, or -1 — indices shuffle when a finger lifts, ids follow the finger
 bool tap(int x, int y, int w, int h);    // any touch inside this canvas-space rect?
+bool tapp(int x, int y, int w, int h);   // did a touch BEGIN inside this rect this frame? (edge-triggered, like btnp)
 void touch_controls(bool on);            // show/hide on-screen stick + A/B (overrides default)
 
 // analog stick (only nonzero while a finger is on the on-screen stick)

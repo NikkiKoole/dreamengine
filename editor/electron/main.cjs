@@ -4,6 +4,7 @@ const path                             = require('path')
 const fs                               = require('fs')
 const zlib                             = require('zlib')
 const http                             = require('http')
+const os                               = require('os')
 
 // Internal app name (menu bar, userData path). The Cmd-Tab / Dock *label* in dev
 // comes from the Electron bundle's Info.plist, not this — see scripts/dev-branding.cjs.
@@ -781,6 +782,14 @@ const WEB_PORT = 8765
 const WEB_MIME = { '.html': 'text/html', '.js': 'application/javascript', '.wasm': 'application/wasm', '.png': 'image/png' }
 let webServer = null
 
+// first non-internal IPv4 — so a phone/iPad on the same wifi can open the cart
+function lanAddress() {
+  for (const ifaces of Object.values(os.networkInterfaces()))
+    for (const i of ifaces)
+      if (i.family === 'IPv4' && !i.internal) return i.address
+  return null
+}
+
 function startWebServer() {
   const url = `http://localhost:${WEB_PORT}/cart.html`
   return new Promise((resolve, reject) => {
@@ -793,7 +802,8 @@ function startWebServer() {
         res.end(data)
       })
     })
-    webServer.listen(WEB_PORT, '127.0.0.1', () => resolve(url))
+    // 0.0.0.0 so devices on the LAN (iPad multitouch testing) can reach it too
+    webServer.listen(WEB_PORT, '0.0.0.0', () => resolve(url))
     webServer.on('error', reject)
   })
 }
@@ -901,6 +911,8 @@ ipcMain.handle('studio:build-web', async (_event, code, cfg) => {
       const url = await startWebServer()
       shell.openExternal(url)
       log(`✓ done — opening ${url}\n`)
+      const lan = lanAddress()
+      if (lan) log(`  on your iPad/phone (same wifi): http://${lan}:${WEB_PORT}/cart.html\n`)
       resolve({ ok: true, cmd, url, output: null })
     })
   })
