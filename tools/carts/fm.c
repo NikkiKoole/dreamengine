@@ -13,8 +13,8 @@
 // sound until it earns a nameplate; the panel prints the exact instrument() call to
 // copy into your cart. The 1:1 detent carries the built-in DX tine (E.PIANO attack ping).
 //
-// controls: A S D F G H J K  play (major scale)   ·   1..5 presets:
-//           epiano / bell / bass / brass / clang
+// controls: A S D F G H J K  play (major scale)   ·   Z / X octave down / up
+//           1..5 presets: epiano / bell / bass / brass / clang
 //           drag any slider with the mouse (auditions as you drag), or
 //           LEFT/RIGHT pick a slider + UP/DOWN turn it (7 sliders: 3 macros + ADSR)
 //           SPACE chord   ·   M autoplay on/off
@@ -57,6 +57,9 @@ static bool  autoplay = true;
 static int   cur_preset = 0;
 static int   apos = 0;
 static int   scope_age = 9999;
+static int   oct = 0;          // Z/X octave shift, -2..+3 (bass lives low, bells live high)
+
+static int km(int b) { return midi_of[b] + oct * 12; }
 
 // geometry: scope · keys · presets · macro row · env row · footer
 #define KEY_W    34
@@ -84,13 +87,13 @@ static void apply_patch(void) {
 }
 
 static void play_key(int b, int vol) {
-    note(midi_of[b], I_FM, vol);
+    note(km(b), I_FM, vol);
     glow[b] = 1.0f;
     scope_age = 0;
 }
 
 static void play_chord(void) {
-    chord(midi_of[0], CHORD_MAJ7, I_FM, 5);
+    chord(km(0), CHORD_MAJ7, I_FM, 5);
     glow[0] = glow[2] = glow[4] = 1.0f;
     scope_age = 0;
 }
@@ -126,6 +129,8 @@ void update(void) {
 
     if (keyp(KEY_SPACE)) play_chord();
     if (keyp('M')) autoplay = !autoplay;
+    if (keyp('Z') && oct > -2) { oct--; play_key(2, 5); }   // audition the new register
+    if (keyp('X') && oct <  3) { oct++; play_key(2, 5); }
 
     if (mouse_pressed(MOUSE_LEFT)) {
         for (int k = 0; k < 3; k++)
@@ -156,7 +161,7 @@ void update(void) {
         if (beat() % 8 == 0) play_chord();
         else {
             play_key(seq[apos % 16] % NKEY, 4);
-            if (chance(25)) schedule_hit(280, midi_of[(seq[apos % 16] + 2) % NKEY], I_FM, 3, 250);
+            if (chance(25)) schedule_hit(280, km((seq[apos % 16] + 2) % NKEY), I_FM, 3, 250);
         }
         apos++;
     }
@@ -177,6 +182,7 @@ void draw(void) {
     font(FONT_SMALL);
     print("two-operator fm engine", 32, 8, CLR_MEDIUM_GREY);
     print_right(autoplay ? "M autoplay: on" : "M autoplay: off", SCREEN_W - 10, 8, autoplay ? CLR_LIME_GREEN : CLR_DARK_GREY);
+    print_right(str("oct %+d", oct), SCREEN_W - 96, 8, oct ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
     font(FONT_NORMAL);
 
     // the engine's parameters, derived exactly like sound_fm_sample does
@@ -279,6 +285,6 @@ void draw(void) {
     }
 
     font(FONT_TINY);
-    print("A..K play   1..5 presets   SPACE chord   7 sliders: arrows pick + turn, or drag", 10, SCREEN_H - 8, CLR_DARK_GREY);
+    print("A..K play   Z/X octave   1..5 presets   SPACE chord   sliders: drag or arrows", 10, SCREEN_H - 8, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
