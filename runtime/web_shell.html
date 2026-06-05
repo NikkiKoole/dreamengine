@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <!-- "Add to Home Screen" on iOS launches the cart standalone: no URL bar, true
+       fullscreen — the only fullscreen path on iPhone (no Fullscreen API there) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1b1c1f">
   <title>dreamengine</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,6 +34,9 @@
   <div id="rotate-hint" style="display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%);
        background:#25262b; color:#e8e6e3; border:1px solid #ff6c24; border-radius:8px;
        padding:8px 14px; font:13px ui-monospace,Menlo,monospace; pointer-events:none;">&#8635; rotate your phone</div>
+  <button id="fs" title="fullscreen" style="position:fixed; right:10px; bottom:10px; width:34px; height:34px;
+       background:#25262b; color:#9a948c; border:1px solid #34353b; border-radius:8px;
+       font:16px ui-monospace,Menlo,monospace; cursor:pointer; opacity:.6;">&#x26F6;</button>
   <script>
     var Module = { canvas: document.getElementById('canvas') };
     // landscape cart viewed in portrait on a touch device? show a gentle hint.
@@ -43,6 +51,19 @@
     }
     window.addEventListener('resize', rotateHint);
     setTimeout(rotateHint, 1000);  // after Raylib has sized the canvas
+    // fullscreen button — desktop/Android/iPad. iPhone Safari has no Fullscreen
+    // API for canvas, so the button hides itself there (home-screen install is
+    // the iPhone path, via the apple-mobile-web-app meta above).
+    var fsBtn = document.getElementById('fs');
+    if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) {
+      fsBtn.style.display = 'none';
+    } else fsBtn.addEventListener('click', function () {
+      var d = document, el = d.documentElement;
+      if (d.fullscreenElement || d.webkitFullscreenElement)
+        (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+      else
+        (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    });
     // emscripten's GLFW shim (-s USE_GLFW=3) drops mouse events whose target isn't
     // the canvas, and its own capture call (event.target.setCapture()) is a legacy
     // Firefox/IE API that throws on Chrome/Safari. Without capture, a drag released

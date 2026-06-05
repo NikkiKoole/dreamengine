@@ -110,13 +110,23 @@ function buildCart(name, { force = false } = {}) {
     return false
   }
 
-  // per-cart page title + thumbnail (the .cart.png doubles as a shareable cart)
-  const meta = cartMeta(name)
-  if (meta) {
-    const html = fs.readFileSync(outHtml, 'utf8')
-      .replace('<title>dreamengine</title>', `<title>${esc(meta.title)} — dreamengine</title>`)
-    fs.writeFileSync(outHtml, html)
-  }
+  // per-cart page title, web-app manifest + icon (Add to Home Screen → the cart
+  // launches standalone/fullscreen with its own icon), thumbnail (the .cart.png
+  // doubles as a shareable cart). The manifest link is injected here, not in
+  // web_shell.html, so the editor's build-web (no manifest on disk) stays 404-free.
+  const meta  = cartMeta(name)
+  const title = meta?.title || name
+  const html = fs.readFileSync(outHtml, 'utf8')
+    .replace('<title>dreamengine</title>',
+      `<title>${esc(title)} — dreamengine</title>\n` +
+      `  <link rel="manifest" href="manifest.json">\n` +
+      `  <link rel="apple-touch-icon" href="cart.png">`)
+  fs.writeFileSync(outHtml, html)
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({
+    name: title, short_name: title, display: 'fullscreen',
+    background_color: '#1b1c1f', theme_color: '#1b1c1f', start_url: './',
+    icons: [{ src: 'cart.png', sizes: '320x200', type: 'image/png' }],
+  }, null, 2))
   const png = path.join(PNG_DIR, `${name}.cart.png`)
   if (fs.existsSync(png)) fs.copyFileSync(png, path.join(outDir, 'cart.png'))
 
