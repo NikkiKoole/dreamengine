@@ -110,7 +110,16 @@ static int  gvPno[3] = { 62, 65, 69 };
 static bool pnoInit = false;
 static Improv solo;
 
+// THE BAND (B) — the chairs and their candidates, from radio-instrument-options.md.
+// First station on the rad_band panel: the trio's third chair is the genre's real
+// historical variable (Peterson's guitar trio, the MJQ's vibes), so the solo chair
+// gets three candidates and improv.h just plays whoever sits down.
+static RadBand band;
+static int chPiano, chSolo, chBass, chKit;
+
 #define srnd(n) rad_srnd(&rs, (n))
+
+static void apply_band_overrides(void);   // defined with the chairs, below
 
 // ── song generation ───────────────────────────────────────────────────────
 static const char *TW1[] = { "Velvet", "Manhattan", "Midnight", "Smoky", "Uptown",
@@ -155,6 +164,7 @@ static void new_song(double pos, unsigned seed) {
 
     tempo = sng.ballad ? 96 + srnd(13) : 116 + srnd(29);   // 96..108 / 116..144
     bpm(tempo);
+    apply_band_overrides();          // picked chairs beat the filter roll above
     songBase = (long)pos + 8;
     pnoInit = false;
     bassLast = 33;
@@ -317,25 +327,81 @@ static void play_step(long abs, double pos) {
 }
 
 // ── setup ─────────────────────────────────────────────────────────────────
+// Each chair's candidates are full recipes — switching re-aims the slot from
+// scratch, so a swap mid-song is clean. sel 0 is always the shipped sound.
+static void apply_chair(int idx) {
+    int sel = band.c[idx].sel;
+    if (idx == chPiano) {
+        if (sel == 0) {
+            instrument(I_PNO, INSTR_TRI, 2, 600, 2, 240);    // the felt grand
+            instrument_env(I_PNO, 0, ENV_CUTOFF, 0, 70, 700);
+        } else {
+            instrument(I_PNO, INSTR_SINE, 3, 700, 2, 260);   // the closed-lid ballad set
+            instrument_filter(I_PNO, FILTER_LOW, 1400, 1);
+        }
+    } else if (idx == chSolo) {
+        if (sel == 0) {
+            instrument(I_PSOLO, INSTR_TRI, 1, 500, 3, 220);  // the piano's solo stop
+            instrument_env(I_PSOLO, 0, ENV_CUTOFF, 0, 60, 900);
+        } else if (sel == 1) {
+            instrument(I_PSOLO, INSTR_MALLET, 1, 0, 7, 1200); // the MJQ night
+            instrument_harmonics(I_PSOLO, 0.25f);             //   (the vibes preset
+            instrument_timbre(I_PSOLO, 0.50f);                //    from the mallet cart)
+            instrument_morph(I_PSOLO, 0.85f);
+        } else {
+            instrument(I_PSOLO, INSTR_PLUCK, 1, 0, 7, 700);  // the Herb Ellis night
+            instrument_harmonics(I_PSOLO, 0.50f);            //   warm archtop, neck pickup
+            instrument_timbre(I_PSOLO, 0.45f);
+            instrument_morph(I_PSOLO, 0.5f);
+            instrument_filter(I_PSOLO, FILTER_LOW, 2300, 1);
+        }
+    } else if (idx == chBass) {
+        if (sel == 0) {
+            instrument(I_BASS, INSTR_TRI, 3, 300, 5, 110);   // the upright
+            instrument_env(I_BASS, 0, ENV_PITCH, 0, 16, 2);  // the thumb
+        } else {
+            instrument(I_BASS, INSTR_SINE, 4, 340, 5, 130);  // darker — gut strings
+            instrument_filter(I_BASS, FILTER_LOW, 380, 1);
+            instrument_env(I_BASS, 0, ENV_PITCH, 0, 16, 2);
+        }
+    } else if (idx == chKit) {
+        if (sel == 0) {
+            instrument(SL_RIDE, INSTR_SQUARE, 1, 260, 0, 160);   // brushed ride ping
+            instrument_filter(SL_RIDE, FILTER_HIGH, 5400, 3);
+            instrument(SL_HAT, INSTR_NOISE, 0, 30, 0, 14);
+            instrument_filter(SL_HAT, FILTER_HIGH, 8200, 3);
+            instrument(SL_BRSH, INSTR_NOISE, 60, 300, 2, 200);   // the circular sweep
+            instrument_filter(SL_BRSH, FILTER_HIGH, 4800, 1);
+            instrument(SL_KICK, INSTR_SINE, 0, 150, 0, 60);      // feathered, felt
+            instrument_filter(SL_KICK, FILTER_LOW, 220, 1);
+            instrument_env(SL_KICK, 0, ENV_PITCH, 0, 35, 9.0f);
+        } else {
+            instrument(SL_RIDE, INSTR_SQUARE, 0, 320, 0, 180);   // the sticks night
+            instrument_filter(SL_RIDE, FILTER_HIGH, 6400, 4);    //   ride rings brighter
+            instrument(SL_HAT, INSTR_NOISE, 0, 22, 0, 12);       //   hat snaps tighter
+            instrument_filter(SL_HAT, FILTER_HIGH, 9000, 3);
+            instrument(SL_BRSH, INSTR_NOISE, 2, 60, 0, 40);      //   the sweep becomes a tap
+            instrument_filter(SL_BRSH, FILTER_BAND, 3200, 4);
+            instrument(SL_KICK, INSTR_SINE, 0, 170, 0, 60);      //   kick sits forward
+            instrument_filter(SL_KICK, FILTER_LOW, 300, 1);
+            instrument_env(SL_KICK, 0, ENV_PITCH, 0, 38, 11.0f);
+        }
+    }
+}
+
+// re-assert any non-default chair (new_song re-rolls filters over the slots;
+// default chairs keep the trio's per-song roll, picked chairs win over it)
+static void apply_band_overrides(void) {
+    for (int i = 0; i < band.n; i++)
+        if (band.c[i].sel) apply_chair(i);
+}
+
 static void setup_instruments(void) {
-    // the piano: satie.c's solo-piano recipe, a lounge room over it
-    instrument(I_PNO, INSTR_TRI, 2, 600, 2, 240);
-    instrument_env(I_PNO, 0, ENV_CUTOFF, 0, 70, 700);        // the felt attack
-    instrument(I_PSOLO, INSTR_TRI, 1, 500, 3, 220);
-    instrument_env(I_PSOLO, 0, ENV_CUTOFF, 0, 60, 900);
-
-    instrument(I_BASS, INSTR_TRI, 3, 300, 5, 110);           // the upright
-    instrument_env(I_BASS, 0, ENV_PITCH, 0, 16, 2);          // the thumb
-
-    instrument(SL_RIDE, INSTR_SQUARE, 1, 260, 0, 160);       // brushed ride ping
-    instrument_filter(SL_RIDE, FILTER_HIGH, 5400, 3);
-    instrument(SL_HAT, INSTR_NOISE, 0, 30, 0, 14);
-    instrument_filter(SL_HAT, FILTER_HIGH, 8200, 3);
-    instrument(SL_BRSH, INSTR_NOISE, 60, 300, 2, 200);       // the circular sweep
-    instrument_filter(SL_BRSH, FILTER_HIGH, 4800, 1);
-    instrument(SL_KICK, INSTR_SINE, 0, 150, 0, 60);          // feathered, felt
-    instrument_filter(SL_KICK, FILTER_LOW, 220, 1);
-    instrument_env(SL_KICK, 0, ENV_PITCH, 0, 35, 9.0f);
+    chPiano = rad_chair(&band, "piano", "felt grand", "closed lid", NULL, NULL);
+    chSolo  = rad_chair(&band, "solo chair", "piano", "vibes", "guitar", NULL);
+    chBass  = rad_chair(&band, "bass", "upright", "gut strings", NULL, NULL);
+    chKit   = rad_chair(&band, "drums", "brushes", "sticks", NULL, NULL);
+    for (int i = 0; i < band.n; i++) apply_chair(i);
 }
 
 // ── update ────────────────────────────────────────────────────────────────
@@ -366,6 +432,9 @@ void update(void) {
         instrument_filter(I_PNO,   FILTER_LOW, (int)(2200 * tm), 1);
         instrument_filter(I_PSOLO, FILTER_LOW, (int)(2700 * tm), 1);
     }
+
+    int chair = rad_band_input(&band, &showHelp);   // THE BAND — B, then click/number
+    if (chair >= 0) apply_chair(chair);
 
     if (radioOn) {
         long st;
@@ -458,7 +527,7 @@ void draw(void) {
     rad_power_led(radioOn, CLR_PEACH, CLR_MAUVE);
 
     rad_help_button(CLR_PEACH);
-    rad_footer("SPACE next tune   H help");
+    rad_footer("SPACE next tune   B band   H help");
 
     if (showHelp) {
         static const char *HELP[8][2] = {
@@ -469,7 +538,7 @@ void draw(void) {
             { "UP/DOWN",    "tempo of this tune" },
             { "T",          "tone - mellow/warm/clear/bright" },
             { "M",          "radio power on / off" },
-            { "H or ?",     "show / hide this help" },
+            { "B",          "the band - swap chairs live" },
         };
         static const char *NOTES[3] = {
             "walking bass: root, motion, CHROMATIC",
@@ -478,4 +547,5 @@ void draw(void) {
         };
         rad_help_panel("COCKTAIL RADIO", HELP, 8, NOTES, 3, CLR_PEACH);
     }
+    rad_band_panel(&band, CLR_PEACH);
 }

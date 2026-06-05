@@ -271,4 +271,87 @@ static void rad_help_panel(const char *title, const char *(*rows)[2], int nrows,
     font(FONT_NORMAL);
 }
 
+// ── the band panel ────────────────────────────────────────────────────────
+// The G-key A/B toggle generalized (radio-instrument-options.md): a second
+// overlay besides help where every CHAIR (instrument seat) lists its timbre
+// candidates — click a row or press its number to cycle, live, mid-song.
+// The toolkit owns the registry + input + draw; the CART applies the change:
+// rad_band_input returns the chair index that just cycled, the cart re-aims
+// that instrument slot. The toolkit never calls back into the cart, and the
+// panel never touches rad_srnd — pinned seeds stay intact. Candidates per
+// chair come from docs/design/radio-instrument-options.md; once a station's
+// candidates all sound right, the song seed rolls the default and this panel
+// becomes the live override.
+
+#define RAD_MAXCHAIR 6
+#define RAD_MAXCAND  4
+
+typedef struct {
+    const char *name;                  // the chair: "piano", "bass", "drums"…
+    const char *cand[RAD_MAXCAND];     // candidate labels
+    int ncand, sel;
+} RadChair;
+
+typedef struct {
+    RadChair c[RAD_MAXCHAIR];
+    int  n;
+    bool show;
+} RadBand;
+
+// register a chair (pass NULL for unused candidate slots); returns its index
+static int rad_chair(RadBand *b, const char *name,
+                     const char *c0, const char *c1, const char *c2, const char *c3) {
+    RadChair *ch = &b->c[b->n];
+    const char *cs[RAD_MAXCAND] = { c0, c1, c2, c3 };
+    ch->name = name; ch->sel = 0; ch->ncand = 0;
+    for (int i = 0; i < RAD_MAXCAND && cs[i]; i++) ch->cand[ch->ncand++] = cs[i];
+    return b->n++;
+}
+
+// B toggles the panel (closing help — the two overlays share the spot);
+// number keys 1..n and row clicks cycle a chair. Returns the chair index
+// that just cycled (apply it in the cart) or -1.
+static int rad_band_input(RadBand *b, bool *showHelp) {
+    if (keyp('B')) { b->show = !b->show; if (b->show) *showHelp = false; }
+    if (*showHelp) b->show = false;
+    if (!b->show) return -1;
+    int hit = -1;
+    for (int i = 0; i < b->n; i++)
+        if (keyp('1' + i)) hit = i;
+    if (mouse_pressed(MOUSE_LEFT)) {
+        int mx = mouse_x(), my = mouse_y();
+        for (int i = 0; i < b->n; i++) {
+            int ry = 58 + i * 13;
+            if (mx >= 48 && mx <= 272 && my >= ry - 3 && my < ry + 10) hit = i;
+        }
+    }
+    if (hit >= 0) b->c[hit].sel = (b->c[hit].sel + 1) % b->c[hit].ncand;
+    return hit;
+}
+
+// draw the panel — same chassis spot as the help overlay
+static void rad_band_panel(const RadBand *b, int accent) {
+    if (!b->show) return;
+    rectfill(44, 40, 232, 122, CLR_BLACK);
+    rect(44, 40, 232, 122, accent);
+    print("THE BAND", 52, 46, accent);
+    font(FONT_SMALL);
+    for (int i = 0; i < b->n; i++) {
+        const RadChair *ch = &b->c[i];
+        int ry = 58 + i * 13;
+        char num[4]; snprintf(num, 4, "%d", i + 1);
+        print(num, 52, ry, CLR_YELLOW);
+        print(ch->name, 62, ry, CLR_WHITE);
+        int cw = text_width(ch->cand[ch->sel]);          // current pick, boxed
+        rectfill(148, ry - 2, cw + 6, 11, accent);
+        print(ch->cand[ch->sel], 151, ry, CLR_BLACK);
+        for (int k = 0; k < ch->ncand; k++)              // position dots
+            circfill(162 + cw + k * 5, ry + 3, 1,
+                     k == ch->sel ? accent : CLR_DARK_GREY);
+    }
+    print("click a row / press its number to cycle", 52, 137, accent);
+    print("the swap lands live, mid-song", 52, 146, accent);
+    font(FONT_NORMAL);
+}
+
 #endif // RADIO_H
