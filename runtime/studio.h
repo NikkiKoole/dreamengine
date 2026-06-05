@@ -313,6 +313,13 @@ void note_morph(int handle, float x);          // live macro on a held note, sle
 void instrument_drive(int slot, float x);      // overdrive a slot 0.0..1.0 — 0 = clean (default), 0.3 = warm, 1 = fuzz. loudness stays put; character changes
 void note_drive(int handle, float x);          // sweep a held note's drive live, slewed — ride it up mid-phrase for the acid scream
 
+// echo — THE shared echo bus (there is exactly one): each slot chooses how much to send
+// into it. Repeats get darker every pass (tone), and feedback past 1.0 self-oscillates
+// like a tape echo instead of exploding. Sweeping the time live pitch-bends the tail.
+void echo(int time_ms, float feedback, float tone);  // configure the bus: delay 1..2000ms, feedback 0..1.1 (>1 = runaway), tone 0..1 (dark..bright repeats)
+void instrument_echo(int slot, float send);    // how much this slot feeds the bus 0.0..1.0 — 0 = dry (default), 0.15 = slapback, 0.8 = dub throw
+void note_echo(int handle, float x);           // sweep a held note's echo send live, slewed — throw a single phrase into the tail
+
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti
 #define SCALE_MINOR      1   // natural minor

@@ -63,6 +63,7 @@ typedef struct {
     float env_amount[2];            // 0 = off; bipolar; units depend on dest (Hz / semitones / 0..1)
     float harmonics, timbre, morph; // engine macros 0..1 (INSTR_PLUCK+) — meaning is per-engine; default 0.5
     float drive;                    // post-filter saturation 0..1; 0 = clean bypass (default — old carts unchanged)
+    float echo;                     // send to THE echo bus 0..1; 0 = dry (default — old carts unchanged)
     uint32_t choke_mask;            // bitmask: bit N set = a new note on this slot kills active voices on slot N
 } Instrument;
 
@@ -102,6 +103,7 @@ typedef struct {
     float  harm, timb, mor;
     float  harm_target, timb_target, mor_target;
     float  drv, drv_target;        // post-filter drive (current + slew target, same machinery)
+    float  eko, eko_target;        // echo-bus send (current + slew target, same machinery — note_echo)
     int    instr_slot;             // instrument slot this voice was started from (for choke matching)
     float  last_out;               // this voice's previous mixed contribution — feeds the steal-declick tail
     // Karplus-Strong string state (INSTR_PLUCK): a write head + a FRACTIONAL read tap.
@@ -206,6 +208,37 @@ static Instrument    instr_bank[SOUND_INSTR_SLOTS];
 #define SOUND_WAVE_LEN   64
 static float         user_wave[SOUND_USER_WAVES][SOUND_WAVE_LEN];   // INSTR_USER0..3 single-cycle tables (filled via wave_set)
 
+// ── THE echo bus (audio-notes §17 step 3, decisions/0015) ─────────────────
+// ONE shared delay line — a bus with per-slot sends, not a per-voice effect
+// (a 2s line is ~345 KB; nobody wants 16 private ones). Audio-thread-owned;
+// params arrive via the request ring like everything else. Dormant until the
+// first echo()/instrument_echo()/note_echo() call ever arrives (echo_used),
+// so old carts pay nothing and stay bytes-identical.
+//   • tone = a one-pole lowpass INSIDE the feedback loop → repeats get darker
+//     each pass ("dark is a space property" — the thing scheduled-note echo
+//     fundamentally can't do)
+//   • feedback up to 1.1: a tanh soft-clip inside the loop turns >1.0 into a
+//     controlled tape-style self-oscillation instead of an explosion
+//   • the read tap is FRACTIONAL and the delay time slews toward its target
+//     with a clamped per-sample step — sweeping echo() time live pitch-bends
+//     the ringing tail exactly like varying tape speed (the RE-201 move)
+#define SOUND_ECHO_MAX (SOUND_SAMPLE_RATE * 2)   // 2s cap on the delay line
+static float echo_buf[SOUND_ECHO_MAX];
+static int   echo_widx        = 0;
+static float echo_time        = 0.375f * SOUND_SAMPLE_RATE;   // read-tap distance, samples (fractional)
+static float echo_time_target = 0.375f * SOUND_SAMPLE_RATE;   // default 375ms = dotted-8th at 120bpm
+static float echo_fb          = 0.35f;
+static float echo_tone_coef   = 0.0f;            // one-pole LP coefficient (set from tone; default in sound_init)
+static float echo_lp          = 0.0f;            // the loop filter's running state
+static bool  echo_used        = false;           // flips true on first echo API call, never back
+
+// tone 0..1 → loop-filter cutoff 300 Hz .. ~6.8 kHz (each repeat passes through it once)
+static float sound_echo_coef(float t) {
+    if (t < 0.0f) t = 0.0f; if (t > 1.0f) t = 1.0f;
+    float fc = 300.0f * powf(2.0f, t * 4.5f);
+    return 1.0f - expf(-6.2831853f * fc / (float)SOUND_SAMPLE_RATE);
+}
+
 // Request kinds for the ring buffer (main thread pushes → audio thread drains).
 // -1 in the `a` slot = "stop" for SR_SFX.
 // delay_samples: 0 = fire immediately; >0 = audio thread holds it in `delayed[]` and fires when countdown expires.
@@ -242,6 +275,9 @@ typedef enum {
     SR_INSTR_CHOKE  = 23,
     SR_INSTR_DRIVE  = 24,
     SR_NOTE_DRIVE   = 25,
+    SR_ECHO         = 26,
+    SR_INSTR_ECHO   = 27,
+    SR_NOTE_ECHO    = 28,
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -688,6 +724,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->timb = v->timb_target = ins->timbre;
     v->mor  = v->mor_target  = ins->morph;
     v->drv  = v->drv_target  = ins->drive;
+    v->eko  = v->eko_target  = ins->echo;
     v->last_out = 0.0f;
     v->ks_len = 0;
     v->md_on  = false;
@@ -899,6 +936,32 @@ static void sound_fire_req(SoundReq r) {
             if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
             v->drv_target = x;
         }
+    } else if (r.kind == SR_ECHO) {         // a=time_ms, b=feedback*1000, c=tone*1000
+        echo_used = true;
+        float ms = (float)r.a;
+        if (ms < 1.0f)    ms = 1.0f;
+        if (ms > 2000.0f) ms = 2000.0f;
+        echo_time_target = ms * (float)SOUND_SAMPLE_RATE / 1000.0f;
+        if (echo_time_target > (float)(SOUND_ECHO_MAX - 4)) echo_time_target = (float)(SOUND_ECHO_MAX - 4);
+        float fb = r.b / 1000.0f;
+        if (fb < 0.0f) fb = 0.0f; if (fb > 1.1f) fb = 1.1f;   // >1.0 = self-osc zone (tanh-bounded)
+        echo_fb = fb;
+        echo_tone_coef = sound_echo_coef(r.c / 1000.0f);
+    } else if (r.kind == SR_INSTR_ECHO) {   // a=slot, b=send*1000
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        float x = r.b / 1000.0f;
+        if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+        instr_bank[slot].echo = x;
+        echo_used = true;
+    } else if (r.kind == SR_NOTE_ECHO) {    // a=val*1000 (live, slewed)
+        echo_used = true;
+        Voice *v = sound_held_voice(r.e0, r.e1);
+        if (v) {
+            float x = r.a / 1000.0f;
+            if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+            v->eko_target = x;
+        }
     }
 }
 
@@ -928,6 +991,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
     // tiny (<64) so the cost is noise.
     for (unsigned int i = 0; i < frames; i++) {
         float mix = 0.0f;
+        float echo_in = 0.0f;   // this sample's summed sends into the echo bus
 
         for (int di = 0; di < delayed_count; ) {
             if (--delayed[di].delay_samples < 0) {
@@ -956,6 +1020,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 v->timb       += (v->timb_target   - v->timb)       * 0.002f;
                 v->mor        += (v->mor_target    - v->mor)        * 0.002f;
                 v->drv        += (v->drv_target    - v->drv)        * 0.002f;   // drive (note_drive)
+                v->eko        += (v->eko_target    - v->eko)        * 0.002f;   // echo send (note_echo)
             }
 
             // step advance? (SFX walk their step list; one-shots fall through to ADSR release)
@@ -1038,6 +1103,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             float contrib = s * v->vol * env * trem * 0.2f;
             v->last_out = contrib;        // remembered so a steal can declick (see steal_tail)
             mix += contrib;
+            if (v->sfx_idx < 0 && v->eko > 0.0005f) echo_in += contrib * v->eko;   // post-everything send (dry stays full)
 
             v->phase += v->freq * pitch_mul / (float)SOUND_SAMPLE_RATE;
             if (v->phase >= 1.0f) v->phase -= 1.0f;
@@ -1050,6 +1116,30 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         mix += steal_tail;
         steal_tail *= 0.992f;
         if (steal_tail > -1e-5f && steal_tail < 1e-5f) steal_tail = 0.0f;
+
+        // THE echo bus (dormant until the first echo API call — old carts skip this entirely)
+        if (echo_used) {
+            // tape-speed time slew: the read tap glides toward its target with a clamped
+            // per-sample step, so a live time sweep pitch-bends the ringing tail (RE-201)
+            float dstep = (echo_time_target - echo_time) * 0.0003f;
+            if (dstep >  0.5f) dstep =  0.5f;
+            if (dstep < -0.5f) dstep = -0.5f;
+            echo_time += dstep;
+            // fractional read tap behind the write head
+            float rp = (float)echo_widx - echo_time;
+            if (rp < 0.0f) rp += (float)SOUND_ECHO_MAX;
+            int   r0 = (int)rp, r1 = r0 + 1;
+            if (r1 >= SOUND_ECHO_MAX) r1 = 0;
+            float fr  = rp - (float)r0;
+            float tap = echo_buf[r0] + (echo_buf[r1] - echo_buf[r0]) * fr;
+            // the loop filter: every repeat passes through it once → darker each pass
+            echo_lp += (tap - echo_lp) * echo_tone_coef;
+            // write input + feedback through a tanh: feedback >1.0 saturates into a
+            // self-oscillation plateau instead of blowing up — the tape echo behaviour
+            echo_buf[echo_widx] = tanhf(echo_in + echo_lp * echo_fb);
+            if (++echo_widx >= SOUND_ECHO_MAX) echo_widx = 0;
+            mix += echo_lp;   // the filtered tap IS the audible echo (wet adds to dry)
+        }
 
         // master soft-clip: linear below the ±0.8 knee (quiet mixes stay bit-identical),
         // tanh-shaped above, asymptote at ±1.0 — a hot 16-voice sum folds over smoothly
@@ -1385,6 +1475,22 @@ void note_drive(int handle, float x) {
     sound_push_ctrl(SR_NOTE_DRIVE, (int)(x * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
+// ── echo: ONE shared bus with per-slot sends (audio-notes §17 step 3, decisions/0015) ──
+
+void echo(int time_ms, float feedback, float tone) {
+    sound_push_ctrl(SR_ECHO, time_ms, (int)(feedback * 1000.0f), (int)(tone * 1000.0f), 0, 0, 0);
+}
+
+void instrument_echo(int slot, float send) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_ECHO, slot, (int)(send * 1000.0f), 0, 0, 0, 0);
+}
+
+void note_echo(int handle, float x) {
+    if (handle <= 0) return;
+    sound_push_ctrl(SR_NOTE_ECHO, (int)(x * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
+}
+
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {
     if (handle <= 0) return;
     if (which < 0 || which >= SOUND_ENVS) return;
@@ -1460,7 +1566,18 @@ static void sound_init(void) {
         instr_bank[i].timbre     = 0.5f;
         instr_bank[i].morph      = 0.5f;
         instr_bank[i].drive      = 0.0f;   // clean until instrument_drive() — old carts unchanged
+        instr_bank[i].echo       = 0.0f;   // dry until instrument_echo() — old carts unchanged
     }
+
+    // echo bus: clean slate (matters for libtcc hot-reload + --det reproducibility)
+    memset(echo_buf, 0, sizeof(echo_buf));
+    echo_widx        = 0;
+    echo_time        = 0.375f * SOUND_SAMPLE_RATE;   // dotted-8th at 120bpm
+    echo_time_target = echo_time;
+    echo_fb          = 0.35f;
+    echo_tone_coef   = sound_echo_coef(0.5f);
+    echo_lp          = 0.0f;
+    echo_used        = false;
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence
     for (int w = 0; w < SOUND_USER_WAVES; w++)
