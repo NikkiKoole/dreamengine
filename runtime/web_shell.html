@@ -19,7 +19,17 @@
 </head>
 <body>
   <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-  <script>var Module = { canvas: document.getElementById('canvas') };</script>
+  <script>
+    var Module = { canvas: document.getElementById('canvas') };
+    // emscripten's GLFW shim (-s USE_GLFW=3) drops mouse events whose target isn't
+    // the canvas, and its own capture call (event.target.setCapture()) is a legacy
+    // Firefox/IE API that throws on Chrome/Safari. Without capture, a drag released
+    // outside the canvas loses its mouseup: mouse_released() never fires and
+    // mouse_down() sticks. Capturing the pointer retargets the release to the canvas.
+    Module.canvas.addEventListener('pointerdown', function (e) {
+      try { Module.canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+  </script>
   {{{ SCRIPT }}}
 </body>
 </html>
