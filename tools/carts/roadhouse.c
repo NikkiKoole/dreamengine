@@ -32,6 +32,7 @@
 
 #include "studio.h"
 #include "radio.h"
+#include "improv.h"   // THE IMPROVISER — born here, extracted when the cocktail trio became customer #2
 #include <stdio.h>
 #include <math.h>
 
@@ -117,110 +118,14 @@ static bool orgInit = false;
 
 #define srnd(n) rad_srnd(&rs, (n))
 
-// ══ THE IMPROVISER — melody brain #2 ══════════════════════════════════════
-// A solo is phrases; a phrase is the motif, developed. Rendered two bars at
-// a time into this buffer by render_phrase(), then play_step reads it out.
-// EVERYTHING in here uses engine rnd() — performance, never composition.
-typedef struct {
-    int  motif[4], motifN;     // the solo's idea: small degree steps
-    int  phraseNo;             // which 2-bar phrase of this solo
-    int  onset[16], deg[16], dur[16], n;   // the rendered phrase (32 steps)
-    int  regBase;              // register floor (climbs with the arc)
-    long renderedAt;           // the 2-bar window this buffer belongs to
-} Solo;
-static Solo solo;
+// ══ THE IMPROVISER — now shared machinery (runtime/improv.h) ══════════════
+// Born in this cart; extracted verbatim when the cocktail trio became its
+// second customer. Pure performance rnd — extraction can't break any seed.
+static Improv solo;
 
-// the tension arc 0..1 over a 16-bar solo: rise to the peak at 0.7, release
-static float arc_at(long barInSolo) {
-    float t = (float)barInSolo / 16.0f;
-    if (t < 0) t = 0;
-    if (t > 1) t = 1;
-    return t < 0.7f ? t / 0.7f : 1.0f - (t - 0.7f) / 0.3f * 0.55f;
-}
-
-static void solo_begin(int regBase) {
-    solo.motifN = 3 + rnd(2);                       // a NEW idea, never seeded
-    for (int i = 0; i < solo.motifN; i++) solo.motif[i] = rnd(5) - 2;   // -2..+2 degrees
-    if (solo.motif[0] == 0) solo.motif[0] = 1;      // the idea has to GO somewhere
-    solo.phraseNo = 0;
-    solo.regBase  = regBase;
-    solo.renderedAt = -1;
-}
-
-// degree index -> midi, walking the song's mode from the key center
+// degree index -> midi in this song's mode (the head riff still uses it)
 static int deg_to_midi(int degIdx, int center) {
-    int oct = 0;
-    while (degIdx < 0)  { degIdx += 7; oct--; }
-    while (degIdx >= 7) { degIdx -= 7; oct++; }
-    int m = center + MODE[sng.mode][degIdx] + oct * 12;
-    return m;
-}
-
-// render one 2-bar phrase: development op by phrase number, density/register
-// from the arc, blue substitutions, a long resolving tone + a breath at the end
-static void render_phrase(long barInSolo) {
-    float arc = arc_at(barInSolo);
-    int   op  = solo.phraseNo % 4;                  // statement/answer/sequence/answer-low
-    int   want = 3 + (int)(arc * 7.0f) + (op == 2 ? 1 : 0);   // 3..11 notes
-    if (op == 3) want = want * 2 / 3;               // the answer breathes
-    if (want > 11) want = 11;
-
-    // onsets: off-beat-leaning candidates; the peak doubles time with 16th pairs
-    static const int OC[14] = { 0, 2, 3, 5, 6, 8, 10, 11, 13, 16, 18, 21, 24, 26 };
-    int used[14] = { 0 };
-    solo.n = 0;
-    for (int k = 0; k < want && solo.n < 14; k++) {
-        int tries = 6;
-        while (tries--) {
-            int c = rnd(14);
-            if (!used[c]) { used[c] = 1; break; }
-        }
-    }
-    for (int c = 0; c < 14; c++) if (used[c]) solo.onset[solo.n++] = OC[c];
-    if (arc > 0.8f && solo.n < 13)                  // the PEAK: a double-time burst
-        for (int c = 0; c < 14 && solo.n < 13; c++)
-            if (used[c] && OC[c] + 1 < 28 && chance(40)) solo.onset[solo.n++] = OC[c] + 1;
-    // simple insertion sort — onsets must be in order for the gap math
-    for (int i = 1; i < solo.n; i++)
-        for (int j = i; j > 0 && solo.onset[j] < solo.onset[j - 1]; j--)
-            { int t = solo.onset[j]; solo.onset[j] = solo.onset[j - 1]; solo.onset[j - 1] = t; }
-
-    // pitches: walk the mode from a start point, stepping by the motif —
-    // the development op transposes/inverts the idea; blue notes intrude
-    int reg  = solo.regBase + (int)(arc * 10.0f);   // the register CLIMB
-    int d    = (op == 2 ? 2 : 0) + (op == 3 ? -2 : 0) + rnd(3) - 1;   // seq up / answer low
-    for (int i = 0; i < solo.n; i++) {
-        int step = solo.motif[i % solo.motifN];
-        if (op == 1) step = -step;                  // the ANSWER inverts the question
-        d += step;
-        if (d < -3) d = -3;
-        if (d > 10) d = 10;
-        solo.deg[i] = d;
-        solo.dur[i] = (i + 1 < solo.n ? solo.onset[i + 1] - solo.onset[i] : 32 - solo.onset[i]);
-        (void)reg;
-    }
-    if (solo.n > 0) {                               // resolve: end long, on home
-        solo.deg[solo.n - 1] = (solo.deg[solo.n - 1] > 4 ? 7 : 0) + (chance(40) ? 4 : 0);
-        if (solo.dur[solo.n - 1] < 6) solo.dur[solo.n - 1] = 6;
-    }
-    solo.phraseNo++;
-    solo.renderedAt = barInSolo;
-}
-
-// one solo note -> midi, with the blue intrusion (b3 / b7 / b5 over anything)
-static int solo_midi(int i, float arc) {
-    int center = 60 + sng.keyPc + (solo.regBase - 60 + (int)(arc * 10.0f)) - 60;
-    int m = deg_to_midi(solo.deg[i], 60 + sng.keyPc);
-    m += ((solo.regBase - 60) / 12) * 12 + (int)(arc * 10.0f) / 7 * 12;
-    while (m < solo.regBase - 5)  m += 12;
-    while (m > solo.regBase + 17) m -= 12;
-    if (chance(sng.blue)) {                         // the blue bend
-        static const int BLUE[3] = { 3, 10, 6 };
-        m = 60 + sng.keyPc + BLUE[rnd(3)];
-        while (m < solo.regBase - 5) m += 12;
-    }
-    (void)center;
-    return m;
+    return improv_deg_to_midi(degIdx, center, MODE[sng.mode]);
 }
 
 // ── song generation ───────────────────────────────────────────────────────
@@ -358,14 +263,14 @@ static void play_step(long abs, double pos) {
     if (sect == S_ORGAN || sect == S_GUITAR) {
         long soloBar = bar - (sect == S_ORGAN ? 16 : 32);
         if (soloBar == 0 && step == 0)              // a fresh idea per solo
-            solo_begin(sect == S_ORGAN ? 67 : 62);
-        if (step == 0 && bar % 2 == 0 && solo.renderedAt != soloBar)
-            render_phrase(soloBar);                 // two new bars of thought
-        float arc = arc_at(soloBar);
+            improv_begin(&solo, sect == S_ORGAN ? 67 : 62, 16, 1.0f);
+        if (step == 0 && bar % 2 == 0 && improv_due(&solo, soloBar))
+            improv_render(&solo, soloBar, MODE[sng.mode]);   // two new bars of thought
+        float arc = improv_arc(&solo, soloBar);
         int cs = (int)(s % 32);
         for (int i = 0; i < solo.n; i++)
             if (solo.onset[i] == cs) {
-                int m   = solo_midi(i, arc);
+                int m   = improv_midi(&solo, i, soloBar, sng.keyPc, MODE[sng.mode], sng.blue);
                 int vol = 4 + (arc > 0.6f ? 1 : 0);
                 int gat = (int)(stepMs * (solo.dur[i] > 4 ? solo.dur[i] : 2) * 0.9f);
                 if (sect == S_ORGAN)
