@@ -224,6 +224,43 @@ Worked showcases: **`foundry.cart.js`** (the step-by-step "watch the code draw"
 cart — every function gets a frame on stage) and **`monstermix.cart.js`**
 (`stamp()` part composition + magic `pal()` indices).
 
+### font-bake.js — real TTF text as sprites
+
+For title screens and logos: `tools/font-bake.js` rasterizes text from any TTF
+(every Google Font works) into the same 2D canvases sprite-draw uses — at
+**build time**, so the cart has zero runtime font code.
+
+```js
+const { bakeText, measure } = require('../font-bake.js')
+const g = bakeText('fonts/Bungee-Regular.ttf', 'DREAM',
+                   { px: 28, color: 10, aa: 9 })   // aa = darker edge color
+// g is an ordinary sprite-draw grid: outlined(g, 16), stamp it, split() it
+```
+
+- `measure(font, text, px)` → `{w, h}` without rasterizing — loop it to find the
+  biggest `px` that fits a slot budget.
+- `aa` maps partial-coverage edge pixels to a darker companion color so small
+  text doesn't look chewed. **If the cart recolors the text with `pal()`, remap
+  the `aa` color too** — fill and edge are separate palette indices, and
+  swapping only the fill leaves a clashing rim.
+- Border/shadow are just sprite-draw composition: `outlined(g, color)` for the
+  border (bake with `pad: 2` to leave room), and stamp a recolored `clone()` at
+  a 1px offset under the text for a drop shadow.
+- Fonts live in `tools/fonts/` (with their OFL license). New ones are one curl
+  from the google/fonts repo:
+  ```bash
+  curl -sL -o tools/fonts/<File>.ttf \
+    "https://github.com/google/fonts/raw/main/ofl/<family>/<File>.ttf"
+  ```
+- **The sheet is the budget**: 64 slots = 128×128 px of glyph space total. This
+  is a banner/title tool, not a text renderer — `print()` stays the workhorse
+  for dynamic text.
+
+Worked showcase: **`fontbake.cart.js`** — each word baked centered into a fixed
+slot-rect so the C side `sspr()`s a constant sheet region regardless of the
+word's width; the cart waves the title in strips and `pal()`-recolors it live
+(fill + edge together).
+
 ---
 
 ## Map format

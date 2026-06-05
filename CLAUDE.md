@@ -75,6 +75,11 @@ eventually2/
 │   │                   #            OUT, RAMP_DARKER, RAMP_LIGHTER
 │   │                   #   require('../sprite-draw.js') from any .cart.js in tools/carts/
 │   │                   #   showcases: foundry (watch each op draw), monstermix (stamp composition)
+│   ├── font-bake.js    #   bake real-TTF text (any Google Font) into sprite-draw canvases
+│   │                   #   at build time — titles/logos with zero runtime font code
+│   │                   #   exports: bakeText (px/color/aa-edge), measure, loadFont
+│   │                   #   fonts in tools/fonts/ (+ OFL); vendored opentype.js in tools/vendor/
+│   │                   #   showcase: fontbake cart; see guides/cart-authoring.md → font-bake.js
 │   ├── lint-carts.js   #   validate index.json: every cart tagged (kind[] from the
 │   │                   #   vocabulary, genre required for games) + every .cart.png
 │   │                   #   registered. Owns the tag vocabulary; run after adding carts
