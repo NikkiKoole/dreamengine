@@ -548,6 +548,43 @@ this guide's blocks; the copied core has now survived **ten** carts essentially
 verbatim — extraction is overdue, and the plan is written up below
 ("`radio.h` — the shared chassis").
 
+## The brain catalog — every reusable part, and how to combine them
+
+> Added 2026-06-05, after fourteen stations made the pattern obvious: a station
+> is not a monolith — it's a PICK of interchangeable brains (a chord brain + a
+> time feel + a bass brain + a melody brain + a form + a band). New carts should
+> shop this catalog first, and **novel combinations are first-class builds**:
+> "the walking bass under the improviser playing FM brass" is a legitimate
+> station nobody has made yet. The graduation rule governs reuse: a block lives
+> in its home cart until a SECOND customer wants it, then it moves to a shared
+> header (`radio.h` and `improv.h` are the two graduates so far).
+
+**Chord brains** (what the harmony does):
+
+| # | brain | home | character |
+|---|---|---|---|
+| 1 | functional walk + forced cadences | `bossa.c`, `cocktail.c` (jazz rate, secondary dominants, tritone sub) | pull — always comes home |
+| 2 | modal drift | `ambient.c` | float — no cadences, light shifting |
+| 3 | the vamp | `jangle.c`, `roadhouse.c` (2-chord modal) | sit — arrangement is the form |
+| 4 | stolen playbook | `jingle.c`, `citypop.c`, `house.c`, `yacht.c` (+ the mu chord as a named QUALITY) | sound like *someone* |
+| 5 | sampled loop, cut + rotated | `lowend.c` | nod — loop-born harmony |
+| 6 | alternating pair | `satie.c` | rock two chords for bars on end |
+| — | lounge templates + flavor rolls | `exotica.c` (borrowed-ivm6 dusk) | 4-brain's gentler cousin |
+
+**Time brains / feels**: schedule-ahead clock (`radio.h` `RadioClock`) · groove templates (`lowend.c` push/drag lanes) · swing 55–62% (`cocktail.c` has the full ride pattern) · machine-tight ±2ms (`citypop.c`/`ymo.c`/`house.c`) · lazy two-feel (`exotica.c`) · Purdie half-time shuffle + ghosts (`yacht.c`) · *future:* colotomic cycles (gamelan), the process form (motorik), volatility grammar (Aphex).
+
+**Melody brains**: #1 the re-pitched cell (everywhere since bossa) · **#2 THE IMPROVISER (`runtime/improv.h`)** — phrase-based solos, any mode, any register, any density; its inputs are deliberately generic: hand it a scale, a register, a length, a density and ANY instrument slot becomes a soloist · *future:* kotekan interlock (gamelan).
+
+**Bass brains**: voice-led roots (everywhere) · octave disco pop (`house.c`) · Hosono counterpoint generator (`ymo.c`) · seeded riddim/ostinato (`dub.c`, `roadhouse.c` piano bass) · **THE WALKING BASS (`cocktail.c` `walk_note()`)** — root → chord/scale motion → chromatic approach; *graduation candidate: second customer moves it to a header.*
+
+**Form brains**: 8×8 sectional + density curve (`rad_level`, everywhere) · verse/chorus + gear change (`citypop.c`, `yacht.c`) · the jam — head/solos/head (`roadhouse.c`) · the trio set + bass solo (`cocktail.c`) · THE DESK — per-phrase performance mixing (`dub.c`) · the filter ride as form (`house.c`).
+
+**Performance channels** (never seeded): the improviser's solos · THE AVIARY — aleatoric calls (`exotica.c`) · the desk (`dub.c`) · humanize jitter (everywhere).
+
+**The band** (timbre is a pick too): engine voices — PLUCK strings/guitars, MALLET vibes/bells, FM epiano/bells/bass/brass (`instrument()` ADSR included: brass = slow attack!) · drawn waves (`wave_set` — `roadhouse.c`'s Vox is the worked example) · borrowed machine circuits (`tr808.c` → house, `cr78.c` → yacht — copy the `instrument()` lines verbatim) · the per-song timbre roll (seeded band variation, `exotica.c`/`yacht.c` from day one).
+
+**A worked combination** (the kind of build this catalog exists for): *a hard-bop brass combo* = cocktail's walking bass + swing ride, `improv.h` soloing on an `INSTR_FM` brass patch (1:1 detent, timbre 0.9, **70ms attack** — the §8.8.3 swell makes the horn speak), chord brain #1 at jazz rate, the trio-set form with trading fours. Every part exists today; the cart is ~150 lines of glue plus a face.
+
 ## `radio.h` — the shared chassis, and how to lift it out
 
 Planned 2026-06-05. Inventory of what is verbatim (or one-rename-away) across
@@ -855,6 +892,27 @@ Genres scoring 4/4, in taste order:
 - **J-fusion (Casiopea / T-Square)** — citypop's instrumental twin, same
   Tokyo session scene — but it needs real solos, so it should wait for the
   Doors station's improviser (melody brain #2).
+
+### New brains per cart — the third build-order axis (2026-06-05)
+
+The first axis was engine fit, the second the citypop conditions; this one asks
+**what does the engine LEARN from this cart?** — counting genuinely new brains
+(see the brain catalog above), not genre appeal. The session that shipped
+stations 11–14 ranked the remaining candidates:
+
+| candidate | new brains | what they are |
+|---|---|---|
+| **gamelan** | **4** | seed-rolled TUNING (first exit from 12-TET) · colotomic time (form as nested gong cycles) · kotekan (melody as two interlocking voices, trace-verifiable) · ombak (paired-voice beating as the timbral identity) |
+| **Aphex / IDM wing** | 3 | RHYTHM BRAIN #1: drums as grammar with a volatility knob (0 = loop, 1 = never the same bar) · ratchets (sample-exact sub-hits) · two deliberately CROSSED density curves |
+| **KPM library** | 2 | MOOD METADATA AS THE FRONT DOOR ("give me tension" — the API games actually want; could retrofit the whole family as a mood-keyed library) · the drums-only BREAK as an arrangement feature |
+| **motorik / Stereolab** | 1–2 | THE PROCESS FORM: no sections at all — one unbroken line, accumulation/subtraction as a continuous function of song-time (house's ride, committed to per-song) · the modulation as a once-per-song EVENT (a story beat, not a position). Sneaky-high taste fit (Farfisa+Moog+lounge = exotica∩Plantasia∩ymo) and the best *game-loop* music on the list — no boundaries to interrupt |
+| **Plantasia** | 1 | the MELODY-FORWARD arrangement — first station where the lead is the protagonist (could promote the improviser from soloist to frontman) + the growing-houseplant face |
+| **Eno / Reich phasing** | 1 | prime-length cells drifting against each other; nearly free |
+| **Boards of Canada** | 1 | systematic MISTUNING as warmth (inconsistent per-voice detune + slow pitch LFOs as tape memory) |
+| **Italo disco** | **0** | pure recombination: ymo's arp + house's pump + citypop's gear change + FM keys + new minor templates. High gloss, an easy afternoon, teaches nothing — *that's fine, but schedule it as dessert* |
+
+(Ethio-jazz and J-fusion fell off the "blocked" list when `improv.h` shipped —
+they're now ordinary stations: scales-as-data + the improviser.)
 
 ### Batch two: the IDM / electronic wing
 
