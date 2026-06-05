@@ -382,6 +382,41 @@ lowpass ~1500 + tiny `ENV_CUTOFF` bark; **vinyl crackle** = `chance(8)` per fram
 (amount ~14, decay 60); **chip lead** = SQUARE + `instrument_duty(slot, 0.25f)` +
 `LFO_DUTY`.
 
+### Drawn waves — `wave_set` + `INSTR_USER0..3` (the lever nobody pulled)
+
+Beyond the five built-in waves there are four **user wave slots**: fill one with a
+single cycle and it plays like any other wave. Zero of the first ten stations used
+this — not because it's weak, but because this guide never mentioned it and the
+recipes above never needed it. What it buys: **static timbres the basic waves can't
+make** — an organ drawbar mix, a nasal clav/reed, a brassy harmonic spread.
+Anything whose recipe is "this fixed blend of partials":
+
+```c
+// organ — drawbar sum 8'+4'+2⅔'+2' (formula lifted from waveed.c's seed())
+float t[64];
+for (int i = 0; i < 64; i++) {
+    float ph = i / 64.0f;
+    t[i] = 0.55f*sinf(ph* 6.2832f) + 0.28f*sinf(ph*12.566f)
+         + 0.18f*sinf(ph*18.850f) + 0.12f*sinf(ph*25.133f);
+}
+wave_set(0, t, 64);                                  // → INSTR_USER0
+instrument(I_ORGAN, INSTR_USER0, 12, 80, 6, 90);     // skank / organ-bubble voice
+```
+
+To *design* a wave instead of computing one, run the **`waveed` cart**: draw with
+the mouse (a live drone morphs as you edit), press **E** to export the float array
+as paste-ready C. Its `seed()` function is the current de-facto bank — sine,
+rounded square, saw, organ drawbars, vocal/clav, random-walk wobble, triangle —
+copy the four-line formula you want into your cart's `init()`. (The planned
+endgame is a curated `runtime/waves.h` carts can `#include` instead of copying —
+see audio-notes §13 for when that lands and why not sooner.)
+
+Know the limit: a drawn cycle is a **snapshot, not behavior**. It cannot make the
+sounds the radio family actually ran out of — epiano pickup growl, FM bell
+beating, plucked-string decay (audio-notes §12). Those need engines. Reach for
+`wave_set` when the wish is "this harmonic color, please"; reach for an engine
+(or wait for one) when the sound has to *move inside a single note*.
+
 ### Echo is just more notes (dub.c)
 
 Dub's defining effect needs no FX engine — `schedule_hit` already schedules the

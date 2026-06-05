@@ -24,6 +24,10 @@
 #define SOUND_INSTR_SLOTS  32   // 0-4 = the raw waves; 5-31 cart-defined (rich patch carts like modrack want banks per wave)
 
 // Waveform IDs (INSTR_*) come from studio.h.
+// Wave ids below INSTR_ENGINE_BASE are wavetable oscillators (sound_osc); at/above they are
+// modeled ENGINES — stateful per-note simulations that read the three macros (harm/timb/mor).
+#define INSTR_ENGINE_BASE  INSTR_PLUCK
+#define SOUND_KS_MAX       1024   // Karplus-Strong delay line cap (~4KB/voice) — bottoms out around 43Hz / MIDI 29
 
 // One step in an SFX. pitch=0 means silence; vol 0..7.
 typedef struct {
@@ -57,6 +61,7 @@ typedef struct {
     int   env_a_samp[2];            // attack, in samples
     int   env_d_samp[2];            // decay, in samples
     float env_amount[2];            // 0 = off; bipolar; units depend on dest (Hz / semitones / 0..1)
+    float harmonics, timbre, morph; // engine macros 0..1 (INSTR_PLUCK+) — meaning is per-engine; default 0.5
 } Instrument;
 
 #define SOUND_LFOS 3
@@ -91,6 +96,12 @@ typedef struct {
     int    owner_slot, owner_gen;  // which handle owns this voice (for stale-handle rejection)
     float  freq_target, vol_target, cutoff_target, duty_target, flt_q_target;
     float  freq_slew;              // pitch slew coefficient/sample — note_glide() sets it (default = snappy)
+    // engine macros (current + slew target, riding the same machinery as cutoff/duty)
+    float  harm, timb, mor;
+    float  harm_target, timb_target, mor_target;
+    // Karplus-Strong string state (INSTR_PLUCK) — pitch comes from the buffer LENGTH, not phase
+    float  ks_buf[SOUND_KS_MAX];
+    int    ks_len, ks_idx;
 } Voice;
 
 static Voice         voices[SOUND_VOICES];
@@ -117,7 +128,8 @@ static float         user_wave[SOUND_USER_WAVES][SOUND_WAVE_LEN];   // INSTR_USE
 //       4=set duty, 5=set lfo, 6=set filter,
 //       7=note_on, 8=note_off, 9=note_pitch, 10=note_vol, 11=note_cutoff, 12=note_duty,
 //       13=note_off_all, 14=note_res, 15=note_lfo, 16=note_filter, 17=note_glide,
-//       18=instrument_env, 19=note_env, 20=wave_set (4 samples/request).
+//       18=instrument_env, 19=note_env, 20=wave_set (4 samples/request),
+//       21=instrument macro (harmonics/timbre/morph), 22=note macro (live, slewed).
 //       -1 in the a slot = "stop" for sfx.
 // delay_samples: 0 = fire immediately; >0 = audio thread holds it in `delayed[]` and fires when countdown expires.
 // e0/e1/e2: extra payload (instrument attack/decay/release samples).
@@ -223,6 +235,74 @@ static inline float sound_osc(int wave, float phase, float duty, int *noise_stat
     }
     }
     return 0.0f;
+}
+
+// ───────── modeled engines (wave ids >= INSTR_ENGINE_BASE) ─────────
+// An engine is a stateful per-note simulation, not a wavetable — sound_osc never sees these
+// ids. Every engine reads the same three macros (v->harm / v->timb / v->mor); the mapping
+// from macro to internal parameter is the engine's taste, curated here, never exposed as API.
+
+// PLUCK note-on: excite the string. Karplus-Strong = fill a delay line of length SR/freq
+// with a noise burst, then per-sample average + feedback (sound_engine_sample). The macros
+// shape the EXCITATION here (timbre/morph) and the FEEDBACK there (harmonics).
+static void sound_pluck_start(Voice *v) {
+    int len = (int)((float)SOUND_SAMPLE_RATE / (v->freq > 20.0f ? v->freq : 20.0f));
+    if (len < 2) len = 2;
+    if (len > SOUND_KS_MAX) len = SOUND_KS_MAX;
+    v->ks_len = len;
+    v->ks_idx = 0;
+    // timbre = pick brightness: one-pole lowpass over the noise burst
+    // (0 = soft felt thud, 1 = hard pick, full spectrum)
+    float k  = 0.04f + 0.96f * v->timb * v->timb;
+    float lp = 0.0f;
+    for (int i = 0; i < len; i++) {
+        v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+        float n = ((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f;
+        lp += k * (n - lp);
+        v->ks_buf[i] = lp;
+    }
+    // morph = pick position: comb-filter the excitation (subtract a shifted copy) — notches
+    // the harmonics a real pluck point cancels. 0 = near the bridge (full), 1 = mid-string (hollow)
+    int pos = (int)(len * (0.04f + 0.46f * v->mor));
+    if (pos > 0) {
+        float tmp[SOUND_KS_MAX];
+        memcpy(tmp, v->ks_buf, len * sizeof(float));
+        for (int i = 0; i < len; i++) v->ks_buf[i] = tmp[i] - tmp[(i + pos) % len];
+    }
+    // remove DC (the feedback loop would sustain it forever) + normalize so every
+    // macro setting plucks at the same loudness
+    float mean = 0.0f;
+    for (int i = 0; i < len; i++) mean += v->ks_buf[i];
+    mean /= (float)len;
+    float peak = 0.0f;
+    for (int i = 0; i < len; i++) {
+        v->ks_buf[i] -= mean;
+        float a = fabsf(v->ks_buf[i]);
+        if (a > peak) peak = a;
+    }
+    if (peak > 0.0001f) {
+        float g = 0.9f / peak;
+        for (int i = 0; i < len; i++) v->ks_buf[i] *= g;
+    }
+}
+
+// One engine sample. PLUCK is the only engine so far; this grows a dispatch when #2 lands.
+static inline float sound_engine_sample(Voice *v) {
+    if (v->ks_len < 2) return 0.0f;   // engine id without a note-on init (e.g. an sfx step) — stay silent
+    int   i   = v->ks_idx, j = (i + 1 >= v->ks_len) ? 0 : i + 1;
+    float cur = v->ks_buf[i];
+    // harmonics = ring time, mapped PERCEPTUALLY: the knob sets a target decay time
+    // (T60 ≈ 0.04s thunk → ~2min drone, exponential so every knob position is an audible
+    // step) and the feedback coefficient is derived from it per note frequency. A raw
+    // linear fb range sounds dead — at 0.985 a 220Hz string still rings a full second, so
+    // the bottom three-quarters of the knob did nothing. Frequency compensation keeps the
+    // knob honest across the neck; at the very top the 0.5 average below becomes the real
+    // ceiling (it still darkens highs faster — which is what sells "string").
+    float t60 = 0.04f * expf(v->harm * 8.0f);             // 0.04 * 2980^harm seconds to -60dB
+    float fb  = expf(-6.9078f / (t60 * v->freq));         // fb^(freq*t60) = 0.001
+    v->ks_buf[i] = (cur + v->ks_buf[j]) * 0.5f * fb;
+    v->ks_idx = j;
+    return cur;
 }
 
 // ADSR amplitude during the gated (held) portion of a note. `s` = samples since note-on.
@@ -340,6 +420,12 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->flt_low        = 0.0f;
     v->flt_band       = 0.0f;
     v->freq_slew        = 0.006f;   // ~snappy by default; note_glide() slows it for portamento
+    // engine macros ride the same current/target slew pattern as cutoff/duty
+    v->harm = v->harm_target = ins->harmonics;
+    v->timb = v->timb_target = ins->timbre;
+    v->mor  = v->mor_target  = ins->morph;
+    v->ks_len = 0;
+    if (v->wave >= INSTR_ENGINE_BASE) sound_pluck_start(v);   // excite the string (the only engine so far)
     v->step_samples     = 0;
     v->step_len_samples = gate_samples;
     v->rel_start        = sound_adsr_gated(gate_samples, v->a_samp, v->d_samp, v->sustain);
@@ -487,6 +573,23 @@ static void sound_fire_req(SoundReq r) {
             user_wave[r.a][r.b + 2] = r.e1 / 32767.0f;
             user_wave[r.a][r.b + 3] = r.e2 / 32767.0f;
         }
+    } else if (r.kind == 21) {      // instrument engine macro: a=slot, b=which 0..2, c=val*1000
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        float x = r.c / 1000.0f;
+        if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+        if      (r.b == 0) instr_bank[slot].harmonics = x;
+        else if (r.b == 1) instr_bank[slot].timbre    = x;
+        else if (r.b == 2) instr_bank[slot].morph     = x;
+    } else if (r.kind == 22) {      // note engine macro (live, slewed): a=which 0..2, b=val*1000
+        Voice *v = sound_held_voice(r.e0, r.e1);
+        if (v) {
+            float x = r.b / 1000.0f;
+            if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+            if      (r.a == 0) v->harm_target = x;
+            else if (r.a == 1) v->timb_target = x;
+            else if (r.a == 2) v->mor_target  = x;
+        }
     }
 }
 
@@ -540,6 +643,9 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 v->flt_cutoff += (v->cutoff_target - v->flt_cutoff) * 0.0015f;  // smooth filter sweep
                 v->flt_q      += (v->flt_q_target  - v->flt_q)      * 0.0015f;  // smooth resonance sweep
                 v->duty       += (v->duty_target   - v->duty)       * 0.003f;
+                v->harm       += (v->harm_target   - v->harm)       * 0.002f;   // engine macros (note_harmonics/timbre/morph)
+                v->timb       += (v->timb_target   - v->timb)       * 0.002f;
+                v->mor        += (v->mor_target    - v->mor)        * 0.002f;
             }
 
             // step advance? (SFX walk their step list; one-shots fall through to ADSR release)
@@ -602,7 +708,9 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 if (duty > 0.95f) duty = 0.95f;
             }
 
-            float s = sound_osc(v->wave, v->phase, duty, &v->noise_state);
+            // engine fork: wavetable oscillators below INSTR_ENGINE_BASE, modeled engines at/above
+            float s = (v->wave >= INSTR_ENGINE_BASE) ? sound_engine_sample(v)
+                                                     : sound_osc(v->wave, v->phase, duty, &v->noise_state);
             if (v->sfx_idx < 0 && v->flt_mode != FILTER_OFF) {
                 if (cutoff < 20.0f) cutoff = 20.0f;
                 if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
@@ -907,6 +1015,24 @@ void instrument_env(int slot, int which, int dest, int attack_ms, int decay_ms, 
     sound_push_ctrl(18, slot, which, dest, a, d, (int)(amount * 1000.0f));
 }
 
+// ── engine macros: three 0..1 knobs every modeled engine answers — six functions, forever
+//    (the count never grows with the engine roster; see audio-notes §8.1.1) ──
+
+static void sound_macro_slot(int slot, int which, float x) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(21, slot, which, (int)(x * 1000.0f), 0, 0, 0);
+}
+static void sound_macro_note(int handle, int which, float x) {
+    if (handle <= 0) return;
+    sound_push_ctrl(22, which, (int)(x * 1000.0f), 0, handle & 7, handle >> 3, 0);
+}
+void instrument_harmonics(int slot, float x) { sound_macro_slot(slot, 0, x); }
+void instrument_timbre(int slot, float x)    { sound_macro_slot(slot, 1, x); }
+void instrument_morph(int slot, float x)     { sound_macro_slot(slot, 2, x); }
+void note_harmonics(int handle, float x)     { sound_macro_note(handle, 0, x); }
+void note_timbre(int handle, float x)        { sound_macro_note(handle, 1, x); }
+void note_morph(int handle, float x)         { sound_macro_note(handle, 2, x); }
+
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {
     if (handle <= 0) return;
     if (which < 0 || which >= SOUND_ENVS) return;
@@ -978,6 +1104,9 @@ static void sound_init(void) {
         instr_bank[i].flt_mode   = FILTER_OFF;
         instr_bank[i].flt_cutoff = 1000.0f;
         instr_bank[i].flt_q      = 1.0f;
+        instr_bank[i].harmonics  = 0.5f;   // engine macros: center detent, Plaits-style
+        instr_bank[i].timbre     = 0.5f;
+        instr_bank[i].morph      = 0.5f;
     }
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence

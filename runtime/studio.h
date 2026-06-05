@@ -244,6 +244,10 @@ void map_scale(int n);                                  // integer zoom for map 
 #define INSTR_USER1   6
 #define INSTR_USER2   7
 #define INSTR_USER3   8
+// modeled ENGINES — wave ids 16+. An engine computes its sound per note (a tiny physical
+// simulation, not a wavetable). Wrap one in a slot like any wave — instrument(5, INSTR_PLUCK, …)
+// — and shape it with the three macro knobs below (instrument_harmonics/timbre/morph).
+#define INSTR_PLUCK   16  // Karplus-Strong plucked string — guitar/harp/koto. Decays on its own (give it a long hit() or release); pitch locks at note-on
 
 void sfx(int n);                              // play sfx slot n; -1 stops all sfx
 void note(int midi, int instr, int vol);                  // one-shot note (250ms). vol 0..7. `instr` is an instrument slot (0..4 are the waves above; define 5..31 yourself)
@@ -291,6 +295,15 @@ void instrument_filter(int slot, int mode, int cutoff_hz, int resonance);  // mo
 #define ENV_PITCH   1   // pitch blip — drum punch / attack snap / zap. amount in semitones (+ starts sharp, settles to the note)
 #define ENV_DUTY    2   // pulse-width sweep (square/pulse slots only). amount 0.0..1.0
 void instrument_env(int slot, int which, int dest, int attack_ms, int decay_ms, float amount);  // attach mod-envelope `which` (0..1) to a slot. dest ENV_*. pluck: ENV_CUTOFF amount 1500, attack 0, decay 120. amount 0 = off
+
+// engine macros — three 0..1 knobs that EVERY modeled engine (INSTR_PLUCK, …) answers; what
+// they sweep is per-engine, but the API never grows when a new engine lands. Defaults: 0.5.
+void instrument_harmonics(int slot, float x);  // engine macro 0..1 — PLUCK: ring time (0 dead slap, 1 near-endless sustain)
+void instrument_timbre(int slot, float x);     // engine macro 0..1 — PLUCK: pick brightness (0 soft felt thud, 1 sharp bright pick)
+void instrument_morph(int slot, float x);      // engine macro 0..1 — PLUCK: pick position (0 near the bridge = full, 1 mid-string = hollow)
+void note_harmonics(int handle, float x);      // live macro on a held note, slewed — PLUCK: reshapes the ring while it sounds
+void note_timbre(int handle, float x);         // live macro on a held note, slewed — PLUCK: the pick is already struck, applies at the next note
+void note_morph(int handle, float x);          // live macro on a held note, slewed — PLUCK: the pick is already struck, applies at the next note
 
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti

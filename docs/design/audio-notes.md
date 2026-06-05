@@ -561,6 +561,7 @@ timbres. But SCW gives a rich *snapshot*, not the *living behavior* — the EP p
 the organ key-click, the piano's inharmonic dispersion — that makes the modeled engines feel
 alive. Treat SCW as a cheap timbre-source lever (it could even feed an organ drawbar), not as
 a substitute for the modeled instruments. Aliasing at high notes is acceptable/retro here.
+*Build-order decision — when to invest in this vs. the engines: §13.*
 
 ### 8.5 How this reframes the roadmap (§7)
 
@@ -1063,6 +1064,10 @@ the wall was hit, and scored against §1's leverage rule.
    filtered TRI envelope: bossa's nylon, jangle's chorus-wobble, the planned
    Krieger drone guitar. One wave type covers guitar / harp / koto — and KS
    variants do metallic percussion too. Famously ~20 lines.
+   **→ SHIPPED 2026-06-05** as `INSTR_PLUCK` + the §8.1.1 three-macro surface
+   (six functions, ctrl kinds 21/22), showcased by the `pluck` cart. The
+   jangle/bossa retrofit (the ear test against shipped stations) is the
+   open follow-up.
 
 4. **Finer dynamics.** `vol 0..7` is coarse: ghost notes jump audibly
    between 1 and 2, and satie.c — solo piano, where *touch is the whole
@@ -1081,3 +1086,68 @@ complete in practice — house.c's entire filter ride was `note_cutoff` +
 in game-music.md so far. Also `wave_set`/`INSTR_USER0..3` went **unused by
 all ten stations** — a drawn single-cycle wave could fake organ drawbars or
 a nasal clav today; worth a reminder in the guide before adding anything.
+(Done — the guide now has a "Drawn waves" recipe section. But don't read
+that observation as "the SCW bank is the next move" — it isn't; the
+investment call is laid out in §13.)
+
+## 13. The lay of the land — SCWs vs. engines (decided 2026-06-05)
+
+§8.4 (single-cycle waves) and §8.5–8.9 (modeled engines) keep getting
+discussed in the same breath, and §12's closing note about `wave_set` going
+unused makes it worse: it *reads* like the cheap, shipped, underused lever
+should be picked up first. This section fixes the map so a fresh session
+doesn't re-derive (or re-confuse) the decision.
+
+**Two different levers for two different problems:**
+
+| | `wave_set` / SCW bank | modeled engines (§8) |
+|---|---|---|
+| what it is | a static single-cycle table — a *snapshot* of a timbre | per-voice DSP — *behavior over time* |
+| what it buys | fixed harmonic recipes: organ drawbars, nasal clav, brass blend | epiano pickup growl, FM/bell inharmonic beating, plucked-string decay |
+| §12 gaps it solves | **none** (the gaps are all temporal/relational) | gaps 2 and 3 — the blocking ones |
+| stations it unblocks | none — it *colors* stations that already work | the whole parked batch: Italo, Steely Dan/AOR, gamelan, the Doors, ethio-jazz |
+| cost | an afternoon | real work — but pluck is pre-designed (§8.2 buffer, §8.5 ordering, §8.8 sketch, §11 decoupled mod-env) |
+
+**The decision: engines first, pluck specifically.** Three separate design
+passes (§8.5, §8.8, §11) already converge on KS pluck as the first engine,
+and §12 added the empirical evidence: every guitar on the dial is a faked
+filtered TRI. Pluck also validates against *shipped* carts (retrofit
+jangle/bossa) before any new station needs it — the cart-ships-with-the-API
+rule is satisfied from day one.
+
+**The trap this section exists to prevent:** building the SCW bank first
+*because it's easy* and counting it as progress on §12. It wouldn't be —
+the parked stations would still be parked. Cheap-and-shippable is exactly
+how an afternoon lever displaces the week that moves the project.
+
+**Order of work:**
+
+1. **KS pluck** (§8.5 phase 1) — retrofit jangle or bossa as the proof.
+   **→ SHIPPED 2026-06-05**: `INSTR_PLUCK` (per-voice KS buffer, §8.2 made
+   concrete) + the full §8.1.1 macro surface (`instrument_harmonics/timbre/
+   morph` + `note_*` twins — landed as ctrl kinds 21/22; the sketch's 18/19
+   were taken by §11's mod-envelopes by ship time) + the `pluck` showcase
+   cart. The station retrofit is still open.
+2. **Choke groups** (§12 gap 1) — tiny surface; ride along with whatever
+   drum work happens near the pluck retrofits, no slot of its own.
+3. **Second oscillator / FM** (§12 gap 2) — when the Italo/gamelan/AOR
+   batch actually starts. That batch defines the requirements and settles
+   the FM-vs-modal-epiano ambiguity §12 left open: build for the station
+   in front of you, not the abstraction. (The unison-detune flag may ship
+   earlier — it's the cheapest 80% and pure polyphony relief.)
+4. **The SCW bank — opportunistically**, the first time a station wants
+   organ or clav color (the Doors' Vox Continental is the likely trigger).
+   Shape is decided, see below.
+5. **Reverb** (§8.10 / §12 gap 5) — stays deferred, as both docs agree.
+
+**The SCW bank's decided shape** (so the debate doesn't rerun): a
+hand-written **`runtime/waves.h`** as single source of truth — `wave_gen(kind,
+float out[64])` fills a buffer, convenience `wave_seed(slot, kind)` calls
+`wave_set()`; carts get one `#include` + one call. **`waveed.c` includes it**
+and drives its seed buttons from the same table, becoming the bank's
+interactive auditioner — one definition, no drift. Keep it small and
+researched: 6–8 named shapes beats 20 speculative ones. Explicitly
+rejected: a JS source of truth + codegen (the `gen-tcc-symbols` pattern
+doesn't apply — waves aren't baked into `.cart.png`, they're set at runtime
+from C, so the JS side would have **no consumer**), and dual hand-written
+JS+C files (sync discipline purchasing nothing).

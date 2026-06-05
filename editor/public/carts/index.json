@@ -2268,5 +2268,14 @@
       "instrument"
     ],
     "homage": "Daft Punk / Stardust (French house)"
+  },
+  {
+    "title": "pluck",
+    "description": "INSTR_PLUCK showcase - the first modeled ENGINE (wave ids 16+): every note excites a Karplus-Strong string simulation instead of reading a wavetable, so plucks decay and darken on their own like a real string. Eight pentatonic strings + the three engine macros every future engine answers too (instrument_harmonics = ring time, instrument_timbre = pick brightness, instrument_morph = pick position) - turn a knob and hear the same string go from dead thunk to endless drone, felt thumb to hard pick, full to hollow. A S D F G H J K pluck strings (or click one), drag a slider with the mouse (or LEFT/RIGHT + UP/DOWN), SPACE strum, P autoplay on/off.",
+    "file": "pluck.cart.png",
+    "kind": [
+      "instrument",
+      "tech-demo"
+    ]
   }
 ]
