@@ -94,6 +94,11 @@ swipes judged at lift time (`gest_update()` + `swiped(dir)` / `swiped_in(rect)`
 side-by-side against rgestures (test 8) — swipe while drumming other fingers;
 9 keeps firing where 8 dies.
 
+**DEVICE-CONFIRMED same day (iPhone, live gallery): it works.** Five
+simultaneous fingers on the piano — a full chord at Safari's touch ceiling —
+each note released by exactly its own finger. The release API + per-finger
+model survives contact with hardware on day one.
+
 ## 4. Raylib gestures — what's available, and the lean
 
 Raylib ships a gestures module (`rgestures.h`) the engine doesn't expose:
