@@ -231,10 +231,16 @@ static void echo_hit(int dly, int midi, int instr, int vol, int dur, int taps) {
 // The scheduled taps above ARE the rhythm of dub echo and they stay. What
 // they could never do is the diffuse, darkening wash a real tape loop puts
 // under them — that's the engine's echo bus: same dotted-8th time, repeats
-// losing brightness every pass. Modest sends on the echoed voices; the
-// throw rides the skank's send fader hot (see the desk).
+// losing brightness every pass. And the bus is PERFORMED, not just set:
+// a throw cranks the feedback toward runaway for the whole phrase (fbHot),
+// and sometimes the engineer grabs the tape speed mid-throw (bendF) — the
+// delay time sweeps down and back while the tail rings, so the repeats
+// pitch-bend. That warble is the King Tubby signature.
+static bool  fbHot = false;    // feedback ridden hot through a throw phrase
+static float bendF = -1.0f;    // tape-bend phase 0..1 (-1 = idle)
+
 static void apply_echo_bus(void) {
-    echo((int)(60000.0 / (tempo * 4) * 3.0), 0.45f, 0.22f);
+    echo((int)(60000.0 / (tempo * 4) * 3.0), fbHot ? 0.8f : 0.45f, 0.22f);
 }
 
 // voice-led bass register, deep: G1..G2
@@ -325,13 +331,19 @@ static void play_step(long abs, double pos) {
                 echo_hit(dly, gv[k], I_SKANK, 5, 70, lvl >= 3 ? 6 : 4);
             vu += 3;
         }
-        // ride the skank's send fader: hot through a throw phrase so the taps
-        // dissolve into the bus's darkening wash, back to the base wash after
-        instrument_echo(I_SKANK, throwNow ? 0.8f : 0.18f);
-        // the meltdown toy
-        if (lvl >= 3 && chance(18))
+        // the desk's hands on the bus: a throw cranks send AND feedback for
+        // the phrase — the ghost rings near runaway for bars, not 4 repeats —
+        // and sometimes grabs the tape speed too (the pitch-bending warble)
+        instrument_echo(I_SKANK, throwNow ? 0.9f : 0.18f);
+        fbHot = throwNow;
+        apply_echo_bus();
+        if (throwNow && lvl >= 2 && chance(50)) bendF = 0.0f;
+        // the meltdown toy — siren + a tape bend, the full Tubby meltdown
+        if (lvl >= 3 && chance(18)) {
             for (int k = 0; k < 3; k++)
                 schedule_hit(dly + k * (int)(stepMs * 2), 80 - k * 5, I_SIREN, 3, 240);
+            bendF = 0.0f;
+        }
     }
 
     // BASS — the riddim, transposed to the chord. The deepest thing here.
@@ -441,6 +453,18 @@ void update(void) {
     double pos = (double)beat() * 4.0 + beat_pos() * 4.0;
     stepMs = 60000.0 / (tempo * 4);
 
+    // the tape bend: sweep the delay time down 60% and back over ~1.5s while
+    // the tail rings — the bus's read tap glides, so the repeats pitch-bend
+    // up the way a sped-up tape loop does. THE King Tubby move.
+    if (bendF >= 0.0f) {
+        bendF += 0.011f;
+        if (bendF >= 1.0f) { bendF = -1.0f; apply_echo_bus(); }
+        else {
+            float warp = 1.0f - 0.6f * sinf(bendF * 3.14159f);
+            echo((int)(stepMs * 3.0 * warp), fbHot ? 0.8f : 0.45f, 0.22f);
+        }
+    }
+
     if (!booted) {
         setup_instruments();
         apply_voicing();
@@ -493,6 +517,7 @@ void update(void) {
     watch("sect", "%s", SN[sect_of(bar)]);
     watch("chord", "%s", nowChord[(int)(bar % 4)]);
     watch("desk", "%d%d%d%d%d", dkBass, dkDrums, dkSkank, dkOrg, dkMelo);
+    watch("bus", "fb%s bend%.2f", fbHot ? "HOT" : "0.45", bendF);
 #endif
 }
 
