@@ -188,6 +188,21 @@ function mobileTier(name, meta) {
   return 'ready'
 }
 
+// "date added" = the cart's FIRST commit into the repo (its .cart.png landing
+// in editor/public/carts/), read from git history at gallery-build time. This
+// survives bulk publishes: redeploying all of site/ at once doesn't flatten
+// the timeline, because the date never came from site/ in the first place.
+function dateAdded(name) {
+  try {
+    const out = execFileSync('git',
+      ['log', '--diff-filter=A', '--format=%as', '--', `editor/public/carts/${name}.cart.png`],
+      { cwd: ROOT, encoding: 'utf8' }).trim()
+    return out ? out.split('\n').pop() : ''   // log is newest-first; the A(dd) is last
+  } catch (e) { return '' }
+}
+
+const TIER_RANK = { ready: 0, mostly: 1, rough: 2, desktop: 3 }
+
 function buildGallery() {
   if (!fs.existsSync(SITE_DIR)) fs.mkdirSync(SITE_DIR, { recursive: true })
   const built = fs.readdirSync(SITE_DIR, { withFileTypes: true })
@@ -197,19 +212,21 @@ function buildGallery() {
   const entries = []
   for (const name of built) {
     const meta = cartMeta(name) || { title: name, description: '' }
-    entries.push({ name, ...meta })
+    entries.push({ name, added: dateAdded(name), tier: mobileTier(name, meta), ...meta })
   }
-  entries.sort((a, b) => a.title.localeCompare(b.title))
+  // server-side default order = newest first (the client re-sorts live)
+  entries.sort((a, b) => (b.added || '').localeCompare(a.added || '') || a.title.localeCompare(b.title))
 
   const cards = entries.map(e => {
-    const badge = BADGES[mobileTier(e.name, e)]
+    const badge = BADGES[e.tier]
     return `
-    <a class="card" href="${e.name}/">
+    <a class="card" href="${e.name}/" data-title="${esc(e.title.toLowerCase())}" data-added="${e.added}" data-tier="${TIER_RANK[e.tier] ?? 9}">
       <img src="${e.name}/cart.png" alt="${esc(e.title)}" loading="lazy">
       <div class="body">
         <h2>${esc(e.title)}${e.genre ? ` <span class="tag">${esc(e.genre)}</span>` : ''}</h2>
         ${badge ? `<div class="badge ${badge.cls}">${badge.text}</div>` : ''}
         <p>${esc(e.description)}</p>
+        ${e.added ? `<div class="added">added ${e.added}</div>` : ''}
       </div>
     </a>`
   }).join('\n')
@@ -222,36 +239,117 @@ function buildGallery() {
 <title>dreamengine — playable carts</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1b1c1f; color: #e8e6e3; font-family: ui-monospace, Menlo, monospace; padding: 24px; }
+  :root { --bg:#1b1c1f; --card:#25262b; --border:#34353b; --fg:#e8e6e3;
+          --dim:#9a948c; --faint:#5f5a54; --accent:#ff6c24; --link:#06b5e0; }
+  body.day { --bg:#f2efe9; --card:#ffffff; --border:#d8d4cc; --fg:#26241f;
+             --dim:#6b665e; --faint:#a59f95; }
+  body { background: var(--bg); color: var(--fg); font-family: ui-monospace, Menlo, monospace; padding: 24px; }
   header { max-width: 960px; margin: 0 auto 24px; }
-  h1 { font-size: 22px; } h1 span { color: #ff6c24; }
-  header p { color: #9a948c; margin-top: 6px; font-size: 13px; }
-  header a { color: #06b5e0; }
+  h1 { font-size: 22px; } h1 span { color: var(--accent); }
+  header p { color: var(--dim); margin-top: 6px; font-size: 13px; }
+  header a { color: var(--link); }
+  .controls { max-width: 960px; margin: 0 auto 16px; display: flex; gap: 6px; align-items: center;
+              flex-wrap: wrap; color: var(--faint); font-size: 12px; }
+  .controls button { background: var(--card); border: 1px solid var(--border); color: var(--dim);
+                     font: inherit; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .controls button:hover { border-color: var(--accent); }
+  .controls button.on { color: var(--fg); border-color: var(--accent); }
+  .controls .sep { margin: 0 4px; }
   .grid { max-width: 960px; margin: 0 auto; display: grid; gap: 16px;
           grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-  .card { background: #25262b; border: 1px solid #34353b; border-radius: 8px;
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
           overflow: hidden; text-decoration: none; color: inherit; display: block; }
-  .card:hover { border-color: #ff6c24; }
+  .card:hover { border-color: var(--accent); }
   .card img { width: 100%; aspect-ratio: 8/5; object-fit: cover; image-rendering: pixelated; display: block; }
   .body { padding: 10px 12px 12px; }
   h2 { font-size: 14px; } .tag { color: #ffa300; font-size: 11px; font-weight: normal; }
   .badge { font-size: 11px; margin-top: 4px; }
   .b-ready { color: #00e436; } .b-mostly { color: #ffa300; }
-  .b-rough { color: #ff6c24; } .b-desktop { color: #9a948c; }
-  .body p { color: #9a948c; font-size: 12px; margin-top: 4px; }
-  footer { max-width: 960px; margin: 32px auto 0; color: #5f5a54; font-size: 12px; }
+  .b-rough { color: #ff6c24; } .b-desktop { color: var(--dim); }
+  .body p { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  body.desc-clamp .body p { display: -webkit-box; -webkit-box-orient: vertical;
+                            -webkit-line-clamp: 3; overflow: hidden; }
+  body.desc-off .body p { display: none; }
+  .added { color: var(--faint); font-size: 10px; margin-top: 6px; }
+  body.desc-off .added { display: none; }
+  footer { max-width: 960px; margin: 32px auto 0; color: var(--faint); font-size: 12px; }
 </style>
 </head>
-<body>
+<body class="desc-clamp">
 <header>
   <h1><span>▶</span> dreamengine</h1>
   <p>Little games and toys made with <a href="https://github.com/NikkiKoole/dreamengine">dreamengine</a>,
      a fantasy console where you write C and hit run. Click a cart to play it in your browser.</p>
 </header>
+<div class="controls">
+  <span>sort:</span>
+  <button data-sort="added">newest</button>
+  <button data-sort="title">a–z</button>
+  <button data-sort="tier">mobile</button>
+  <span class="sep">·</span>
+  <button id="desc-btn">desc: 3 lines</button>
+  <span class="sep">·</span>
+  <button id="theme-btn">☀ day</button>
+</div>
 <div class="grid">
 ${cards}
 </div>
 <footer>${entries.length} cart${entries.length === 1 ? '' : 's'} · arrows + Z/X to play (most carts)</footer>
+<script>
+(function () {
+  var grid = document.querySelector('.grid')
+
+  function applySort(k) {
+    var cards = [].slice.call(grid.children)
+    cards.sort(function (a, b) {
+      if (k === 'added') return (b.dataset.added || '').localeCompare(a.dataset.added || '') ||
+                                a.dataset.title.localeCompare(b.dataset.title)
+      if (k === 'tier')  return (+a.dataset.tier) - (+b.dataset.tier) ||
+                                a.dataset.title.localeCompare(b.dataset.title)
+      return a.dataset.title.localeCompare(b.dataset.title)
+    })
+    cards.forEach(function (c) { grid.appendChild(c) })
+    document.querySelectorAll('[data-sort]').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.sort === k)
+    })
+    try { localStorage.setItem('de-sort', k) } catch (e) {}
+  }
+
+  var DESC_ORDER = ['clamp', 'full', 'off']
+  var DESC_LABEL = { clamp: 'desc: 3 lines', full: 'desc: full', off: 'desc: off' }
+  function applyDesc(m) {
+    document.body.classList.remove('desc-clamp', 'desc-full', 'desc-off')
+    document.body.classList.add('desc-' + m)
+    document.getElementById('desc-btn').textContent = DESC_LABEL[m]
+    try { localStorage.setItem('de-desc', m) } catch (e) {}
+  }
+
+  function applyTheme(t) {
+    document.body.classList.toggle('day', t === 'day')
+    document.getElementById('theme-btn').textContent = t === 'day' ? '☾ night' : '☀ day'
+    try { localStorage.setItem('de-theme', t) } catch (e) {}
+  }
+
+  document.querySelectorAll('[data-sort]').forEach(function (b) {
+    b.addEventListener('click', function () { applySort(b.dataset.sort) })
+  })
+  document.getElementById('desc-btn').addEventListener('click', function () {
+    var cur = (localStorage.getItem('de-desc') || 'clamp')
+    applyDesc(DESC_ORDER[(DESC_ORDER.indexOf(cur) + 1) % DESC_ORDER.length])
+  })
+  document.getElementById('theme-btn').addEventListener('click', function () {
+    applyTheme(document.body.classList.contains('day') ? 'night' : 'day')
+  })
+
+  var s = 'added', d = 'clamp', t = 'night'
+  try {
+    s = localStorage.getItem('de-sort')  || s
+    d = localStorage.getItem('de-desc')  || d
+    t = localStorage.getItem('de-theme') || t
+  } catch (e) {}
+  applySort(s); applyDesc(d); applyTheme(t)
+})()
+</script>
 </body>
 </html>
 `)
