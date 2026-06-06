@@ -299,6 +299,23 @@ single time, and LIFT must report both ids. Then the §5 card top-to-bottom to
 confirm no regressions (especially test 1 coordinates and test 3 id stability,
 since both now flow through the mirror).
 
+**Device finding #6 — tap-as-mouse death: GLFW's stuck primary-touch latch
+(iPad day one, 2026-06-06; FIXED engine-side same day):** after extended play,
+taps stop registering entirely in mouse-driven carts (most of the gallery)
+until the page is reloaded. Cause: emscripten's GLFW shim emulates the mouse
+from touches via a `primaryTouchId` latch (`libglfw.js`) — touchstart only
+fires a mousedown when the latch is free, and only an event whose
+`changedTouches` contains the primary's id clears it. iOS Safari sometimes
+**drops `touchcancel`** (WebKit bug 153064 — system edge-swipes, gesture
+takeovers), so the latch sticks forever and every later tap is ignored. Our
+touch mirror was never affected (rebuild-from-`event.touches` self-heals) —
+this was the *mouse* path, which bypassed the mirror. Fix, same medicine:
+once a real touch is seen, `studio.c` (web) synthesizes the mouse from the
+mirror (`web_tm_*`: button down while any finger is down, position follows a
+sticky primary finger, edges from prev/cur) and never reads GLFW's emulated
+mouse again. Desktop browsers with real mice are untouched (the latch only
+flips on a real touch). Validates the rebuild-don't-latch rule a third time.
+
 **Device finding #5 — the 6th finger nukes everything (iPhone, 2026-06-06,
 correct behavior, do not "fix"):** exceed the iPhone's 5-touch ceiling and iOS
 fires `touchcancel` for **all** active touches — the OS abandons the whole

@@ -203,6 +203,29 @@ static void key_claims_reset(void) { memset(key_claimed, 0, sizeof key_claimed);
 // ------------------------------------------------------------
 static int raylib_mouse_button(int button);   // defined in the mouse api section
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+// normalize a public MOUSE_* button to a 0/1/2 index (matches raylib_mouse_button)
+static int mbtn_index(int button) {
+    return button == MOUSE_RIGHT ? 1 : button == MOUSE_MIDDLE ? 2 : 0;
+}
+
+#ifdef PLATFORM_WEB
+// web touch→mouse synthesis. Emscripten's GLFW shim emulates the mouse from
+// touches through a primaryTouchId LATCH (libglfw.js): touchstart only fires
+// mousedown when the latch is free, and only the primary's own touchend/cancel
+// clears it. iOS Safari is known to DROP touchcancel (WebKit bug 153064 —
+// system edge-swipes, gesture takeovers), and then the latch sticks forever:
+// every later tap is ignored, "touch stops working" until reload. Found on
+// iPad day one (2026-06-06), tap-as-mouse carts only.
+// Same medicine as the touch mirror: once a real touch is seen, this device's
+// "mouse" is an emulation — synthesize it from the self-healing mirror instead
+// (vt pool, rebuilt every event) and never read GLFW's mouse again.
+static bool    web_tm_active = false;  // latched on first real touch
+static bool    web_tm_down = false, web_tm_prev = false;
+static int     web_tm_id   = -1;       // sticky primary finger
+static Vector2 web_tm_pos  = { 0, 0 }; // window pixels; persists after release
+#endif
+
 #ifndef PLATFORM_WEB
 #define DET_DT      (1.0 / 60.0)         // fixed timestep when det_mode is on
 #define KEYSTATE_N  512                  // raylib MAX_KEYBOARD_KEYS
@@ -235,11 +258,6 @@ static int     max_frames     = 0;       // --frames: stop after N frames (0 = r
 
 // synthetic clock: deterministic runs read frame-derived time, not the wall clock
 static double clk(void) { return det_mode ? det_clock : GetTime(); }
-
-// normalize a public MOUSE_* button to a 0/1/2 index (matches raylib_mouse_button)
-static int mbtn_index(int button) {
-    return button == MOUSE_RIGHT ? 1 : button == MOUSE_MIDDLE ? 2 : 0;
-}
 
 // input indirection — every key()/keyp()/btn()/mouse_*() read funnels through these
 // so a replay/script can inject state and a recorder can observe it.
@@ -281,16 +299,34 @@ static bool inp_mouse_released(int button) {
     return IsMouseButtonReleased(raylib_mouse_button(button));
 }
 #else
-// web build: harness is a no-op, input goes straight to raylib
+// web build: harness is a no-op. Mouse reads go straight to raylib UNTIL a
+// real touch is seen — from then on the mouse is synthesized from the touch
+// mirror (web_tm_*), bypassing GLFW's stuck-latch touch emulation (see the
+// web_tm_* block above). Touch devices only ever have a LEFT button.
 static double clk(void) { return GetTime(); }
 static bool inp_down(int k)    { return IsKeyDown(k); }
 static bool inp_pressed(int k) { return IsKeyPressed(k); }
 static bool inp_released(int k){ return IsKeyReleased(k); }
-static int  inp_mouse_x(void)  { return clampi((int)(GetMousePosition().x / SCALE), 0, SCREEN_W - 1); }
-static int  inp_mouse_y(void)  { return clampi((int)(GetMousePosition().y / SCALE), 0, SCREEN_H - 1); }
-static bool inp_mouse_down(int b)     { return IsMouseButtonDown(raylib_mouse_button(b)); }
-static bool inp_mouse_pressed(int b)  { return IsMouseButtonPressed(raylib_mouse_button(b)); }
-static bool inp_mouse_released(int b) { return IsMouseButtonReleased(raylib_mouse_button(b)); }
+static int  inp_mouse_x(void)  {
+    if (web_tm_active) return clampi((int)(web_tm_pos.x / SCALE), 0, SCREEN_W - 1);
+    return clampi((int)(GetMousePosition().x / SCALE), 0, SCREEN_W - 1);
+}
+static int  inp_mouse_y(void)  {
+    if (web_tm_active) return clampi((int)(web_tm_pos.y / SCALE), 0, SCREEN_H - 1);
+    return clampi((int)(GetMousePosition().y / SCALE), 0, SCREEN_H - 1);
+}
+static bool inp_mouse_down(int b)     {
+    if (web_tm_active) return mbtn_index(b) == 0 && web_tm_down;
+    return IsMouseButtonDown(raylib_mouse_button(b));
+}
+static bool inp_mouse_pressed(int b)  {
+    if (web_tm_active) return mbtn_index(b) == 0 && web_tm_down && !web_tm_prev;
+    return IsMouseButtonPressed(raylib_mouse_button(b));
+}
+static bool inp_mouse_released(int b) {
+    if (web_tm_active) return mbtn_index(b) == 0 && !web_tm_down && web_tm_prev;
+    return IsMouseButtonReleased(raylib_mouse_button(b));
+}
 #endif
 
 // ------------------------------------------------------------
@@ -407,6 +443,21 @@ static void poll_virtual_touches(void) {
     for (int i = 0; i < n; i++) {
         vt_pos[i] = (Vector2){ web_x[i], web_y[i] };
         vt_id[i]  = web_id[i];
+    }
+    // touch→mouse synthesis (see web_tm_* block): button down while any finger
+    // is down, position follows a sticky primary finger, edges from prev/cur.
+    web_tm_prev = web_tm_down;
+    if (n > 0) {
+        web_tm_active = true;          // fingers exist → GLFW's emulated mouse is dead to us
+        int idx = -1;
+        for (int i = 0; i < n; i++)
+            if (vt_id[i] == web_tm_id) { idx = i; break; }
+        if (idx < 0) { idx = 0; web_tm_id = vt_id[0]; }   // primary lifted → adopt the next finger
+        web_tm_pos  = vt_pos[idx];
+        web_tm_down = true;
+    } else {
+        web_tm_down = false;
+        web_tm_id   = -1;
     }
 #endif
     if (n < 0) {                  // native — or a web shell without the mirror

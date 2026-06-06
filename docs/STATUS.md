@@ -483,6 +483,11 @@ in [`POLISH_TODO.md`](POLISH_TODO.md).
 24. ~~**Web phantom touch point**~~ — **CLOSED 2026-06-06, same day as filed**: root-caused,
     fix BUILT & DEVICE-PASSED (touchlab/multitouch/touchpiano via the live gallery), and the
     rebuild tail cleared by the whole-catalog publish (all 263 carts carry the fixed engine).
+    **Same-day sequel (iPad play session): tap-as-mouse death** — taps stop registering in
+    mouse-driven carts until reload; emscripten GLFW's `primaryTouchId` latch sticks when iOS
+    drops a `touchcancel` (WebKit 153064). Fixed with the same medicine: on web, once a real
+    touch is seen the mouse is synthesized from the touch mirror (`web_tm_*` in `studio.c`),
+    GLFW's emulated mouse never read again. Touch-notes **device finding #6**.
     Kept for the record:
     on web builds a lifted finger's contact can stay in the touch list (most reliably when
     two fingers release at once); native is clean. Cause: emscripten#4679 (`wontfix`,
