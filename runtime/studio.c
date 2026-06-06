@@ -1577,6 +1577,23 @@ bool tapr(int x, int y, int w, int h) {
 
 void touch_controls(bool on) { show_touch_ui = on; }
 
+#ifdef PLATFORM_WEB
+// computed once at boot by web_shell.html (Module.deTouchCeiling) — see the
+// detection traps in docs/design/mobile-web-notes.md §5 (iPad pretends to be
+// a Mac; navigator.maxTouchPoints reports 5 on BOTH iPhone and iPad).
+EM_JS(int, de_web_touch_ceiling, (void), {
+    return (Module.deTouchCeiling | 0);
+});
+#endif
+
+int touch_ceiling(void) {
+#ifdef PLATFORM_WEB
+    return de_web_touch_ceiling();
+#else
+    return 0;   // native desktop: no touch digitizer (mouse-as-touch is one contact anyway)
+#endif
+}
+
 float stick_x(void) {
     if (stick_touch_id < 0) return 0.0f;
     return (stick_knob_x - stick_base_x) / STICK_RADIUS;

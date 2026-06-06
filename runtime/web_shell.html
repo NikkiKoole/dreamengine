@@ -49,6 +49,19 @@
        font:16px ui-monospace,Menlo,monospace; cursor:pointer; opacity:.6;">&#x26F6;</button>
   <script>
     var Module = { canvas: document.getElementById('canvas') };
+    // device touch ceiling, read by the engine's touch_ceiling() via EM_JS.
+    // iOS cancels ALL touches when a finger lands past the ceiling (5 on
+    // iPhone), so carts size chords/holds to this budget. The detection traps
+    // (docs/design/mobile-web-notes.md §5): navigator.maxTouchPoints reports 5
+    // on BOTH iPhone and iPad (the iPad really tracks ~10), and since iPadOS 13
+    // the iPad's UA pretends to be a desktop Mac — the tell is a "Mac" with
+    // touch points. Android digitizers report truthfully; desktop is 0.
+    Module.deTouchCeiling = (function () {
+      var ua = navigator.userAgent, mtp = navigator.maxTouchPoints || 0;
+      if (/iPhone|iPod/.test(ua)) return 5;
+      if (/iPad/.test(ua) || (/Macintosh/.test(ua) && mtp > 1)) return 10;
+      return mtp;
+    })();
     // landscape cart viewed in portrait on a touch device? show a gentle hint.
     // checked at runtime (canvas is sized by Raylib at boot) so a portrait-shaped
     // cart never nags. hint only — we never CSS-rotate the canvas, because the

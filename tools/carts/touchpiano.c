@@ -139,7 +139,14 @@ void draw(void) {
     snprintf(buf, sizeof buf, "TOUCH PIANO   fingers:%d  notes:%d", touch_count(), held);
     print(buf, 4, 6, CLR_WHITE);
     font(FONT_SMALL);
-    print("hold keys - chords up to 5 fingers (iphone)", 4, 20, CLR_LIGHT_GREY);
+    int cap = touch_ceiling();   // 5 iPhone, 10 iPad, 0 desktop — one more cancels ALL touches on iOS
+    if (cap > 0) {
+        char cb[56];
+        snprintf(cb, sizeof cb, "hold keys - this device tracks max %d fingers", cap);
+        print(cb, 4, 20, CLR_LIGHT_GREY);
+    } else {
+        print("hold keys - chords up to 5 fingers (iphone)", 4, 20, CLR_LIGHT_GREY);
+    }
     print("slide for glissando - lift to release", 4, 28, CLR_LIGHT_GREY);
     font(FONT_NORMAL);
 }

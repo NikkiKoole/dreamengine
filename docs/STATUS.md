@@ -469,8 +469,10 @@ in [`POLISH_TODO.md`](POLISH_TODO.md).
     customers), the **device-facts trio** (`touch_available()` grown into
     `touch_available`/`device_class`/`touch_ceiling` — researched 2026-06-06
     incl. the iPad-pretends-to-be-a-Mac detection traps and the
-    ceiling-safeguard pattern against the iPhone 6th-finger mass-cancel, first
-    customer = touchpiano at one octave; design ready in mobile-web-notes §5),
+    ceiling-safeguard pattern against the iPhone 6th-finger mass-cancel;
+    **`touch_ceiling()` SHIPPED same day** — shell computes `Module.deTouchCeiling`,
+    EM_JS read, 4-place wiring, touchpiano header prints "max N fingers";
+    `touch_available`/`device_class` still open, design in mobile-web-notes §5),
     and the formal touchlab-on-iPhone
     checklist run (>5-touch assumptions — iPhone Safari caps at ~5 simultaneous
     touches, found on-device; tiny tap targets). Full design + device findings:

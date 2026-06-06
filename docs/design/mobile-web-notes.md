@@ -125,11 +125,19 @@ into a small device-facts trio, same plumbing precedent as the `Module.deTouches
 touch mirror (shell computes once at boot → `EM_JS` read):
 
 ```c
-bool touch_available(void);   // as above
-int  device_class(void);      // DEV_DESKTOP / DEV_PHONE / DEV_TABLET
-int  touch_ceiling(void);     // max simultaneous fingers: 5 iPhone, 10 iPad,
+bool touch_available(void);   // as above — still open
+int  device_class(void);      // DEV_DESKTOP / DEV_PHONE / DEV_TABLET — still open
+int  touch_ceiling(void);     // SHIPPED 2026-06-06: 5 iPhone, 10 iPad,
                               // maxTouchPoints Android, 0 desktop
 ```
+
+**`touch_ceiling()` SHIPPED 2026-06-06** (the first of the trio — built when the
+6th-finger mass-cancel made it concrete): `web_shell.html` computes
+`Module.deTouchCeiling` at boot using the detection facts below; `studio.c`
+reads it via EM_JS under `PLATFORM_WEB` (native returns 0); full 4-place wiring
+done. First customer: **touchpiano's header** prints "this device tracks max N
+fingers" on touch devices (display-only — the compact-layout retrofit was
+deliberately skipped for now). The other two functions stay open.
 
 Detection facts (the Apple traps, so nobody re-derives them):
 
