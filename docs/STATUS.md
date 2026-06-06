@@ -488,6 +488,8 @@ in [`POLISH_TODO.md`](POLISH_TODO.md).
     drops a `touchcancel` (WebKit 153064). Fixed with the same medicine: on web, once a real
     touch is seen the mouse is synthesized from the touch mirror (`web_tm_*` in `studio.c`),
     GLFW's emulated mouse never read again. Touch-notes **device finding #6**.
+    Spawned **open item 27** (web debug overlay) — three on-device mysteries in one iPad
+    afternoon with zero cable-free visibility.
     Kept for the record:
     on web builds a lifted finger's contact can stay in the touch list (most reliably when
     two fingers release at once); native is clean. Cause: emscripten#4679 (`wontfix`,
@@ -511,6 +513,16 @@ in [`POLISH_TODO.md`](POLISH_TODO.md).
     sliders. Evidence (modrack/sh101/tb303/sfx-tools all duplicate the same drag state
     machine) + API sketch: [`design/ui-widgets-notes.md`](design/ui-widgets-notes.md).
     Web-side blocked by item 24 (a ghost finger never releases its capture).
+
+27. **Web debug overlay** *(new 2026-06-06 — designed, not built)* — cable-free on-device
+    visibility for wasm carts: `?debug=1` (or corner triple-tap) overlays live touch dots
+    (from `Module.deTouches`), a printh/console mirror, `window.onerror` capture, fps; v2
+    pushes the cart's `watch()` values via EM_JS so the native debug workflow works on a
+    phone. Architecture rule learned the expensive way: shell tweaks cost a full-catalog
+    rebuild (263 × emcc, twice today), so the shell gets only a ~5-line loader and ALL
+    overlay logic lives in one site-root `debug-overlay.js` — iterating means republishing
+    one file. Zero-code alternative meanwhile: iPad + cable + Mac Safari remote Web
+    Inspector. Design: [`design/mobile-web-notes.md`](design/mobile-web-notes.md) §6d.
 
 26. **Editor hand-editing workflow** *(new 2026-06-06 — explored, sliced)* — three gaps when
     a human edits carts in the editor instead of via `tools/carts/` + CLI: (a) **no

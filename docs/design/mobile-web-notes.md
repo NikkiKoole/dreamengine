@@ -287,6 +287,38 @@ Options if a cart needs name entry on mobile:
 Lint angle: `text_input()` reads are now surfaced as a `text-input` warning —
 dead path on any touch device.
 
+## 6d. Web debug overlay — cable-free on-device visibility (designed 2026-06-06)
+
+Motivated by one iPad afternoon producing three on-device mysteries (muted
+WebAudio, the §-touch-notes-7 phantom, the finding-#6 tap-death) with zero
+visibility — native has the editor overlay + trigger-file inspection, web has
+nothing without a Mac and a cable.
+
+**v1 (pure shell JS, no engine changes):**
+- live touch state: a dot per `Module.deTouches` contact + count/ids readout —
+  makes phantom-vs-tap-death diagnosis a 5-second visual ("a dot stayed" vs
+  "dots appear but the game ignores them" = mouse path)
+- printh/console mirror: last ~10 `console.log` lines on screen
+- JS error capture: `window.onerror` → red banner instead of a frozen canvas
+- fps from the rAF loop
+
+**v2 (small engine assist):** the cart's `watch()` values pushed once per frame
+via EM_JS — the native `watch()` debug workflow, identical on a phone — plus
+the `web_tm_*` mouse-synth state (now load-bearing).
+
+**Architecture rule (the expensive lesson):** the shell is baked into every
+cart at emcc time — every shell tweak costs a full-catalog rebuild (~13 min ×
+263 carts, twice on 2026-06-06 alone). So: a ~5-line LOADER in the shell
+(`?debug=1` → inject `<script src="../debug-overlay.js">`, silent if absent)
+and all overlay logic in ONE site-root file. Iterating on the overlay then
+means republishing one JS file, zero cart rebuilds. Activation: `?debug=1`, or
+triple-tap the top-left corner mid-session. General principle worth extending:
+the less logic baked per-cart, the cheaper web iteration gets.
+
+**Zero-code alternative that already works:** iPad + USB cable + Mac Safari →
+Develop menu → remote Web Inspector = full console into a running cart. The
+overlay's value is being cable-free and game-legible.
+
 ## 7. Next steps
 
 1. ~~**`tools/mobile-lint.js` v1**~~ — **SHIPPED 2026-06-05** (checks 1, 3, 4, 5
