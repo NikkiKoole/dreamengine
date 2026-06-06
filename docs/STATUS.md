@@ -472,7 +472,8 @@ in [`POLISH_TODO.md`](POLISH_TODO.md).
     touches, found on-device; tiny tap targets). Full design + device findings:
     [`design/mobile-web-notes.md`](design/mobile-web-notes.md).
 
-24. **Web phantom touch point** *(new 2026-06-06 — root-caused, fix designed, not built)* —
+24. **Web phantom touch point** *(new 2026-06-06 — root-caused; **fix BUILT same day**,
+    pending device confirmation)* —
     on web builds a lifted finger's contact can stay in the touch list (most reliably when
     two fingers release at once); native is clean. Cause: emscripten#4679 (`wontfix`,
     touchend conflates remaining+lifted touches) stacked on raylib's

@@ -367,17 +367,55 @@ static bool vt_was_down(int id) {
     return false;
 }
 
+#ifdef PLATFORM_WEB
+// The web phantom-touch fix (docs/design/touch-notes.md §7): emscripten's
+// touchend reports remaining+lifted contacts conflated (emscripten#4679,
+// wontfix) and raylib's web backend removes at most ONE point per event —
+// release two fingers in the same instant and a stale contact survives in
+// GetTouchPosition()'s list forever. The shell (web_shell.html) mirrors the
+// DOM's event.touches — spec-correct in every browser: exactly the fingers
+// that are down, rebuilt on every touch event — into Module.deTouches as flat
+// [id, x, y] triples in canvas pixels. Read that instead of raylib's list.
+// Returns the contact count, or -1 if the mirror isn't installed (an older
+// shell → caller falls back to raylib's list).
+EM_JS(int, de_web_touch_read, (int *ids, float *xs, float *ys, int max), {
+    var t = Module.deTouches;
+    if (!t) return -1;
+    var n = (t.length / 3) | 0;
+    if (n > max) n = max;
+    for (var i = 0; i < n; i++) {
+        HEAP32[(ids >> 2) + i]  = t[i*3];
+        HEAPF32[(xs >> 2) + i]  = t[i*3 + 1];
+        HEAPF32[(ys >> 2) + i]  = t[i*3 + 2];
+    }
+    return n;
+});
+#endif
+
 static void poll_virtual_touches(void) {
     vt_prev_count = vt_count;
     for (int i = 0; i < vt_count; i++) {
         vt_prev_id[i]  = vt_id[i];
         vt_prev_pos[i] = vt_pos[i];
     }
-    int n = GetTouchPointCount();
-    if (n > VT_MAX - 1) n = VT_MAX - 1;
+    int n = -1;
+#ifdef PLATFORM_WEB
+    // touch truth from the shell's DOM mirror, not raylib's web list (§7 fix)
+    int   web_id[VT_MAX];
+    float web_x[VT_MAX], web_y[VT_MAX];
+    n = de_web_touch_read(web_id, web_x, web_y, VT_MAX - 1);
     for (int i = 0; i < n; i++) {
-        vt_pos[i] = GetTouchPosition(i);
-        vt_id[i]  = GetTouchPointId(i);
+        vt_pos[i] = (Vector2){ web_x[i], web_y[i] };
+        vt_id[i]  = web_id[i];
+    }
+#endif
+    if (n < 0) {                  // native — or a web shell without the mirror
+        n = GetTouchPointCount();
+        if (n > VT_MAX - 1) n = VT_MAX - 1;
+        for (int i = 0; i < n; i++) {
+            vt_pos[i] = GetTouchPosition(i);
+            vt_id[i]  = GetTouchPointId(i);
+        }
     }
     vt_count = n;
     // mouse-as-touch is a DESKTOP affordance. On a real touch device the browser

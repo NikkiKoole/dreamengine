@@ -72,6 +72,32 @@
     Module.canvas.addEventListener('pointerdown', function (e) {
       try { Module.canvas.setPointerCapture(e.pointerId); } catch (err) {}
     });
+    // touch mirror — the engine reads contacts from Module.deTouches instead of
+    // raylib's web touch list (docs/design/touch-notes.md §7). Emscripten reports
+    // touchend with remaining+lifted touches conflated (emscripten#4679, wontfix)
+    // and raylib removes at most ONE point per event — so releasing two fingers in
+    // the same instant left a phantom contact stuck in the list. The DOM's
+    // event.touches is spec-correct in every browser: exactly the fingers that are
+    // down, on every event. So we REBUILD the list each event instead of counting
+    // up/down. Flat [id, x, y] triples, in canvas pixels (canvas.width / CSS width
+    // — the same mapping raylib's own handler uses; no HIGHDPI flag is set, so
+    // canvas.width == GetScreenWidth()).
+    Module.deTouches = [];
+    ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (ev) {
+      Module.canvas.addEventListener(ev, function (e) {
+        var c = Module.canvas, rect = c.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        var out = [];
+        for (var i = 0; i < e.touches.length; i++) {
+          var t = e.touches[i];
+          if (t.target !== c) continue;   // a finger on the fullscreen button is not a cart touch
+          out.push(t.identifier,
+                   (t.clientX - rect.left) * (c.width / rect.width),
+                   (t.clientY - rect.top) * (c.height / rect.height));
+        }
+        Module.deTouches = out;
+      }, { passive: true });
+    });
   </script>
   {{{ SCRIPT }}}
 </body>

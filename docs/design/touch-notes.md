@@ -213,6 +213,15 @@ what fails; items 1/6/7 are shell bugs if they fail, 2/3/4/5 are engine bugs.
 
 ## 7. The web phantom touch point — ROOT CAUSE FOUND (2026-06-06)
 
+> **Fix BUILT same day, pending device confirmation.** Exactly the plan below:
+> `web_shell.html` rebuilds `Module.deTouches` (flat `[id,x,y]` triples, canvas
+> pixels, filtered to `touch.target === canvas`) from `event.touches` on every
+> touch event; `studio.c`'s `poll_virtual_touches()` reads it via
+> `de_web_touch_read` (EM_JS) under `PLATFORM_WEB`, falling back to raylib's
+> list if the mirror is absent (returns −1 — older shells keep working).
+> Native path untouched, native build verified. Run the acceptance test below
+> on a phone before calling it done.
+
 **Symptom** (observed on device, web builds only — native is clean): lift a finger
 and its touch point *stays in the list* — `touch_count()` doesn't drop, a stale
 contact sits frozen at the last position. Not every time, but often, and **most
