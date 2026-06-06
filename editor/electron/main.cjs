@@ -1010,11 +1010,13 @@ ipcMain.handle('studio:publish', async (_event, code, cfg) => {
 
     log('committing + pushing…\n')
     const out = await step('sh', ['tools/publish-cart.sh', '--no-build', name])
-    log(out + '\n')
+    // the script echoes its own URLs — drop those lines so the live link below
+    // is the ONE clickable url in the log
+    log(out.split('\n').filter(l => l.trim() && !l.includes('https://')).join('\n') + '\n')
 
     const url = `https://nikkikoole.github.io/dreamengine/${name}/`
-    log(`✓ pushed — the wasm now lives in the dreamengine repo under site/${name}/,\n`)
-    log(`  served by GitHub Pages at ${url} (live in ~1 min)\n`)
+    log(`✓ the wasm lives in the dreamengine repo under site/${name}/ — pushed.\n`)
+    log(`▶ play it (live in ~1 min): ${url}\n`)
     return { ok: true, url, output: null }
   } catch (e) {
     log('✗ publish failed:\n' + e.message + '\n')
