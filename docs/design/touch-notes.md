@@ -295,6 +295,20 @@ single time, and LIFT must report both ids. Then the §5 card top-to-bottom to
 confirm no regressions (especially test 1 coordinates and test 3 id stability,
 since both now flow through the mirror).
 
+**Device finding #5 — the 6th finger nukes everything (iPhone, 2026-06-06,
+correct behavior, do not "fix"):** exceed the iPhone's 5-touch ceiling and iOS
+fires `touchcancel` for **all** active touches — the OS abandons the whole
+gesture, not just the extra finger (native UIKit apps get the same
+`touchesCancelled`). The mirror truthfully reports everything lifted: all
+notes off, all ripples fire. Before §7 this same event was catastrophic —
+raylib 5.5 never decrements on `touchcancel`, so a 6th finger left FIVE
+permanent phantoms. Keeping contacts alive through a cancel would resurrect
+exactly those phantoms; the fix is design guidance instead: carts must not
+depend on >5 simultaneous fingers on iPhone (iPad allows ~10), and a
+mass-cancel should fail gracefully (touchpiano already does — every key
+releases). Cart-detectable if ever needed: all contacts ending on the same
+frame while `touch_count()` was at the ceiling.
+
 ## 8. gestures.h — known gaps (work after §7 lands)
 
 §7 is the prerequisite: until the phantom is fixed, lift-judged gestures misfire
@@ -315,3 +329,8 @@ on web no matter what this header does. Then, in rough order of value:
    a finger that hooks (left then right) records the net direction. Fine for
    now; noted so nobody mistakes it for a bug. Path tracking only if a cart
    actually needs flick-curves.
+4. **A cancel looks like a lift** (device finding #5): when iOS mass-cancels at
+   the 6th finger, every tracked finger "lifts" at once — one that had just
+   moved >`GEST_SWIPE_MIN_PX` registers a spurious swipe. Cheap guard if it
+   ever bites: ignore lift-judgments on frames where *all* contacts ended
+   simultaneously from at-ceiling count.
