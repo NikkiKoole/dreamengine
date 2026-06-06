@@ -180,6 +180,10 @@ the card:
 6. **iOS audio unlock.** Each landing finger blips. If the first blip is
    swallowed, emscripten's AudioContext-resume-on-gesture isn't firing and the
    shell needs an explicit `resume()` hook.
+   **CHECK THE BELL FIRST (iPad finding, 2026-06-06):** Safari's WebAudio
+   respects Control Center silent mode even when video/music apps don't — an
+   "audio is broken on every cart!" iPad turned out to be muted. Bell icon in
+   Control Center + volume rocker while Safari is front, *then* debug.
 7. **Browser gesture leak.** Pinch, double-tap, drag, swipe from edges — the
    page must not zoom, scroll, rubber-band, or navigate (tests §1's CSS).
    Also long-press: no callout/magnifier.
