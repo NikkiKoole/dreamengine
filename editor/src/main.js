@@ -8,6 +8,7 @@ import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/sea
 import { oneDark } from '@codemirror/theme-one-dark'
 import { dayTheme } from './dayTheme.js'
 import { studioDocs } from './studioDocs.js'
+import { openFileViewer } from './navigate.js'
 
 // build autocomplete entries from studioDocs
 // (skip kind: 'keyword' — those are C-basics tooltip-only entries, already in cKeywords below)
@@ -31,7 +32,7 @@ const cKeywords = completeFromList([
 // brief highlight on a range — used after go-to-definition jumps
 const addFlash   = StateEffect.define()
 const clearFlash = StateEffect.define()
-const flashField = StateField.define({
+export const flashField = StateField.define({
   create() { return Decoration.none },
   update(value, tr) {
     value = value.map(tr.changes)
@@ -100,6 +101,7 @@ export function flashRange(view, from, to) {
 }
 
 // cmd/ctrl-click on a word:
+//   - on an #include "file.h" line → open that runtime file read-only (viewer tab)
 //   - if it's documented in studioDocs → open help tab + scroll to entry
 //   - else search the cart for a declaration (int x, void f(), #define X, etc.) and jump cursor there
 const studioClickToHelp = EditorView.domEventHandlers({
@@ -107,6 +109,22 @@ const studioClickToHelp = EditorView.domEventHandlers({
     if (!event.metaKey && !event.ctrlKey) return false
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
     if (pos === null) return false
+
+    // 0) click ON the filename of an #include "file.h" → read-only viewer
+    // (quote-includes only — <math.h> is not ours; and only the quoted span
+    // itself triggers, so cmd-clicking elsewhere on the line does nothing odd)
+    const incLine = view.state.doc.lineAt(pos)
+    const inc = /#include\s*"([^"]+)"/.exec(incLine.text)
+    if (inc) {
+      const nameFrom = incLine.from + inc.index + inc[0].indexOf('"')
+      const nameTo   = incLine.from + inc.index + inc[0].length
+      if (pos >= nameFrom && pos <= nameTo) {
+        openFileViewer(inc[1])
+        event.preventDefault()
+        return true
+      }
+    }
+
     const word = view.state.wordAt(pos)
     if (!word) return false
     const name = view.state.sliceDoc(word.from, word.to)

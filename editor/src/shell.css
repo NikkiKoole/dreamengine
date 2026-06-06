@@ -1221,3 +1221,40 @@ a.tutorials-link:hover {
 #toast.visible {
   opacity: 1;
 }
+
+/* ── read-only runtime-file preview (cmd-click an #include filename) ──
+   overlays the editor inside the code tab; cart untouched below */
+#viewer-overlay {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  right: 181px;               /* leave the outline sidebar visible (180px + border) */
+  z-index: 5;
+  display: none;
+  flex-direction: column;
+  background: var(--bg);
+}
+#panel-code.outline-collapsed #viewer-overlay { right: 0; }
+#viewer-overlay.open { display: flex; }
+#viewer-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font);
+}
+#viewer-close {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+#viewer-close:hover { color: var(--accent); }
+#viewer-editor { flex: 1; min-height: 0; overflow: hidden; }
+#viewer-editor .cm-editor { height: 100%; }

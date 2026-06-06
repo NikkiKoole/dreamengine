@@ -13,20 +13,44 @@ import { view, flashRange, onDocChange } from './main.js'
 // definition from a call or an `if (...) {` inside a body — those are indented.
 const FUNC_RE = /^(?:static\s+)?(?:inline\s+)?(?:unsigned\s+|signed\s+)?(int|float|bool|void|char|long|short|double|[A-Z]\w*)(\s+\*?\s*|\s*\*\s*)([A-Za-z_]\w*)\s*\([^;{)]*\)\s*\{/gm
 
+// Prototypes (same shape, ends in `;` instead of `{`) — only consulted for the
+// read-only preview, where headers like studio.h are declaration-only.
+const PROTO_RE = /^(?:static\s+)?(?:inline\s+)?(?:unsigned\s+|signed\s+)?(int|float|bool|void|char|long|short|double|[A-Z]\w*)(\s+\*?\s*|\s*\*\s*)([A-Za-z_]\w*)\s*\([^;{)]*\)\s*;/gm
+
 // names that look like a type+call but are really control flow — never list them
 const NOT_FUNCS = new Set(['if', 'for', 'while', 'switch', 'return', 'sizeof', 'else'])
 
-function parseFunctions(doc) {
-  const out = []
-  FUNC_RE.lastIndex = 0
+// while the read-only preview is open, navigate.js points the outline at it:
+// { doc: () => string, view: () => EditorView }. null = the cart, as normal.
+let override = null
+export function setOutlineOverride(o) {
+  override = o
+  render()
+}
+
+function scan(doc, re, out, seen) {
+  re.lastIndex = 0
   let m
-  while ((m = FUNC_RE.exec(doc))) {
+  while ((m = re.exec(doc))) {
     const ret = m[1]
     const name = m[3]
-    if (NOT_FUNCS.has(name)) continue
+    if (NOT_FUNCS.has(name) || seen.has(name)) continue
+    seen.add(name)
     // offset of the name within the whole document, for an accurate jump + flash
     const namePos = m.index + m[0].indexOf(name, ret.length)
     out.push({ name, ret, pos: namePos })
+  }
+}
+
+function parseFunctions(doc) {
+  const out = []
+  const seen = new Set()
+  scan(doc, FUNC_RE, out, seen)
+  // headers in the preview are often declaration-only — list prototypes too
+  // (definitions win the dedupe; results re-sorted into file order)
+  if (override) {
+    scan(doc, PROTO_RE, out, seen)
+    out.sort((a, b) => a.pos - b.pos)
   }
   return out
 }
@@ -38,19 +62,20 @@ function jumpTo(pos, len) {
   // breathing room above) so you see the signature + body below — rather than
   // scrollIntoView:true, which does the minimum scroll and can leave the line
   // pinned to the bottom edge.
-  view.dispatch({
+  const v = override ? override.view() : view
+  v.dispatch({
     selection: { anchor: pos, head: pos },
     effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 48 }),
   })
-  view.focus()
-  flashRange(view, pos, pos + len)
+  v.focus()
+  flashRange(v, pos, pos + len)
 }
 
 let listEl = null
 
 function render() {
   if (!listEl) return
-  const fns = parseFunctions(view.state.doc.toString())
+  const fns = parseFunctions(override ? override.doc() : view.state.doc.toString())
   listEl.innerHTML = ''
   if (!fns.length) {
     const empty = document.createElement('div')

@@ -4,12 +4,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const DOCS = path.resolve(here, '../docs')   // repo docs/ lives one level up from editor/
+const DOCS = path.resolve(here, '../docs')       // repo docs/ lives one level up from editor/
+const RUNTIME = path.resolve(here, '../runtime') // engine sources, for the read-only viewer
 
 // Serve the repo's docs/ over the dev server so the in-editor "Docs" wiki view can
-// fetch and render them live (no copy step, always fresh). Two routes:
-//   GET /docs-list.json   → recursive list of *.md paths (for the sidebar nav)
-//   GET /docs/<rel>.md    → the raw markdown
+// fetch and render them live (no copy step, always fresh). Three routes:
+//   GET /docs-list.json     → recursive list of *.md paths (for the sidebar nav)
+//   GET /docs/<rel>.md      → the raw markdown
+//   GET /runtime-src/<f>.h  → a runtime/ source file (the cmd-click include viewer);
+//                             flat names only — no path separators, .h/.c only
 function serveDocs() {
   const EXCLUDE = new Set(['guides/cart-specs'])
   const listMarkdown = (dir, base = '') => {
@@ -36,6 +39,22 @@ function serveDocs() {
           try { files = listMarkdown(DOCS) } catch {}
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify(files))
+          return
+        }
+
+        if (url.startsWith('/runtime-src/')) {
+          const name = url.slice('/runtime-src/'.length)
+          // strict whitelist: a flat .h/.c filename, nothing that can escape runtime/
+          if (/^[A-Za-z0-9_.-]+\.(h|c)$/.test(name)) {
+            const abs = path.join(RUNTIME, name)
+            if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+              fs.createReadStream(abs).pipe(res)
+              return
+            }
+          }
+          res.statusCode = 404
+          res.end('not found')
           return
         }
 
