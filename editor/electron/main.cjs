@@ -917,3 +917,97 @@ ipcMain.handle('studio:build-web', async (_event, code, cfg) => {
     })
   })
 })
+
+// ── publish to site ───────────────────────────────────────────
+// Builds the CURRENT editor cart (code + sprites + map + settings) straight to
+// site/<name>/, writes the C source back to tools/carts/<name>.c (repo and site
+// stay in sync), then commits site/ + the write-back and pushes — live at
+// https://nikkikoole.github.io/dreamengine/<name>/ ~1 min later. Gated behind
+// the settings → "publish to site" toggle; renderer confirms before invoking.
+// Post-processing (manifest/title/thumbnail/gallery) lives in build-site.js
+// --finish; the git step (with the staged-strays guard) in publish-cart.sh.
+ipcMain.handle('studio:publish', async (_event, code, cfg) => {
+  const ROOT_DIR = path.join(__dirname, '../..')
+  const wc  = _event.sender
+  const log = (msg) => { if (!wc.isDestroyed()) wc.send('cart:log', msg) }
+
+  const name = String(cfg?.cartName || '').toLowerCase().replace(/\.cart\.png$/, '').replace(/[^a-z0-9_-]+/g, '')
+  if (!name) return { ok: false, output: 'the cart needs a name — load a cart, or "save cart" first' }
+
+  const RAYLIB_WEB = path.join(RUNTIME_DIR, 'raylib-web')
+  if (!fs.existsSync(path.join(RAYLIB_WEB, 'include', 'raylib.h')))
+    return { ok: false, output: 'raylib-web missing (see "Build for web" for setup)' }
+
+  log(`── publish "${name}" ──\n`)
+  fs.mkdirSync(BUILD_DIR, { recursive: true })
+  fs.writeFileSync(CART_SRC, code)
+
+  // asset headers from the just-saved editor sprites/map (same as build-web)
+  const mkHeader = (file, sym) => {
+    const out = path.join(BUILD_DIR, `${sym.toLowerCase()}.h`)
+    if (fs.existsSync(path.join(BUILD_DIR, file))) {
+      try {
+        const xxd = execSync(`xxd -i ${file}`, { cwd: BUILD_DIR }).toString()
+        fs.writeFileSync(out, xxd
+          .replace(new RegExp(`unsigned char ${file.replace('.', '_')}\\[\\]`), `static const unsigned char ${sym}[]`)
+          .replace(new RegExp(`unsigned int ${file.replace('.', '_')}_len`),  `static const unsigned int  ${sym}_LEN`))
+        return
+      } catch {}
+    }
+    fs.writeFileSync(out, `static const unsigned char ${sym}[]={0};static const unsigned int ${sym}_LEN=0;\n`)
+  }
+  mkHeader('sprites.png', 'SPRITES_DATA')
+  mkHeader('map.dat', 'MAP_DATA')
+
+  const outDir = path.join(ROOT_DIR, 'site', name)
+  fs.mkdirSync(outDir, { recursive: true })
+  const args = [
+    CART_SRC, path.join(RUNTIME_DIR, 'studio.c'),
+    '-I', RUNTIME_DIR, '-I', BUILD_DIR, '-I', path.join(RAYLIB_WEB, 'include'),
+    '-DPLATFORM_WEB',
+    `-DSCREEN_W=${cfg?.screenW || 320}`, `-DSCREEN_H=${cfg?.screenH || 200}`, `-DSCALE=${cfg?.scale || 4}`,
+    `-DMAP_W=${cfg?.mapW || 128}`, `-DMAP_H=${cfg?.mapH || 64}`,
+    `-DCELL_W=${cfg?.cellW || 16}`, `-DCELL_H=${cfg?.cellH || 16}`,
+    `-DTOUCH_CONTROLS_DEFAULT=${cfg?.touchControls ? 1 : 0}`,
+    '-Os', '-fno-delete-null-pointer-checks',
+    path.join(RAYLIB_WEB, 'lib', 'libraylib.a'),
+    '-s', 'USE_GLFW=3', '-s', 'TOTAL_MEMORY=67108864',
+    '-s', 'EXPORTED_RUNTIME_METHODS=ccall,HEAPF32',
+    '--shell-file', path.join(RUNTIME_DIR, 'web_shell.html'),
+    '-o', path.join(outDir, 'index.html'),
+  ]
+
+  log('compiling for web… (~10s)\n')
+  const step = (file, fargs, opts = {}) => new Promise((res, rej) => {
+    const { execFile } = require('child_process')
+    execFile(file, fargs, { timeout: 180000, cwd: ROOT_DIR, ...opts }, (err, stdout, stderr) =>
+      err ? rej(new Error((stderr || stdout || err.message).trim())) : res(stdout))
+  })
+
+  try {
+    await step('emcc', args)
+
+    // write the source back so tools/carts/ and the site can't drift.
+    // (sprites are NOT written back: editor pixels and a .cart.js generator are
+    // two different sources of truth — see STATUS "sprite story" open item)
+    const cartC = path.join(ROOT_DIR, 'tools', 'carts', `${name}.c`)
+    fs.writeFileSync(cartC, code)
+    log(`✓ source written back to tools/carts/${name}.c\n`)
+    if (fs.existsSync(cartC.replace(/\.c$/, '.cart.js')))
+      log(`⚠ ${name}.cart.js exists — editor-drawn sprite/map changes are in THIS build,\n  but the .cart.js generator was not updated (the sprite story, see STATUS)\n`)
+
+    log('finishing (manifest, thumbnail, gallery)…\n')
+    await step('node', ['tools/build-site.js', '--finish', name])
+
+    log('committing + pushing…\n')
+    const out = await step('sh', ['tools/publish-cart.sh', '--no-build', name])
+    log(out + '\n')
+
+    const url = `https://nikkikoole.github.io/dreamengine/${name}/`
+    log(`✓ pushed — live in ~1 min: ${url}\n`)
+    return { ok: true, url, output: null }
+  } catch (e) {
+    log('✗ publish failed:\n' + e.message + '\n')
+    return { ok: false, output: e.message }
+  }
+})

@@ -979,6 +979,34 @@ buildWebBtn.addEventListener('click', async () => {
   }
 })
 
+// ── publish to site (gated by settings → publish toggle) ─────
+const publishBtn = document.getElementById('publish-btn')
+if (settings.showPublish) publishBtn.style.display = ''
+
+publishBtn.addEventListener('click', async () => {
+  if (!window.studio) return
+  const slug = (currentCartName || '').toLowerCase().replace(/\.cart\.png$/, '').replace(/[^a-z0-9_-]+/g, '')
+  if (!slug) { showToast('the cart needs a name — load one, or "save cart" first'); return }
+  if (!confirm(`Publish "${slug}" to the PUBLIC site?\n\nCommits to github.com/NikkiKoole/dreamengine (site/ + tools/carts/${slug}.c) and pushes to master.\n\nLive at: nikkikoole.github.io/dreamengine/${slug}/`)) return
+
+  const tilemapCanvas = document.querySelector('#tilemap-canvas')
+  if (tilemapCanvas) await window.studio.saveSprites(tilemapCanvas.toDataURL('image/png'))
+  await window.studio.saveMap(getMapBytes())
+
+  publishBtn.textContent = 'publishing…'
+  publishBtn.disabled = true
+  rlogClear()
+
+  const code = view.state.doc.toString()
+  const result = await window.studio.publish(code, { ...settings, cartName: slug })
+
+  publishBtn.textContent = '🚀 publish to site'
+  publishBtn.disabled = false
+
+  if (result.ok) showToast(`live in ~1 min: ${result.url}`)
+  else showLog(result)
+})
+
 // ── drag-and-drop cart loading ────────────────────────────────
 document.addEventListener('dragover', e => e.preventDefault())
 document.addEventListener('drop', async e => {

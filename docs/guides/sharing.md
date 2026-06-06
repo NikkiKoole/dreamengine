@@ -6,6 +6,9 @@
 > push in one command (GitHub Pages publishes the committed `site/` via
 > `.github/workflows/pages.yml` — no emscripten in CI, builds happen locally).
 > This is the "GitHub Pages" option below, chosen because the repo already lives there.
+> **The editor has the button too (2026-06-06):** settings → "publish to site" toggle
+> reveals 🚀 *publish to site* next to "build for web" — compiles the current cart into
+> `site/<name>/`, writes the C source back to `tools/carts/<name>.c`, commits and pushes.
 > The rest of this doc is the original exploration, kept for the options not taken.
 
 Web builds already work — `build/cart.html + cart.js + cart.wasm` runs in any

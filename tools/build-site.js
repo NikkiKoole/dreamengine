@@ -111,10 +111,24 @@ function buildCart(name, { force = false } = {}) {
     return false
   }
 
-  // per-cart page title, web-app manifest + icon (Add to Home Screen → the cart
-  // launches standalone/fullscreen with its own icon), thumbnail (the .cart.png
-  // doubles as a shareable cart). The manifest link is injected here, not in
-  // web_shell.html, so the editor's build-web (no manifest on disk) stays 404-free.
+  finishCart(name)
+
+  const kb = Math.round(fs.statSync(path.join(outDir, 'index.wasm')).size / 1024)
+  console.log(`ok (${((Date.now() - t0) / 1000).toFixed(1)}s, wasm ${kb} KB)`)
+  return true
+}
+
+// ── finish one cart dir: title, web-app manifest + icon, thumbnail ──────────
+// Shared by the normal build and by `--finish <name>` (the editor's publish
+// button compiles straight into site/<name>/ and then calls this). The manifest
+// link is injected here, not in web_shell.html, so the editor's build-web
+// preview (no manifest on disk) stays 404-free. Idempotent: the title replace
+// no-ops on an already-finished page. Unregistered carts (no index.json entry
+// yet) get their bare name as title and a placeholder thumbnail.
+function finishCart(name) {
+  const outDir  = path.join(SITE_DIR, name)
+  const outHtml = path.join(outDir, 'index.html')
+  if (!fs.existsSync(outHtml)) { console.error(`✗ ${name}: no ${outHtml} to finish`); return false }
   const meta  = cartMeta(name)
   const title = meta?.title || name
   const html = fs.readFileSync(outHtml, 'utf8')
@@ -130,9 +144,8 @@ function buildCart(name, { force = false } = {}) {
   }, null, 2))
   const png = path.join(PNG_DIR, `${name}.cart.png`)
   if (fs.existsSync(png)) fs.copyFileSync(png, path.join(outDir, 'cart.png'))
-
-  const kb = Math.round(fs.statSync(path.join(outDir, 'index.wasm')).size / 1024)
-  console.log(`ok (${((Date.now() - t0) / 1000).toFixed(1)}s, wasm ${kb} KB)`)
+  else if (!fs.existsSync(path.join(outDir, 'cart.png')))
+    fs.writeFileSync(path.join(outDir, 'cart.png'), mk.makePlaceholderPng())
   return true
 }
 
@@ -253,10 +266,15 @@ const names = argv.filter(a => !a.startsWith('--'))
 if (!argv.includes('--gallery') && names.length === 0) {
   console.log('usage: node tools/build-site.js <name> [<name>...] [--force]')
   console.log('       node tools/build-site.js --gallery')
+  console.log('       node tools/build-site.js --finish <name>   (post-process an already-compiled site/<name>/)')
   process.exit(1)
 }
 
 let ok = true
-for (const name of names) ok = buildCart(name, { force }) && ok
+if (argv.includes('--finish')) {
+  for (const name of names) ok = finishCart(name) && ok
+} else {
+  for (const name of names) ok = buildCart(name, { force }) && ok
+}
 buildGallery()
 process.exit(ok ? 0 : 1)

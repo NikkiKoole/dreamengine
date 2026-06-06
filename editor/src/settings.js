@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, showProfiler: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal' }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal' }
 
 // ── key bindings ──────────────────────────────────────────────
 // Values are raylib (GLFW) keycodes — letters/digits are ASCII, specials match
@@ -82,6 +82,7 @@ function load() {
     cellH:         parseInt(localStorage.getItem('cellH')   || DEFAULTS.cellH),
     touchControls: localStorage.getItem('touchControls') === '1',
     showProfiler:  localStorage.getItem('showProfiler') === '1',
+    showPublish:   localStorage.getItem('showPublish') === '1',
     welcomeCart:   localStorage.getItem('welcomeCart') || 'zoo',
     backend:       localStorage.getItem('backend')   || DEFAULTS.backend,
     buildMode:     localStorage.getItem('buildMode') || DEFAULTS.buildMode,
@@ -297,6 +298,21 @@ export function buildSettingsPanel(el) {
   ))
   profSection.appendChild(note('runs the cart for a few seconds, samples it with macOS `sample`, and lists which functions burned the most CPU — straight into the build log. desktop app only.'))
   el.appendChild(profSection)
+
+  // ── publish to site (advanced) ────────────────────────────────
+  const pubSection = section('publish to site')
+  pubSection.appendChild(checkbox(
+    'show \u{1F680} publish button in the cart panel',
+    settings.showPublish,
+    v => {
+      settings.showPublish = v
+      save('showPublish', v ? '1' : '0')
+      const btn = document.getElementById('publish-btn')
+      if (btn) btn.style.display = v ? '' : 'none'
+    },
+  ))
+  pubSection.appendChild(note('\u26A0 publishes the CURRENT cart to the PUBLIC internet. One click: compiles to wasm, writes the C source back to tools/carts/<name>.c, COMMITS to the git repo (github.com/NikkiKoole/dreamengine) and PUSHES to master \u2014 live ~1 min later at nikkikoole.github.io/dreamengine/<name>/. The cart needs a name (load one from the gallery, or save yours first). Sprites drawn in the sprite editor ship with the build but are NOT written back to a .cart.js generator \u2014 see the "sprite story" in docs/STATUS.md. desktop app only.'))
+  el.appendChild(pubSection)
 }
 
 function section(title) {
