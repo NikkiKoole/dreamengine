@@ -514,15 +514,19 @@ in [`POLISH_TODO.md`](POLISH_TODO.md).
     machine) + API sketch: [`design/ui-widgets-notes.md`](design/ui-widgets-notes.md).
     Web-side blocked by item 24 (a ghost finger never releases its capture).
 
-27. **Web debug overlay** *(new 2026-06-06 — designed, not built)* — cable-free on-device
-    visibility for wasm carts: `?debug=1` (or corner triple-tap) overlays live touch dots
-    (from `Module.deTouches`), a printh/console mirror, `window.onerror` capture, fps; v2
-    pushes the cart's `watch()` values via EM_JS so the native debug workflow works on a
-    phone. Architecture rule learned the expensive way: shell tweaks cost a full-catalog
-    rebuild (263 × emcc, twice today), so the shell gets only a ~5-line loader and ALL
-    overlay logic lives in one site-root `debug-overlay.js` — iterating means republishing
-    one file. Zero-code alternative meanwhile: iPad + cable + Mac Safari remote Web
-    Inspector. Design: [`design/mobile-web-notes.md`](design/mobile-web-notes.md) §6d.
+27. **Web debug overlay** *(designed 2026-06-06; **v1 SHIPPED 2026-06-07**)* — cable-free
+    on-device visibility for wasm carts: `?debug=1` or **triple-tap the top-left corner**
+    overlays live touch rings straight from `Module.deTouches` (a ring that stays after
+    lifting = phantom; rings the game ignores = bug is past the touch layer), a
+    printh/console mirror, `window.onerror` red lines, fps + the device's touch ceiling.
+    Built per the §6d architecture rule (shell tweaks cost a 263-cart rebuild — learned
+    twice on 2026-06-06): the shell bakes only a ~25-line loader; ALL overlay logic lives
+    in one site-root `debug-overlay.js` (source `runtime/debug-overlay.js`, copied by
+    `build-site.js`) — future overlay iteration is a one-file republish, zero rebuilds.
+    **Still open (v2):** the cart's `watch()` values pushed per frame via EM_JS so the
+    native watch-workflow works on a phone; the `web_tm_*` mouse-synth state readout.
+    Zero-code alternative for deep dives: iPad + cable + Mac Safari remote Web Inspector.
+    Design: [`design/mobile-web-notes.md`](design/mobile-web-notes.md) §6d.
 
 26. **Editor hand-editing workflow** *(new 2026-06-06 — explored, sliced)* — three gaps when
     a human edits carts in the editor instead of via `tools/carts/` + CLI: (a) **no

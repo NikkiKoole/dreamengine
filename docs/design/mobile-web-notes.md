@@ -289,6 +289,12 @@ dead path on any touch device.
 
 ## 6d. Web debug overlay — cable-free on-device visibility (designed 2026-06-06)
 
+> **v1 SHIPPED 2026-06-07** exactly as designed below — `runtime/debug-overlay.js`
+> (site-root copy via `build-site.js`) + the baked loader in `web_shell.html`.
+> Open: `?debug=1` or triple-tap/click the top-left corner; ✕ or the same
+> gesture closes. v2 (the `watch()` push + `web_tm_*` readout) still open —
+> and it's a one-file republish now, no cart rebuilds.
+
 Motivated by one iPad afternoon producing three on-device mysteries (muted
 WebAudio, the §-touch-notes-7 phantom, the finding-#6 tap-death) with zero
 visibility — native has the editor overlay + trigger-file inspection, web has
