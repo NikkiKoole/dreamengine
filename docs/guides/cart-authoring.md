@@ -320,7 +320,8 @@ the include, and they never touch engine internals or the tcc symbol table.
 
 | Header | What it gives you | When to reach for it | Showcase carts |
 |---|---|---|---|
-| `ui.h` | cross-input widgets: `ui_button`/`ui_slider`/`ui_knob` + per-finger capture, fat-finger hit pads, opt-in keyboard/gamepad focus ring | any cart with knobs, sliders, or clickable buttons — don't hand-roll the drag state machine | `uikit`, `sfxgen` |
+| `ui.h` | cross-input widgets: `ui_button`/`ui_slider`/`ui_knob` + per-finger drag-capture, fat-finger hit pads, opt-in keyboard/gamepad focus ring | **editing a value** (slider/knob) or a **panel of mixed widgets** you want keyboard-navigable — don't hand-roll the drag-capture machine. NOT for plain hit-targets (next row) | `uikit`, `sfxgen` |
+| `studio.h` `tapp()`/`tapr()` (not a header — the built-in) | "did a touch begin / end in this rect this frame" — edge-triggered, stateless, no capture | **discrete hit-targets on your own drawn surface**: toggle a grid cell, a preset chip, a transport button, a piano key | `mt70`, `drummachine`, `mallet` |
 | `gestures.h` | per-finger swipes judged at lift (`swiped`/`swiped_in`) + `pinch_scale` | touch games where fingers act independently (a swipe must survive other fingers drumming) | `touchlab` (test 9) |
 | `improv.h` | melodic improvisation helpers for the radio stations | generative music carts that want a soloist | `cocktail`, `roadhouse` |
 | `radio.h` | radio-station chrome: chair registry, THE BAND panel, seeded-song plumbing | building a new generative radio station | the radio carts, `tango`, `yacht` |
@@ -333,6 +334,35 @@ of an `#include "ui.h"` in your cart and it jumps to that same view.
 **Writing one:** a new library header must follow the same contract (all
 `static`, `#define` tunables, header-comment manual) and ships per the
 second-customer rule — a showcase cart *plus* one real cart using it.
+
+### Touch input: `ui.h` vs `tapp()` — the decision (settled 2026-06-07)
+
+Both build on the same virtual-touch pool, so **both are mouse + touch capable
+for free** — the desktop mouse arrives as one synthetic finger either way. The
+choice is therefore *never* "which one supports touch"; it's **what kind of
+control you're drawing:**
+
+- **`ui.h`** — reach for it when you're **editing a continuous value** (a
+  slider or knob needs *drag-capture*: the value keeps tracking a finger that
+  slid off the widget), or building a **cluster of mixed widgets** that should
+  share one keyboard/gamepad focus ring. That drag-capture + focus-ring
+  machinery is exactly what you must not hand-roll — it's why `ui.h` exists.
+- **`tapp()` / `tapr()`** (built into `studio.h`) — reach for these for
+  **discrete hit-targets you draw yourself**: toggle a sequencer cell, pick a
+  preset chip, hit a transport button, press a piano key. There's no value to
+  track and no capture needed — just "did a tap begin in this rect?". Wrapping
+  these in `ui_button` buys nothing and forces `ui.h`'s visual + focus model
+  onto a surface you're already drawing in your own style.
+- **Multitouch *drag gestures*** (paint across a grid, glissando across keys,
+  sweep across mallet bars) are **neither** — they're the per-finger pool
+  (`touch_count`/`touch_id`/`touch_ended_*`); `ui.h` captures one contact per
+  widget and won't drag *across* targets. `mallet.c`/`drummachine.c` are the
+  pattern; `gestures.h` covers swipes/pinch.
+
+Rule of thumb: **value → `ui.h`; hit-target → `tapp()`; drag-across → the
+finger pool.** A standalone button is a `tapp()`; a button *inside a `ui.h`
+panel* (so it joins the focus ring) is a `ui_button`. The scope boundary lives
+in [`../design/ui-widgets-notes.md`](../design/ui-widgets-notes.md).
 
 ## House conventions for instrument carts
 

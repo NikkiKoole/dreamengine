@@ -276,3 +276,30 @@ ui.h widget script/replay-drivable — §7's verification leans on it. And the
 tinydaws rack chassis is the kit's next big customer: step-grid = buttons,
 lane levels = vertical faders (8a), the play-pad = a surface (8c) — the
 rack work order and this v2 list are the same list.
+
+## 9. Scope boundary — `ui.h` is NOT the answer to "my cart has buttons" (settled 2026-06-07)
+
+Two carts (`mt70`, `drummachine`) were retrofitted for touch *without* `ui.h`,
+on purpose, and the reasoning needs to be written down so it's a consistent
+path and not a per-agent coin-flip. The trap is reading "carts keep
+re-rolling widgets → use `ui.h`" (§1) as "all on-screen controls → `ui.h`."
+They don't. **The deciding fact: `ui.h`, `tapp()`, and the finger pool are
+ALL built on the same virtual-touch pool, so all three are mouse + touch
+capable for free.** Touch coverage is never the reason to pick one — the
+*kind of control* is. Three kinds, three tools:
+
+| Control kind | Tool | Why | Example |
+|---|---|---|---|
+| **Value editor** — a continuous number a finger drags, needs *capture* (keeps tracking after sliding off the widget) | **`ui.h`** (`ui_slider`/`ui_knob`) | capture + slew + the keyboard/gamepad focus ring is the machinery you must not hand-roll | sfxgen's 17 sliders, a synth's cutoff knob |
+| **Discrete hit-target** — a thing you tap once; drawn in the cart's own style | **`tapp()`/`tapr()`** | no value, no capture; wrapping it in `ui_button` only forces `ui.h`'s visual + focus model onto a surface you're already drawing | a sequencer cell, a preset chip, a transport button, a piano key |
+| **Surface** — a zone map where a finger *hands over between zones* as it moves (the deliberate opposite of capture, §8c) | **the per-finger pool** (`touch_id`/`touch_ended_*`); future `ui_surface` | a captured contact never migrates widgets — wrong for keybeds, drum grids, glissando, paint-drag | sh101 keybed, mt70/drummachine grids, mallet sweep |
+
+The fuzzy edge is **buttons**: `ui_button` exists and is right *inside a `ui.h`
+panel* (so the button joins the focus ring with neighbouring sliders). A
+**standalone** button, or one on a custom-drawn panel, is a `tapp()` — that's
+what mt70's preset/octave/transport row and drummachine's transport use, and it
+keeps those carts off an include they'd otherwise touch for nothing.
+
+One-line rule (mirrored in
+[`../guides/cart-authoring.md`](../guides/cart-authoring.md) → "Touch input"):
+**value → `ui.h`; hit-target → `tapp()`; drag-across → the finger pool.**
