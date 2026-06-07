@@ -16,6 +16,7 @@
 //   Z          toggle the cell under the cursor (and audition it)
 //   X          clear the whole grid
 //   ← / →      tempo down / up (the arrow keys are "player 1")
+//   ↑ / ↓      swing up / down — drags every 2nd 16th late, 0-60%
 
 #define ROWS  6
 #define STEPS 16
@@ -46,20 +47,42 @@ static int  cur_step = 0;             // column the playhead is on
 static int  last_16 = -1;             // last sixteenth-note we triggered on
 static int  flash[ROWS];              // frame() when each row last fired
 static int  tempo = 120;
+static int  swing = 0;                // % of a 16th the off-beats drag (0-60, ↑/↓)
 
-// fire one row's drum — different midi/instrument/decay per voice
+// fire one row's drum — each row plays its own instrument slot (defined in init)
 static void play_row(int r) {
     switch (r) {
-        case 0: hit(36, INSTR_TRI,    6, 100); break;  // kick   — low triangle thump
-        case 1: hit(55, INSTR_NOISE,  5, 120); break;  // snare  — mid noise
-        case 2: hit(84, INSTR_NOISE,  3,  28); break;  // hihat  — short noise tick
-        case 3: hit(84, INSTR_NOISE,  2, 170); break;  // o.hat  — long noise wash
-        case 4: hit(64, INSTR_NOISE,  4,  60); break;  // clap   — snappy noise
-        case 5: hit(40, INSTR_SQUARE, 4, 110); break;  // bass   — tonal square
+        case 0: hit(72, INSTR_NOISE, 2, 12);             // kick — click layer...
+                hit(34, 5, 6, 250); break;               // ...over the sine boom (pitch env = punch)
+        case 1: hit(58, 6, 5, 110);                      // snare — noise bark...
+                hit(53, INSTR_TRI, 3, 45); break;        // ...over a tonal body
+        case 2: hit(92, 7, 3, 24); break;                // closed hat — high-passed tick
+        case 3: hit(92, 8, 2, 170); break;               // open hat — same sizzle, longer
+        case 4: hit(64, 9, 4, 35);                       // clap — three bursts, like hands:
+                schedule_hit(12, 64, 9, 3, 30);          // sample-accurate echoes of the slap
+                schedule_hit(24, 64, 9, 4, 60); break;
+        case 5: hit(40, 10, 4, 110); break;              // bass — rounded-off square
     }
 }
 
 void init() {
+    // the kit lives in instrument slots 5-10, one per row. The kick is the "punch"
+    // recipe: a LONG sine whose pitch env does the donk (909 boom), not a short tri
+    // tick. The noise rows get per-row filters so the hats sizzle (highpass) and the
+    // snare/clap bark (bandpass) instead of all four sharing the same white-noise splat.
+    instrument(5, INSTR_SINE,  0, 280, 0, 60);           // kick body
+    instrument_env(5, 1, ENV_PITCH, 0, 55, 30);          // starts +30 st, settles in 55ms
+    instrument(6, INSTR_NOISE, 0, 130, 0, 50);           // snare rattle
+    instrument_filter(6, FILTER_BAND, 1400, 3);
+    instrument(7, INSTR_NOISE, 0, 25, 0, 15);            // closed hat
+    instrument_filter(7, FILTER_HIGH, 6500, 2);
+    instrument(8, INSTR_NOISE, 0, 180, 0, 80);           // open hat
+    instrument_filter(8, FILTER_HIGH, 6000, 2);
+    instrument(9, INSTR_NOISE, 0, 60, 0, 30);            // one clap burst (play_row fires 3)
+    instrument_filter(9, FILTER_BAND, 1100, 5);
+    instrument(10, INSTR_SQUARE, 1, 100, 3, 60);         // bass
+    instrument_filter(10, FILTER_LOW, 900, 4);
+
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < STEPS; c++)
             grid[r][c] = (PRESET[r][c] == 'x');
@@ -69,7 +92,11 @@ void update() {
     bpm(tempo);
 
     // ── transport: advance the playhead off the synth clock ──
-    int sixteenth = beat() * 4 + (int)(beat_pos() * 4.0f);
+    // swing drags every ODD 16th late by swing% of a step: the counter only ticks
+    // over once beat_pos clears the swung onset. Even 16ths (the on-beats) stay straight.
+    float pos16 = beat() * 4 + beat_pos() * 4.0f;
+    int   n     = (int)pos16;
+    int sixteenth = (n % 2 == 1 && pos16 - n < swing / 100.0f) ? n - 1 : n;
     if (sixteenth != last_16) {
         last_16  = sixteenth;
         cur_step = sixteenth % STEPS;
@@ -91,16 +118,18 @@ void update() {
         for (int r = 0; r < ROWS; r++)
             for (int c = 0; c < STEPS; c++) grid[r][c] = false;
 
-    // ── tempo: arrow keys are "player 1" ──
+    // ── tempo + swing: arrow keys are "player 1" ──
     if (btnp(1, BTN_LEFT))  tempo = max(60,  tempo - 5);
     if (btnp(1, BTN_RIGHT)) tempo = min(240, tempo + 5);
+    if (btnp(1, BTN_UP))    swing = min(60, swing + 10);
+    if (btnp(1, BTN_DOWN))  swing = max(0,  swing - 10);
 }
 
 void draw() {
     cls(CLR_BROWNISH_BLACK);
 
     print("DRUM MACHINE", 2, 4, CLR_LIGHT_YELLOW);
-    print_right(str("%d BPM", tempo), 318, 4, CLR_WHITE);
+    print_right(str("%d BPM  swing %d%%", tempo, swing), 318, 4, CLR_WHITE);
 
     // playhead marker above the active column
     rectfill(GX + cur_step * SX, GY - 4, CW, 2, CLR_WHITE);
@@ -130,5 +159,5 @@ void draw() {
     rect(GX + curC * SX - 1, GY + curR * SY - 1, CW + 2, CH + 2, CLR_GREEN);
 
     print("WASD move   Z toggle   X clear", 2, GY + ROWS * SY + 6, CLR_LIGHT_GREY);
-    print("arrow keys: tempo", 2, GY + ROWS * SY + 18, CLR_DARK_GREY);
+    print("arrows: tempo + swing", 2, GY + ROWS * SY + 18, CLR_DARK_GREY);
 }
