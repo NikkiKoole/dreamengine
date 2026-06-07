@@ -17,10 +17,13 @@
 // SRC switch = the probe's A/B: struck presets can also play on INSTR_MALLET
 // (one voice, macro positions) — ear decides if the engine corner is enough.
 //
-// controls: touch the keys (multitouch, slide = glissando, lift = release)
-//           Z S X D C V B H N J M , = lower octave on the computer keyboard
-//           1..9,0 presets · A vibrato · K src 2-osc/mallet · SPACE demo tune
+// controls: touch the keys (multitouch, slide = glissando; struck presets ring
+//           out past the lift — only sustained ones gate off)
+//           computer keys = GarageBand musical typing, same as moog.c:
+//           A S D F G H J K L ; ' whites · W E T Y U O P blacks (1.5 octaves)
+//           1..9,0 presets · Z vibrato · X src 2-osc/mallet · SPACE demo tune
 #include "studio.h"
+#include <math.h>
 #include <stdio.h>
 
 // ---------------------------------------------------------------- slots
@@ -78,11 +81,26 @@ static const int bsemi[7] = { 1, 3, -1, 6, 8, 10, -1 };
 #define NOFINGER (-999)
 #define FNG_KB   (-1234)       // "held by the computer keyboard"
 #define FNG_DEMO (-5678)       // "held by the demo sequencer"
-typedef struct { int handle[3], nh; int finger; long since; } KeyState;
+typedef struct {
+    int  handle[3], nh;
+    int  finger;               // NOFINGER = nobody holds it (may still be RINGING)
+    long since;
+    // struck-preset ring-out state: the engine's amp ADSR decays LINEARLY, which
+    // reads as "plonk, stop" — so struck notes sustain engine-side and the cart
+    // drives a true EXPONENTIAL decay through live note_vol(), per layer with its
+    // own ring time. On lift the key detaches but keeps ringing, like real bells.
+    bool struck, engine_decay; // engine_decay = mallet mode (it rings itself)
+    int  age;                  // frames since strike
+    int  bvol[3], lvol[3], ring_ms[3];
+} KeyState;
 static KeyState ks[NSEMI];
 
-// one octave of computer keys, classic layout: Z=C S=C# X=D ... M=B ,=C
-static const char KBMAP[13] = { 'Z','S','X','D','C','V','G','B','H','N','J','M',',' };
+// computer keys = GarageBand musical typing (same map as moog.c): home row is
+// the white keys from A=C, the QWERTY row above holds the blacks. 18 semis —
+// the keyboard's top few keys are touch-only.
+#define NKBKEY 18
+static const char KBMAP[NKBKEY] = {
+    'A','W','S','E','D','F','T','G','Y','H','U','J','K','O','L','P',';','\'' };
 
 // ---------------------------------------------------------------- voices
 static int voices_used(void) {
@@ -99,19 +117,21 @@ static void release_semi(int s) {
 
 // program slots 5/6/7 (+8) for the current preset; partials with o2_d==0 follow
 // the main envelope (the Organ's sustaining 3rd, the Chime's equal decay)
+// One slot of the stack. Sustained presets (organ/flute…) use the plain gated
+// ADSR. Struck presets (sustain 0) deliberately DON'T put their decay in the
+// ADSR — the slot sustains at full and the cart decays the note itself via
+// live note_vol() (exponential, the bell percept the linear ADSR can't make).
+static void program_slot(int slot, const P *p, int s) {
+    if (s == 0) instrument(slot, INSTR_SINE, p->a, 0, 7, 150);
+    else        instrument(slot, INSTR_SINE, p->a, p->d, s, p->r);
+    instrument_filter(slot, FILTER_LOW, p->cut, 0);
+}
+
 static void apply_preset(void) {
     const P *p = &PRE[preset];
-    instrument(SL_FUND, INSTR_SINE, p->a, p->d, p->s, p->r);
-    instrument_filter(SL_FUND, FILTER_LOW, p->cut, 0);
-    if (p->o2_vol) {
-        if (p->o2_d) instrument(SL_OSC2, INSTR_SINE, p->a, p->o2_d, 0, p->r);
-        else         instrument(SL_OSC2, INSTR_SINE, p->a, p->d, p->s, p->r);
-        instrument_filter(SL_OSC2, FILTER_LOW, p->cut, 0);
-    }
-    if (p->o3_vol) {
-        instrument(SL_OSC3, INSTR_SINE, p->a, p->o3_d ? p->o3_d : p->d, p->o3_d ? 0 : p->s, p->r);
-        instrument_filter(SL_OSC3, FILTER_LOW, p->cut, 0);
-    }
+    program_slot(SL_FUND, p, p->s);
+    if (p->o2_vol) program_slot(SL_OSC2, p, p->o2_d ? 0 : p->s);
+    if (p->o3_vol) program_slot(SL_OSC3, p, p->o3_d ? 0 : p->s);
     if (p->struck) {
         instrument_harmonics(SL_MALLET, p->mh);
         instrument_timbre(SL_MALLET, p->mt);
@@ -147,26 +167,74 @@ static void press_semi(int s, int finger) {
 
     float fm = (float)(BASE_MIDI + s);
     KeyState *K = &ks[s];
-    if (K->nh) release_semi(s);              // demo/finger collision: no orphans
+    if (K->nh) release_semi(s);              // re-strike / demo collision: no orphans
     K->nh = 0;
+    K->age = 0;
+    K->struck = (p->s == 0);                 // decays-to-silence preset → rings past lift
+    K->engine_decay = false;
     if (use_mallet && p->struck) {
-        K->handle[K->nh++] = note_on(BASE_MIDI + s, SL_MALLET, 6);
+        K->handle[K->nh] = note_on(BASE_MIDI + s, SL_MALLET, 6);
+        K->ring_ms[K->nh] = 600 + (int)(p->mm * p->mm * 6000.0f);  // mallet rings itself
+        K->bvol[K->nh] = K->lvol[K->nh] = 6;
+        K->engine_decay = true;
+        K->nh++;
     } else {
-        K->handle[K->nh++] = note_on(BASE_MIDI + s, SL_FUND, p->vol);
-        if (p->o2_vol) {
-            int h = note_on(BASE_MIDI + s + (int)(p->o2_st + 0.5f), SL_OSC2, p->o2_vol);
-            note_pitch(h, fm + p->o2_st);          // the exact-ratio correction
-            K->handle[K->nh++] = h;
-        }
-        if (p->o3_vol) {
-            int h = note_on(BASE_MIDI + s + (int)(p->o3_st + 0.5f), SL_OSC3, p->o3_vol);
-            note_pitch(h, fm + p->o3_st);
+        // layer ring times: 0 = sustains with the gate; >0 = cart-side exponential
+        // decay via note_vol (a partial can fade while its key stays held — Flute)
+        int ring[3] = {
+            K->struck ? p->d : 0,
+            p->o2_d ? p->o2_d : (K->struck ? p->d : 0),
+            p->o3_d ? p->o3_d : (K->struck ? p->d : 0),
+        };
+        int vols[3] = { p->vol, p->o2_vol, p->o3_vol };
+        float sts[3] = { 0.0f, p->o2_st, p->o3_st };
+        for (int L = 0; L < 3; L++) {
+            if (vols[L] == 0) continue;
+            int slot = SL_FUND + L;
+            int h = note_on(BASE_MIDI + s + (int)(sts[L] + 0.5f), slot, vols[L]);
+            if (sts[L] != (float)(int)sts[L]) note_pitch(h, fm + sts[L]); // exact ratio
+            K->bvol[K->nh] = K->lvol[K->nh] = vols[L];
+            K->ring_ms[K->nh] = ring[L];
             K->handle[K->nh++] = h;
         }
         if (p->click_vol) hit(BASE_MIDI + s + 24, SL_CLICK, p->click_vol, 8);
     }
     K->finger = finger;
     K->since  = frame();
+}
+
+// lift: a sustained key gates off; a struck key DETACHES and keeps ringing —
+// the original hardware behavior (and the fix for "a tap just pops"):
+// percussive presets always ring out their full decay, lift or no lift.
+static void lift_semi(int s) {
+    if (ks[s].struck) ks[s].finger = NOFINGER;
+    else              release_semi(s);
+}
+
+// per-frame ring-out: drive each decaying layer's exponential note_vol curve
+// (the engine's amp ADSR is linear — this loop is what makes a bell BELL),
+// and free a struck key's voices once every layer has rung to silence
+static void ring_tick(void) {
+    for (int s = 0; s < NSEMI; s++) {
+        KeyState *K = &ks[s];
+        if (!K->nh) continue;
+        bool decaying = K->engine_decay;
+        for (int i = 0; i < K->nh && !decaying; i++) decaying = K->ring_ms[i] > 0;
+        if (!decaying) continue;
+        K->age++;
+        float t_ms = K->age * (1000.0f / 60.0f);
+        bool alive = false;
+        for (int i = 0; i < K->nh; i++) {
+            if (K->engine_decay) { alive = t_ms < K->ring_ms[i]; continue; }
+            if (K->ring_ms[i] == 0) { alive = true; continue; }   // gated layer
+            int nv = (int)(K->bvol[i] * expf(-4.0f * t_ms / (float)K->ring_ms[i]) + 0.5f);
+            if (nv != K->lvol[i]) { note_vol(K->handle[i], nv); K->lvol[i] = nv; }
+            if (nv > 0) alive = true;
+        }
+        // a struck key with nothing left to say frees its voices; a held
+        // sustained key keeps its (now quiet) decayed partials until lift
+        if (!alive && (K->struck || K->finger == NOFINGER)) release_semi(s);
+    }
 }
 
 // ---------------------------------------------------------------- demo tune
@@ -178,8 +246,8 @@ static const int DEMO_MEL[32] = {            // semis from BASE+12; -1 = rest/ho
 static int demo_step = -1, demo_mel_semi = -1, demo_bass_semi = -1;
 
 static void demo_off(void) {
-    if (demo_mel_semi  >= 0) { release_semi(demo_mel_semi);  demo_mel_semi  = -1; }
-    if (demo_bass_semi >= 0) { release_semi(demo_bass_semi); demo_bass_semi = -1; }
+    if (demo_mel_semi  >= 0) { lift_semi(demo_mel_semi);  demo_mel_semi  = -1; }
+    if (demo_bass_semi >= 0) { lift_semi(demo_bass_semi); demo_bass_semi = -1; }
     demo_step = -1;
 }
 
@@ -190,12 +258,12 @@ static void demo_tick(void) {
     demo_step = stp;
     int m = DEMO_MEL[stp];
     if (m >= 0) {
-        if (demo_mel_semi >= 0) release_semi(demo_mel_semi);
+        if (demo_mel_semi >= 0) lift_semi(demo_mel_semi);   // struck notes ring out
         demo_mel_semi = m;
         press_semi(m, FNG_DEMO);
     }
     if (stp % 8 == 0) {                          // bass on the bar: C3 / G3
-        if (demo_bass_semi >= 0) release_semi(demo_bass_semi);
+        if (demo_bass_semi >= 0) lift_semi(demo_bass_semi);
         demo_bass_semi = ((stp / 8) & 1) ? 7 : 0;
         press_semi(demo_bass_semi, FNG_DEMO);
     }
@@ -239,14 +307,14 @@ void update(void) {
     // presets: 1..9 then 0
     for (int i = 0; i < 10; i++)
         if (keyp(i == 9 ? '0' : '1' + i)) { preset = i; apply_preset(); }
-    if (keyp('A')) { vibrato = !vibrato; apply_preset(); vibrato_live(); }
-    if (keyp('K') && p->struck) { use_mallet = !use_mallet; }
+    if (keyp('Z')) { vibrato = !vibrato; apply_preset(); vibrato_live(); }
+    if (keyp('X') && p->struck) { use_mallet = !use_mallet; }
     if (keyp(KEY_SPACE)) { demo = !demo; if (!demo) demo_off(); }
 
-    // computer keyboard: one octave, gate = key held
-    for (int s = 0; s <= 12; s++) {
+    // computer keyboard: 1.5 octaves, gate = key held
+    for (int s = 0; s < NKBKEY; s++) {
         if (keyp(KBMAP[s]) && ks[s].finger == NOFINGER) press_semi(s, FNG_KB);
-        if (keyr(KBMAP[s]) && ks[s].finger == FNG_KB)   release_semi(s);
+        if (keyr(KBMAP[s]) && ks[s].finger == FNG_KB)   lift_semi(s);
     }
 
     // touch: live fingers claim keys / glissando (touchpiano pattern)
@@ -257,14 +325,14 @@ void update(void) {
         for (int k = 0; k < NSEMI; k++)
             if (ks[k].finger == id) { cur = k; break; }
         if (s == cur) continue;
-        if (cur >= 0) release_semi(cur);
+        if (cur >= 0) lift_semi(cur);
         if (s >= 0 && ks[s].finger == NOFINGER) press_semi(s, id);
     }
     // lifted fingers release exactly their keys
     for (int i = 0; i < touch_ended_count(); i++) {
         int id = touch_ended_id(i);
         for (int k = 0; k < NSEMI; k++)
-            if (ks[k].finger == id) release_semi(k);
+            if (ks[k].finger == id) lift_semi(k);
     }
     // panel buttons (edge-triggered taps; mouse arrives as a synthetic finger)
     for (int i = 0; i < 10; i++)
@@ -274,6 +342,7 @@ void update(void) {
     if (tapp(cbt_x[2], CBT_Y, cbt_w[2], 16) && p->struck) use_mallet = !use_mallet;
 
     if (demo) demo_tick();
+    ring_tick();
 
 #ifdef DE_TRACE
     watch("preset", "%d", preset);
@@ -334,7 +403,7 @@ void draw(void) {
     print(str("\"%s\"", p->quote), 8, CBT_Y + 22, CLR_LIGHT_GREY);
     int nl = (use_mallet && p->struck) ? 1 : 1 + (p->o2_vol ? 1 : 0) + (p->o3_vol ? 1 : 0);
     print_right(str("%d voice%s/key", nl, nl == 1 ? "" : "s"), SCREEN_W - 10, CBT_Y + 22, CLR_DARK_GREY);
-    print("Z..M keys  1..0 presets  A vib  K src  SPACE demo", 8, CBT_Y + 32, CLR_DARK_GREY);
+    print("A..' keys (garageband layout)  1..0 presets  Z vib  X src  SPACE demo", 8, CBT_Y + 32, CLR_DARK_GREY);
     font(FONT_NORMAL);
 
     // keyboard
