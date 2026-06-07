@@ -309,6 +309,32 @@ Rows shorter than `MAP_W` are zero-padded. Rows beyond `MAP_H` are ignored.
 
 ---
 
+## Cart-land library headers — `#include` superpowers
+
+Beyond `studio.h`, `runtime/` carries a small set of **library headers**: pure
+cart-land C you `#include` when a cart needs a capability the engine
+deliberately doesn't own ([ADR-0006](../decisions/0006-library-carts-not-engine.md)
+— richness lives in readable cart code, not the kernel). Everything in them is
+`static` (each cart compiles its own copy), tunables are `#define`d *before*
+the include, and they never touch engine internals or the tcc symbol table.
+
+| Header | What it gives you | When to reach for it | Showcase carts |
+|---|---|---|---|
+| `ui.h` | cross-input widgets: `ui_button`/`ui_slider`/`ui_knob` + per-finger capture, fat-finger hit pads, opt-in keyboard/gamepad focus ring | any cart with knobs, sliders, or clickable buttons — don't hand-roll the drag state machine | `uikit`, `sfxgen` |
+| `gestures.h` | per-finger swipes judged at lift (`swiped`/`swiped_in`) + `pinch_scale` | touch games where fingers act independently (a swipe must survive other fingers drumming) | `touchlab` (test 9) |
+| `improv.h` | melodic improvisation helpers for the radio stations | generative music carts that want a soloist | `cocktail`, `roadhouse` |
+| `radio.h` | radio-station chrome: chair registry, THE BAND panel, seeded-song plumbing | building a new generative radio station | the radio carts, `tango`, `yacht` |
+
+**Reading them:** each header opens with its own manual (why it exists, usage,
+tunables). In the editor, type the `#include "ui.h"` line and **cmd-click the
+filename** — the source opens read-only over the code tab, outline following.
+
+**Writing one:** a new library header must follow the same contract (all
+`static`, `#define` tunables, header-comment manual) and ships per the
+second-customer rule — a showcase cart *plus* one real cart using it.
+
+---
+
 ## Cart file locations
 
 | Path | Purpose |

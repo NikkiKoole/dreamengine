@@ -38,7 +38,20 @@ The Electron window opens automatically once Vite is ready at `localhost:5173`. 
 eventually2/
 ├── runtime/
 │   ├── studio.h        # the public API — all constants, function declarations
-│   └── studio.c        # Raylib implementation of the API + main()
+│   ├── studio.c        # Raylib implementation of the API + main()
+│   └── *.h library headers — cart-land capabilities the engine deliberately
+│       doesn't own (ADR-0006); all static, tunables #define'd before the
+│       include. CHECK HERE before hand-rolling input/UI plumbing in a cart:
+│       ├── ui.h        #   widgets: ui_button/ui_slider/ui_knob — per-finger
+│       │               #   capture, fat-finger hit pads, opt-in focus ring
+│       │               #   (mouse+touch+keyboard at once); carts with knobs/
+│       │               #   sliders/buttons include this, never hand-roll the
+│       │               #   drag machine (uikit + sfxgen are the references)
+│       ├── gestures.h  #   per-finger swipes judged at lift + pinch_scale
+│       ├── improv.h    #   melodic improvisation for the radio stations
+│       └── radio.h     #   radio-station chrome (chairs, THE BAND panel)
+│       full table + contract: docs/guides/cart-authoring.md → "Cart-land
+│       library headers"
 ├── editor/
 │   ├── electron/
 │   │   ├── main.cjs    # Electron main process — compiles + runs cartridges
