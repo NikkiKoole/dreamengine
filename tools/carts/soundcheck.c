@@ -20,7 +20,7 @@ static int   step = -1;          // current test step (-1 until the first beat)
 static float t = 0;
 static const char *label = "warming up";
 
-static const char *WN[13] = { "SQUARE", "SAW", "TRI", "NOISE", "SINE", "USER0 org", "USER1 vox", "USER2 bel", "USER3 fld", "PLUCK ks", "MALLET bar", "FM 2op", "ORGAN B3" };
+static const char *WN[14] = { "SQUARE", "SAW", "TRI", "NOISE", "SINE", "USER0 org", "USER1 vox", "USER2 bel", "USER3 fld", "PLUCK ks", "MALLET bar", "FM 2op", "ORGAN B3", "EPIANO" };
 
 static int  held = -1;           // the live-setter test voice
 static int  burst_left = 0;      // schedule_hit machine-gun
@@ -74,6 +74,10 @@ void init(void) {
     instrument_harmonics(28, 0.45f);             // jimmy-smith-ish registration
     instrument_timbre(28, 0.55f);
     instrument_morph(28, 0.7f);                  // scanner chorus + a touch of percussion
+    instrument(27, INSTR_EPIANO, 1, 0, 7, 1200); // slot 27 = the electric-piano engine
+    instrument_harmonics(27, 0.15f);             // Rhodes
+    instrument_timbre(27, 0.35f);
+    instrument_morph(27, 0.4f);                  // a little bark
     bpm(120);
 }
 
@@ -88,30 +92,31 @@ void update(void) {
     if (t < 0.6f) return;
     t = 0;
     step++;
-    int s = step % 20;
-    if (s < 13) {                               // each wave id, audibly, labeled
+    int s = step % 21;
+    if (s < 14) {                               // each wave id, audibly, labeled
         label = WN[s];
         if      (s == 9)  hit(57, 31, 6, 500);   // the KS pluck engine (slot 31)
         else if (s == 10) hit(69, 30, 6, 500);   // the modal mallet engine (slot 30)
         else if (s == 11) hit(57, 29, 6, 500);   // the 2-op FM engine (slot 29)
         else if (s == 12) hit(45, 28, 6, 700);   // the tonewheel organ engine (slot 28)
+        else if (s == 13) hit(57, 27, 6, 900);   // the electric-piano engine (slot 27)
         else              note(57, s, 6);        // slots 0-8: raw waves + the 4 user waves
-    } else if (s == 13) {
+    } else if (s == 14) {
         label = "chord + strum";
         chord(48, CHORD_MIN7, 5, 4);
         strum(60, CHORD_MAJ, 6, 4, 40);
-    } else if (s == 14) {
+    } else if (s == 15) {
         label = "tone + schedule";
         tone(SCALE_PENTA, 4, 7, 4);
         schedule(120, 72, 8, 4);
-    } else if (s == 15) {
+    } else if (s == 16) {
         label = "schedule_hit burst (40x9ms)";
         burst_left = 40;
-    } else if (s == 16) {
+    } else if (s == 17) {
         label = "note_on + live setters";
         held = note_on(52, 9, 5);
         note_glide(held, 80);
-    } else if (s == 17 && held >= 0) {
+    } else if (s == 18 && held >= 0) {
         label = "live: pitch/cutoff/res/duty/lfo/env/macros";
         note_pitch(held, 59);
         note_cutoff(held, 2000);
@@ -123,11 +128,11 @@ void update(void) {
         note_harmonics(held, 0.9f);              // engine macros ride kind 22 — no-op on a
         note_timbre(held, 0.7f);                 // wavetable slot, but the request path and
         note_morph(held, 0.3f);                  // stale-handle safety must survive them
-    } else if (s == 18) {
+    } else if (s == 19) {
         label = "note_off + panic";
         if (held >= 0) { note_off(held); held = -1; }
         note_off_all();
-    } else if (s == 19) {
+    } else if (s == 20) {
         label = "sfx + music banks";
         sfx(0);
     }
@@ -137,7 +142,7 @@ void draw(void) {
     cls(CLR_DARKER_BLUE);
     print("SOUND CHECK", 8, 6, CLR_WHITE);
     print_scaled(label, 8, 60, CLR_YELLOW, 2);
-    print(str("step %d", step < 0 ? 0 : step % 20), 8, 90, CLR_LIGHT_GREY);
+    print(str("step %d", step < 0 ? 0 : step % 21), 8, 90, CLR_LIGHT_GREY);
     print("PASS = no [sound] WARNING in the log", 8, 130, CLR_LIME_GREEN);
     print("       and all 12 waves sound different", 8, 140, CLR_LIME_GREEN);
     print("FAIL = any dropped-request warning", 8, 154, CLR_DARK_PEACH);

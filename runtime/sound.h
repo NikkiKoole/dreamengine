@@ -135,6 +135,13 @@ typedef struct {
     float  org_lp;                 // pre-drive lowpass state — driven organ loses its top (amp/Leslie)
     int    org_widx;               // scanner delay write index into ks_buf[0..ORGAN_SCAN)
     bool   org_on;                 // struck this note — guards an engine id without a note-on init
+    // electric-piano state (INSTR_EPIANO): 12 decaying inharmonic sine modes through a pickup
+    // nonlinearity + DC blocker, buffer-free (mallet family). Struck/self-decaying like mallet.
+    float  ep_ph[12], ep_amp[12], ep_dec[12], ep_ratio[12]; // per-mode phase / amp / decay-frac / ratio
+    float  ep_dc_prev, ep_dc_state;  // DC blocker taps (the sum^2 nonlinearity injects DC)
+    float  ep_freqnorm;              // register position 0..1 (upper modes + bark fade out high up)
+    int    ep_type;                  // 0 Rhodes / 1 Wurli / 2 Clav (from harmonics at note-on)
+    bool   ep_on;                    // struck this note — guards an engine id without a note-on init
 } Voice;
 
 static Voice         voices[SOUND_VOICES];
@@ -686,6 +693,110 @@ static inline float sound_organ_sample(Voice *v, float pitch_mul) {
     return out * 0.9f;
 }
 
+// EP note-on: build the 12 modal sines from the instrument detent (harmonics), brightness
+// (timbre = pickup position), register, and strike level. The modes then ring down (struck,
+// self-decaying — mallet family); the sample fn sums them, runs the pickup nonlinearity
+// (morph = bark, read live) and a DC blocker. navkit crib: initEPianoSettings + the tables.
+static void sound_epiano_start(Voice *v) {
+    // 12 mode ratios per instrument (navkit synth_oscillators.h:3675 — the inharmonicity is
+    // the bell attack): Rhodes tine+spring, Wurli reed (odd-ish), Clav string (near-harmonic)
+    static const float RAT[3][12] = {
+        { 1.0f, 4.2f, 9.5f, 16.3f, 24.8f, 35.0f, 47.0f, 61.0f, 77.0f, 95.0f, 115.0f, 137.0f },
+        { 1.0f, 2.02f, 3.01f, 5.04f, 7.05f, 9.08f, 11.1f, 13.1f, 15.2f, 17.2f, 19.3f, 21.3f },
+        { 1.0f, 2.003f, 3.012f, 4.028f, 5.15f, 6.35f, 7.6f, 8.9f, 10.2f, 11.6f, 13.0f, 14.5f },
+    };
+    // amp profiles, centered (mellow) -> offset (bright); timbre crossfades them (:3747)
+    static const float AC[3][12] = {
+        { 1.0f, .04f, .03f, .06f, .03f, .02f, .015f, .012f, .010f, .008f, .006f, .004f },
+        { 1.0f, .08f, .45f, .12f, .10f, .04f, 0,0,0,0,0,0 },
+        { 1.0f, .30f, .20f, .35f, .15f, .06f, 0,0,0,0,0,0 },
+    };
+    static const float AO[3][12] = {
+        { .60f, .35f, .08f, .20f, .08f, .05f, .04f, .03f, .025f, .02f, .015f, .01f },
+        { .60f, .15f, .60f, .20f, .20f, .08f, 0,0,0,0,0,0 },
+        { .60f, .55f, .50f, .20f, .30f, .10f, 0,0,0,0,0,0 },
+    };
+    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.9f };   // base sustain s (Rhodes long, Clav short)
+    static const float TONEBAR[3]  = { 0.6f, 0.0f, 0.0f };   // Rhodes only: extends fund + 2nd
+    int ty = (int)(v->harm * 2.999f); if (ty < 0) ty = 0; else if (ty > 2) ty = 2;
+    v->ep_type = ty;
+    float pp  = v->timb;                                     // pickup position / brightness
+    float vel = v->vol;                                      // strike level 0..1
+    float fn  = (v->freq - 80.0f) / 1200.0f; if (fn < 0.0f) fn = 0.0f; else if (fn > 1.0f) fn = 1.0f;
+    v->ep_freqnorm = fn;
+    const float dt = 1.0f / (float)SOUND_SAMPLE_RATE;
+    float keep = 1.0f - fn;
+    for (int i = 0; i < 12; i++) {
+        v->ep_ratio[i] = RAT[ty][i];
+        v->ep_ph[i]    = (float)i * 0.083f;                  // small spread (keep the attack edge, dodge a DC spike)
+        float a = AC[ty][i] + (AO[ty][i] - AC[ty][i]) * pp;
+        if (i == 0) {
+            a *= (1.0f - 0.15f * fn);
+        } else {
+            float k = keep * keep;                           // upper modes fade with register
+            if (i >= 4) k *= keep;                           // bell modes steeper (real Rhodes top ~ pure sine)
+            a *= k * (0.3f + 0.7f * vel);                    // and brighter when struck harder
+        }
+        v->ep_amp[i] = a;
+        float dfac = 1.0f / (1.0f + (RAT[ty][i] - 1.0f) * 0.25f);   // upper modes ring shorter
+        float dec  = BASE_DEC[ty] * (1.0f - fn * 0.4f) * dfac;
+        if (ty == 0 && i == 0) dec *= (1.0f + TONEBAR[0] * 1.5f);   // tone-bar: fund sustains
+        if (ty == 0 && i == 1) dec *= (1.0f + TONEBAR[0] * 0.6f);
+        if (dec < 0.02f) dec = 0.02f;
+        v->ep_dec[i] = dt / dec;                             // per-sample decay fraction
+    }
+    v->ep_dc_prev = v->ep_dc_state = 0.0f;
+    v->ep_on = true;
+}
+
+// One EP sample: sum the 12 decaying modes, then the PICKUP NONLINEARITY (the soul — a bare
+// sum is a dull bell). Rhodes = asymmetric even-harmonic bark, Wurli = symmetric odd-harmonic
+// buzz, Clav = mixed honk; bark amount = morph (live), register-scaled (high notes clean).
+// A DC blocker follows (the sum^2 term injects DC). Pitch per sample (§8.8.1).
+static inline float sound_epiano_sample(Voice *v, float pitch_mul) {
+    if (!v->ep_on) return 0.0f;                       // engine id without a note-on init
+    const float dt = 1.0f / (float)SOUND_SAMPLE_RATE;
+    float f = v->freq * pitch_mul;
+    if (f < 20.0f) f = 20.0f;
+    float nyq = (float)SOUND_SAMPLE_RATE * 0.45f;
+    float sum = 0.0f;
+    for (int i = 0; i < 12; i++) {
+        float a = v->ep_amp[i];
+        if (a < 0.0001f) continue;
+        v->ep_amp[i] = a - a * v->ep_dec[i];          // exponential decay
+        float mf = f * v->ep_ratio[i];
+        if (mf >= nyq) continue;                      // above Nyquist: decays silently
+        v->ep_ph[i] += mf * dt;
+        if (v->ep_ph[i] >= 1.0f) v->ep_ph[i] -= 1.0f;
+        sum += sinf(v->ep_ph[i] * 6.2831853f) * a;
+    }
+    float regDist = (1.0f - v->ep_freqnorm) * (1.0f - v->ep_freqnorm);
+    float bark = v->mor;                              // the dig-in growl — live (note_morph)
+    float s2 = sum * sum, out;
+    if (v->ep_type == 1) {                            // Wurli: odd harmonics, symmetric clip
+        float k3 = (0.40f + bark * 1.5f) * regDist;
+        float k5 = (0.10f + bark * 0.4f) * regDist;
+        out = sum + k3 * sum * s2 + k5 * sum * s2 * s2;
+        out = tanhf(out);
+    } else if (v->ep_type == 2) {                     // Clav: mixed even+odd, harder clip
+        float k2 = 0.30f + bark * 0.5f;
+        float k3 = 0.40f + bark * 0.6f;
+        out = sum + k2 * s2 + k3 * sum * s2;
+        out = tanhf(out * 1.2f);
+    } else {                                          // Rhodes: even harmonics, asymmetric clip
+        float k  = (0.25f + bark * 1.2f) * regDist;
+        float k2 = (0.10f + bark * 0.4f) * regDist;
+        out = sum + k * s2 + k2 * sum * s2;
+        float drive = 1.0f + bark * 0.5f * regDist;
+        out = (out >= 0.0f) ? tanhf(out * drive) : tanhf(out * drive * 0.85f) * 0.9f;
+    }
+    float dcin = out;                                 // DC blocker (pickup AC coupling, ~7Hz)
+    out = dcin - v->ep_dc_prev + 0.995f * v->ep_dc_state;
+    v->ep_dc_prev  = dcin;
+    v->ep_dc_state = out;
+    return out * 0.8f;
+}
+
 // One engine sample — the dispatch (engine ids >= INSTR_ENGINE_BASE). The default body is
 // PLUCK. pitch_mul carries the per-sample LFO/env pitch modulation; v->freq carries
 // note_pitch/note_glide (slewed) — so the SAME pitch machinery every oscillator answers
@@ -695,6 +806,7 @@ static inline float sound_engine_sample(Voice *v, float pitch_mul) {
     if (v->wave == INSTR_MALLET) return sound_mallet_sample(v, pitch_mul);
     if (v->wave == INSTR_FM)     return sound_fm_sample(v, pitch_mul);
     if (v->wave == INSTR_ORGAN)  return sound_organ_sample(v, pitch_mul);
+    if (v->wave == INSTR_EPIANO) return sound_epiano_sample(v, pitch_mul);
     int alloc = v->ks_len;
     if (alloc < 4) return 0.0f;   // engine id without a note-on init (e.g. an sfx step) — stay silent
     float f = v->freq * pitch_mul;
@@ -854,10 +966,12 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->ks_len = 0;
     v->md_on  = false;
     v->org_on = false;
+    v->ep_on  = false;
     v->fm_mph = v->fm_fb = v->fm_tph = 0.0f;   // FM needs no excitation, just deterministic phases
     if      (v->wave == INSTR_PLUCK)  sound_pluck_start(v);    // excite the string
     else if (v->wave == INSTR_MALLET) sound_mallet_start(v);   // strike the bar
     else if (v->wave == INSTR_ORGAN)  sound_organ_start(v);    // arm the click + perc, clear the scanner
+    else if (v->wave == INSTR_EPIANO) sound_epiano_start(v);   // build the 12 modal sines
     v->step_samples     = 0;
     v->step_len_samples = gate_samples;
     v->rel_start        = sound_adsr_gated(gate_samples, v->a_samp, v->d_samp, v->sustain);
