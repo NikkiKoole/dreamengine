@@ -2333,6 +2333,14 @@
     ]
   },
   {
+    "title": "handpan",
+    "description": "A steel hang drum: one ding, eight tone fields, every strike a gesture. The mallet cart is INSTR_MALLET's tuning rig - this is the same engine as an INSTRUMENT, no knobs at all. Real handpans zigzag the scale across the circle (ascending notes alternate right/left climbing to 12 o'clock) so physical neighbors are consonant: two-handed noodling always sounds composed. WHERE you hit matters - the strike's offset from a field's center drives the timbre macro per hit (center = soft palm thump, edge = bright ping), and taps on the bare steel between fields are the shoulder tok. Four tunings to pick from the rack: kurd, celtic, hijaz, pygmy. Multitouch: every finger is its own pointer - both hands play, like the real thing. Tap/click fields (offset = tone), drag = roll, SPACE ding, A S D F G H J K ring notes ascending, 1..4 pick a pan, M autoplay.",
+    "file": "handpan.cart.png",
+    "kind": [
+      "instrument"
+    ]
+  },
+  {
     "title": "fm",
     "description": "INSTR_FM showcase - the third modeled ENGINE: two-operator FM, the DX-synth recipe. An inaudible modulator sine bends the carrier's phase; brightness DECAYS within each note like a real DX strike (bright attack, mellow tail), and SWELLS along a slow amp attack so brass can speak. The 1:1 detent carries the built-in DX tine - the E.PIANO attack ping. The three engine macros: instrument_harmonics = carrier:mod ratio (snapped detents - integers sound musical/harmonic, off-integers are bells and metal), instrument_timbre = brightness (FM amount), instrument_morph = modulator feedback (clean to saw-edge growl to noisy clang). Five presets (1 epiano, 2 bell, 3 bass, 4 brass, 5 clang) are knob positions plus an ADSR - a DX patch is both, since this engine deliberately doesn't bake its amp envelope. The modeling rig: seven sliders (three macros + a full ADSR with live ms readouts and a drawn envelope shape - the selected segment lights up), and the panel prints the exact instrument() call to copy into your cart. The scope draws the engine's actual formula live - strike a key and watch the wave mellow (and the tine flicker). A S D F G H J K play a major scale, 1..5 presets, drag any slider (or LEFT/RIGHT + UP/DOWN), SPACE chord, M autoplay on/off.",
     "file": "fm.cart.png",
