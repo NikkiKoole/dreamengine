@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "gestures.h"   // pinch_scale() — two-finger zoom on touch (the wheel has no finger)
 #include <math.h>   // sinf — bakes the org/vox/bel/fld user-wave tables in init()
 
 // MODRACK — a tiny modular synth (see docs/design/modular-synth.md).
@@ -34,7 +35,7 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
        MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS,
        MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, MOD_MIX, MOD_CMP, MOD_DIV, MOD_ADSR, NTYPE };
-enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT, FMT_DIV };
+enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT, FMT_DIV, FMT_PCT };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
 typedef struct { const char *label; float lo, hi, def; int dx, dy, fmt; } KnobDef;
@@ -47,7 +48,7 @@ typedef struct {
 ModType TYPES[NTYPE] = {
     // 4-cell (48px): LFO S&H ENV DRUM  |  5-cell (60px): CLOCK QUANT EUCLID TURING MARBLES MATHS  |  6-cell (72px): VOICE KEYS SCOPE GRIDS
     [MOD_CLOCK] = { "CLOCK", CLR_ORANGE, 5, 6, 3, {{0,true,12,60,"1"},{0,true,30,60,"2"},{0,true,48,60,"4"}},
-                   1, {{"bpm",60,240,112,30,28,FMT_INT}} },
+                   2, {{"bpm",60,240,112,18,30,FMT_INT},{"swg",0,0.6f,0,44,30,FMT_PCT}} },
     [MOD_LFO]   = { "LFO", CLR_PINK, 4, 6, 1, {{2,true,24,60,"cv"}},
                    1, {{"rate",0.1f,8,0.37f,24,28,FMT_F1}} },
     [MOD_SH]    = { "S&H", CLR_YELLOW, 4, 6, 3, {{2,false,8,60,"in"},{0,false,24,60,"clk"},{2,true,40,60,"cv"}}, 0, {} },
@@ -120,6 +121,7 @@ ModType TYPES[NTYPE] = {
 // knob arrays in TYPES[] above. Use these instead of raw numbers in eval/presets: a
 // reordered or inserted knob then fails loudly at the compiler instead of silently
 // cross-wiring (the fenv/flt/penv mixup of 2026-06-04).
+enum { CK_BPM, CK_SWG };                                            // MOD_CLOCK knobs
 enum { VK_CUT, VK_RES, VK_PW, VK_WAV, VK_FLT, VK_FENV, VK_PENV };   // MOD_VOICE knobs
 enum { BK_RATE, BK_DEPTH, BK_DEST };                                // MOD_VIBRATO knobs
 enum { MK_ENG, MK_HARM, MK_TIMB, MK_MORPH };                        // MOD_MACRO knobs
@@ -131,7 +133,7 @@ int th(int type) { return TYPES[type].ch * CELL; }
 
 // one-screen help per module kind (click the module's ? to show it)
 const char *HELP[NTYPE][3] = {
-    [MOD_CLOCK]  = { "Master clock. bpm knob sets the tempo.", "Gate outs: /1 every step, /2 half,", "/4 quarter. Patch into trigger inputs." },
+    [MOD_CLOCK]  = { "Master clock. bpm sets tempo; swg drags", "every 2nd step (swing). Gate outs: /1", "every step, /2 half, /4 quarter." },
     [MOD_LFO]    = { "Low-freq oscillator: a slow 0..1 wave.", "rate sets speed. Patch the cv out into", "any cv input to modulate it." },
     [MOD_SH]     = { "Sample & Hold. On each clk pulse it", "grabs the cv at 'in' and holds it until", "the next clk -> a stepped, random-ish cv." },
     [MOD_QUANT]  = { "Quantizer. Snaps any cv to the nearest", "note of a scale (scl/root) so it's always", "in key. cv in -> pitch out." },
@@ -186,6 +188,8 @@ int   wmx = 0, wmy = 0;                           // mouse in world space (valid
 int   panning = 0, pan_px = 0, pan_py = 0, palette_drag = -1, help_type = -1;
 int   drag_mod = -1, grab_dx = 0, grab_dy = 0;    // module being dragged around the canvas
 int   palette_scroll = 0, preset_open = 0;         // sidebar scroll offset (px); presets dropdown open?
+int   palette_pend = -1, pend_my = 0, pal_scrolling = 0;   // deferred palette pick-up: press → drag right = place, drag up/down = scroll (touch has no wheel)
+float pinch_acc = 1.0f;                            // accumulated two-finger pinch factor (touch zoom)
 
 int  spawn(int type, int x, int y) {
     if (nmod >= MAX_MOD) return MAX_MOD - 1;   // rack full — callers should check, but never write past mod[]
@@ -611,6 +615,15 @@ void init(void) {
     instrument(23, INSTR_PLUCK,  1,   0, 7, 1200);
     instrument(24, INSTR_MALLET, 1,   0, 7, 1200);
     instrument(25, INSTR_FM,     2, 700, 3,  350);
+    // DRUM voices (26-28) — the §17 "darker drums" pass. The kick is the punch-preset
+    // recipe baked in: a LONG sine whose pitch env does the donk (909 boom), not a 90ms
+    // tri tick. Snare = band-passed noise over a tonal body; hat = high-passed noise.
+    instrument(26, INSTR_SINE,  0, 280, 0, 60);                // kick body
+    instrument_env(26, 1, ENV_PITCH, 0, 55, 30);               // starts +30 st, settles fast = punch
+    instrument(27, INSTR_NOISE, 0, 130, 0, 50);                // snare rattle
+    instrument_filter(27, FILTER_BAND, 1400, 3);
+    instrument(28, INSTR_NOISE, 0, 25, 0, 15);                 // hat
+    instrument_filter(28, FILTER_HIGH, 6500, 2);
 
     // registry tripwire: every loop in the cart indexes jack[8]/knob[8]/param[8]/jackval[8].
     // A ModType declaring more than 8 of either reads/writes garbage — fail LOUDLY at boot
@@ -629,8 +642,12 @@ void eval_mod(int mi) {
             // each CLOCK runs its OWN tempo off dt() — NOT the global bpm() — so multiple
             // clocks are independent and only drive what they're patched to. 8th-note steps
             // (2 per beat); state[0]=phase, state[1]=last step, state[2]=LED flash timer.
-            m->state[0] += dt() * (m->param[0] / 60.0f) * 2.0f;
-            int s = (int)m->state[0];
+            // swg delays every ODD step by that fraction of a step (the off-beat drags —
+            // swing); /2 and /4 fire on even steps only, so the on-beats stay straight.
+            m->state[0] += dt() * (m->param[CK_BPM] / 60.0f) * 2.0f;
+            int   n  = (int)m->state[0];
+            float fr = m->state[0] - n;
+            int s = (n % 2 == 1 && fr < m->param[CK_SWG]) ? n - 1 : n;   // odd onset not reached yet
             bool ns = s != (int)m->state[1];
             m->state[1] = s;
             m->state[2] = ns ? 0 : m->state[2] + 1;
@@ -717,11 +734,11 @@ void eval_mod(int mi) {
             }
             m->jackval[1] = clamp(m->state[3], 0, 1);
             break; }
-        case MOD_DRUM: {
+        case MOD_DRUM: {   // slots 26-28 defined in init() — see the "darker drums" block there
             float k = read_in(mi, 0), s = read_in(mi, 1), h = read_in(mi, 2);
-            if (k > 0.5f && m->state[0] <= 0.5f) { hit(72, INSTR_NOISE, 3, 18); hit(43, INSTR_TRI, 7, 90); m->state[3] = 0; } m->state[0] = k; m->state[3] += 1;
-            if (s > 0.5f && m->state[1] <= 0.5f) { hit(58, INSTR_NOISE, 5, 90); m->state[4] = 0; } m->state[1] = s; m->state[4] += 1;
-            if (h > 0.5f && m->state[2] <= 0.5f) { hit(92, INSTR_NOISE, 3, 22); m->state[5] = 0; } m->state[2] = h; m->state[5] += 1;
+            if (k > 0.5f && m->state[0] <= 0.5f) { hit(72, INSTR_NOISE, 2, 12); hit(34, 26, 7, 250); m->state[3] = 0; } m->state[0] = k; m->state[3] += 1;
+            if (s > 0.5f && m->state[1] <= 0.5f) { hit(58, 27, 5, 110); hit(53, INSTR_TRI, 3, 45); m->state[4] = 0; } m->state[1] = s; m->state[4] += 1;
+            if (h > 0.5f && m->state[2] <= 0.5f) { hit(92, 28, 3, 24); m->state[5] = 0; } m->state[2] = h; m->state[5] += 1;
             break; }
         case MOD_SLEW: {   // smooth a CV toward its input → glide / lag
             float k = clamp(16.67f / m->param[0], 0.02f, 1.0f);
@@ -942,6 +959,7 @@ const char *knob_str(int fmt, float v) {
     if (fmt == FMT_SCALE) return SCALES[(int)v];
     if (fmt == FMT_NOTE)  return NOTES[(int)v];
     if (fmt == FMT_F1)    return str("%.1f", v);
+    if (fmt == FMT_PCT)   return str("%d%%", (int)(v * 100 + 0.5f));
     if (fmt == FMT_MS)    return str("%dms", (int)(v * 1000));
     return str("%d", (int)v);
 }
@@ -1280,28 +1298,42 @@ void draw_jacks_ss(void) {
     }
 }
 
+// step to the next crisp zoom stop, keeping the point under (ax,ay) fixed —
+// shared by the mouse wheel and the touch pinch
+void zoom_step(int dir, float ax, float ay) {
+    int zi = 0; for (int i = 0; i < NZOOM; i++) if (zoom >= ZOOMS[i] - 0.01f) zi = i;
+    zi = (int)clamp(zi + dir, 0, NZOOM - 1);
+    float z0 = zoom, z1 = ZOOMS[zi];
+    if (z1 == z0) return;
+    cam_x += (ax - SCREEN_W / 2.0f) * (1.0f / z0 - 1.0f / z1);
+    cam_y += (ay - SCREEN_H / 2.0f) * (1.0f / z0 - 1.0f / z1);
+    zoom = z1;
+}
+
 void draw(void) {
-    // ---- pan (left-drag empty space) + zoom (wheel), in screen-delta terms ----
+    // ---- pan (left-drag empty space) + zoom (wheel / pinch), in screen-delta terms ----
     if (panning && mouse_down(MOUSE_LEFT)) { cam_x -= (mouse_x() - pan_px) / zoom; cam_y -= (mouse_y() - pan_py) / zoom; }
     pan_px = mouse_x(); pan_py = mouse_y();
     if (!mouse_down(MOUSE_LEFT)) { panning = 0; held_knob = 0; }
     bool over_side = mouse_x() < SIDEBAR_W;
     float wh = mouse_wheel();
+    int maxsc = 14 + NTYPE * 16 - SCREEN_H + 6; if (maxsc < 0) maxsc = 0;
     if (wh != 0) {
-        if (over_side) {   // wheel over the palette → scroll the module list
-            int maxsc = 14 + NTYPE * 16 - SCREEN_H + 6; if (maxsc < 0) maxsc = 0;
-            palette_scroll = (int)clamp(palette_scroll - wh * 16, 0, maxsc);
-        } else {           // wheel over the canvas → step to the next crisp zoom stop (point under cursor stays fixed)
-            int zi = 0; for (int i = 0; i < NZOOM; i++) if (zoom >= ZOOMS[i] - 0.01f) zi = i;
-            zi = (int)clamp(zi + (wh > 0 ? 1 : -1), 0, NZOOM - 1);
-            float z0 = zoom, z1 = ZOOMS[zi];
-            if (z1 != z0) {
-                cam_x += (mouse_x() - SCREEN_W / 2.0f) * (1.0f / z0 - 1.0f / z1);
-                cam_y += (mouse_y() - SCREEN_H / 2.0f) * (1.0f / z0 - 1.0f / z1);
-                zoom = z1;
-            }
-        }
+        if (over_side) palette_scroll = (int)clamp(palette_scroll - wh * 16, 0, maxsc);   // wheel over the palette → scroll the list
+        else           zoom_step(wh > 0 ? 1 : -1, mouse_x(), mouse_y());                  // wheel over the canvas → zoom (point under cursor stays fixed)
     }
+    // touch: a second finger means PINCH — cancel the one-finger gestures so the zoom
+    // doesn't also pan/turn/drag, accumulate the per-frame pinch factor, and step one
+    // crisp zoom stop each time it crosses ±~30%, anchored at the pinch midpoint.
+    float pz = pinch_scale();   // call every frame — it tracks the finger pair internally
+    if (touch_count() >= 2) {
+        panning = 0; held_knob = 0; drag_mod = -1; palette_drag = -1; palette_pend = -1; pal_scrolling = 0;
+        pinch_acc *= pz;
+        if (pinch_acc > 1.30f || pinch_acc < 0.77f) {
+            zoom_step(pinch_acc > 1.0f ? 1 : -1, (touch_x(0) + touch_x(1)) * 0.5f, (touch_y(0) + touch_y(1)) * 0.5f);
+            pinch_acc = 1.0f;
+        }
+    } else pinch_acc = 1.0f;
 
     cls(CLR_DARKER_BLUE);
 
@@ -1378,7 +1410,23 @@ void draw(void) {
         rectfill(3, by, SIDEBAR_W - 6, 14, CLR_DARKER_PURPLE);
         rect(3, by, SIDEBAR_W - 6, 14, hot ? CLR_WHITE : TYPES[t].col);
         print(TYPES[t].name, 6, by + 4, TYPES[t].col);
-        if (hot && mouse_pressed(MOUSE_LEFT) && palette_drag < 0 && nmod < MAX_MOD && help_type < 0 && !preset_open) palette_drag = t;
+        if (hot && mouse_pressed(MOUSE_LEFT) && palette_drag < 0 && palette_pend < 0 && !pal_scrolling && nmod < MAX_MOD && help_type < 0 && !preset_open)
+            { palette_pend = t; pend_my = mouse_y(); held_knob = 0; panning = 0; }   // deferred: not a drag yet (see below)
+    }
+    // pressing empty sidebar space (no item caught it) → drag-scroll the list directly
+    if (mouse_pressed(MOUSE_LEFT) && over_side && palette_pend < 0 && palette_drag < 0 && !pal_scrolling && help_type < 0 && !preset_open)
+        { pal_scrolling = 1; pend_my = mouse_y(); held_knob = 0; panning = 0; }
+    // deferred pick-up: a press on a palette item isn't a module-drag yet — drag RIGHT onto
+    // the canvas to place it, drag UP/DOWN to scroll the list (the touch path: no wheel).
+    if (palette_pend >= 0) {
+        int dy = mouse_y() - pend_my;
+        if      (!mouse_down(MOUSE_LEFT))  palette_pend = -1;
+        else if (mouse_x() >= SIDEBAR_W) { palette_drag = palette_pend; palette_pend = -1; }
+        else if (dy > 8 || dy < -8)      { pal_scrolling = 1; pend_my = mouse_y(); palette_pend = -1; }
+    }
+    if (pal_scrolling) {   // list follows the finger/cursor
+        if (mouse_down(MOUSE_LEFT)) { palette_scroll = (int)clamp(palette_scroll - (mouse_y() - pend_my), 0, maxsc); pend_my = mouse_y(); }
+        else pal_scrolling = 0;
     }
     if (mouse_released(MOUSE_LEFT) && palette_drag >= 0) {
         if (mouse_x() >= SIDEBAR_W && nmod < MAX_MOD) spawn(palette_drag, wmx - tw(palette_drag) / 2, wmy - th(palette_drag) / 2);

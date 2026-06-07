@@ -1144,6 +1144,14 @@ v1, document it on the panel.
 6. **Cart-side, no engine change: swing knob on CLOCK** (`schedule_hit` already
    keeps the timing), **darker DRUM voices** (909 kick = longer sine + pitch
    env — the "Punch (VCA)" preset recipe, baked in).
+   **✓ SHIPPED 2026-06-07** — both in modrack: CLOCK's `swg` knob (0–60%, delays
+   every odd 8th-step at eval time; /2 and /4 fire on even steps so the on-beats
+   stay straight, and swing 0 is bit-identical to the old clock), and DRUM slots
+   26–28 (kick = 280ms sine + `ENV_PITCH` +30 st/55ms donk + a noise click layer;
+   snare = band-passed noise over a tri body; hat = high-passed noise). Measured
+   on the default patch: RMS −21.8 → −19.9 dBFS, crest 17.7 → 19.3 dB (more
+   transient relative to body), zero clipping — kick peaks lean into the master
+   soft-clip knee as designed. `drummachine.c` is the open second customer.
 
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
