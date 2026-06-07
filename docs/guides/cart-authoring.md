@@ -333,6 +333,24 @@ filename** — the source opens read-only over the code tab, outline following.
 `static`, `#define` tunables, header-comment manual) and ships per the
 second-customer rule — a showcase cart *plus* one real cart using it.
 
+## House conventions for instrument carts
+
+**Piano-style computer keys = the GarageBand musical-typing map** (owner
+decision, 2026-06-07 — one layout to learn, not one per cart). Copy `moog.c`'s
+arrays verbatim:
+
+```c
+const char wkey[]  = "ASDFGHJKL;'";                 // home row = white keys, A = C
+int   wsemi[11] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17 };
+char  bkey[7]   = { 'W','E','T','Y','U','O','P' };  // QWERTY row = black keys
+int   bsemi[7]  = { 1, 3, 6, 8, 10, 13, 15 };
+```
+
+Carts using it: `moog`, `mt70` (sh101's two-manual layout is its own beast).
+Cart control keys go on the **bottom row** (Z X C V…), which the layout leaves
+free. Carts with *bars/pads* instead of a piano (mallet, fm, handpan) use plain
+home-row `A S D F G H J K` — same starting key, no blacks.
+
 ---
 
 ## Cart file locations
