@@ -94,4 +94,9 @@ prose — link to those. (This is why the old "~100 functions" counts kept going
   investigation longer than ~a screen gets its own `design/` file + a one-line pointer,
   never a new § appended to the hub.
 - Product direction or a core principle changed? → **`VISION.md`**.
+- Splitting a section out of a grown doc? **If other files reference its §-numbers widely,
+  keep the numbers verbatim in the new doc + leave a stub at the old spot**
+  (`instrument-engines.md` is the worked example); otherwise just renumber. The kept
+  numbering exists *only* to serve live references — once those age out, renumbering the
+  doc is ordinary cleanup, not a rule violation.
 - A doc went stale or started duplicating another? → prune it. This README is the contract.
