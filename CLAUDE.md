@@ -58,11 +58,13 @@ eventually2/
 │   │   └── preload.cjs # exposes window.studio.run() and window.studio.saveSprites()
 │   ├── src/
 │   │   ├── shell.js/css    # IDE chrome — tabs, run button, build log
-│   │   ├── main.js         # CodeMirror editor setup + cmd-click dispatch (help / go-to-def / include preview)
-│   │   ├── navigate.js     # read-only engine-source preview: cmd-click an #include "x.h"
-│   │   │                   # filename → runtime file overlays the editor (✕/Esc closes);
-│   │   │                   # clicks chain inside it, outline follows the previewed file
-│   │   ├── outline.js      # function-list sidebar (cart by default; previewed file when open)
+│   │   ├── main.js         # CodeMirror editor setup + cmd-click dispatch (help / go-to-def / open engine source)
+│   │   ├── navigate.js     # read-only engine-source viewer (lives in the DOCS tab):
+│   │   │                   # the docs sidebar's "engine source" group + cmd-click an
+│   │   │                   # #include "x.h" → switches to docs tab, opens the runtime
+│   │   │                   # file there; clicks chain (includes → other headers,
+│   │   │                   # documented symbols → API reference)
+│   │   ├── outline.js      # function-list sidebar for the cart (code tab)
 │   │   ├── sprite-editor.js/css  # pixel sprite editor
 │   │   ├── map-editor.js   # tile map editor
 │   │   ├── studioDocs.js   # single source of truth for API docs (autocomplete + hover + help tab)
@@ -75,7 +77,7 @@ eventually2/
 │   │   └── palettes/pico32.json    # 32-color palette used by sprite editor
 │   ├── vite.config.js  # Vite config + serveDocs() plugin: serves /docs-list.json
 │   │                   # and /docs/<rel>.md live from docs/ — powers the Docs tab —
-│   │                   # plus /runtime-src/<f>.h|c from runtime/ — powers the include preview
+│   │                   # plus /runtime-src/<f>.h|c from runtime/ — powers the engine-source viewer
 │   │                   # (route changes need a dev-server restart, unlike src/ edits)
 │   └── index.html      # shell HTML — all panels live here
 ├── Makefile            # repo-root convenience: `make` kills stale processes + starts editor

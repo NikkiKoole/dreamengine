@@ -326,8 +326,9 @@ the include, and they never touch engine internals or the tcc symbol table.
 | `radio.h` | radio-station chrome: chair registry, THE BAND panel, seeded-song plumbing | building a new generative radio station | the radio carts, `tango`, `yacht` |
 
 **Reading them:** each header opens with its own manual (why it exists, usage,
-tunables). In the editor, type the `#include "ui.h"` line and **cmd-click the
-filename** — the source opens read-only over the code tab, outline following.
+tunables). In the editor they're all listed under the **docs tab → "engine
+source"** sidebar group (alongside `studio.h`); or **cmd-click the filename**
+of an `#include "ui.h"` in your cart and it jumps to that same view.
 
 **Writing one:** a new library header must follow the same contract (all
 `static`, `#define` tunables, header-comment manual) and ships per the

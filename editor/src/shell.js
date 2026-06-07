@@ -1,5 +1,6 @@
 import { view, setEditorTheme, setErrorLines, onDocChange } from './main.js'
 import { initOutline, refreshOutline } from './outline.js'
+import { ENGINE_SOURCES, showEngineFileIn } from './navigate.js'
 import './sprite-editor.js'
 import { getMapBytes, loadMapBytes } from './map-editor.js'
 import { studioDocs } from './studioDocs.js'
@@ -175,6 +176,12 @@ function runFind(query) {
   clearFind()
   findQuery = query
   if (!query) { updateFindCount(); return }
+  // the engine-source view is a CodeMirror instance — injecting <mark>s would
+  // corrupt its managed DOM, so find-in-docs sits this one out
+  if (currentDocPath.startsWith('engine:')) {
+    if (findCount) findCount.textContent = 'n/a in source view'
+    return
+  }
   const q = query.toLowerCase()
   const walker = document.createTreeWalker(docsContent, NodeFilter.SHOW_TEXT, {
     acceptNode: node => node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
@@ -301,6 +308,32 @@ function renderApiReference() {
   reapplyFind()
 }
 
+// — render an engine source file (runtime/*.h|c) into the content pane —
+// read-only CodeMirror viewer from navigate.js; cmd-click inside it chains
+// to other headers and jumps documented symbols to the API reference
+async function showEngineSource(file) {
+  currentDocPath = 'engine:' + file
+  setActiveNav('engine:' + file)
+  docsContent.innerHTML = ''
+  const head = document.createElement('div')
+  head.className = 'engine-src-head'
+  head.textContent = `runtime/${file} — read-only`
+  docsContent.appendChild(head)
+  const wrap = document.createElement('div')
+  wrap.className = 'engine-src'
+  docsContent.appendChild(wrap)
+  await showEngineFileIn(wrap, file)
+  docsContent.scrollTop = 0
+}
+
+// cmd-click on an #include "x.h" in the cart (or a chained click inside the
+// viewer) lands here — switch to the docs tab and show the file
+window.addEventListener('engine-source', (e) => {
+  const helpTab = document.querySelector('.tab[data-tab="help"]')
+  if (helpTab && !helpTab.classList.contains('active')) helpTab.click()
+  showEngineSource(e.detail.file)
+})
+
 // — render a markdown doc from docs/ into the content pane —
 async function showDoc(relPath) {
   currentDocPath = relPath
@@ -344,6 +377,16 @@ function docNavItem(label, key, onClick) {
 async function buildDocsSidebar() {
   docsSidebar.innerHTML = ''
   docsSidebar.appendChild(docNavItem('API reference', 'api', () => renderApiReference()))
+
+  // the engine's own C files, readable right here (cmd-click an #include in
+  // your cart jumps to the same view) — studio.h first, then the cart-land
+  // library headers, then internals
+  const engGrp = document.createElement('div')
+  engGrp.className = 'docs-nav-group'
+  engGrp.innerHTML = `<div class="docs-nav-head">engine source</div>`
+  ENGINE_SOURCES.forEach(f =>
+    engGrp.appendChild(docNavItem(f, 'engine:' + f, () => showEngineSource(f))))
+  docsSidebar.appendChild(engGrp)
 
   let files = []
   try { files = await (await fetch('/docs-list.json')).json() } catch {}

@@ -1,13 +1,20 @@
-// navigate.js — read-only runtime-file preview.
+// navigate.js — read-only engine-source viewer (lives in the DOCS tab).
 //
-// Cmd/ctrl-click the filename of an `#include "gestures.h"` and the file opens
-// read-only INSIDE the code tab, overlaying the editor (VS Code preview style —
-// no extra tab; the cart underneath is untouched and ▶ run still builds it).
-// Served by the vite /runtime-src/ route, so it works in both Electron and the
-// browser tab. Clicks keep working inside the preview: includes chain to other
-// headers, documented symbols jump to the help tab. The outline sidebar stays
-// visible and lists the PREVIEWED file (definitions + prototypes) while it's
-// open. Close with the ✕ or Esc.
+// The runtime's C files — studio.h, the cart-land library headers (ui.h,
+// gestures.h, improv.h, radio.h), sound.h, studio.c — are readable in-editor
+// under the docs sidebar's "engine source" group. Cmd/ctrl-clicking the
+// filename of an `#include "ui.h"` in your cart does the same thing: it
+// switches to the docs tab with that file open (no overlay over your code —
+// the code tab is always just your cart).
+//
+// Served by the vite /runtime-src/ route, so it works in both Electron and
+// the browser tab. Clicks keep working inside the viewer: includes chain to
+// other headers, documented symbols jump to the API reference.
+//
+// Wiring: openFileViewer(file) (called from main.js's cmd-click dispatch and
+// from the viewer's own chained clicks) dispatches an 'engine-source' event;
+// shell.js owns the docs tab, listens, switches tabs, and mounts the viewer
+// via showEngineFileIn(container, file).
 
 import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, lineNumbers, highlightActiveLine } from '@codemirror/view'
@@ -16,7 +23,12 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { dayTheme } from './dayTheme.js'
 import { studioDocs } from './studioDocs.js'
 import { flashField } from './main.js'
-import { setOutlineOverride } from './outline.js'
+
+// the files offered in the sidebar group, curated order: the public API,
+// then the cart-land library headers, then engine internals
+export const ENGINE_SOURCES = [
+  'studio.h', 'ui.h', 'gestures.h', 'improv.h', 'radio.h', 'sound.h', 'studio.c',
+]
 
 let vview = null
 const vTheme = new Compartment()
@@ -31,7 +43,7 @@ new MutationObserver(() => {
   if (vview) vview.dispatch({ effects: vTheme.reconfigure(themeExt()) })
 }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
-// cmd/ctrl-click inside the preview: includes chain, documented symbols → help
+// cmd/ctrl-click inside the viewer: includes chain, documented symbols → API reference
 const viewerClicks = EditorView.domEventHandlers({
   click(event, v) {
     if (!event.metaKey && !event.ctrlKey) return false
@@ -54,7 +66,6 @@ const viewerClicks = EditorView.domEventHandlers({
     if (!word) return false
     const name = v.state.sliceDoc(word.from, word.to)
     if (studioDocs[name]) {
-      closeViewer()   // jumping to docs — don't leave the preview hanging behind
       window.dispatchEvent(new CustomEvent('help-jump', { detail: { key: name } }))
       event.preventDefault()
       return true
@@ -73,58 +84,30 @@ function makeViewerState(docText) {
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
       viewerClicks,
-      flashField,        // outline clicks flash the jumped-to name, same as the cart
+      flashField,        // kept so future jump+flash affordances work here too
       vTheme.of(themeExt()),
     ],
   })
 }
 
-function ensureViewer() {
-  if (!vview) {
-    vview = new EditorView({
-      state: makeViewerState(''),
-      parent: document.getElementById('viewer-editor'),
-    })
-  }
-  return vview
+// Ask the docs tab to show `file` (e.g. 'gestures.h'). Quote-includes only —
+// <math.h> and friends are system headers, not ours. shell.js listens.
+export function openFileViewer(file) {
+  window.dispatchEvent(new CustomEvent('engine-source', { detail: { file } }))
 }
 
-export function closeViewer() {
-  document.getElementById('viewer-overlay')?.classList.remove('open')
-  setOutlineOverride(null)   // outline goes back to listing the cart
-}
-
-function viewerOpen() {
-  return document.getElementById('viewer-overlay')?.classList.contains('open')
-}
-
-document.getElementById('viewer-close')?.addEventListener('click', () => closeViewer())
-window.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && viewerOpen()) {
-    e.preventDefault()
-    closeViewer()
-  }
-})
-
-// Open `file` (e.g. 'gestures.h') read-only over the code editor.
-// Quote-includes only — <math.h> and friends are system headers, not ours.
-export async function openFileViewer(file) {
+// Mount/refresh the viewer inside `container` (the docs content pane) showing
+// `file`. The single EditorView is reused and re-parented across calls.
+export async function showEngineFileIn(container, file) {
   let text
   try {
     const r = await fetch('/runtime-src/' + encodeURIComponent(file))
     if (!r.ok) throw new Error()
     text = await r.text()
   } catch {
-    text = `// ${file} — not found in runtime/\n// (only the engine's own headers can be viewed here)`
+    text = `// ${file} — not found in runtime/\n// (only the engine's own source files can be viewed here)`
   }
-  // the preview lives inside the code tab — make sure that tab is showing
-  const codeTab = document.querySelector('.tab[data-tab="code"]')
-  if (codeTab && !codeTab.classList.contains('active')) codeTab.click()
-  const title = document.getElementById('viewer-title')
-  if (title) title.textContent = `runtime/${file} — read-only`
-  const v = ensureViewer()
-  v.setState(makeViewerState(text))
-  document.getElementById('viewer-overlay')?.classList.add('open')
-  // the outline sidebar stays visible beside the preview — point it at this file
-  setOutlineOverride({ doc: () => v.state.doc.toString(), view: () => v })
+  if (!vview) vview = new EditorView({ state: makeViewerState(text) })
+  else vview.setState(makeViewerState(text))
+  container.appendChild(vview.dom)
 }

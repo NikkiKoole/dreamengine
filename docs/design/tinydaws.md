@@ -5,7 +5,11 @@ STATUS: IDEA / exploration (2026-06). Nothing built yet. Companion reading:
 builds on), [`radio-instrument-options.md`](radio-instrument-options.md) (the band
 panel — the first "open the radio up" affordance), [`audio-notes.md`](audio-notes.md)
 (engine surface), [`instrument-engines.md`](instrument-engines.md) (the engine
-catalog), [`touch-notes.md`](touch-notes.md) (these must be touch-first).
+catalog), [`touch-notes.md`](touch-notes.md) (these must be touch-first),
+[`product-notes.md`](product-notes.md) (the commercial lens: sketch-first
+decision, MIDI/AUv3/latency parking lot, and the **trademark rule** — Roland
+names/faceplates in the rack table below are fine free, but nothing
+Roland-skinned crosses a paywall; paid racks get original identities).
 
 ## The idea in one paragraph
 

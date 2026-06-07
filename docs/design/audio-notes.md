@@ -24,6 +24,7 @@ left here — that rule is what keeps this doc from regrowing).
 | a new radio station to build | [`future-stations.md`](future-stations.md) — the candidates parking lot + build-order axes |
 | a per-station timbre swap / engine retrofit | [`radio-instrument-options.md`](radio-instrument-options.md) |
 | genre racks / generate-play-export / song.h | [`tinydaws.md`](tinydaws.md) |
+| selling any of this (market, MIDI/AUv3, latency, trademark) | [`product-notes.md`](product-notes.md) — sketch-first decision + the parked builder items |
 | holding + driving notes live (the shipped spec) | [`held-notes.md`](held-notes.md) |
 | modrack / patching | [`modular-synth.md`](modular-synth.md) |
 | recording the player, looping it back | [`input-recording-looper.md`](input-recording-looper.md) |
@@ -1151,7 +1152,10 @@ v1, document it on the panel.
    snare = band-passed noise over a tri body; hat = high-passed noise). Measured
    on the default patch: RMS −21.8 → −19.9 dBFS, crest 17.7 → 19.3 dB (more
    transient relative to body), zero clipping — kick peaks lean into the master
-   soft-clip knee as designed. `drummachine.c` is the open second customer.
+   soft-clip knee as designed. **Second customer shipped same day:**
+   `drummachine.c` carries the same kit (slots 5–10, the punch-recipe kick +
+   per-row hat/snare filters, clap = three `schedule_hit` bursts) and a swing
+   knob on its 16-step transport (↑/↓, 0–60%) — RMS −24.0 → −21.4 dBFS.
 
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
