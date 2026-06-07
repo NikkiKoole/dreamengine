@@ -121,6 +121,34 @@
         Module.deTouches = out;
       }, { passive: true });
     });
+    // debug overlay LOADER (mobile-web-notes §6d) — the overlay logic lives in
+    // ONE site-root file (../debug-overlay.js) so improving it never needs a
+    // cart rebuild; only this loader is baked. Open with ?debug=1 or by
+    // triple-tapping/clicking the top-left corner; same gesture toggles off.
+    // Fails silent where the file isn't served (editor build-web preview).
+    (function () {
+      function openOverlay() {
+        if (window.deDebug) { window.deDebug.toggle(); return; }
+        var s = document.createElement('script');
+        s.src = '../debug-overlay.js';
+        s.onerror = function () { console.warn('debug-overlay.js not found here'); };
+        document.body.appendChild(s);
+      }
+      if (/[?&#]debug/.test(location.search + location.hash))
+        window.addEventListener('load', openOverlay);
+      var taps = [];
+      function cornerTap(x, y) {
+        if (x > 60 || y > 60) return;
+        var now = Date.now();
+        taps = taps.filter(function (t) { return now - t < 650; });
+        taps.push(now);
+        if (taps.length >= 3) { taps = []; openOverlay(); }
+      }
+      window.addEventListener('touchstart', function (e) {
+        var t = e.touches[0]; if (t) cornerTap(t.clientX, t.clientY);
+      }, { passive: true, capture: true });
+      window.addEventListener('mousedown', function (e) { cornerTap(e.clientX, e.clientY); }, true);
+    })();
   </script>
   {{{ SCRIPT }}}
 </body>

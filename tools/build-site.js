@@ -205,6 +205,9 @@ const TIER_RANK = { ready: 0, mostly: 1, rough: 2, desktop: 3 }
 
 function buildGallery() {
   if (!fs.existsSync(SITE_DIR)) fs.mkdirSync(SITE_DIR, { recursive: true })
+  // the on-device debug overlay (mobile-web-notes §6d) — one site-root copy
+  // shared by every cart; the shell only bakes a tiny loader for it
+  fs.copyFileSync(path.join(RUNTIME, 'debug-overlay.js'), path.join(SITE_DIR, 'debug-overlay.js'))
   const built = fs.readdirSync(SITE_DIR, { withFileTypes: true })
     .filter(d => d.isDirectory() && fs.existsSync(path.join(SITE_DIR, d.name, 'index.html')))
     .map(d => d.name)
