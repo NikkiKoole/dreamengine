@@ -2342,6 +2342,15 @@
     ]
   },
   {
+    "title": "epiano",
+    "description": "INSTR_EPIANO showcase - the fifth modeled ENGINE: Rhodes / Wurlitzer / Clavinet in one. Every key sums 12 decaying inharmonic sine modes and pushes them through a PICKUP NONLINEARITY - the bark/buzz/honk that makes it electric, not a dull bell. Struck and self-decaying like pluck/mallet (hold = sustains+rings, release = damper). The three macros every engine answers: instrument_harmonics = instrument (snapped Rhodes/Wurli/Clav, each its own mode ratios + pickup character); instrument_timbre = brightness (pickup position + hammer, mellow to bright/snappy); instrument_morph = bark (the pickup driven hard - clean fundamental to dig-in growl, read live). Six presets (1 rhodes, 2 rho brite, 3 suitcase, 4 wurli, 5 wur buzz, 6 clav) are baked knob positions. The DX/digital EP is the fm cart; this is the electromechanical one. A S D F G H J K white keys, W E T Y U black, Z/X octave, 1..6 presets, drag a slider, M autoplay. Multitouch.",
+    "file": "epiano.cart.png",
+    "kind": [
+      "instrument",
+      "tech-demo"
+    ]
+  },
+  {
     "title": "handpan",
     "description": "A steel hang drum: one ding, eight tone fields, every strike a gesture. The mallet cart is INSTR_MALLET's tuning rig - this is the same engine as an INSTRUMENT, no knobs at all. Real handpans zigzag the scale across the circle (ascending notes alternate right/left climbing to 12 o'clock) so physical neighbors are consonant: two-handed noodling always sounds composed. WHERE you hit matters - the strike's offset from a field's center drives the timbre macro per hit (center = soft palm thump, edge = bright ping), and taps on the bare steel between fields are the shoulder tok. Four tunings to pick from the rack: kurd, celtic, hijaz, pygmy. Multitouch: every finger is its own pointer - both hands play, like the real thing. Tap/click fields (offset = tone), drag = roll, SPACE ding, A S D F G H J K ring notes ascending, 1..4 pick a pan, M autoplay.",
     "file": "handpan.cart.png",
