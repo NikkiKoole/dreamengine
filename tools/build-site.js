@@ -222,8 +222,11 @@ function buildGallery() {
 
   const cards = entries.map(e => {
     const badge = BADGES[e.tier]
+    // data-search feeds the live filter: name + title + genre + kind + description
+    const hay = [e.name, e.title, e.genre, ...(e.kind || []), e.description]
+      .filter(Boolean).join(' ').toLowerCase()
     return `
-    <a class="card" href="${e.name}/" data-title="${esc(e.title.toLowerCase())}" data-added="${e.added}" data-tier="${TIER_RANK[e.tier] ?? 9}">
+    <a class="card" href="${e.name}/" data-title="${esc(e.title.toLowerCase())}" data-search="${esc(hay)}" data-added="${e.added}" data-tier="${TIER_RANK[e.tier] ?? 9}">
       <img src="${e.name}/cart.png" alt="${esc(e.title)}" loading="lazy">
       <div class="body">
         <h2>${esc(e.title)}${e.genre ? ` <span class="tag">${esc(e.genre)}</span>` : ''}</h2>
@@ -252,7 +255,13 @@ function buildGallery() {
   header p { color: var(--dim); margin-top: 6px; font-size: 13px; }
   header a { color: var(--link); }
   .controls { max-width: 960px; margin: 0 auto 16px; display: flex; gap: 6px; align-items: center;
-              flex-wrap: wrap; color: var(--faint); font-size: 12px; }
+              flex-wrap: wrap; color: var(--faint); font-size: 12px;
+              position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0; }
+  .controls input[type=search] { background: var(--card); border: 1px solid var(--border);
+                                 color: var(--fg); font: inherit; padding: 4px 10px;
+                                 border-radius: 6px; width: 170px; }
+  .controls input[type=search]:focus { border-color: var(--accent); outline: none; }
+  #count { color: var(--dim); }
   .controls button { background: var(--card); border: 1px solid var(--border); color: var(--dim);
                      font: inherit; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
   .controls button:hover { border-color: var(--accent); }
@@ -285,6 +294,9 @@ function buildGallery() {
      a fantasy console where you write C and hit run. Click a cart to play it in your browser.</p>
 </header>
 <div class="controls">
+  <input id="search" type="search" placeholder="search… (just type)" autocomplete="off">
+  <span id="count"></span>
+  <span class="sep">·</span>
   <span>sort:</span>
   <button data-sort="added">newest</button>
   <button data-sort="title">a–z</button>
@@ -301,6 +313,35 @@ ${cards}
 <script>
 (function () {
   var grid = document.querySelector('.grid')
+
+  // ── live search: filters cards on name/title/genre/kind/description.
+  // Desktop: just start typing anywhere ('/' also focuses). Esc clears.
+  // The query round-trips through #q= so back-nav and shared links keep it.
+  var search = document.getElementById('search')
+  function applyFilter() {
+    var q = search.value.trim().toLowerCase(), n = 0
+    ;[].slice.call(grid.children).forEach(function (c) {
+      var hit = !q || (c.dataset.search || '').indexOf(q) !== -1
+      c.style.display = hit ? '' : 'none'
+      if (hit) n++
+    })
+    document.getElementById('count').textContent = q ? n + '/' + grid.children.length : ''
+    try {
+      history.replaceState(null, '',
+        q ? '#q=' + encodeURIComponent(q) : location.pathname + location.search)
+    } catch (e) {}
+  }
+  search.addEventListener('input', applyFilter)
+  search.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { search.value = ''; applyFilter(); search.blur() }
+  })
+  document.addEventListener('keydown', function (e) {
+    if (e.target === search || e.metaKey || e.ctrlKey || e.altKey) return
+    if (e.key === '/') { e.preventDefault(); search.focus(); return }
+    if (e.key.length === 1) search.focus()   // the keystroke lands in the box
+  })
+  var qm = /[#&]q=([^&]*)/.exec(location.hash)
+  if (qm) { search.value = decodeURIComponent(qm[1]); applyFilter() }
 
   function applySort(k) {
     var cards = [].slice.call(grid.children)
