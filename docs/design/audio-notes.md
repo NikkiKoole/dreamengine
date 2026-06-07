@@ -745,13 +745,14 @@ the wall was hit, and scored against §1's leverage rule.
 **SFX editor as percussion modeler — a partial bridge for gap 2/sample sounds.**
 The SFX editor (`sfxed.c`, §5.6) exports per-step pitch + volume + filter-CUT
 arrays as C code. That's more sculpting power than a single `instrument()` call —
-you can draw the exact filter-close curve and volume shape of a hit. The TR-909
-hihat is a real-world case: ROM samples in the hardware, but the *character* is a
-fast-closing highpass burst. Authoring it in the SFX editor (NOISE wave, steep CUT
-lane, short vol decay) and calling `sfx(n)` in fire() is not a perfect reproduction
-but it's meaningfully closer than a static instrument definition. This is a useful
-technique for any future drum machine that needs sounds more sculpted than a fixed
-ADSR. See §14 for the 909 build-readiness assessment.
+you can draw the exact filter-close curve and volume shape of a hit (NOISE wave,
+steep CUT lane, short vol decay → a sampled-hat-style burst, fired with `sfx(n)`).
+A useful technique for any drum machine needing sounds more sculpted than a fixed
+ADSR — though **still unused in anger**: its motivating case, the 909's ROM-sample
+hihat, ended up solved *better* by `INSTR_FM`'s clang detent + a negative
+`ENV_CUTOFF` when the cart actually shipped (§14). It stays on the shelf for the
+next sound that genuinely needs a hand-drawn contour (tinydaws names the
+synthwave gated-reverb snare).
 
 **What was NOT missing**, for the record: the per-note modulation system is
 complete in practice — house.c's entire filter ride was `note_cutoff` +
@@ -870,31 +871,21 @@ open the overlay (the menu used to consume the same press as Continue).
 
 ### TR-909 (1983) — hybrid drum machine
 
-**Build kick/snare/toms now; hihat/cymbal need a workaround or a future gap.**
+**SHIPPED 2026-06-05** — `tr909` cart, completing the ReBirth RB-338 rack
+(303 + 808 + 909). The pre-build call ("kick/snare/toms now; hihat/cymbal need
+a workaround") held for the analog half and was *beaten* on the sampled half:
 
-The 909 is hybrid: kick, snare, toms, clap are analog circuits (same approach
-as tr-808.c, just different component values). Hihat and cymbal are **ROM
-samples** in the real hardware — that gap is noted in the feature comparison
-table (PCM = ❌) and not yet closable via synthesis alone.
-
-| 909 section | Status |
+| 909 section | How it landed |
 |---|---|
-| Kick (analog, ENV_PITCH drop) | ✅ same as 808 kick, slightly different tuning |
-| Snare (analog, body + noise) | ✅ same architecture as 808 snare |
-| Toms (analog, sine + pitch drop) | ✅ identical to 808 toms |
-| Clap (noise retriggers) | ✅ identical approach to 808 clap |
-| Hihat / cymbal (ROM samples) | ⚠️ approximation only — see below |
-| Shuffle (909 had it; 808 didn't) | ✅ `beat_pos()` swing, same as our Z/X knob |
+| Kick (analog, ENV_PITCH drop) | ✅ as assessed — 808 kick retuned, + a click layer on the ATTACK knob |
+| Snare / toms / clap (analog) | ✅ as assessed — 808 architectures, 909 component values |
+| Hihat / cymbal (ROM samples in hardware) | ✅ **better than the predicted workaround**: `INSTR_FM` on the 3.5 inharmonic clang detent (harmonics 0.55, feedback cranked) through a highpass whose cutoff rises via a **negative `ENV_CUTOFF` amount** — the fast-closing sizzle of a sampled hat, synthesized. Closed hat chokes open via `instrument_choke` |
+| Shuffle (909 had it; 808 didn't) | ✅ period-correct at last (even 16ths drag) |
 
-**Hihat workaround — SFX editor as percussion modeler.** The SFX editor
-(`sfxed.c`) authors per-step pitch + volume + filter-CUT curves and exports
-them as C arrays called with `sfx(n)`. A 909 hihat is characteristically a
-fast-closing highpass burst — exactly the shape the CUT lane can sculpt. Author
-the sound in the SFX editor (NOISE wave, steep CUT lane decay, short volume
-envelope), embed the exported array in the cart, fire with `sfx(n)`. Not a ROM
-sample reproduction but substantially more shaped than a static `instrument()`
-call. This technique applies to any future drum machine needing sounds beyond
-a fixed ADSR (see §12 SFX modeler note).
+The *predicted* hihat answer — SFX-editor-sculpted CUT-lane bursts — wasn't
+needed; that technique's canonical write-up lives in §12 (still unused in anger).
+Lesson banked in instrument-engines §8.8.3: inharmonicity, not ratio height, is
+what reads as metal — the clang detent is a drum machine's sample shelf.
 
 ### Juno-60 (1982) — 6-voice polyphonic pad/chord synth
 
