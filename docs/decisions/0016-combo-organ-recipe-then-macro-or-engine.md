@@ -66,13 +66,16 @@ the §8.1.1 sin; off the table regardless of how the triggers resolve.
   pointer here.
 - The combo question is **pre-reasoned**: a future context asking "should combo be its own engine?"
   reads this instead of re-deriving it from scratch.
-- **Morph-fill verdict (2026-06-07, preliminary): FULL — no spare macro → branch B.** Playing the
-  `organ.c` showcase (scanner chorus + percussion on `morph`), the third macro is a *full,
-  distinct axis* — it is not free to repurpose. So **branch A (one engine, morph = combo blend) is
-  ruled out**: when combo organ earns promotion (a built station proving the bright+drive recipe
-  insufficient, per the second-customer rule), it lands as **branch B — its own `INSTR_COMBO`
-  engine**, not a repurposed macro. *Still preliminary on the timbre side:* the per-registration
-  sounds haven't been fully auditioned yet (organ-type familiarity), so the preset/mapping
-  ear-tuning (§8.8.2 step 6) is open — but that tuning won't free up `morph`, so the branch-B
-  verdict stands regardless.
+- **Morph-fill verdict (2026-06-07): FULL — no spare macro → branch B.** Playing the `organ.c`
+  showcase (scanner chorus + percussion on `morph`), the third macro is a *full, distinct axis* —
+  it is not free to repurpose. So **branch A (one engine, morph = combo blend) is ruled out**: when
+  combo organ earns promotion (a built station proving the bright+drive recipe insufficient, per
+  the second-customer rule), it lands as **branch B — its own `INSTR_COMBO` engine**, not a
+  repurposed macro.
+- **Timbre confirmed by ear (2026-06-07):** the registrations sound right across the dial,
+  including driven — verdict "sounds awesome" from the user. One ear-driven engine fix landed
+  during audition: saturating a *sparse bright* registration (ballad = sub + fundamental + a lone
+  1′) fizzed through the voice drive (intermodulation), so `INSTR_ORGAN` now rolls its top off
+  before the drive (a cranked-amp/Leslie HF loss; drive-gated, clean is bit-identical). See §8.8.4.
+  This closes the §8.8.2-step-6 ear-tuning; the branch-B verdict is unaffected by it.
 - Does not supersede 0015; it is an **application** of it to a specific engine.

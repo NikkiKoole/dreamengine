@@ -649,10 +649,18 @@ Hammond; a transistor combo organ's character is a non-sine divider waveform a p
 can't model, only approximate. Ship it as a cart preset (bright registration + baked `drive`); it
 graduates to its own `morph` axis or a second `INSTR_COMBO` engine only when a built station proves
 the recipe insufficient — the path + named triggers are [decision 0016](../decisions/0016-combo-organ-recipe-then-macro-or-engine.md).
-**Morph-fill verdict (2026-06-07, preliminary): FULL** — playing `organ.c`, the scanner+perc
-`morph` is a full distinct axis, *not* spare. So 0016 resolves to **branch B**: combo organ, when
-it earns promotion, gets its own `INSTR_COMBO` engine rather than folding onto morph. (Preset
-timbre ear-tuning is still open, but won't free morph.)
+**Morph-fill verdict (2026-06-07): FULL** — playing `organ.c`, the scanner+perc `morph` is a full
+distinct axis, *not* spare. So 0016 resolves to **branch B**: combo organ, when it earns promotion,
+gets its own `INSTR_COMBO` engine rather than folding onto morph. Timbre confirmed by ear (presets
+sound right driven + clean).
+
+**Post-ship ear finding (2026-06-07): drive on sparse bright registrations fizzed.** Saturating
+ballad (sub + fundamental + a lone 1′ over a big gap) through the voice's `tanh` drive made harsh
+*intermodulation* in the empty gap — the sum/difference tones of the fundamental and the isolated
+8× partial. Fix (shipped): the engine rolls off its top **before** the drive (`v->org_lp`, a
+drive-gated one-pole, ~6 kHz light → ~1.8 kHz cranked) — exactly what a real cranked amp/Leslie
+does. Clean (drv=0) is bit-identical (filter bypassed). Rule echoing FM's §8.8.3 clang finding:
+**a hard nonlinearity punishes spectral *gaps* — roll the top off before you saturate.**
 
 #### Appendix — navkit's 9 organ registrations (verbatim, `instrument_presets.h:3427`)
 
