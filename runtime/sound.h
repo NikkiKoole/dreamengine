@@ -132,6 +132,7 @@ typedef struct {
     float  org_click;              // key-click noise-burst envelope (decays ~3ms)
     float  org_perc, org_perc_ph;  // percussion ping envelope + its 2nd-harmonic phase
     float  org_scan_ph;            // scanner LFO phase (6.9Hz, gear-locked to the motor)
+    float  org_lp;                 // pre-drive lowpass state — driven organ loses its top (amp/Leslie)
     int    org_widx;               // scanner delay write index into ks_buf[0..ORGAN_SCAN)
     bool   org_on;                 // struck this note — guards an engine id without a note-on init
 } Voice;
@@ -585,6 +586,7 @@ static void sound_organ_start(Voice *v) {
     for (int i = 0; i < ORGAN_SCAN; i++) v->ks_buf[i] = 0.0f;     // clear borrowed scanner delay
     v->org_widx    = 0;
     v->org_scan_ph = 0.0f;
+    v->org_lp      = 0.0f;
     v->org_click   = v->timb;                                     // brightness drives the click bite (§8.8.4)
     float perc = (v->mor - 0.55f) / 0.45f;                        // percussion fades in over morph's top ~45%
     v->org_perc    = perc < 0.0f ? 0.0f : (perc > 1.0f ? 1.0f : perc);
@@ -653,20 +655,35 @@ static inline float sound_organ_sample(Voice *v, float pitch_mul) {
     // morph = animation: the scanner CHORUS (C-mode, dry+wet) deepens with morph; 0 = a
     // stone-still combo organ. The 6.9Hz scanner LFO sweeps a fractional tap in the borrowed
     // ks_buf head — the comb shimmer that defines the gospel/jazz B3 (audio-notes §8.8.4).
+    float out;
     float depth = v->mor * 30.0f;                       // up to ~0.7ms excursion (navkit C3)
-    if (depth < 0.5f) return dry * 0.9f;                // still: dry only, no scanner
-    v->ks_buf[v->org_widx] = dry;
-    v->org_scan_ph += 6.9f * dt;
-    if (v->org_scan_ph >= 1.0f) v->org_scan_ph -= 1.0f;
-    float lfo = sinf(v->org_scan_ph * 6.2831853f);
-    float rp  = (float)v->org_widx - (32.0f + lfo * depth);  // tap centered 32 behind the write head
-    if (rp < 0.0f) rp += (float)ORGAN_SCAN;
-    int   r0 = (int)rp;
-    float fr = rp - (float)r0;
-    int   r1 = r0 + 1; if (r1 >= ORGAN_SCAN) r1 = 0;
-    float wet = v->ks_buf[r0] + (v->ks_buf[r1] - v->ks_buf[r0]) * fr;
-    v->org_widx++; if (v->org_widx >= ORGAN_SCAN) v->org_widx = 0;
-    return (0.5f * dry + 0.5f * wet) * 0.9f;
+    if (depth < 0.5f) {
+        out = dry;                                      // still: dry only, no scanner
+    } else {
+        v->ks_buf[v->org_widx] = dry;
+        v->org_scan_ph += 6.9f * dt;
+        if (v->org_scan_ph >= 1.0f) v->org_scan_ph -= 1.0f;
+        float lfo = sinf(v->org_scan_ph * 6.2831853f);
+        float rp  = (float)v->org_widx - (32.0f + lfo * depth);  // tap centered 32 behind the write head
+        if (rp < 0.0f) rp += (float)ORGAN_SCAN;
+        int   r0 = (int)rp;
+        float fr = rp - (float)r0;
+        int   r1 = r0 + 1; if (r1 >= ORGAN_SCAN) r1 = 0;
+        float wet = v->ks_buf[r0] + (v->ks_buf[r1] - v->ks_buf[r0]) * fr;
+        v->org_widx++; if (v->org_widx >= ORGAN_SCAN) v->org_widx = 0;
+        out = 0.5f * dry + 0.5f * wet;
+    }
+    // driven organ rolls off its top BEFORE the voice's tanh drive (a cranked amp/Leslie loses
+    // highs). Without this, saturating a sparse bright registration — ballad's lone 1' sparkle
+    // over a big gap — makes harsh intermodulation fizz; the rolloff keeps it a smooth growl.
+    // Clean (drv=0) is bit-identical: the filter is bypassed entirely.
+    if (v->drv > 0.01f) {
+        float fc   = 6000.0f - v->drv * 4200.0f;        // ~6kHz light .. ~1.8kHz cranked
+        float coef = 1.0f - expf(-6.2831853f * fc / (float)SOUND_SAMPLE_RATE);
+        v->org_lp += (out - v->org_lp) * coef;
+        out = v->org_lp;
+    }
+    return out * 0.9f;
 }
 
 // One engine sample — the dispatch (engine ids >= INSTR_ENGINE_BASE). The default body is
