@@ -12,6 +12,10 @@
 // beat — so beat()*4 + floor(beat_pos()*4) is a sixteenth-note counter. We
 // trigger sounds the instant that number changes. No timers of our own.
 //
+//   TOUCH/MOUSE  tap a cell to toggle it; DRAG across cells to paint a run
+//                (the first cell sets paint on/off, the rest follow) — every
+//                finger paints independently. The bottom row of buttons does
+//                tempo / swing / clear, so the whole thing plays with no keys.
 //   WASD       move the cursor
 //   Z          toggle the cell under the cursor (and audition it)
 //   X          clear the whole grid
@@ -48,6 +52,47 @@ static int  last_16 = -1;             // last sixteenth-note we triggered on
 static int  flash[ROWS];              // frame() when each row last fired
 static int  tempo = 120;
 static int  swing = 0;                // % of a 16th the off-beats drag (0-60, ↑/↓)
+
+static void play_row(int r);          // defined below; set_cell auditions through it
+
+// per-finger paint state: a touch lands, decides paint = !cell, then drags it
+// across the grid (each finger independent — the mallet.c sweep pattern)
+#define NPTR 10
+#define NOID (-999)
+typedef struct { int id, paint, lastR, lastC; } Ptr;
+static Ptr ptr[NPTR];
+
+// bottom transport buttons (also driven by the arrow keys). Geometry is shared
+// by the tapp() hit-test in update() and the drawing in draw().
+#define BTN_Y 170
+#define BTN_H 18
+enum { B_BPMDN, B_BPMUP, B_SWDN, B_SWUP, B_CLEAR, NBTN };
+static const struct { int x, w; const char *label; } BTN[NBTN] = {
+    {   4, 40, "BPM-"  },
+    {  46, 40, "BPM+"  },
+    {  92, 36, "SW-"   },
+    { 130, 36, "SW+"   },
+    { 256, 60, "CLEAR" },
+};
+
+// which grid cell is under canvas point (x,y)? fat-finger: the full stride counts
+static int cell_rc(int x, int y, int *r, int *c) {
+    if (x < GX || y < GY) return 0;
+    int cc = (x - GX) / SX, rr = (y - GY) / SY;
+    if (cc < 0 || cc >= STEPS || rr < 0 || rr >= ROWS) return 0;
+    *r = rr; *c = cc; return 1;
+}
+
+static void clear_grid(void) {
+    for (int r = 0; r < ROWS; r++)
+        for (int c = 0; c < STEPS; c++) grid[r][c] = false;
+}
+
+static void set_cell(int r, int c, bool on) {
+    grid[r][c] = on;
+    curR = r; curC = c;                       // keep the keyboard cursor in sync
+    if (on) { play_row(r); flash[r] = frame(); }  // audition only on turn-on
+}
 
 // fire one row's drum — each row plays its own instrument slot (defined in init)
 static void play_row(int r) {
@@ -86,6 +131,8 @@ void init() {
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < STEPS; c++)
             grid[r][c] = (PRESET[r][c] == 'x');
+
+    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
 }
 
 void update() {
@@ -114,15 +161,45 @@ void update() {
         grid[curR][curC] = !grid[curR][curC];
         if (grid[curR][curC]) { play_row(curR); flash[curR] = frame(); }  // audition
     }
-    if (btnp(0, BTN_B))
-        for (int r = 0; r < ROWS; r++)
-            for (int c = 0; c < STEPS; c++) grid[r][c] = false;
+    if (btnp(0, BTN_B)) clear_grid();
 
-    // ── tempo + swing: arrow keys are "player 1" ──
-    if (btnp(1, BTN_LEFT))  tempo = max(60,  tempo - 5);
-    if (btnp(1, BTN_RIGHT)) tempo = min(240, tempo + 5);
-    if (btnp(1, BTN_UP))    swing = min(60, swing + 10);
-    if (btnp(1, BTN_DOWN))  swing = max(0,  swing - 10);
+    // ── tempo + swing: arrow keys are "player 1", or the on-screen buttons ──
+    if (btnp(1, BTN_LEFT)  || tapp(BTN[B_BPMDN].x, BTN_Y, BTN[B_BPMDN].w, BTN_H)) tempo = max(60,  tempo - 5);
+    if (btnp(1, BTN_RIGHT) || tapp(BTN[B_BPMUP].x, BTN_Y, BTN[B_BPMUP].w, BTN_H)) tempo = min(240, tempo + 5);
+    if (btnp(1, BTN_UP)    || tapp(BTN[B_SWUP].x,  BTN_Y, BTN[B_SWUP].w,  BTN_H)) swing = min(60, swing + 10);
+    if (btnp(1, BTN_DOWN)  || tapp(BTN[B_SWDN].x,  BTN_Y, BTN[B_SWDN].w,  BTN_H)) swing = max(0,  swing - 10);
+    if (tapp(BTN[B_CLEAR].x, BTN_Y, BTN[B_CLEAR].w, BTN_H)) clear_grid();
+
+    // ── touch/mouse: tap a cell to toggle, drag across cells to paint a run ──
+    // (the mouse arrives as one virtual finger, so this covers it too)
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i), r, c;
+        Ptr *p = 0, *freeP = 0;
+        for (int j = 0; j < NPTR; j++) {
+            if (ptr[j].id == id) { p = &ptr[j]; break; }
+            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
+        }
+        if (!p) {                                  // finger just landed
+            if (!freeP || !cell_rc(tx, ty, &r, &c)) continue;   // outside grid → buttons own it
+            p = freeP;
+            *p = (Ptr){ id, !grid[r][c], r, c };   // paint = the inverse of what we touched
+            set_cell(r, c, p->paint);
+        } else if (cell_rc(tx, ty, &r, &c) && (r != p->lastR || c != p->lastC)) {
+            p->lastR = r; p->lastC = c;            // dragged onto a new cell — paint it
+            set_cell(r, c, p->paint);
+        }
+    }
+    for (int i = 0; i < touch_ended_count(); i++)  // lifted fingers free their slot
+        for (int j = 0; j < NPTR; j++)
+            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+
+#ifdef DE_TRACE
+    int lit = 0;
+    for (int r = 0; r < ROWS; r++) for (int c = 0; c < STEPS; c++) lit += grid[r][c];
+    watch("tempo", "%d", tempo);
+    watch("swing", "%d", swing);
+    watch("lit",   "%d", lit);
+#endif
 }
 
 void draw() {
@@ -158,6 +235,15 @@ void draw() {
     // cursor — a bright outline around the selected cell
     rect(GX + curC * SX - 1, GY + curR * SY - 1, CW + 2, CH + 2, CLR_GREEN);
 
-    print("WASD move   Z toggle   X clear", 2, GY + ROWS * SY + 6, CLR_LIGHT_GREY);
-    print("arrows: tempo + swing", 2, GY + ROWS * SY + 18, CLR_DARK_GREY);
+    // transport buttons (tap, or the matching keys)
+    for (int b = 0; b < NBTN; b++) {
+        rectfill(BTN[b].x, BTN_Y, BTN[b].w, BTN_H, CLR_DARK_GREY);
+        rect(BTN[b].x, BTN_Y, BTN[b].w, BTN_H, CLR_MEDIUM_GREY);
+        int tw = text_width(BTN[b].label);
+        print(BTN[b].label, BTN[b].x + (BTN[b].w - tw) / 2, BTN_Y + 6,
+              b == B_CLEAR ? CLR_ORANGE : CLR_LIGHT_GREY);
+    }
+    font(FONT_SMALL);
+    print("tap or drag cells - bottom buttons or WASD/arrows", 4, BTN_Y - 9, CLR_DARK_GREY);
+    font(FONT_NORMAL);
 }
