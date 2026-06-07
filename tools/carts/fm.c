@@ -14,10 +14,14 @@
 // copy into your cart. The 1:1 detent carries the built-in DX tine (E.PIANO attack ping).
 //
 // controls: A S D F G H J K  play (major scale)   ·   Z / X octave down / up
-//           1..5 presets: epiano / bell / bass / brass / clang
-//           drag any slider with the mouse (auditions as you drag), or
+//           1..5 presets: epiano / bell / bass / brass / clang (labels tappable)
+//           drag any slider (auditions as you drag), or
 //           LEFT/RIGHT pick a slider + UP/DOWN turn it (7 sliders: 3 macros + ADSR)
 //           SPACE chord   ·   M autoplay on/off
+//
+// MULTITOUCH: every finger is its own pointer — tap keys for chords, sweep
+// across them for a run, hold a slider with another finger while the chord
+// rings. The desktop mouse arrives as one synthetic finger, same code path.
 
 #include "studio.h"
 #include <math.h>
@@ -52,8 +56,16 @@ static int   midi_of[NKEY];
 static float glow[NKEY];
 static float knob[NSLIDER];    // macro 0..2 + env 3..6, all 0..1
 static int   sel = 0;
-static int   drag_k = -1;
 static bool  autoplay = true;
+
+// per-finger pointer table — each finger independently drags a slider or
+// plays/sweeps the keys (the desktop mouse = one synthetic finger)
+#define NPTR 10
+#define NOID (-999)
+enum { PTR_IDLE, PTR_DRAG, PTR_SWEEP };
+typedef struct { int id, mode, k, prevX; } Ptr;
+static Ptr ptr[NPTR];          // .id == NOID → slot free
+static int chord_rx = -1;      // footer "SPACE chord" tap zone, recorded by draw()
 static int   cur_preset = 0;
 static int   apos = 0;
 static int   scope_age = 9999;
@@ -107,6 +119,7 @@ static void set_preset(int p) {
 }
 
 void init(void) {
+    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     set_preset(0);
     for (int b = 0; b < NKEY; b++) midi_of[b] = degree(SCALE_MAJOR, 4, b);
     bpm(96);
@@ -127,33 +140,63 @@ void update(void) {
         if (frame() % 12 == 0) play_key(2, 5);
     }
 
-    if (keyp(KEY_SPACE)) play_chord();
+    if (keyp(KEY_SPACE) || (chord_rx >= 0 && tapp(chord_rx - 2, SCREEN_H - 12, 52, 12))) play_chord();
     if (keyp('M')) autoplay = !autoplay;
-    if (keyp('Z') && oct > -2) { oct--; play_key(2, 5); }   // audition the new register
-    if (keyp('X') && oct <  3) { oct++; play_key(2, 5); }
+    // Z/X or the [-]/[+] chips next to the oct readout shift the octave
+    if ((keyp('Z') || tapp(154, 2, 14, 13)) && oct > -2) { oct--; play_key(2, 5); }   // audition the new register
+    if ((keyp('X') || tapp(212, 2, 14, 13)) && oct <  3) { oct++; play_key(2, 5); }
 
-    if (mouse_pressed(MOUSE_LEFT)) {
-        for (int k = 0; k < 3; k++)
-            if (point_in_box(mouse_x(), mouse_y(), MROW_X(k) - 2, MROW_Y - 6, MROW_W + 4, 18))
-                drag_k = sel = k;
-        for (int k = 0; k < 4; k++)
-            if (point_in_box(mouse_x(), mouse_y(), EROW_X(k) - 2, EROW_Y - 6, EROW_W + 4, 18))
-                drag_k = sel = 3 + k;
-        if (drag_k < 0)
-            for (int b = 0; b < NKEY; b++)
-                if (point_in_box(mouse_x(), mouse_y(), KEY_X(b), KEY_Y, KEY_W, KEY_H))
-                    play_key(b, 6);
-    }
-    if (drag_k >= 0) {
-        if (mouse_down(MOUSE_LEFT)) {
-            int x0 = drag_k < 3 ? MROW_X(drag_k) : EROW_X(drag_k - 3);
-            int w  = drag_k < 3 ? MROW_W : EROW_W;
-            knob[drag_k] = clamp((float)(mouse_x() - x0) / (float)w, 0.0f, 1.0f);
+    // touch: every finger is its own pointer — drag a slider, tap a preset, or
+    // play a key (sweeping across the keys = a run), all independently at once
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
+        Ptr *p = 0, *freeP = 0;
+        for (int j = 0; j < NPTR; j++) {
+            if (ptr[j].id == id) { p = &ptr[j]; break; }
+            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
+        }
+        if (!p) {                                  // finger just landed
+            if (!freeP) continue;
+            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, tx };
+            if (point_in_box(tx, ty, SCREEN_W - 92, 2, 88, 12)) {
+                autoplay = !autoplay;              // the top-right label is a button
+                continue;
+            }
+            if (ty >= KEY_Y + KEY_H + 2 && ty < KEY_Y + KEY_H + 16) {
+                for (int q = 0; q < 5; q++)        // preset labels are tappable
+                    if (tx >= 12 + q * 58 && tx < 12 + q * 58 + 56) set_preset(q);
+                continue;
+            }
+            for (int k = 0; k < 3; k++)
+                if (point_in_box(tx, ty, MROW_X(k) - 2, MROW_Y - 6, MROW_W + 4, 18))
+                    { p->mode = PTR_DRAG; p->k = sel = k; }
+            for (int k = 0; k < 4; k++)
+                if (point_in_box(tx, ty, EROW_X(k) - 2, EROW_Y - 6, EROW_W + 4, 18))
+                    { p->mode = PTR_DRAG; p->k = sel = 3 + k; }
+            if (p->mode == PTR_IDLE && ty >= KEY_Y - 4 && ty < KEY_Y + KEY_H + 2) {
+                for (int b = 0; b < NKEY; b++)
+                    if (point_in_box(tx, ty, KEY_X(b), KEY_Y, KEY_W, KEY_H))
+                        play_key(b, 6);
+                p->mode = PTR_SWEEP; p->prevX = tx;
+            }
+        } else if (p->mode == PTR_DRAG) {
+            int x0 = p->k < 3 ? MROW_X(p->k) : EROW_X(p->k - 3);
+            int w  = p->k < 3 ? MROW_W : EROW_W;
+            knob[p->k] = clamp((float)(tx - x0) / (float)w, 0.0f, 1.0f);
             cur_preset = -1;
             apply_patch();
             if (frame() % 12 == 0) play_key(2, 5);
-        } else drag_k = -1;
+        } else if (p->mode == PTR_SWEEP) {
+            for (int b = 0; b < NKEY; b++) {       // play each key the finger crosses
+                int cx = KEY_X(b) + KEY_W / 2;
+                if ((p->prevX < cx && tx >= cx) || (p->prevX > cx && tx <= cx)) play_key(b, 5);
+            }
+            p->prevX = tx;
+        }
     }
+    for (int i = 0; i < touch_ended_count(); i++)  // lifted fingers free their slot
+        for (int j = 0; j < NPTR; j++)
+            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
 
     // autoplay: epiano comping — a maj7 chord at the top, a noodle between
     if (autoplay && every(1)) {
@@ -182,7 +225,10 @@ void draw(void) {
     font(FONT_SMALL);
     print("two-operator fm engine", 32, 8, CLR_MEDIUM_GREY);
     print_right(autoplay ? "M autoplay: on" : "M autoplay: off", SCREEN_W - 10, 8, autoplay ? CLR_LIME_GREEN : CLR_DARK_GREY);
-    print_right(str("oct %+d", oct), SCREEN_W - 96, 8, oct ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
+    // octave readout with tappable [-]/[+] chips (Z/X still work)
+    rect(154, 2, 14, 13, CLR_DARK_GREY);  print("-", 159, 6, CLR_LIGHT_GREY);
+    print(str("oct %+d", oct), 172, 8, oct ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
+    rect(212, 2, 14, 13, CLR_DARK_GREY);  print("+", 217, 6, CLR_LIGHT_GREY);
     font(FONT_NORMAL);
 
     // the engine's parameters, derived exactly like sound_fm_sample does
@@ -285,6 +331,8 @@ void draw(void) {
     }
 
     font(FONT_TINY);
-    print("A..K play   Z/X octave   1..5 presets   SPACE chord   sliders: drag or arrows", 10, SCREEN_H - 8, CLR_DARK_GREY);
+    chord_rx = print("A..K play   Z/X octave   1..5 presets   ", 10, SCREEN_H - 8, CLR_DARK_GREY);
+    int after_chord = print("SPACE chord", chord_rx, SCREEN_H - 8, CLR_MEDIUM_GREY);   // tappable
+    print("   sliders: drag or arrows", after_chord, SCREEN_H - 8, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }

@@ -50,7 +50,8 @@
 //           strokes as ticks. Preset rows mark them 'f' / 'd' / 'r'.
 //
 //   Q W E R T Y U I O P A   play each voice by hand
-//   LEFT / RIGHT  preset      UP / DOWN  tempo      SPACE  start / stop
+//   LEFT / RIGHT  preset (or tap the < > arrows on the label)
+//   UP / DOWN  tempo      SPACE  start / stop
 //   Z / X  shuffle down / up
 //   MOUSE  click/drag cells to edit (RIGHT-click = flam), click the strip
 //          above for accents, click a label to audition, drag the knobs
@@ -155,6 +156,7 @@ static int  flash[NV];
 enum { ST_PLAIN, ST_FLAM, ST_DRAG, ST_RATCHET, NSTROKE };
 
 static bool grid[NV][STEPS];   // the live pattern — editable, loaded from preset
+static int  nextz_x = -1;      // the preset '>' tap zone, recorded by draw() ('<' is fixed)
 static unsigned char gstroke[NV][STEPS];  // ST_* per cell (only meaningful when grid on)
 static bool gacc[STEPS];       // live accent row
 static bool paint_val;         // what a click-drag writes (set on press)
@@ -442,13 +444,16 @@ void update(void) {
     for (int v = 0; v < NV; v++)
         if (keyp(VKEY[v])) { fire(v, 1, 0); flash[v] = 5; }
 
-    if (keyp(KEY_SPACE)) { running = !running; last16 = -1; }
-    if (keyp(KEY_LEFT))  { pre = (pre + NP - 1) % NP; load_preset(); last16 = -1; }
-    if (keyp(KEY_RIGHT)) { pre = (pre + 1) % NP;      load_preset(); last16 = -1; }
-    if (keyp(KEY_UP))   { tempo += 4; if (tempo > 250) tempo = 250; bpm(tempo); }
-    if (keyp(KEY_DOWN)) { tempo -= 4; if (tempo <  40) tempo =  40; bpm(tempo); }
-    if (keyp('Z')) { swing -= 2; if (swing < 50) swing = 50; }
-    if (keyp('X')) { swing += 2; if (swing > 66) swing = 66; }
+    if (keyp(KEY_SPACE) || tapp(248, 22, 64, 14)) { running = !running; last16 = -1; }   // tap PLAYING/STOPPED
+    // < > switch presets — keys, or tap the label's arrows
+    if (keyp(KEY_LEFT)  || tapp(8, 22, 20, 14))
+        { pre = (pre + NP - 1) % NP; load_preset(); last16 = -1; }
+    if (keyp(KEY_RIGHT) || (nextz_x >= 0 && tapp(nextz_x, 22, 20, 14)))
+        { pre = (pre + 1) % NP;      load_preset(); last16 = -1; }
+    if (keyp(KEY_UP)   || tapp(278, 7, 32, 12)) { tempo += 4; if (tempo > 250) tempo = 250; bpm(tempo); }   // BPM halves
+    if (keyp(KEY_DOWN) || tapp(248, 7, 30, 12)) { tempo -= 4; if (tempo <  40) tempo =  40; bpm(tempo); }
+    if (keyp('Z') || tapp(196, 7, 22, 12)) { swing -= 2; if (swing < 50) swing = 50; }                      // SHF halves
+    if (keyp('X') || tapp(218, 7, 24, 12)) { swing += 2; if (swing > 66) swing = 66; }
 
     // knob hover + drag (Y=coarse, X=fine, same as modrack)
     int mx = mouse_x(), my = mouse_y();
@@ -565,8 +570,10 @@ void draw(void) {
     print(buf, 200, 11, swing > 50 ? CLR_DARK_RED : CLR_DARK_GREY);
     sprintf(buf, "%3d BPM", tempo);
     print(buf, 252, 11, CLR_BROWNISH_BLACK);
-    sprintf(buf, "< %s >", p->name);
-    print(buf, 14, 26, CLR_DARK_RED);
+    int nx = print("< ", 14, 26, CLR_DARK_RED);    // the arrows are tap targets
+    nx = print(p->name, nx, 26, CLR_DARK_RED);
+    print(" >", nx, 26, CLR_DARK_RED);
+    nextz_x = nx + 2;
     print(running ? "PLAYING" : "STOPPED", 252, 26, running ? CLR_MEDIUM_GREEN : CLR_RED);
 
     // playhead column

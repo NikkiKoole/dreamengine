@@ -54,6 +54,9 @@ int ui_finger = NOFINGER;     // touch id driving the panel UI
 int ui_press  = 0;            // pointer went down on the panel this frame
 int ui_down   = 0;            // pointer is currently down
 
+// info-line tap zones ([Z -] [X +] [C -] [V +]), recorded by draw()
+int octdn_x = -1, octup_x = -1, veldn_x = -1, velup_x = -1;
+
 // previous frame's touch ids — lets us spot a touch that BEGAN this frame
 int seen_ids[12]; int seen_n = 0;
 int touch_began(int id) {
@@ -197,10 +200,11 @@ void update() {
         if (keyr(bkey[j])) voice_off(&bh[j]);
     }
 
-    if (keyp('Z')) base = CLI(base - 12, 12, 96);
-    if (keyp('X')) base = CLI(base + 12, 12, 96);
-    if (keyp('C')) vel  = CLI(vel - 10, 1, 127);
-    if (keyp('V')) vel  = CLI(vel + 10, 1, 127);
+    // keys or the tappable [..] labels on the info line
+    if (keyp('Z') || (octdn_x >= 0 && tapp(octdn_x - 2, 186, 44, 13))) base = CLI(base - 12, 12, 96);
+    if (keyp('X') || (octup_x >= 0 && tapp(octup_x - 2, 186, 44, 13))) base = CLI(base + 12, 12, 96);
+    if (keyp('C') || (veldn_x >= 0 && tapp(veldn_x - 2, 186, 44, 13))) vel  = CLI(vel - 10, 1, 127);
+    if (keyp('V') || (velup_x >= 0 && tapp(velup_x - 2, 186, 44, 13))) vel  = CLI(vel + 10, 1, 127);
 
     // touch keyboard: every finger is a voice — chords, glissando, per-finger
     // release (the touchpiano pattern). the panel's UI finger is skipped so a
@@ -367,9 +371,13 @@ void draw() {
         lfos[L].depth = ui_slider(30 + L, x + 44, y + 50, w - 52, lfos[L].depth, 0, 1, lcol[L]);
     }
 
-    // ---- info line ----
-    print(str("OCT C%d   [Z -] [X +]", base / 12 - 1), 8, 190, CLR_LIGHT_GREY);
-    print(str("VELOCITY %d   [C -] [V +]", vel), 250, 190, CLR_LIGHT_GREY);
+    // ---- info line (the [..] labels are tap targets too) ----
+    int ix = print(str("OCT C%d   ", base / 12 - 1), 8, 190, CLR_LIGHT_GREY);
+    octdn_x = ix; ix = print("[Z -]", ix, 190, CLR_LIGHT_GREY) + 4;
+    octup_x = ix; print("[X +]", ix, 190, CLR_LIGHT_GREY);
+    ix = print(str("VELOCITY %d   ", vel), 250, 190, CLR_LIGHT_GREY);
+    veldn_x = ix; ix = print("[C -]", ix, 190, CLR_LIGHT_GREY) + 4;
+    velup_x = ix; print("[V +]", ix, 190, CLR_LIGHT_GREY);
 
     // ---- keyboard ----
     for (int i = 0; i < 11; i++) {

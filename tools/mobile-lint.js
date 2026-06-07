@@ -22,6 +22,12 @@
 //   touch>5        literal touch index ≥ 5 — iOS Safari caps at ~5 simultaneous touches
 //   tiny-target    tap()/tapp() with a literal w or h < 16 canvas px (44pt Apple HIG floor
 //                  ≈ 15–17 canvas px on a 320-wide cart fullscreen on an iPhone)
+//   keys-untapped  literal-arg key reads on a line with no tap/touch alternative —
+//                  the keycap-retrofit checklist for touch-capable carts. Grep-grade:
+//                  a key whose touch path lives in ANOTHER statement (a pointer-table
+//                  branch, a tappable tab) still shows up — verify by hand before
+//                  retrofitting. Dynamic args (key arrays = play surfaces, usually
+//                  mirrored by a touch surface) are skipped.
 //
 // v1 is grep-grade and informational (always exits 0): it produces a worklist,
 // not a gate. Known gap (manual check): key-gated title screens — "press Z to
@@ -98,6 +104,21 @@ function lint(name) {
       keys.add(k ?? '?')
     }
     warnings.push(`keys(${[...keys].sort().join(',')})`)
+
+    // which of those literal keys lack an INLINE tap/touch alternative — the
+    // "could this label be tappable?" checklist (see header for caveats)
+    if (verdict === 'touch-ready' || verdict === 'tap-as-mouse') {
+      const untapped = new Set()
+      for (const line of src.split('\n')) {
+        if (/\btapp?\s*\(|\btouch_/.test(line)) continue
+        for (const m of line.matchAll(/\bkey[pr]?\s*\(\s*(KEY_\w+|'(?:[^'\\]|\\.)')\s*\)/g)) {
+          const arg = m[1]
+          untapped.add(arg.startsWith('KEY_') ? arg.slice(4) : arg.slice(1, -1))
+        }
+      }
+      if (untapped.size)
+        warnings.push(`keys-untapped(${[...untapped].sort().join(',')})`)
+    }
   }
 
   // text_input() never sees a phone — no OS keyboard on canvas (§6c)

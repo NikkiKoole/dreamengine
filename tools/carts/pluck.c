@@ -11,13 +11,17 @@
 // controls: A S D F G H J K  pluck a string
 //           the string is a real object:
 //             GRAB it (press right on it) and drag up/down = BEND its pitch
-//             (note_pitch tracking the mouse — the engine's read tap is
+//             (note_pitch tracking the finger — the engine's read tap is
 //             fractional, so bends reach the ringing string live)
 //             press in OPEN SPACE = a pick; sweep past strings to STRUM them
 //           V chorus warble on/off (the jangle trick: 5.5Hz pitch LFO on a string)
-//           drag a slider with the mouse (auditions as you drag), or
+//           drag a slider (auditions as you drag), or
 //           LEFT/RIGHT pick a knob + UP/DOWN turn it
 //           SPACE strum   ·   M autoplay on/off ('P' belongs to the runtime pause overlay)
+//
+// MULTITOUCH: every finger is its own pointer — bend two strings at once,
+// strum with one hand while another holds a slider. The desktop mouse arrives
+// as one synthetic finger, so the same code path covers it.
 
 #include "studio.h"
 #include <math.h>
@@ -36,19 +40,21 @@ static float vib_ph[NSTR];
 static int   pend[NSTR];       // frames until a scheduled strum note visually plucks
 static float knob[3] = { 0.5f, 0.55f, 0.35f };
 static int   sel = 0;
-static int   drag_k = -1;      // slider currently grabbed by the mouse, -1 = none
 static bool  autoplay = true;
 static bool  warble = false;   // V: jangle-style chorus warble (pitch LFO bending the string)
 static int   apos = 0;
-// string gestures — the string is a real object:
+// string gestures — the string is a real object, and EVERY finger is a pointer:
 //   press ON a string (±4px)   = grab it → drag up/down BENDS its pitch (a held note_on;
 //                                the fractional KS read tap bending live)
 //   press in OPEN space        = a pick → sweeping past strings STRUMS them, each string
-//                                plucked the moment the cursor crosses it
-static int   bendH = -1, bendS = -1, bendY0 = 0;
-static float bendSt = 0;       // current bend in semitones (also bows the drawn string)
-static bool  strumming = false;
-static int   prevY = 0;        // last cursor y while strumming — crossings pluck
+//                                plucked the moment the finger crosses it
+#define NPTR 10
+#define NOID (-999)
+enum { PTR_IDLE, PTR_DRAG, PTR_BEND, PTR_PICK };
+typedef struct { int id, mode, k, s, h, y0, x, y, prevY; } Ptr;
+static Ptr   ptr[NPTR];        // .id == NOID → slot free
+static float bowSt[NSTR];      // live bend per string, semitones (bows the drawn string)
+static int   warble_rx = -1;   // footer "V warble" tap zone, recorded by draw()
 
 // slider geometry — shared by draw() and the mouse hit-test
 #define KNOB_W   88
@@ -82,6 +88,7 @@ void init(void) {
     // long release: the gate ending should never chop a ringing string
     instrument(I_STR, INSTR_PLUCK, 1, 0, 7, 1200);
     apply_knobs();
+    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     for (int s = 0; s < NSTR; s++) midi_of[s] = degree(SCALE_PENTA, 3, s + 2);
     bpm(96);
     amp[1] = 0.7f; amp[4] = 0.9f; amp[6] = 0.5f;   // a lively first frame
@@ -104,59 +111,74 @@ void update(void) {
 
     if (keyp(KEY_SPACE)) strum_all();
     if (keyp('M')) autoplay = !autoplay;   // M like the radio carts ('P' is the runtime pause key)
-    if (keyp('V')) {   // chorus warble — the jangle trick, bending the string ±0.12 st at 5.5Hz
+    // chorus warble — the jangle trick, bending the string ±0.12 st at 5.5Hz
+    if (keyp('V') || (warble_rx >= 0 && tapp(warble_rx - 2, SCREEN_H - 13, 56, 13))) {
         warble = !warble;
         instrument_lfo(I_STR, 0, LFO_PITCH, 5.5f, warble ? 0.12f : 0.0f);
     }
 
-    // mouse: grab a slider...
-    if (mouse_pressed(MOUSE_LEFT)) {
-        for (int k = 0; k < 3; k++)
-            if (point_in_box(mouse_x(), mouse_y(), KNOB_X(k) - 2, KNOB_Y - 6, KNOB_W + 4, 18)) {
-                drag_k = sel = k;
-            }
-        // ...or touch the string area: ON a string = grab it (bend); open space = a pick (strum)
-        if (drag_k < 0 && mouse_y() < KNOB_Y - 14) {
-            int grabbed = -1;
-            for (int s = 0; s < NSTR; s++)
-                if (mouse_y() >= 42 + s * 13 - 4 && mouse_y() <= 42 + s * 13 + 4) grabbed = s;
-            if (grabbed >= 0) {
-                bendH = note_on(midi_of[grabbed], I_STR, 6);   // held → pitch is drivable
-                note_glide(bendH, 25);                         // a touch of smoothing on the bend
-                bendS = grabbed; bendY0 = mouse_y(); bendSt = 0;
-                amp[grabbed] = 1.0f; vib_ph[grabbed] = 0.0f;
-            } else {
-                strumming = true;                              // the pick is down
-                prevY = mouse_y();
-            }
+    // touch: every finger is its own pointer — grab a slider, grab a string
+    // (bend), or pick open space (strum), all independently and at once
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
+        Ptr *p = 0, *freeP = 0;
+        for (int j = 0; j < NPTR; j++) {
+            if (ptr[j].id == id) { p = &ptr[j]; break; }
+            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
         }
-    }
-    if (drag_k >= 0) {
-        if (mouse_down(MOUSE_LEFT)) {
-            knob[drag_k] = clamp((float)(mouse_x() - KNOB_X(drag_k)) / (float)KNOB_W, 0.0f, 1.0f);
+        if (!p) {                                              // finger just landed
+            if (!freeP) continue;
+            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, -1, -1, ty, tx, ty, ty };
+            if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) {
+                autoplay = !autoplay;                          // the top-right label is a button
+                continue;
+            }
+            for (int k = 0; k < 3; k++)
+                if (point_in_box(tx, ty, KNOB_X(k) - 2, KNOB_Y - 6, KNOB_W + 4, 18)) {
+                    p->mode = PTR_DRAG; p->k = sel = k;
+                }
+            // ...or the string area: ON a string = grab it (bend); open space = a pick (strum)
+            if (p->mode == PTR_IDLE && ty < KNOB_Y - 14) {
+                int grabbed = -1;
+                for (int s = 0; s < NSTR; s++)
+                    if (ty >= 42 + s * 13 - 4 && ty <= 42 + s * 13 + 4) grabbed = s;
+                for (int j = 0; j < NPTR; j++)                 // one bending finger per string
+                    if (ptr[j].id != NOID && ptr[j].mode == PTR_BEND && ptr[j].s == grabbed) grabbed = -1;
+                if (grabbed >= 0) {
+                    p->mode = PTR_BEND; p->s = grabbed;
+                    p->h = note_on(midi_of[grabbed], I_STR, 6);   // held → pitch is drivable
+                    note_glide(p->h, 25);                      // a touch of smoothing on the bend
+                    amp[grabbed] = 1.0f; vib_ph[grabbed] = 0.0f;
+                } else {
+                    p->mode = PTR_PICK;                        // the pick is down
+                }
+            }
+        } else if (p->mode == PTR_DRAG) {
+            knob[p->k] = clamp((float)(tx - KNOB_X(p->k)) / (float)KNOB_W, 0.0f, 1.0f);
             apply_knobs();
-            if (frame() % 12 == 0) pluck_str(4, 5);   // audition while dragging
-        } else drag_k = -1;
-    }
-    if (bendS >= 0) {
-        if (mouse_down(MOUSE_LEFT)) {
-            bendSt = clamp((float)(bendY0 - mouse_y()) / 12.0f, -7.0f, 7.0f);   // push up = pitch up
-            note_pitch(bendH, (float)midi_of[bendS] + bendSt);
-        } else {
-            if (bendH >= 0) { note_off(bendH); bendH = -1; }   // ring out through the release
-            bendS = -1; bendSt = 0;
-        }
-    }
-    if (strumming) {
-        if (mouse_down(MOUSE_LEFT)) {
-            int my = mouse_y();
+            if (frame() % 12 == 0) pluck_str(4, 5);            // audition while dragging
+        } else if (p->mode == PTR_BEND) {
+            float st = clamp((float)(p->y0 - ty) / 12.0f, -7.0f, 7.0f);   // push up = pitch up
+            bowSt[p->s] = st;
+            note_pitch(p->h, (float)midi_of[p->s] + st);
+        } else if (p->mode == PTR_PICK) {
             for (int s = 0; s < NSTR; s++) {                   // pluck each string the pick crosses
                 int ys = 42 + s * 13;
-                if ((prevY < ys && my >= ys) || (prevY > ys && my <= ys)) pluck_str(s, 5);
+                if ((p->prevY < ys && ty >= ys) || (p->prevY > ys && ty <= ys)) pluck_str(s, 5);
             }
-            prevY = my;
-        } else strumming = false;
+            p->prevY = ty;
+        }
+        p->x = tx; p->y = ty;                                  // draw() reads these for the picks
     }
+    for (int i = 0; i < touch_ended_count(); i++)              // lifted fingers
+        for (int j = 0; j < NPTR; j++)
+            if (ptr[j].id == touch_ended_id(i)) {
+                if (ptr[j].mode == PTR_BEND) {
+                    note_off(ptr[j].h);                        // ring out through the release
+                    bowSt[ptr[j].s] = 0;
+                }
+                ptr[j].id = NOID;
+            }
 
     // autoplay: a wandering pentatonic noodle, strum at the top of every 16 beats
     if (autoplay && every(1)) {
@@ -190,7 +212,7 @@ void draw(void) {
         amp[s] *= 0.94f;
         vib_ph[s] += 0.55f;
         int col = amp[s] > 0.5f ? CLR_LIGHT_YELLOW : amp[s] > 0.1f ? CLR_PEACH : CLR_DARK_BROWN;
-        float bow = (s == bendS) ? bendSt * -2.2f : 0.0f;   // dragging bows the string
+        float bow = bowSt[s] * -2.2f;                       // dragging bows the string
         int x0 = 34, x1 = SCREEN_W - 16, px = x0, py = y;
         for (int x = x0 + 8; x <= x1; x += 8) {
             float t  = (float)(x - x0) / (float)(x1 - x0);
@@ -199,9 +221,9 @@ void draw(void) {
             line(px, py, x, wy, col);
             px = x; py = wy;
         }
-        if (s == bendS && (bendSt > 0.05f || bendSt < -0.05f)) {
+        if (bowSt[s] > 0.05f || bowSt[s] < -0.05f) {
             font(FONT_TINY);
-            print(str("%+.1f st", bendSt), x1 - 28, y - 9, CLR_LIGHT_YELLOW);
+            print(str("%+.1f st", bowSt[s]), x1 - 28, y - 9, CLR_LIGHT_YELLOW);
             font(FONT_NORMAL);
         }
         print(str("%c", STRKEY[s]), 12, y - 3, amp[s] > 0.1f ? CLR_WHITE : CLR_MEDIUM_GREY);
@@ -223,12 +245,16 @@ void draw(void) {
         if (on) print(">", x - 9, y, CLR_YELLOW);
     }
 
-    // the pick, while strumming
-    if (strumming) trifill(mouse_x() - 3, mouse_y() - 4, mouse_x() + 3, mouse_y() - 4,
-                           mouse_x(), mouse_y() + 4, CLR_LIGHT_PEACH);
+    // a pick under every strumming finger
+    for (int j = 0; j < NPTR; j++)
+        if (ptr[j].id != NOID && ptr[j].mode == PTR_PICK)
+            trifill(ptr[j].x - 3, ptr[j].y - 4, ptr[j].x + 3, ptr[j].y - 4,
+                    ptr[j].x, ptr[j].y + 4, CLR_LIGHT_PEACH);
 
     font(FONT_TINY);
-    print(str("A..K pluck   grab a string = bend   sweep open space = strum   V warble:%s",
-              warble ? "ON" : "off"), 10, SCREEN_H - 9, warble ? CLR_MEDIUM_GREY : CLR_DARK_GREY);
+    warble_rx = print("A..K pluck   grab a string = bend   sweep open space = strum   ",
+                      10, SCREEN_H - 9, CLR_DARK_GREY);
+    print(str("V warble:%s", warble ? "ON" : "off"), warble_rx, SCREEN_H - 9,
+          warble ? CLR_LIGHT_YELLOW : CLR_MEDIUM_GREY);   // tappable
     font(FONT_NORMAL);
 }

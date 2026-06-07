@@ -12,11 +12,16 @@
 // baked macro positions) — that's what makes this cart the engine's tuning rig: if
 // pressing 4 doesn't sound like a vibraphone, the macro MAPPING is wrong, not the preset.
 //
-// controls: A S D F G H J K  strike a bar (or click one; drag across = glissando)
+// controls: A S D F G H J K  strike a bar (or tap one; drag across = glissando)
 //           1..5  presets: marimba / xylophone / celesta / vibraphone / glockenspiel
-//           drag a slider with the mouse (auditions as you drag), or
+//           (preset labels + the autoplay label are tappable too)
+//           drag a slider (auditions as you drag), or
 //           LEFT/RIGHT pick a knob + UP/DOWN turn it
 //           SPACE glissando run   ·   M autoplay on/off
+//
+// MULTITOUCH: every finger is its own pointer — sweep the bars with several
+// fingers at once while another holds a slider. The desktop mouse arrives as
+// one synthetic finger, so the same code path covers it.
 
 #include "studio.h"
 #include <math.h>
@@ -45,13 +50,19 @@ static float glow[NBAR];       // visual strike flash, decays each frame
 static int   pend[NBAR];       // frames until a scheduled gliss note visually lands
 static float knob[3] = { 0.25f, 0.5f, 0.5f };
 static int   sel = 0;
-static int   drag_k = -1;      // slider currently grabbed by the mouse, -1 = none
 static bool  autoplay = true;
 static int   cur_preset = -1;  // last pressed preset (display only; knob moves clear it)
 static int   apos = 0;
-static bool  sweeping = false; // mouse drag across the bars = glissando
-static int   prevX = 0;
 static float motor_ph = 0;     // the spinning fan, drawn when the motor is on
+
+// per-finger pointer table — each finger independently drags a slider or
+// sweeps the bars (the desktop mouse = one synthetic finger)
+#define NPTR 10
+#define NOID (-999)
+enum { PTR_IDLE, PTR_DRAG, PTR_SWEEP };
+typedef struct { int id, mode, k, prevX; } Ptr;
+static Ptr ptr[NPTR];          // .id == NOID → slot free
+static int gliss_rx = -1;      // footer "SPACE gliss" tap zone, recorded by draw()
 
 // bar geometry — a mallet keyboard: low long bars left, high short bars right
 #define BAR_W    26
@@ -98,6 +109,7 @@ void init(void) {
     // long release: the gate ending should never chop a ringing bar
     instrument(I_BAR, INSTR_MALLET, 1, 0, 7, 1200);
     apply_knobs();
+    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     for (int b = 0; b < NBAR; b++) midi_of[b] = degree(SCALE_PENTA, 4, b + 1);
     bpm(92);
     glow[2] = 0.6f; glow[5] = 0.9f;            // a lively first frame
@@ -121,42 +133,57 @@ void update(void) {
         if (frame() % 12 == 0) strike(4, 5);
     }
 
-    if (keyp(KEY_SPACE)) gliss();
+    if (keyp(KEY_SPACE) || (gliss_rx >= 0 && tapp(gliss_rx - 2, SCREEN_H - 13, 52, 13))) gliss();
     if (keyp('M')) autoplay = !autoplay;
 
-    // mouse: grab a slider...
-    if (mouse_pressed(MOUSE_LEFT)) {
-        for (int k = 0; k < 3; k++)
-            if (point_in_box(mouse_x(), mouse_y(), KNOB_X(k) - 2, KNOB_Y - 6, KNOB_W + 4, 18)) {
-                drag_k = sel = k;
-            }
-        // ...or strike a bar; holding and sweeping across the keyboard = glissando
-        if (drag_k < 0 && mouse_y() >= BAR_Y - 4 && mouse_y() < KNOB_Y - 14) {
-            for (int b = 0; b < NBAR; b++)
-                if (point_in_box(mouse_x(), mouse_y(), BAR_X(b), BAR_Y, BAR_W, BAR_H(b)))
-                    strike(b, 6);
-            sweeping = true;
-            prevX = mouse_x();
+    // touch: every finger is its own pointer — grab a slider, tap a preset,
+    // or strike/sweep the bars, all independently and at the same time
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
+        Ptr *p = 0, *freeP = 0;
+        for (int j = 0; j < NPTR; j++) {
+            if (ptr[j].id == id) { p = &ptr[j]; break; }
+            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
         }
-    }
-    if (drag_k >= 0) {
-        if (mouse_down(MOUSE_LEFT)) {
-            knob[drag_k] = clamp((float)(mouse_x() - KNOB_X(drag_k)) / (float)KNOB_W, 0.0f, 1.0f);
+        if (!p) {                                  // finger just landed
+            if (!freeP) continue;
+            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, tx };
+            if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) {
+                autoplay = !autoplay;              // the top-right label is a button
+                continue;
+            }
+            if (ty >= KNOB_Y - 30 && ty < KNOB_Y - 16) {
+                for (int q = 0; q < 5; q++)        // preset labels are tappable
+                    if (tx >= 12 + q * 60 && tx < 12 + q * 60 + 58) set_preset(q);
+                continue;
+            }
+            for (int k = 0; k < 3; k++)
+                if (point_in_box(tx, ty, KNOB_X(k) - 2, KNOB_Y - 6, KNOB_W + 4, 18)) {
+                    p->mode = PTR_DRAG; p->k = sel = k;
+                }
+            // ...or strike a bar; holding and sweeping across the keyboard = glissando
+            if (p->mode == PTR_IDLE && ty >= BAR_Y - 4 && ty < KNOB_Y - 32) {
+                for (int b = 0; b < NBAR; b++)
+                    if (point_in_box(tx, ty, BAR_X(b), BAR_Y, BAR_W, BAR_H(b)))
+                        strike(b, 6);
+                p->mode = PTR_SWEEP; p->prevX = tx;
+            }
+        } else if (p->mode == PTR_DRAG) {
+            knob[p->k] = clamp((float)(tx - KNOB_X(p->k)) / (float)KNOB_W, 0.0f, 1.0f);
             cur_preset = -1;
             apply_knobs();
             if (frame() % 12 == 0) strike(4, 5);   // audition while dragging
-        } else drag_k = -1;
-    }
-    if (sweeping) {
-        if (mouse_down(MOUSE_LEFT)) {
-            int mx = mouse_x();
+        } else if (p->mode == PTR_SWEEP) {
             for (int b = 0; b < NBAR; b++) {       // strike each bar the mallet crosses
                 int cx = BAR_X(b) + BAR_W / 2;
-                if ((prevX < cx && mx >= cx) || (prevX > cx && mx <= cx)) strike(b, 5);
+                if ((p->prevX < cx && tx >= cx) || (p->prevX > cx && tx <= cx)) strike(b, 5);
             }
-            prevX = mx;
-        } else sweeping = false;
+            p->prevX = tx;
+        }
     }
+    for (int i = 0; i < touch_ended_count(); i++)  // lifted fingers free their slot
+        for (int j = 0; j < NPTR; j++)
+            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
 
     // autoplay: a music-box noodle; a glissando at the top of every 16 beats,
     // and now and then a ROLL (the mallet tremolo — rapid repeated strikes)
@@ -243,6 +270,7 @@ void draw(void) {
     }
 
     font(FONT_TINY);
-    print("A..K strike   click/sweep the bars   1..5 presets   SPACE gliss", 10, SCREEN_H - 9, CLR_DARK_GREY);
+    gliss_rx = print("A..K strike   tap/sweep the bars (multitouch)   1..5 presets   ", 10, SCREEN_H - 9, CLR_DARK_GREY);
+    print("SPACE gliss", gliss_rx, SCREEN_H - 9, CLR_MEDIUM_GREY);   // tappable
     font(FONT_NORMAL);
 }

@@ -16,6 +16,12 @@
 //
 // CONTROLS: Z/X/C drums · A..K bass · Q..I lead · drag the pad = theremin ·
 // 1-4 select track · SPACE arm/disarm record · M mute · BACKSPACE clear · N click.
+//
+// TOUCH: everything on screen is also a button — tap drum pads / lead+bass keys,
+// tap a track row to select it, and the REC / MUTE / CLR / CLICK chips along the
+// bottom do what the keys do. The theremin pad claims its own finger, so you can
+// play pads with other fingers while a gesture records. The desktop mouse arrives
+// as one synthetic finger, so mouse users get all of it too.
 
 #define LOOP_BEATS 16.0f     // 4 bars of 4/4
 #define QSTEP      0.25f     // one-shots quantize to 16ths
@@ -57,6 +63,16 @@ static int   loop_i;                 // which pass of the loop we're on
 // theremin voices: one for the live hand, one for the recorded ghost
 static int   vlive, vrep;
 static int   ther_on;                // live gesture in progress
+#define NOID (-999)
+static int   ther_id = NOID;         // the finger claimed by the pad (mouse = a finger)
+static int   ther_px, ther_py;       // that finger's position (draw uses it too)
+
+// bottom action chips (tap = the key) — geometry shared by update() and draw()
+#define CHIP_Y 182
+#define CHIP_H 14
+static const int  CHIP_X[4] = { 6, 60, 116, 178 };
+static const int  CHIP_W[4] = { 50, 52, 58, 56 };
+static const char *CHIP_LBL[4] = { "REC spc", "MUTE m", "CLR bksp", "CLICK n" };
 static float rec_p; static int rec_v;        // last recorded CC values (delta filter)
 static float gho_p; static int gho_v, gho_on; // ghost (replay) state for drawing
 
@@ -177,37 +193,51 @@ void update(void) {
         lamp = 4;
     }
 
-    // ---- track controls ----
-    for (int t = 0; t < NTRK; t++) if (keyp('1' + t)) sel = t;
-    if (keyp(KEY_SPACE)) trk[sel].armed ^= 1;
-    if (keyp('M')) {
+    // ---- track controls (keys, tappable rows, tappable chips) ----
+    for (int t = 0; t < NTRK; t++)
+        if (keyp('1' + t) || tapp(102, 20 + t * 21, 212, 17)) sel = t;
+    if (keyp(KEY_SPACE) || tapp(CHIP_X[0], CHIP_Y, CHIP_W[0], CHIP_H)) trk[sel].armed ^= 1;
+    if (keyp('M') || tapp(CHIP_X[1], CHIP_Y, CHIP_W[1], CHIP_H)) {
         trk[sel].muted ^= 1;
         if (sel == T_THER && trk[sel].muted) silence_ther_replay();
     }
-    if (keyp(KEY_BACKSPACE)) {
+    if (keyp(KEY_BACKSPACE) || tapp(CHIP_X[2], CHIP_Y, CHIP_W[2], CHIP_H)) {
         trk[sel].n = 0;
         if (sel == T_THER) silence_ther_replay();
     }
-    if (keyp('N')) metro ^= 1;
+    if (keyp('N') || tapp(CHIP_X[3], CHIP_Y, CHIP_W[3], CHIP_H)) metro ^= 1;
 
-    // ---- drums ----
-    if (keyp('Z')) { play_note(T_DRUM, SL_KICK,  36, 7, 120, 0); padv[0] = 5; }
-    if (keyp('X')) { play_note(T_DRUM, SL_SNARE, 55, 6, 110, 1); padv[1] = 5; }
-    if (keyp('C')) { play_note(T_DRUM, SL_HAT,   84, 4,  30, 2); padv[2] = 5; }
+    // ---- drums (keys or tap the pads) ----
+    if (keyp('Z') || tapp( 8, 128, 24, 36)) { play_note(T_DRUM, SL_KICK,  36, 7, 120, 0); padv[0] = 5; }
+    if (keyp('X') || tapp(35, 128, 24, 36)) { play_note(T_DRUM, SL_SNARE, 55, 6, 110, 1); padv[1] = 5; }
+    if (keyp('C') || tapp(62, 128, 24, 36)) { play_note(T_DRUM, SL_HAT,   84, 4,  30, 2); padv[2] = 5; }
 
-    // ---- bass + lead (minor pentatonic, two octaves apart) ----
+    // ---- bass + lead (minor pentatonic, two octaves apart; keys or tap the halves) ----
     for (int i = 0; i < 8; i++) {
-        if (keyp(BK[i])) { play_note(T_BASS, SL_BASS, degree(SCALE_PENTA_MIN, 2, i), 7, 260, i); keyv[1][i] = 5; }
-        if (keyp(LK[i])) { play_note(T_LEAD, SL_LEAD, degree(SCALE_PENTA_MIN, 4, i), 6, 200, i); keyv[0][i] = 5; }
+        if (keyp(BK[i]) || tapp(92 + i * 17, 148, 16, 23)) { play_note(T_BASS, SL_BASS, degree(SCALE_PENTA_MIN, 2, i), 7, 260, i); keyv[1][i] = 5; }
+        if (keyp(LK[i]) || tapp(92 + i * 17, 124, 16, 23)) { play_note(T_LEAD, SL_LEAD, degree(SCALE_PENTA_MIN, 4, i), 6, 200, i); keyv[0][i] = 5; }
     }
 
-    // ---- theremin: drag the pad. y = pitch, x = volume. Records as a CC
-    // stream, but only on frames where the hand actually moved (delta filter).
-    int mx = mouse_x(), my = mouse_y();
-    int inpad = mx >= TPX && mx < TPX + TPW && my >= TPY && my < TPY + TPH;
-    if (mouse_down(MOUSE_LEFT) && inpad) {
-        float p = remap(my, TPY, TPY + TPH, TH_HI, TH_LO);          // top = high
-        int   v = (int)clamp(remap(mx, TPX, TPX + TPW, 2.4f, 7.4f), 1, 7);
+    // ---- theremin: drag the pad. y = pitch, x = volume. The pad CLAIMS the
+    // finger that lands on it, so your other fingers keep playing pads/keys
+    // while a gesture records. Records as a CC stream, but only on frames
+    // where the hand actually moved (delta filter).
+    int found = 0;
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
+        if (id == ther_id) { found = 1; ther_px = tx; ther_py = ty; break; }
+        if (ther_id == NOID && tx >= TPX && tx < TPX + TPW && ty >= TPY && ty < TPY + TPH) {
+            ther_id = id; found = 1; ther_px = tx; ther_py = ty;   // claimed
+            break;
+        }
+    }
+    for (int i = 0; i < touch_ended_count(); i++)
+        if (touch_ended_id(i) == ther_id) { ther_id = NOID; found = 0; }
+    int inpad = found && ther_px >= TPX && ther_px < TPX + TPW
+                      && ther_py >= TPY && ther_py < TPY + TPH;
+    if (inpad) {
+        float p = remap(ther_py, TPY, TPY + TPH, TH_HI, TH_LO);     // top = high
+        int   v = (int)clamp(remap(ther_px, TPX, TPX + TPW, 2.4f, 7.4f), 1, 7);
         note_pitch(vlive, p); note_vol(vlive, v);
         if (!ther_on || fabsf(p - rec_p) > 0.08f || v != rec_v) {
             rec_ev(T_THER, EV_CC, SL_THER, p, v, 0, 0);
@@ -317,14 +347,23 @@ void draw(void) {
         circ(mid(TPX + 2, gx, TPX + TPW - 3), mid(TPY + 2, gy, TPY + TPH - 3), 3, CLR_GREEN);
     }
     if (ther_on) {
-        int mx = mouse_x(), my = mouse_y();
-        line(mx - 4, my, mx + 4, my, CLR_WHITE);
-        line(mx, my - 4, mx, my + 4, CLR_WHITE);
+        line(ther_px - 4, ther_py, ther_px + 4, ther_py, CLR_WHITE);
+        line(ther_px, ther_py - 4, ther_px, ther_py + 4, CLR_WHITE);
     }
 
     // ---- HUD ----
     font(FONT_SMALL);
-    print("Z X C drums   A-K bass   Q-I lead   drag the pad: theremin", 6, 178, CLR_INDIGO);
-    print("1-4 select   SPACE rec   M mute   BKSP clear   N click", 6, 188, CLR_DARKER_GREY);
+    print("Z X C drums   A-K bass   Q-I lead   drag the pad: theremin", 6, 174, CLR_INDIGO);
     font(FONT_NORMAL);
+
+    // action chips — tap = the key; they act on the selected track
+    int chip_on[4]  = { trk[sel].armed, trk[sel].muted, 0, metro };
+    int chip_col[4] = { CLR_RED, CLR_MEDIUM_GREY, CLR_DARKER_BLUE, CLR_ORANGE };
+    for (int c = 0; c < 4; c++) {
+        rectfill(CHIP_X[c], CHIP_Y, CHIP_W[c], CHIP_H, chip_on[c] ? chip_col[c] : CLR_DARKER_BLUE);
+        rect(CHIP_X[c], CHIP_Y, CHIP_W[c], CHIP_H, chip_on[c] ? CLR_WHITE : CLR_DARK_BLUE);
+        font(FONT_SMALL);
+        print(CHIP_LBL[c], CHIP_X[c] + 4, CHIP_Y + 4, chip_on[c] ? CLR_BLACK : CLR_MEDIUM_GREY);
+        font(FONT_NORMAL);
+    }
 }

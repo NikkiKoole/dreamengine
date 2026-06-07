@@ -34,12 +34,15 @@
 //     AFTER the filter so the resonant peak screams into it; note_drive()
 //     moves it on the ringing voice. RES + DRV up = the proper acid bite.
 //
-//   MOUSE   piano roll: click/drag to draw the line, click a note to
+//   POINTER piano roll: press/drag to draw the line, press a note to
 //           erase it. Rows below the roll: OCT (+1 octave), ACC (accent),
-//           SLD (slide into next step). Knobs: drag vertically or hover +
-//           mouse wheel. Click the SAW/SQR switch to change wave. The
+//           SLD (slide into next step). Knobs: drag vertically (or hover +
+//           wheel on desktop). The SAW/SQR switch toggles the wave. The
 //           SQUELCH slider (bottom) multiplies the filter-env sweep up to
 //           3x — ENV knob full + slider full = the 9kHz scream.
+//           MULTITOUCH: every finger is its own pointer — ride CUT and RES
+//           with two fingers while the line runs (the acid move). Header is
+//           tappable too: < name > pattern, BPM halves tempo, > run/stop.
 //   N       roll a fresh random acid line (the honest way to write acid)
 //   H       help panel with all of this on screen
 //   LEFT / RIGHT  pattern    UP / DOWN  tempo    SPACE  run / stop
@@ -85,10 +88,16 @@ static int   last16 = -1, playhead = 0;
 static int   h = -1;          // the one voice
 static bool  prev_slide;      // did the step we just played carry a slide?
 static int   wave = INSTR_SAW;
-static int   drag_knob = -1, drag_my;
 static int   squelch = 33;    // 0..100 → 1x..3x filter-env depth
-static bool  drag_slider;
 static bool  show_help;
+
+// per-finger pointer table — every finger drags its own knob, the slider,
+// or draws in the roll (the desktop mouse = one synthetic finger)
+#define NPTR 10
+#define NOID (-999)
+enum { PTR_IDLE, PTR_KNOB, PTR_SLIDER, PTR_ROLL };
+typedef struct { int id, mode, k, lastY; } Ptr;
+static Ptr ptr[NPTR];         // .id == NOID → slot free
 
 // ── knob value mappings ──────────────────────────────────────────────────
 static int cut_hz(void)  { return (int)(60.0f * powf(2.0f, knob[K_CUT] * 0.06f)); } // 60..3840
@@ -144,6 +153,7 @@ static void load_preset(void) {
 static void all_off(void) { if (h >= 0) { note_off(h); h = -1; } prev_slide = false; }
 
 void init(void) {
+    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     define_voice();
     load_preset();
 }
@@ -181,45 +191,88 @@ void update(void) {
     if (keyp(KEY_UP))   { tempo += 4; if (tempo > 250) tempo = 250; bpm(tempo); sync_echo(); }
     if (keyp(KEY_DOWN)) { tempo -= 4; if (tempo <  40) tempo =  40; bpm(tempo); sync_echo(); }
     if (keyp('N')) { gen_random(); }
-    if (keyp('H')) show_help = !show_help;
 
     int mx = mouse_x(), my = mouse_y();
 
-    if (show_help) {                       // help swallows the mouse; music keeps playing
-        if (mouse_pressed(MOUSE_LEFT)) show_help = false;
+    if (show_help) {                       // help swallows the pointer; music keeps playing
+        if (keyp('H') || tapp(0, 0, 320, 200)) show_help = false;   // any tap closes
         goto clock;
     }
+    if (keyp('H') || tapp(258, 178, 56, 18)) show_help = true;
 
-    // ── squelch slider (bottom): drag horizontally ──────────────────────
-    if (mouse_pressed(MOUSE_LEFT) && mx >= 76 && mx < 252 && my >= 180 && my < 194)
-        drag_slider = true;
-    if (!mouse_down(MOUSE_LEFT)) drag_slider = false;
-    if (drag_slider) {
-        squelch = (mx - 80) * 100 / 168;
-        if (squelch < 0)   squelch = 0;
-        if (squelch > 100) squelch = 100;
-    }
+    // ── tappable header: < name > pattern, BPM halves tempo, > run/stop ──
+    if (tapp(146, 0, 18, 22)) { pre = (pre + NP - 1) % NP; load_preset(); last16 = -1; all_off(); }
+    if (tapp(214, 0, 18, 22)) { pre = (pre + 1) % NP;      load_preset(); last16 = -1; all_off(); }
+    if (tapp(166, 0, 46, 22) && !PRESET[pre].nt[0]) gen_random();   // tap RANDOM's name = reroll
+    if (tapp(226, 0, 30, 22)) { tempo -= 4; if (tempo <  40) tempo =  40; bpm(tempo); sync_echo(); }
+    if (tapp(256, 0, 34, 22)) { tempo += 4; if (tempo > 250) tempo = 250; bpm(tempo); sync_echo(); }
+    if (tapp(292, 0, 28, 22)) { running = !running; last16 = -1; if (!running) all_off(); }
 
-    // ── knobs: drag vertically, or hover + wheel ─────────────────────────
-    if (mouse_pressed(MOUSE_LEFT) && !drag_slider) {
-        for (int k = 0; k < NK; k++) {
-            int dx = mx - KX[k], dy = my - KY;
-            if (dx * dx + dy * dy <= (KR + 3) * (KR + 3)) { drag_knob = k; drag_my = my; }
+    // ── touch: every finger is its own pointer — a knob, the slider, the
+    // wave switch, or drawing in the roll, all independently and at once
+    // (the desktop mouse arrives as one synthetic finger) ─────────────────
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
+        Ptr *p = 0, *freeP = 0;
+        for (int j = 0; j < NPTR; j++) {
+            if (ptr[j].id == id) { p = &ptr[j]; break; }
+            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
         }
-        // wave switch
-        if (mx >= 270 && mx < 306 && my >= 30 && my < 48) {
-            wave = (wave == INSTR_SAW) ? INSTR_SQUARE : INSTR_SAW;
-            define_voice();
+        if (!p) {                                      // finger just landed
+            if (!freeP) continue;
+            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, ty };
+            for (int k = 0; k < NK; k++) {
+                int dx = tx - KX[k], dy = ty - KY;
+                if (dx * dx + dy * dy <= (KR + 3) * (KR + 3)) { p->mode = PTR_KNOB; p->k = k; }
+            }
+            if (p->mode != PTR_IDLE) continue;
+            if (tx >= 270 && tx < 306 && ty >= 30 && ty < 48) {        // wave switch
+                wave = (wave == INSTR_SAW) ? INSTR_SQUARE : INSTR_SAW;
+                define_voice();
+                continue;
+            }
+            if (tx >= 76 && tx < 252 && ty >= 180 && ty < 194) {       // squelch slider
+                p->mode = PTR_SLIDER;
+                continue;                                              // value set below next frame
+            }
+            int col = (tx - RX) / RSX;
+            if (tx >= RX && col >= 0 && col < STEPS) {
+                if (ty >= RY && ty < RY + 13 * RSY) {                  // piano roll
+                    int row = 12 - (ty - RY) / RSY;
+                    if (on[col] && pitches[col] == row) on[col] = false;   // press your note = erase
+                    else { on[col] = true; pitches[col] = row; }
+                    p->mode = PTR_ROLL;
+                } else {                                               // flag rows: press toggles
+                    if (ty >= OCTY && ty < OCTY + 7) octv[col] = !octv[col];
+                    if (ty >= ACCY && ty < ACCY + 7) acc[col]  = !acc[col];
+                    if (ty >= SLDY && ty < SLDY + 7) sld[col]  = !sld[col];
+                }
+            }
+        } else if (p->mode == PTR_KNOB) {
+            if (ty != p->lastY) {
+                knob[p->k] += (p->lastY - ty) * 2;
+                if (knob[p->k] < 0)   knob[p->k] = 0;
+                if (knob[p->k] > 100) knob[p->k] = 100;
+                knob_changed(p->k);
+            }
+        } else if (p->mode == PTR_SLIDER) {
+            squelch = (tx - 80) * 100 / 168;
+            if (squelch < 0)   squelch = 0;
+            if (squelch > 100) squelch = 100;
+        } else if (p->mode == PTR_ROLL) {
+            int col = (tx - RX) / RSX;
+            if (tx >= RX && col >= 0 && col < STEPS && ty >= RY && ty < RY + 13 * RSY) {
+                int row = 12 - (ty - RY) / RSY;
+                on[col] = true; pitches[col] = row;    // drag paints
+            }
         }
+        p->lastY = ty;
     }
-    if (!mouse_down(MOUSE_LEFT)) drag_knob = -1;
-    if (drag_knob >= 0 && my != drag_my) {
-        knob[drag_knob] += (drag_my - my) * 2;
-        if (knob[drag_knob] < 0)   knob[drag_knob] = 0;
-        if (knob[drag_knob] > 100) knob[drag_knob] = 100;
-        drag_my = my;
-        knob_changed(drag_knob);
-    }
+    for (int i = 0; i < touch_ended_count(); i++)      // lifted fingers free their slot
+        for (int j = 0; j < NPTR; j++)
+            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+
+    // ── knobs: hover + wheel still works on desktop ──────────────────────
     float wh = mouse_wheel();
     if (wh != 0.0f)
         for (int k = 0; k < NK; k++) {
@@ -231,23 +284,6 @@ void update(void) {
                 knob_changed(k);
             }
         }
-
-    // ── piano roll + flag rows ───────────────────────────────────────────
-    int col = (mx - RX) / RSX;
-    bool in_cols = mx >= RX && col >= 0 && col < STEPS;
-    if (in_cols && (mouse_pressed(MOUSE_LEFT) ||
-                    (mouse_down(MOUSE_LEFT) && drag_knob < 0 && !drag_slider))) {
-        if (my >= RY && my < RY + 13 * RSY) {
-            int row = 12 - (my - RY) / RSY;
-            if (mouse_pressed(MOUSE_LEFT) && on[col] && pitches[col] == row)
-                on[col] = false;                       // click your note = erase
-            else { on[col] = true; pitches[col] = row; }
-        } else if (mouse_pressed(MOUSE_LEFT)) {        // flag rows: click toggles
-            if (my >= OCTY && my < OCTY + 7) octv[col] = !octv[col];
-            if (my >= ACCY && my < ACCY + 7) acc[col]  = !acc[col];
-            if (my >= SLDY && my < SLDY + 7) sld[col]  = !sld[col];
-        }
-    }
 
 clock:
     if (!running) return;
@@ -291,6 +327,10 @@ void draw(void) {
     cls(CLR_LIGHT_GREY);
     rectfill(0, 0, 320, 22, CLR_MEDIUM_GREY);
     print("TB-303 BASS LINE", 14, 8, CLR_BLACK);
+    font(FONT_SMALL);                                  // tappable: < name >, BPM halves, run
+    print("<", 151, 10, CLR_DARK_GREY);
+    print(">", 219, 10, CLR_DARK_GREY);
+    font(FONT_NORMAL);
     print(PRESET[pre].name, 160, 8, CLR_DARK_RED);
     sprintf(buf, "%3d BPM", tempo);
     print(buf, 230, 8, CLR_BLACK);
@@ -370,9 +410,9 @@ void draw(void) {
             "DRV       POST-FILTER GRIT",
             "SQUELCH   FILTER-ENV DEPTH",
             "WAVE BOX  SAW / SQR",
-            "N         NEW RANDOM LINE",
-            "< >       PATTERN   ^v TEMPO",
-            "SPACE     RUN/STOP  H CLOSE",
+            "N         NEW RANDOM (TAP NAME)",
+            "< > PATTERN  ^v TEMPO (TAP)",
+            "SPACE/TAP > RUN/STOP  H CLOSE",
         };
         for (int i = 0; i < 12; i++)
             print(HL[i], 52, 50 + i * 11, i < 9 ? CLR_WHITE : CLR_LIGHT_PEACH);

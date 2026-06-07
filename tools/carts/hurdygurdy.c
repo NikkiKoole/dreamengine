@@ -17,8 +17,10 @@
 //     speed — snaps the buzzing bridge and fires a percussive noise accent. The
 //     rhythmic trick at the heart of hurdy-gurdy playing.
 //
-// CONTROLS: hold the mouse + circle the wheel to crank · A S D F G H J K = melody
-// tangents · flick the crank for the buzz.
+// CONTROLS: hold + circle the wheel to crank (mouse or finger) · A S D F G H J K
+// = melody tangents (the on-screen tangent buttons are tappable and HELD, so on
+// touch you crank with one hand and finger tangents with the other) · flick the
+// crank for the buzz · scale labels + the buzz label are tappable too.
 
 #define DRONE   5
 #define MEL     6
@@ -48,6 +50,19 @@ static const int   SCALES[5]      = { SCALE_MAJOR, SCALE_MINOR, SCALE_PENTA,
                                        SCALE_PENTA_MIN, SCALE_BLUES };
 static const char *SCALE_NAMES[5] = { "major", "minor", "penta", "p-min", "blues" };
 
+// touch: the first finger near the wheel CLAIMS the crank; every other finger
+// holds tangent buttons / taps labels (the desktop mouse = one synthetic finger)
+#define NOID (-999)
+static int   crank_id = NOID;        // the finger turning the crank
+static float crank_px, crank_py;     // that finger's position (draw uses it too)
+static int   tang_hot[NKEYS];        // tangent i held by a finger this frame
+static int   scale_rx[5], scale_rw[5];   // scale-label tap rects, recorded by draw()
+static int   buzz_rx, buzz_rw;           // buzz-label tap rect
+#define TANG_X(i) (14 + (i) * 16)        // tangent button hit boxes
+#define TANG_Y    40
+#define TANG_W    15
+#define TANG_H    30
+
 static float wrap_pi(float a) {
     while (a >  3.14159265f) a -= 6.28318531f;
     while (a < -3.14159265f) a += 6.28318531f;
@@ -68,9 +83,27 @@ void init(void) {
 }
 
 void update(void) {
-    // ---- the crank: angular speed of the mouse circling the wheel ----
-    int down = mouse_down(MOUSE_LEFT);
-    float dx = mouse_x() - WCX, dy = mouse_y() - WCY;
+    // ---- sort the fingers: crank vs tangents vs label taps ----
+    for (int i = 0; i < NKEYS; i++) tang_hot[i] = 0;
+    int down = 0;
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i); float tx = touch_x(i), ty = touch_y(i);
+        if (id == crank_id) { down = 1; crank_px = tx; crank_py = ty; continue; }
+        float ddx = tx - WCX, ddy = ty - WCY;
+        if (crank_id == NOID && sqrtf(ddx * ddx + ddy * ddy) <= WR + 24) {
+            crank_id = id; down = 1; crank_px = tx; crank_py = ty;   // claimed
+            continue;
+        }
+        for (int k = 0; k < NKEYS; k++)              // held tangent buttons
+            if (tx >= TANG_X(k) && tx < TANG_X(k) + TANG_W &&
+                ty >= TANG_Y    && ty < TANG_Y + TANG_H) tang_hot[k] = 1;
+    }
+    for (int i = 0; i < touch_ended_count(); i++)
+        if (touch_ended_id(i) == crank_id) crank_id = NOID;
+    if (crank_id == NOID) down = 0;
+
+    // ---- the crank: angular speed of the crank finger circling the wheel ----
+    float dx = crank_px - WCX, dy = crank_py - WCY;
     float dist = sqrtf(dx * dx + dy * dy);
     float ang  = atan2f(dy, dx);
     float raw  = 0;
@@ -97,12 +130,14 @@ void update(void) {
     note_vol(drone_hi, cv);  note_cutoff(drone_hi, cut);
     note_cutoff(mel, cut);                            // whole instrument brightens together
 
-    // ---- scale select: 1-5 toggle which scale the tangents play in ----
-    for (int i = 0; i < 5; i++) if (keyp('1' + i)) scale_idx = i;
+    // ---- scale select: 1-5 (or tap a label) toggle which scale the tangents play in ----
+    for (int i = 0; i < 5; i++)
+        if (keyp('1' + i) || (scale_rw[i] > 0 && tapp(scale_rx[i], 161, scale_rw[i], 13)))
+            scale_idx = i;
 
-    // ---- melody: highest pressed tangent wins, voiced in the chosen scale ----
+    // ---- melody: highest pressed tangent wins (key or finger), voiced in the chosen scale ----
     active_key = -1;
-    for (int i = 0; i < NKEYS; i++) if (key(TANGENTS[i])) active_key = i;
+    for (int i = 0; i < NKEYS; i++) if (key(TANGENTS[i]) || tang_hot[i]) active_key = i;
     if (active_key >= 0) {
         note_pitch(mel, degree(SCALES[scale_idx], 4, active_key));   // up from C4
         note_vol(mel, cv);
@@ -113,7 +148,8 @@ void update(void) {
     // ---- chien: a deliberate burst of speed ON TOP of a steady crank snaps the
     // buzzing bridge. Gating on prev_speed (already cranking) keeps the big
     // spin-up-from-rest spike from firing it — that's not a flick, just starting.
-    if (keyp('B')) buzz_on = !buzz_on;            // arm / disarm the chien
+    if (keyp('B') || (buzz_rw > 0 && tapp(buzz_rx, 183, buzz_rw, 13)))
+        buzz_on = !buzz_on;                       // arm / disarm the chien
     float accel = speed - prev_speed;
     if (buzz_on && accel > 0.13f && prev_speed > 0.45f && buzz_cd <= 0) {
         hit(38, INSTR_NOISE, cv, 70);                 // dry percussive buzz
@@ -144,9 +180,10 @@ void draw(void) {
     string_line(50, active_key >= 0 ? amp : 0, active_key >= 0 ? CLR_LIGHT_PEACH : CLR_DARK_BROWN);
     for (int i = 0; i < NKEYS; i++) {
         int tx = 22 + i * 16, on = (i == active_key);
+        rect(TANG_X(i), TANG_Y + 2, TANG_W, TANG_H - 4, on ? CLR_ORANGE : CLR_DARK_BROWN);   // tappable button
         line(tx, 44, tx, 56, on ? CLR_WHITE : CLR_DARK_BROWN);
         char lbl[2] = { TANGENTS[i], 0 };
-        print(lbl, tx - 2, 60, on ? CLR_YELLOW : CLR_DARK_BROWN);
+        print(lbl, tx - 2, 60, on ? CLR_YELLOW : CLR_BROWN);
     }
     // two drone strings, lit by the crank
     int dcol = speed > 0.05f ? (speed > 0.5f ? CLR_ORANGE : CLR_BROWN) : CLR_DARK_BROWN;
@@ -169,8 +206,8 @@ void draw(void) {
     circ(WCX, WCY, (int)crank_r, bcol);
 
     // the crank arm + handle — follows your hand while cranking, else coasts
-    float ha = (mouse_down(MOUSE_LEFT) ? atan2f(mouse_y() - WCY, mouse_x() - WCX)
-                                       : wheel_vis * 0.0174533f);
+    float ha = (crank_id != NOID ? atan2f(crank_py - WCY, crank_px - WCX)
+                                 : wheel_vis * 0.0174533f);
     int hx = WCX + (int)(cosf(ha) * (WR + 8)), hy = WCY + (int)(sinf(ha) * (WR + 8));
     line(WCX, WCY, hx, hy, CLR_LIGHT_GREY);
     circfill(hx, hy, 4, CLR_YELLOW);
@@ -183,20 +220,23 @@ void draw(void) {
     // ---- HUD ----
     print("HURDY-GURDY", 6, 6, CLR_ORANGE);
 
-    // scale picker — press 1-5; the active scale glows
+    // scale picker — press 1-5 or tap a label; the active scale glows
     font(FONT_SMALL);
     int sx = print("SCALE", 6, 166, CLR_MEDIUM_GREY) + 5;
     for (int i = 0; i < 5; i++) {
-        int on = (i == scale_idx);
+        int on = (i == scale_idx), x0 = sx;
         char num[3] = { (char)('1' + i), ' ', 0 };
         sx = print(num, sx, 166, on ? CLR_YELLOW : CLR_DARKER_GREY);
         sx = print(SCALE_NAMES[i], sx, 166, on ? CLR_WHITE : CLR_DARK_BROWN) + 7;
+        scale_rx[i] = x0 - 1; scale_rw[i] = sx - x0 - 4;   // record the tap rect
     }
     font(FONT_NORMAL);
 
     print("hold + circle the wheel to crank", 6, 178, CLR_MEDIUM_GREY);
     int bx = print("A-K: melody   B: buzz ", 6, 188, CLR_DARK_BROWN);
-    print(buzz_on ? "[on]" : "[off]", bx, 188, buzz_on ? CLR_ORANGE : CLR_DARKER_GREY);
+    int be = print(buzz_on ? "[on]" : "[off]", bx, 188, buzz_on ? CLR_ORANGE : CLR_DARKER_GREY);
+    buzz_rx = 6 + text_width("A-K: melody   ");           // "B: buzz [on]" is tappable
+    buzz_rw = be - buzz_rx;
     // meters: crank speed (loudness) and circle width (brightness)
     font(FONT_SMALL);
     print("CRANK", 218, 11, CLR_DARKER_GREY);

@@ -30,7 +30,11 @@
 //
 //   KEYS    Z X C V B N M , . / white + S D G H J L ; black — a guitar
 //           (INSTR_PLUCK) playing into the chamber. UP/DOWN shift octave.
-//   MOUSE   knobs: drag vertically or hover + wheel. Click the keys too.
+//   POINTER knobs: drag vertically (or hover + wheel on desktop). Play the
+//           keys too. MULTITOUCH: every finger is its own pointer — ride RATE
+//           and INT with two fingers while a third plays the keys; the header
+//           labels (< OCT >, DUB, H) are tap targets. The desktop mouse
+//           arrives as one synthetic finger, same code path.
 //   SPACE   DUB mode — a sparse minor-pentatonic phrase plays itself; every
 //           few bars one note gets THROWN into the echo (send cranked for
 //           that single hit — the signature dub move).
@@ -47,8 +51,14 @@ static int knob[NK] = { 40, 48, 55, 45, 20 };   // all 0..100
 static int   base = 48;            // keyboard octave root (C3)
 static bool  dub  = true;          // SPACE: the self-playing phrase (on at boot, like tb303 runs)
 static bool  show_help;
-static int   drag_knob = -1, drag_my;
 static int   last16 = -1, playhead = 0;
+
+// per-finger pointer table — every finger drags its own knob or plays the keys
+#define NPTR 10
+#define NOID (-999)
+enum { PTR_IDLE, PTR_KNOB, PTR_KEY };
+typedef struct { int id, mode, k, lastY, semi; } Ptr;
+static Ptr ptr[NPTR];              // .id == NOID → slot free
 static float vu = 0.0f;            // cosmetic echo-level meter
 static float tape_ph = 0.0f;       // tape-loop animation phase
 static int   thrown = -1;          // step whose hit was thrown into the echo (flash)
@@ -105,6 +115,7 @@ static const int  POOL[5] = { 0, 3, 5, 7, 10 };
 
 void init(void) {
     bpm(74);
+    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     apply_voice();
     apply_bus();
 }
@@ -118,11 +129,25 @@ static const int KX[NK] = { 36, 96, 156, 216, 276 };
 #define KBW 30
 #define KBH 54
 
+// which semitone is under canvas point x,y? -1 = none (black keys sit on top)
+static int key_at(int x, int y) {
+    if (y < KBY || y >= KBY + KBH) return -1;
+    for (int j = 0; j < NBLACK; j++) {
+        int bx = KBX + B_AFTER[j] * KBW + KBW - 8;
+        if (y < KBY + 32 && x >= bx && x < bx + 16) return B_SEMI[j];
+    }
+    if (x >= KBX && x < KBX + NWHITE * KBW) return W_SEMI[(x - KBX) / KBW];
+    return -1;
+}
+static void flash_semi(int s) {
+    for (int k = 0; k < NKMAP; k++)
+        if (KMAP[k].semi == s) { key_flash[k] = 6; break; }
+}
+
 void update(void) {
     if (keyp(KEY_SPACE)) { dub = !dub; last16 = -1; }
     if (keyp(KEY_UP))   { base += 12; if (base > 72) base = 72; }
     if (keyp(KEY_DOWN)) { base -= 12; if (base < 24) base = 24; }
-    if (keyp('H')) show_help = !show_help;
 
     // computer keys → the string
     for (int i = 0; i < NKMAP; i++)
@@ -133,36 +158,54 @@ void update(void) {
     int mx = mouse_x(), my = mouse_y();
 
     if (show_help) {
-        if (mouse_pressed(MOUSE_LEFT)) show_help = false;
+        if (keyp('H') || tapp(0, 0, 320, 200)) show_help = false;   // any tap closes
         goto clock;
     }
+    if (keyp('H') || tapp(304, 0, 16, 20)) show_help = true;
 
-    // knobs: drag vertically, or hover + wheel (tb303.c idiom)
-    if (mouse_pressed(MOUSE_LEFT)) {
-        for (int k = 0; k < NK; k++) {
-            int dx = mx - KX[k], dy = my - KY;
-            if (dx * dx + dy * dy <= (KR + 3) * (KR + 3)) { drag_knob = k; drag_my = my; }
+    // tappable header: < OCT > halves shift octave, DUB toggles the phrase
+    if (tapp(200, 0, 32, 20)) { base -= 12; if (base < 24) base = 24; }
+    if (tapp(232, 0, 30, 20)) { base += 12; if (base > 72) base = 72; }
+    if (tapp(262, 0, 42, 20)) { dub = !dub; last16 = -1; }
+
+    // touch: every finger is its own pointer — drag a knob (vertically) or
+    // play the keys, all at once (the desktop mouse = one synthetic finger;
+    // hover + wheel below still nudges knobs on desktop)
+    for (int i = 0; i < touch_count(); i++) {
+        int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
+        Ptr *p = 0, *freeP = 0;
+        for (int j = 0; j < NPTR; j++) {
+            if (ptr[j].id == id) { p = &ptr[j]; break; }
+            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
         }
-        // clickable keys: black first (they sit on top)
-        if (drag_knob < 0 && my >= KBY && my < KBY + KBH) {
-            int hitk = -1;
-            for (int j = 0; j < NBLACK; j++) {
-                int x = KBX + B_AFTER[j] * KBW + KBW - 8;
-                if (my < KBY + 32 && mx >= x && mx < x + 16) { hitk = B_SEMI[j]; break; }
+        if (!p) {                                      // finger just landed
+            if (!freeP) continue;
+            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, ty, -1 };
+            for (int k = 0; k < NK; k++) {
+                int dx = tx - KX[k], dy = ty - KY;
+                if (dx * dx + dy * dy <= (KR + 3) * (KR + 3)) { p->mode = PTR_KNOB; p->k = k; }
             }
-            if (hitk < 0 && mx >= KBX && mx < KBX + NWHITE * KBW)
-                hitk = W_SEMI[(mx - KBX) / KBW];
-            if (hitk >= 0) play_note(base + hitk);
+            if (p->mode == PTR_IDLE) {
+                int s = key_at(tx, ty);
+                if (s >= 0) { play_note(base + s); flash_semi(s); p->mode = PTR_KEY; p->semi = s; }
+            }
+        } else if (p->mode == PTR_KNOB) {
+            if (ty != p->lastY) {
+                knob[p->k] += (p->lastY - ty) * 2;
+                if (knob[p->k] < 0)   knob[p->k] = 0;
+                if (knob[p->k] > 100) knob[p->k] = 100;
+                knob_changed(p->k);
+            }
+        } else if (p->mode == PTR_KEY) {
+            int s = key_at(tx, ty);                    // slide across keys = glissando
+            if (s >= 0 && s != p->semi) { play_note(base + s); flash_semi(s); p->semi = s; }
         }
+        p->lastY = ty;
     }
-    if (!mouse_down(MOUSE_LEFT)) drag_knob = -1;
-    if (drag_knob >= 0 && my != drag_my) {
-        knob[drag_knob] += (drag_my - my) * 2;
-        if (knob[drag_knob] < 0)   knob[drag_knob] = 0;
-        if (knob[drag_knob] > 100) knob[drag_knob] = 100;
-        drag_my = my;
-        knob_changed(drag_knob);
-    }
+    for (int i = 0; i < touch_ended_count(); i++)      // lifted fingers free their slot
+        for (int j = 0; j < NPTR; j++)
+            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+
     float wh = mouse_wheel();
     if (wh != 0.0f)
         for (int k = 0; k < NK; k++) {
@@ -210,10 +253,14 @@ void draw(void) {
     cls(CLR_MEDIUM_GREY);
     rectfill(0, 0, 320, 20, CLR_BROWNISH_BLACK);
     print("ROLAND RE-201 SPACE ECHO", 8, 7, CLR_LIGHT_PEACH);
+    font(FONT_SMALL);                                  // tap halves of OCT to shift it
+    print("<", 203, 9, CLR_DARK_GREY);
+    print(">", 259, 9, CLR_DARK_GREY);
+    font(FONT_NORMAL);
     sprintf(buf, "OCT C%d", base / 12 - 1);
     print(buf, 210, 7, CLR_MEDIUM_GREY);
-    print(dub ? "DUB >" : "DUB #", 264, 7, dub ? CLR_GREEN : CLR_DARK_GREY);
-    print("H", 310, 7, CLR_DARK_GREY);
+    print(dub ? "DUB >" : "DUB #", 264, 7, dub ? CLR_GREEN : CLR_DARK_GREY);   // tappable
+    print("H", 310, 7, CLR_DARK_GREY);                                         // tappable
 
     // knobs
     for (int k = 0; k < NK; k++) {
@@ -296,7 +343,7 @@ void draw(void) {
             "TONE      DARK..BRIGHT REPEATS",
             "DRV       INPUT TUBE GRIT",
             "SPACE     DUB PHRASE + THROWS",
-            "UP/DOWN   OCTAVE   H  CLOSE",
+            "UP/DOWN   OCTAVE (TAP < OCT >)",
         };
         for (int i = 0; i < 11; i++)
             print(HL[i], 42, 48 + i * 11, i < 9 ? CLR_WHITE : CLR_LIGHT_PEACH);
