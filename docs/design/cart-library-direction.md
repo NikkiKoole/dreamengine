@@ -164,5 +164,11 @@ Confirmed already covered, so don't propose these as new:
 
 Stop cloning the canon — it's complete. Spend the next batch on **(1)** a numbered
 "make a whole game" tutorial series, **(2)** a few generative toys, and **(3)** the three
-missing small/teachable games (flappy, idle, typing). Quickest high-value win: the
-**flappy-style one-button cart**.
+missing small/teachable games (flappy, idle, typing).
+
+> **Progress (2026-06-07):** the *quickest high-value win* — **flappy — SHIPPED** (gap #3
+> above; tutorial-curriculum Track C #40), proving the whole-game arc. Gap #2 (toys) also
+> largely closed since this memo: toys 7 → 29, instruments 12 → 40. **Still open and now
+> the highest-leverage next move: gap #1's Track A** ("how code works" — variables, loops,
+> functions, structs, the entity pool; 0 of 8 built), plus the other two teachable games
+> (**idle/incremental**, **typing**). Re-run the counts — this 2026-06-03 memo is stale.

@@ -115,8 +115,10 @@ C) are the payoff and the most shareable; Track A is the foundation that makes t
 ## Count
 
 ~24 net-new (25–48) on top of the existing 24 → a ~48-cart course. "About 30" is the right
-order of magnitude; trim Track D or fold a couple of Track C games if it runs long. Suggested
-first build, per the direction memo: **#40 flappy**.
+order of magnitude; trim Track D or fold a couple of Track C games if it runs long.
+~~Suggested first build: #40 flappy.~~ **#40 flappy SHIPPED 2026-06-07** (the arc proven).
+Next suggested build: **Track A** (#25–32 — "how code works"), the deepest remaining gap —
+0 of 8 built, and the foundation that makes the copied code in every other cart *stick*.
 
 ## Addendum (2026-06-04) — movement-paradigm clusters
 
