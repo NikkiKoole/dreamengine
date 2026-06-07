@@ -216,12 +216,14 @@ their `kind[]` tags.
      Beyond that, the decided queue (2026-06-05, full rationale instrument-engines §8.5 steps 6–10):
      **PD (CZ — the cheap snack, 2 floats) → reed** *(FM's brass stress test passed, so the
      waveguide-brass swap clause is moot)* **→ membrane (hand percussion) → bowed/pipe + the buffered
-     piano/guitar pair → formant + effects layer.** Additive stays deferred (`INSTR_SINE` + FM
-     cover its near corners; it subsumes the MT70/sine family when it lands).
-   Two findings already resolved: the **MT70 presets** (Flute/Bells/Organ/Vibes/JzOrg2…) are
-   **all pure sine + ADSR + filter — not an engine**, so they need *no port* and ship as
-   demo/preset carts on existing API (§8.9); and **`INSTR_SINE` = Additive at harmonics 0**, so
-   it ships now and the future Additive engine subsumes the MT70/sine family via macros.
+     piano/guitar pair → formant + effects layer.** Additive stays deferred (`INSTR_SINE` + FM +
+     MALLET cover its near corners; the MT70 family is its first named customer).
+   The **MT70 finding, corrected 2026-06-07** (the 2026-06-03 "all one pure sine" verdict was a
+   verification artifact — the songs' `osc2*` fields sit ~50 lines into each block and are
+   non-zero): the presets are **2–3 mixed sines with per-partial decay + click** — small
+   additive. Conclusion unchanged, better reasons: *no engine port* — the struck half is
+   `INSTR_MALLET` territory, exact = 2-slot voice stacking, single-voice ≈ SCW + closing
+   `ENV_CUTOFF`; ships as demo/preset carts (instrument-engines §8.9 corrected note).
    Also still open: zero-setup **preset instruments** (`INSTR_PLUCK`/`PAD`/…) and cart-side
    **SFX authoring** (the sfx bank is hardcoded today; *pattern* authoring is settled-no —
    `music()` cut, [decision 0013](decisions/0013-cut-music-api.md)) — *direction 2026-06-04: prototype

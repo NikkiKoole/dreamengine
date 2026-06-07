@@ -291,8 +291,9 @@ independently shippable:
    second string, guitar's KS string + body resonator) on the pluck-validated path.
 10. **Formant filter** + the **effects layer** (§8.10 — buses vs. master; reverb / delay /
     tape / leslie / wah, starting with one master reverb + the formalized bus concept).
-    **Additive stays deferred** — `INSTR_SINE` + FM cover its near corners today, and it
-    subsumes the MT70/sine family when it lands (§8.9 note). SCW bank (§8.4) remains optional.
+    **Additive stays deferred** — `INSTR_SINE` + FM + MALLET cover its near corners today —
+    but it now has a first named customer: the MT70 family is 2–3 partials with per-partial
+    decay, i.e. small additive (§8.9 corrected note). SCW bank (§8.4) remains optional.
 
 ### 8.6 Cons / watch-outs
 
@@ -593,23 +594,42 @@ the table's only job is to say what those three mean for each. Grow it freely.
 > (§6) and live macros the way the organ does, and reed + brass need **zero** new buffer
 > architecture (one bore line ≤ `SOUND_KS_MAX`).
 
-> **MT70 — resolved (verified in navkit `demo/songs/*.song`, 2026-06-03).** The "MT70" presets
-> (Flute, Bells, Organ, Vibes, JzOrg2, …) are **all `waveType = sine`** — *not* a synthesis engine.
-> Each is one pure sine wave shaped by ADSR + lowpass filter + (optional) vibrato; the names differ
-> only in those settings. **So this needs no engine port — dreamengine already makes it** with
-> shipped API. e.g. MT70 Flute ≈ `instrument(slot, INSTR_SINE, 50,100,5,120)` +
-> `instrument_filter(slot, FILTER_LOW, 3500, 0)`. → Belongs as a **shipped preset / demo cart**
-> (zero-setup `INSTR_*` presets, §5.4 / §10.1), not in this engine catalog.
+> **MT70 — CORRECTED 2026-06-07 (the 2026-06-03 "all one pure sine" verdict was a
+> verification artifact).** The original check read `waveType = sine` at the top of each
+> instrument block in `demo/songs/*.song` and stopped — the `osc2*` fields sit ~50 lines
+> down the serialization, and they are **non-zero in those very songs** (Organ 0.4, Flute
+> 0.15, Bells 0.5 *plus an osc3*, Vibes 0.3, JzOrg2 0.35). The authoritative source is
+> `engines/instrument_presets.h:2813` ("Casio MT-70 (1982): **2 mixed sine waves** with
+> different digital envelopes", after weltenschule.de): 9 of 10 presets carry a second
+> sine at a harmonic ratio (2·/3·/4·, the Chime's 1.335 ≈ a fourth) with its **own faster
+> decay**; Bells/Banjo add a third; Cosmic/JzOrg2 add a click transient. So the family is
+> **small additive with per-partial decay** — bright strike fading to a pure fundamental.
+> *(Verification lesson: read the whole serialized block, not its first field.)*
+>
+> **The conclusion survives, with better reasons: still no engine port needed.** Three
+> shipped routes cover it: (a) the **struck half (Vibes/Celesta/Chime/Bells/Banjo) is
+> `INSTR_MALLET`'s native territory** — decaying sine modes + strike click *is* the mallet
+> engine; vibraphone is already a shipped mallet preset; (b) **exact reproduction = 2-slot
+> voice stacking** (the sh101 SOURCE-MIXER lesson, audio-notes §14): fundamental slot +
+> harmonic slot (+12/+19/+24/+5 st) with a faster ADSR — 2 voices/note, cheap at 16
+> voices; (c) single-voice approximation: a drawn SCW (fund + harmonic) through a
+> **closing `ENV_CUTOFF`** — the filter env kills the harmonic over time, which is most
+> of the per-partial-decay percept. → Still belongs as a **shipped preset / demo cart**
+> (§5.4 / §10.1), not as an engine — but note it is now the **first named concrete
+> customer for the Additive engine** (2–3 partials with per-partial decay is literally
+> that row's morph column), strengthening additive's case rather than the reverse.
 
 > **Sine = Additive at `harmonics = 0`.** `INSTR_SINE` and the Additive engine aren't two things —
-> additive *is* a sum of N sine partials, so one partial is a sine. That means the MT70/sine family
-> are the harmonics-≈0 corner of the Additive row above, and the whole bank is a path through its
-> three macros: **harmonics** (0 = pure sine → up = organ/string body), **timbre** (spectral tilt /
-> brightness — the lowpass), **morph** (inharmonicity: integer-ratio = organ/flute ↔ stretched =
-> bell/metallic, optionally + per-partial decay). So: Flute ≈ (harm 0, mellow, harmonic);
-> Organ ≈ (harm up, harmonic); Bells ≈ (mid, bright, **inharmonic**); Vibes ≈ (inharmonic + fast
-> decay). Ship the bare sine as `INSTR_SINE` now (no port); when the Additive engine lands it
-> subsumes the family with live macros — same engine, just `harmonics` turned up off zero.
+> additive *is* a sum of N sine partials, so one partial is a sine. The MT70 family (per the
+> corrected note above: 2–3 partials, per-partial decay) sits at the **harmonics-low** corner of
+> the Additive row — not at zero, which is exactly why it's that engine's first named customer.
+> The whole bank is a path through its three macros: **harmonics** (0 = pure sine → up = more
+> partials/body), **timbre** (spectral tilt / brightness — the lowpass), **morph** (inharmonicity:
+> integer-ratio = organ/flute ↔ stretched = bell/metallic, + per-partial decay). So: Flute ≈
+> (harm low, mellow, harmonic); Organ ≈ (harm up, harmonic, sustained osc2); Bells ≈ (mid,
+> bright, **fast-decaying upper partials**); Vibes ≈ (low, bright strike, 4:1 partial fading
+> first). When the Additive engine lands it subsumes the family with live macros — same engine,
+> `harmonics` turned up off zero.
 
 *Format for adding more:* just name the sound + a reference patch/track if you have one; the
 buffer flag, navkit source, and macro mapping get filled in here.
