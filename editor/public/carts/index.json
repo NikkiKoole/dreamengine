@@ -2358,6 +2358,14 @@
     ]
   },
   {
+    "title": "what is code?",
+    "description": "The very first lesson, before variables or loops: a program is a LIST of instructions the computer runs top to bottom, doing exactly what each one says. The code sits on the left, 'the screen' on the right - press NEXT (or SPACE) to run ONE line at a time and watch its mark appear. Eight lines of real studio.h calls (cls, rectfill, circfill, trifill, rect, print) build a little house, one step at a time, so you SEE the 1:1 mapping: this line -> this mark, in order, accumulating. The done lines get a green check, the current line a yellow arrow, and each shows its plain-English meaning ('a triangle - the roof'). Runs in a roomy 480x300 canvas so the code is readable at full size. Fully playable by button-tap or keyboard. R / OVER starts over and watches it build again.",
+    "file": "whatiscode.cart.png",
+    "kind": [
+      "tutorial"
+    ]
+  },
+  {
     "title": "flappy",
     "description": "The smallest *complete* game, start to finish: an animated attract/title screen, the play loop, a death sequence, and a game-over panel with a medal + a hi-score that survives restarts. ONE BUTTON on every device - SPACE / Z / gamepad-A / mouse-click / screen-tap all flap, so it's fully playable on a phone with no on-screen controls. The bird is drawn in code (sprite-draw.js): one bird() function sampled at three wing heights makes the flap cycle, plus a dead frame, soft clouds, and grass bushes. Juice on every beat: flap stretches the bird upward + puffs feathers + tilts its nose up; falling tilts it into a dive (sspr_ex rotate + squash); passing a pipe pops the score bigger with an ascending ding; crashing flashes the screen white, shakes, hit-stops, then tumbles the bird off spinning. Parallax clouds + scrolling ground. The capstone the tutorials were missing - the bridge from learning primitives to a finished game. Tap / Space / click to play.",
     "file": "flappy.cart.png",
