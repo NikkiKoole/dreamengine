@@ -1,6 +1,6 @@
 # galerijflat — an experimental/arty cart (design seed)
 
-**Status: building — step 4 (facade detail pass) complete.** Cart:
+**Status: building — step 5 (gallery walkers) complete.** Cart:
 `tools/carts/galerijflat.c`, registered in `index.json`, clean. This doc is the
 shared understanding for a cart designed/built across multiple sessions.
 Decisions are marked ✓. **Next agent: start at "Handoff" at the bottom.**
@@ -278,9 +278,11 @@ they want** — it's the building's circulation pump and its metronome.
 1. ✓ **Time**: implemented — `tod` clock, archetype wake/sleep schedules,
    `t_avg` global tint per time slot. Building reads very differently at 02:00
    vs 08:00 vs 20:00.
-2. **Simulation depth**: schedules are in; the next layer is tiny resident
-   agents actually walking — gallery walkers are the main "alive" signal still
-   missing (next build step).
+2. ✓ **Simulation depth**: gallery walkers are in (step 5) — door-height
+   figures that stroll the band between the lift tower and a front door. Still
+   decoupled from the light schedules (entering a door doesn't yet light that
+   home); wiring walker→light causality is the sys 5/6-full work. The lift is
+   still faked (indicator only) — sys 7 (real elevator) is the next build step.
 3. **Interactivity**: pure ambient watch-piece, or light mouse play — hover a
    window to hear/see a hint of that household, click to ring a doorbell?
    (Mouse API is in: `mouse_x/y`, `mouse_pressed`; see orion for patterns.)
@@ -441,10 +443,57 @@ drawn before vensterbank items so plants/vases sit on top.
 
 **Bikes removed.** Read as noise at this scale.
 
-## Handoff — next agent starts here (2026-06-04, session 4 complete)
+### Step 5 — gallery walkers (2026-06-07, session 5)
+
+The building's main "alive" signal: door-height figures (~15px) strolling the
+open gallery. A small pool (`MAXW=6`) of self-contained agents — the *full*
+elevator + per-resident routine sim (sys 6/7) is still ahead; this is the
+standalone walker layer the step-4 handoff asked for.
+
+**Behaviour.** A walker is `WK_ARRIVE` (steps onto a band at the lift-tower
+end, walks to a random occupied door, pauses ~½s "fumbling for keys", then
+vanishes inside) or `WK_LEAVE` (out of a door → walks to the tower → gone, as
+if boarding the lift). `update_walkers()` spawns on a per-frame `1/rate` roll,
+gated by a short cooldown: rate is time-of-day biased — busy at the 6:30–9:00
+morning down-rush (mostly LEAVE) and 16:30–19:30 evening up-rush (mostly
+ARRIVE), a daytime trickle, rare at night. Speed is a calm 0.28–0.45 px/frame.
+
+**The fake lift now means something.** `liftFloor` (previously a static roll,
+driving the tower indicator light) is set to a walker's floor whenever one
+appears at or vanishes into the tower — so the indicator finally tracks real
+comings and goings, a cheap bridge toward sys 7.
+
+**Rendering.** Drawn inside `draw_band()` *after* the doors/walkway floor but
+*before* the railing, so they read as standing on the gallery behind the steel
+bars: head + torso clear the handrail cap (`yb-9`), pelvis + scissoring legs
+(via `line()`) sit behind the sparse bars. A swinging-hand pixel sells the
+walk. They pick up the global tint like everything else (clothing uses only
+non-light-source colours).
+
+**Clash guard.** The shirt is the big mass above the rail, so it's re-rolled
+(`tint_clash`, up to 12 tries) until distinct from `wallC`, `doorBase` *and*
+`panelC` under day light and every tint filter — an early teal shirt melted
+straight into the teal railing before this.
+
+**Trace.** `update()` carries an `#ifdef DE_TRACE` block watching `nwalk` +
+the first walker's `x`/`floor`/`state` (the `watch()` fmt is `"%d"`, not a bare
+int — that segfaults; see smooch.c for the pattern). Verify visually by
+dumping headless frames and cropping on the traced `w0x`:
+`node tools/play.js galerijflat script /dev/null --headless --frames 500 --dump <dir> --dump-every 5 --seed 7`.
+
+## Handoff — next agent starts here (2026-06-07, session 5 complete)
 
 **Repo state.** `tools/carts/galerijflat.c`, in `index.json`, clean.
-Latest commit: `e54d940` (cart) / `f950d4a` (doc).
+Walkers (step 5) added on top of the step-4 facade.
+
+**What's done:** static facade + clock/light schedules + global tint + full
+detail pass + **gallery walkers**.
+
+**Next build steps:** sys 7 (real elevator state machine — promote the faked
+`liftFloor` indicator into an actual car with a call queue + visible queueing;
+walkers already ARRIVE/LEAVE at the tower, so hook them to ride it) → sys 4
+(the flip to the balcony side) → walker→light causality (an entering walker
+lights their home).
 
 **The bake loop** (~10s per iteration):
 ```bash
@@ -453,12 +502,8 @@ node tools/make-cart.js --run editor/public/carts/galerijflat.cart.png
 # inspect build/.bake/galerijflat/screenshot.png — NEVER build/screenshot.png
 magick build/.bake/galerijflat/screenshot.png -scale 960x600 /tmp/gf.png
 ```
-
-**What's done:** static facade + clock/light schedules + global tint + full
-detail pass (railing, doors, curtains, floor depth, sill, fillp variety).
-
-**Next build steps:** gallery walkers (figures walking the band — the building's
-main "alive" signal) → sys 7 (elevator state machine) → sys 4 (the flip).
+The 3-frame bake won't catch a walker (they spawn randomly) — verify walkers
+with the headless dump-and-crop loop noted in step 5, not the thumbnail.
 
 House rules: commit on `master`; `git add` per-file; two-step bake every time.
 

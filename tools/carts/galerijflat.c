@@ -27,6 +27,7 @@
 #define WIN_GAP   3
 #define MAXF     12
 #define MAXB     12
+#define MAXW      6   // gallery walkers (the building's main "alive" signal)
 
 #define DAY_REAL_SECS  300.0f
 #define TOD_START      20.0f
@@ -35,6 +36,7 @@
 enum { A_VACANT, A_ELDER, A_COUPLE, A_FAMILY, A_STUDENT };
 enum { TR_NONE, TR_VITRAGE, TR_CURTAIN, TR_ROLLER, TR_VENETIAN };
 enum { SI_EMPTY, SI_SYMM, SI_RANDOM };
+enum { WK_ARRIVE, WK_LEAVE };   // walking home from the lift, or out to it
 
 typedef struct {
     int   arch;
@@ -49,6 +51,16 @@ typedef struct {
     float wake_h, sleep_h;
 } Home;
 
+typedef struct {
+    int   active;
+    int   floor;               // which band this walker is on
+    float x, tx;               // position + target (facade pixel coords)
+    float vx;                  // signed walk speed
+    int   state;               // WK_ARRIVE / WK_LEAVE
+    int   pause;               // frames fumbling at the door before entering
+    int   skin, hair, shirt, pants;
+} Walker;
+
 static int   NF, NB, BW;
 static int   baysX, towerX, towerLeft;
 static int   baseY, wallTop;
@@ -56,6 +68,8 @@ static int   wallC, slabC, towerC, panelC, doorBase;
 static int   liftFloor, lampX[3], nLamp;
 static Home  homes[MAXF][MAXB];
 static float tod;
+static Walker walkers[MAXW];
+static int    spawn_cooldown;
 
 static const int CURT[][2] = {
     { CLR_RED,          CLR_DARK_RED      },
@@ -123,6 +137,17 @@ static const int DOOR_COLORS[] = {
     CLR_MEDIUM_GREY, CLR_BROWN, CLR_DARK_BLUE, CLR_INDIGO,
 };
 #define N_DOOR_COLORS 12
+
+// walker clothing — non-light-source colours so they pick up the ambient tint
+static const int WALK_SHIRTS[] = {
+    CLR_DARK_RED, CLR_ORANGE, CLR_GREEN, CLR_DARK_GREEN, CLR_INDIGO,
+    CLR_MAUVE, CLR_BLUE_GREEN, CLR_WHITE, CLR_DARK_BROWN, CLR_PINK,
+};
+#define N_WALK_SHIRTS 10
+static const int WALK_HAIR[] = {
+    CLR_BROWNISH_BLACK, CLR_DARK_BROWN, CLR_BROWN, CLR_LIGHT_GREY,
+};
+#define N_WALK_HAIR 4
 
 // ── tint — average blend table (from blendlab) ───────────────────────────────
 // All 32 palette entries are remapped through t_avg[filter] each frame.
@@ -354,6 +379,116 @@ static void roll_building(void) {
     for (int f = 0; f < NF; f++)
         for (int b = 0; b < NB; b++)
             roll_home(&homes[f][b]);
+
+    for (int i = 0; i < MAXW; i++) walkers[i].active = 0;
+    spawn_cooldown = 0;
+}
+
+// ── gallery walkers ─────────────────────────────────────────────────────────
+// Self-contained ambient agents (the full elevator/routine sim is a later
+// step): a walker steps onto a band at the lift-tower end and walks to a door
+// (ARRIVE), or leaves a door and walks to the tower (LEAVE). Speed is a calm
+// stroll; the tower's lift indicator follows wherever a walker just appeared
+// or vanished, so the climbing light finally *means* someone is coming/going.
+
+// x where the gallery meets the lift tower (walkers enter/leave the world here)
+static int tower_edge_x(void) {
+    return towerLeft ? baysX + 1 : baysX + NB * BW - 2;
+}
+// standing spot in front of bay b's front door
+static int bay_door_x(int b) {
+    return baysX + b * BW + BAY_PAD + DW / 2;
+}
+
+static void spawn_walker(void) {
+    int slot = -1;
+    for (int i = 0; i < MAXW; i++) if (!walkers[i].active) { slot = i; break; }
+    if (slot < 0) return;
+
+    int f = rnd(NF);
+    int b = rnd(NB);                                   // prefer an occupied dwelling
+    for (int tries = 0; tries < 6 && homes[f][b].arch == A_VACANT; tries++)
+        b = rnd(NB);
+
+    // arrive vs leave biased by time of day: morning down-rush, evening up-rush
+    int arrive;
+    if      (tod >= 6.5f && tod <  9.0f)  arrive = chance(25);
+    else if (tod >= 16.5f && tod < 19.5f) arrive = chance(75);
+    else                                  arrive = chance(50);
+
+    Walker *w = &walkers[slot];
+    *w = (Walker){0};
+    w->active = 1;
+    w->floor  = f;
+    w->state  = arrive ? WK_ARRIVE : WK_LEAVE;
+    if (arrive) { w->x = tower_edge_x(); w->tx = bay_door_x(b); }
+    else        { w->x = bay_door_x(b);  w->tx = tower_edge_x(); }
+    w->vx    = (w->tx > w->x ? 1.0f : -1.0f) * rnd_float_between(0.28f, 0.45f);
+    w->skin  = chance(70) ? CLR_PEACH : CLR_DARK_PEACH;
+    w->hair  = WALK_HAIR[rnd(N_WALK_HAIR)];
+    // shirt is the big mass above the rail — keep it distinct from the wall,
+    // door and railing (under day light and every tint) so it never melts in
+    { int tries = 0;
+      do { w->shirt = WALK_SHIRTS[rnd(N_WALK_SHIRTS)]; tries++; }
+      while (tries < 12 && (tint_clash(w->shirt, wallC) ||
+                            tint_clash(w->shirt, doorBase) ||
+                            tint_clash(w->shirt, panelC))); }
+    w->pants = chance(50) ? CLR_DARK_BLUE
+             : chance(50) ? CLR_DARKER_GREY : CLR_DARK_BROWN;
+    liftFloor = f;   // the lift just delivered (arrive) someone to this floor
+}
+
+static void update_walkers(void) {
+    if (spawn_cooldown > 0) {
+        spawn_cooldown--;
+    } else {
+        int rate;   // per-frame 1/rate spawn chance — lower = busier
+        if      (tod < 6.0f || tod >= 23.0f)  rate = 600;   // night: rare ding
+        else if (tod >= 6.5f && tod <  9.0f)  rate = 90;    // morning rush
+        else if (tod >= 16.5f && tod < 19.5f) rate = 80;    // evening rush
+        else                                  rate = 200;   // daytime trickle
+        if (rnd(rate) == 0) { spawn_walker(); spawn_cooldown = rnd_between(20, 60); }
+    }
+
+    for (int i = 0; i < MAXW; i++) {
+        Walker *w = &walkers[i];
+        if (!w->active) continue;
+        if (w->pause > 0) { if (--w->pause == 0) w->active = 0; continue; }
+        w->x += w->vx;
+        int reached = (w->vx > 0) ? (w->x >= w->tx) : (w->x <= w->tx);
+        if (reached) {
+            w->x = w->tx;
+            if (w->state == WK_ARRIVE) w->pause = rnd_between(20, 45);  // at the door, then in
+            else { w->active = 0; liftFloor = w->floor; }              // boarded the lift, gone
+        }
+    }
+}
+
+static void draw_walker(Walker *w, int yb) {
+    int cx  = (int)w->x;
+    int fy  = yb - 4;                       // feet rest on the gallery walkway
+    int dir = (w->vx >= 0) ? 1 : -1;
+    int step = ((int)w->x >> 1) & 1;        // walk cycle driven by position
+    int sk = w->skin, hr = w->hair, sh = w->shirt, pa = w->pants;
+
+    // ~15px figure — door-height: head + torso stand above the handrail
+    // (cap at yb-9), pelvis and legs scissor behind the sparse bars.
+    rectfill(cx - 1, fy - 14, 3, 1, hr);                             // hair top  (yb-18)
+    pset(cx - 1, fy - 13, hr); pset(cx, fy - 13, sk); pset(cx + 1, fy - 13, hr); // (yb-17)
+    rectfill(cx - 1, fy - 12, 3, 1, sk);                             // face      (yb-16)
+    rectfill(cx - 1, fy - 11, 3, 5, sh);                             // torso     (yb-15..11)
+    if (w->pause == 0)                                               // a swinging hand sells the walk
+        pset(step ? cx - 2 : cx + 2, fy - 10, sh);
+    rectfill(cx - 1, fy - 6, 3, 2, pa);                              // pelvis    (yb-10..9)
+
+    // legs: scissor between hip (yb-8) and feet (yb-4)
+    int ly = fy - 4;
+    int lFoot, rFoot;
+    if (w->pause > 0)   { lFoot = cx - 1;       rFoot = cx + 1;       }
+    else if (step)      { lFoot = cx - 1 + dir; rFoot = cx + 1 - dir; }
+    else                { lFoot = cx - 1 - dir; rFoot = cx + 1 + dir; }
+    line(cx - 1, ly, lFoot, fy, pa);
+    line(cx + 1, ly, rFoot, fy, pa);
 }
 
 void init(void) {
@@ -368,6 +503,19 @@ void update(void) {
     if (keyp(KEY_SPACE)) roll_building();
     if (keyp('T')) { tod += 1.0f; if (tod >= 24.0f) tod -= 24.0f; }
     if (keyp('B')) tint_on = !tint_on;
+    update_walkers();
+#ifdef DE_TRACE
+    {
+        int n = 0, fx = -1, ff = -1, fs = -1;
+        for (int i = 0; i < MAXW; i++)
+            if (walkers[i].active) {
+                n++;
+                if (fx < 0) { fx = (int)walkers[i].x; ff = walkers[i].floor; fs = walkers[i].state; }
+            }
+        watch("nwalk", "%d", n);
+        watch("w0x", "%d", fx); watch("w0f", "%d", ff); watch("w0s", "%d", fs);
+    }
+#endif
 }
 
 // ── drawing ───────────────────────────────────────────────────────────────────
@@ -444,6 +592,12 @@ static void draw_band(int f) {
 
     // gallery walkway floor — visible through bar gaps, hidden by panel
     rectfill(baysX, yb - SLAB_H - GALLERY_FLOOR, NB * BW, GALLERY_FLOOR, slabC);
+
+    // walkers on this band — drawn after doors/floor, before the railing, so
+    // they read as standing on the gallery behind the steel bars
+    for (int i = 0; i < MAXW; i++)
+        if (walkers[i].active && walkers[i].floor == f)
+            draw_walker(&walkers[i], yb);
 
     // railing — handrail cap in slabC, bars in panelC (clash-guarded against wallC)
     rectfill(baysX, yb - 9, NB * BW, 1, slabC);
