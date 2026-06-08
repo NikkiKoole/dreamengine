@@ -1,5 +1,6 @@
 #include "studio.h"
 #include "radio.h"   // the shared station chassis (PRNG, clock, voice-leading, chrome)
+#include "improv.h"  // THE IMPROVISER — the topline is a vibraphone taking a solo
 #include <stdio.h>
 #include <math.h>
 
@@ -22,10 +23,15 @@
 //   • THE FARFISA DRONE — INSTR_ORGAN (the engine that unblocked this station),
 //     a thin combo registration held forever; the maj7 PLANING pad glides
 //     parallel maj7 voicings over it (the only harmonic motion there is).
+//   • THE VIBRAPHONE SOLOIST — the topline is INSTR_MALLET running improv.h
+//     (melody brain #2). The lone PERFORMED voice over the otherwise-invariant
+//     machine — man vs. motor, Can soloing over the motorik bed. It's the
+//     improviser's easiest gig ever: no chord changes, so it just walks the
+//     mode over the drone, transposing with the modulation. New every listen.
 //
-// Machine-tight, no humanize, NO FILLS — the invariance IS the genre, so this
-// is the station with the LEAST performance randomness on the dial (the
-// anti-dub). Tempo 132-150, eyes-forward.
+// Machine-tight, no humanize, NO FILLS — the rhythm-section spine is the genre's
+// invariance (the anti-dub: nothing in the BAND re-rolls). The one exception is
+// the soloist on top, the deliberate human-over-machine voice. Tempo 132-150.
 //
 //   SPACE next song   R play it again   [ ] song history   M radio on/off
 //   LEFT/RIGHT feel (pulls the layers in earlier/later)   UP/DOWN tempo
@@ -41,7 +47,7 @@
 #define I_ORG   5   // Farfisa drone — INSTR_ORGAN, held
 #define I_BASS  6   // Moog octave pulse
 #define I_PAD   7   // maj7 planing pad — held, 3 voices
-#define I_LEAD  8   // the topline cell
+#define I_SOLO  8   // the topline — a VIBRAPHONE taking a solo (improv.h)
 #define I_KICK  9
 #define I_SNR  10
 #define I_HAT  11
@@ -57,7 +63,7 @@ static const char *PCNAME[12]  = { "C","Db","D","Eb","E","F","Gb","G","Ab","A","
 
 // ── the layers — gated on prog, never on a bar boundary ────────────────────
 enum { L_KICK, L_ORG, L_BASS, L_SNR, L_PAD, L_LEAD, NLAYER };
-static const char *LNAME[NLAYER] = { "kik", "org", "bas", "snr", "pad", "led" };
+static const char *LNAME[NLAYER] = { "kik", "org", "bas", "snr", "pad", "vib" };
 // base accumulation thresholds; new_song jitters the enters ±0.05
 static const float ENTER0[NLAYER] = { 0.00f, 0.05f, 0.12f, 0.18f, 0.30f, 0.50f };
 static const float LEAVE0[NLAYER] = { 1.00f, 0.96f, 0.90f, 0.92f, 0.82f, 0.80f };
@@ -73,7 +79,8 @@ typedef struct {
     double modAt;                 // 0.55..0.78 — where the key lifts
     int   modIv;                  // +2/+3/+5/+7 semitones
     int   planeDeg[NPLANE];       // the pad's planing path (scale degrees)
-    int   leadOn[6], leadDeg[6], leadN;   // the topline cell (1 bar, 16 steps)
+    int   leadOn[6], leadDeg[6], leadN;   // (retained: keeps the seed→song map stable — the
+                                          //  topline is now the improviser; these srnd draws stay)
     int   bassWave;               // INSTR_SAW vs INSTR_SQUARE (rolled per song)
     float orgTimbre;              // Farfisa bright vs Vox dark (rolled per song)
     char  title[24];
@@ -103,6 +110,10 @@ static bool   modDone  = false;  // the key lift has fired
 static int    curKey   = 0;      // keyPc + the modulation, once it lands
 static long   planePhrase = -1;
 static int    planeIdx = 0;
+
+// the topline soloist (improv.h) — the lone PERFORMED voice over the machine
+static Improv solo;
+static long   soloStartBar = -1;            // the bar the lead layer entered (-1 = solo idle)
 
 // held-voice state
 static int  orgH[2] = { -1, -1 };          // drone: root + fifth
@@ -161,7 +172,7 @@ static void apply_voicing(void) {
     float m = RAD_TONEMUL[toneSel];
     instrument_filter(I_ORG,  FILTER_LOW, (int)(2200 * m), 2);
     instrument_filter(I_PAD,  FILTER_LOW, (int)(1800 * m), 2);
-    instrument_filter(I_LEAD, FILTER_LOW, (int)(2600 * m), 2);
+    instrument_filter(I_SOLO, FILTER_LOW, (int)(2600 * m), 2);
     instrument_filter(I_BASS, FILTER_LOW, (int)(800 * (0.75f + 0.25f * m)), 1);
 }
 
@@ -180,9 +191,10 @@ static void setup_static(void) {
     instrument(I_PAD, INSTR_SAW, 360, 600, 5, 1100);     // string-machine canvas for the planing
     instrument_lfo(I_PAD, 0, LFO_PITCH, 0.18f, 0.05f);   // a slow tape wow
 
-    instrument(I_LEAD, INSTR_SQUARE, 8, 130, 3, 170);    // the bright topline
-    instrument_duty(I_LEAD, 0.30f);
-    instrument_lfo(I_LEAD, 0, LFO_PITCH, 5.2f, 0.10f);   // a little vibrato
+    instrument(I_SOLO, INSTR_MALLET, 1, 0, 7, 1100);     // struck bar — vibraphone, rings on its own
+    instrument_harmonics(I_SOLO, 0.25f);                 // the vibes preset (lowend.c key 4):
+    instrument_timbre(I_SOLO, 0.50f);                    //   bar material + mallet hardness
+    instrument_morph(I_SOLO, 0.90f);                     //   morph's top = the motor tremolo
 
     instrument(I_KICK, INSTR_SINE, 0, 100, 0, 40);       // four-on-the-floor thud
     instrument_env(I_KICK, 0, ENV_PITCH, 0, 50, 12);
@@ -251,6 +263,7 @@ static void new_song(double pos, unsigned seed) {
     curKey      = sng.keyPc;
     planeIdx    = 0;
     planePhrase = -1;
+    soloStartBar = -1;
     gvPadInit   = false;
     stop_drone();                                       // re-init the held voices for the new song
     stop_pad();
@@ -295,17 +308,33 @@ static void play_step(long abs, double pos) {
         vu += 1.2f;
     }
 
-    // LEAD — the re-pitched topline cell, in the (modulated) mode
-    if (layer_on(L_LEAD))
-        for (int i = 0; i < sng.leadN; i++)
-            if (sng.leadOn[i] == step) {
-                int pc = MODESC[sng.mode][sng.leadDeg[i] % 7];
-                int n  = 60 + (curKey + pc) % 12;
-                while (n < 67) n += 12;
-                while (n > 84) n -= 12;
-                schedule_hit(dly, n, I_LEAD, 4, (int)(stepMs * 2.0));
+    // SOLO — the vibraphone improviser (improv.h). The lone PERFORMED voice over
+    // the machine: pure engine rnd(), new every listen, while everything else is
+    // seeded. Motorik is its easiest bed — no chord changes, so it just walks the
+    // mode over the drone; it transposes with the modulation (curKey). The drone
+    // grounds it, so the solo can float freely above.
+    if (layer_on(L_LEAD)) {
+        if (soloStartBar < 0) {                          // the solo begins as the topline enters
+            soloStartBar = bar;
+            int lb = (int)((sng.leave[L_LEAD] - sng.enter[L_LEAD]) * sng.songLenBars);
+            if (lb < 8) lb = 8;
+            improv_begin(&solo, 74, lb, 0.9f);           // vibes register, the soloing span, near-lead density
+            improv_render(&solo, 0, MODESC[sng.mode]);   // populate the first 2-bar window now
+        }
+        long soloBar = bar - soloStartBar;
+        int  cs = (int)((soloBar % 2) * 16 + step);      // 0..31 within the solo's 2-bar window
+        if (step == 0 && soloBar % 2 == 0 && improv_due(&solo, soloBar))
+            improv_render(&solo, soloBar, MODESC[sng.mode]);
+        for (int i = 0; i < solo.n; i++)
+            if (solo.onset[i] == cs) {
+                int m   = improv_midi(&solo, i, soloBar, curKey, MODESC[sng.mode], 0);  // bluePct 0 — clean modal
+                int gat = (int)(stepMs * (solo.dur[i] > 4 ? solo.dur[i] : 3) * 0.9);
+                schedule_hit(dly, m, I_SOLO, 4, gat);
                 vu += 1.0f;
             }
+    } else {
+        soloStartBar = -1;                               // lead layer out — re-arm for next entry
+    }
 }
 
 // ── update ────────────────────────────────────────────────────────────────
