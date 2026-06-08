@@ -524,31 +524,40 @@ knob (learned by A/B-ing against navkit's wah):
 2. **High resonance (10–12)** — the peak is the vowel; a gentle one reads as a tone
    control.
 
-Then *what sweeps the centre* is which wah you get — and the choice depends on
-whether the sound sustains or is percussive:
+Then *what sweeps the centre* is which wah you get — one per modulation source.
+All four are in `epiano.c`'s wah toggle (off/auto/env/touch):
 
 ```c
-instrument_filter(slot, FILTER_BAND, 900, 12);          // resonant bandpass — the vowel peak
+instrument_filter(slot, FILTER_BAND, 1300, 11);         // resonant filter — the vowel peak
 
-// AUTO-WAH — an LFO sweeps the centre (rhythmic; works on anything, even staccato)
-instrument_lfo(slot, 0, LFO_CUTOFF, 4.0f, 1200.0f);     // rate Hz, depth Hz
+// AUTO-WAH — an LFO sweeps the centre (rhythmic "wah-wah"; works on anything, even staccato).
+// Keep the sweep in a MUSICAL band (~400-2200) — sweeping to the ~20Hz clamp makes a bandpass
+// pass nothing, so it pulses to mud.
+instrument_lfo(slot, 0, LFO_CUTOFF, 4.0f, 700.0f);      // rate Hz, depth Hz
 
-// TOUCH-WAH (envelope follower) — opens from the note's OWN amplitude, responds to
-// how hard you play, "hangs" on the release. The funky envelope filter (Mu-Tron).
-instrument_follow(slot, LFO_CUTOFF, 3, 200, 2400.0f);   // attack ms, release ms, depth Hz
+// ENVELOPE-WAH — the FUNKY CLAV "quack": a FAST per-note cutoff snap on a resonant filter.
+// The trick is SPEED — ~100ms decay so the brightness snaps shut while the body still rings
+// (the cutoff LEADS the amplitude down). A slow env just tracks the decay and you hear nothing.
+instrument_filter(slot, FILTER_LOW, 500, 9);
+instrument_env(slot, 0, ENV_CUTOFF, 2, 110, 2400.0f);   // attack 2ms, decay 110ms, amount Hz
+
+// TOUCH-WAH — the envelope FOLLOWER: opens from the note's OWN amplitude, "hangs" on a slow
+// release. Dynamic, responds to how hard you play — great on sustained bass/leads. NOT a clav
+// (it holds the filter OPEN; the clav wants the fast snap above).
+instrument_follow(slot, LFO_CUTOFF, 3, 200, 1800.0f);   // attack ms, release ms, depth Hz
 
 // PEDAL-WAH — you are the LFO: sweep it live on a held note
 note_filter(h, FILTER_BAND); note_res(h, 10); note_cutoff(h, foot_hz);
 ```
 
-**Sustained vs percussive matters.** On a sustained voice (Rhodes/strings) a
-per-note `ENV_CUTOFF` "quack" works, but on a *percussive* one (clav) the env just
-tracks the natural decay and you hear nothing — use the **LFO** (continuous motion)
-or the **follower** (touch). The follower is the realistic 70s sound; it's the
-envelope-follower modulation source (see [`audio-notes.md`](../design/audio-notes.md)
-§ modulation). Worked example with off/auto/touch toggle + depth slider: `epiano.c`
-(its clav preset boots into touch-wah — Stevie's "Superstition"). Full
-effects-as-recipes audit: [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md).
+**The funky-clav lesson (confirmed by rendering navkit, 2026-06-08):** a real
+Clavinet's "wah" is *not* a wah pedal or an envelope follower — it's a resonant
+voice filter with a **fast per-note envelope** that snaps the cutoff shut in ~100ms.
+The filter topology (Chamberlin vs TPT SVF) turned out not to matter; the sweep
+*speed/range/source* is everything. The method: `tools/navkit-render.c` renders
+navkit's actual preset to a WAV, `tools/wav-envelope.js` plots amplitude+brightness
+— a real wah shows brightness dropping *faster* than amplitude. Full effects-as-recipes
+audit: [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md).
 
 ### The desk is an instrument (dub.c)
 

@@ -17,8 +17,9 @@ this session:
   FIXED** (2026-06-08): the inharmonic tine/bell modes now decay fast (body-vs-bell split) over a
   warm fundamental — "sounds much better". Tuning lives in a `de_ept_*` scaffold in `sound.h`
   (body 0.7 / bell 0.13 / belllvl 12) — **still to bake into constants** once the ear is fully
-  happy. **WAH reworked** to a resonant BANDPASS + a toggle off/auto/**touch**; the clav boots
-  into touch-wah (the new envelope follower). NOT yet published.
+  happy. **WAH reworked** (2026-06-08, after rendering navkit — see bottom): toggle off/auto/
+  **env**/touch (one per mod source), clav boots into **env** = a fast per-note filter-env quack
+  (navkit's real funky-clav recipe), clav decay shortened. NOT yet published.
 - **Envelope follower** SHIPPED (2026-06-08) — `instrument_follow`/`note_follow`, the 3rd
   modulation source (tracks the voice's own amplitude → cutoff/vol/pitch). The touch-responsive
   auto-wah. Full 4-place wiring + tripwire. Needs its own doc section in audio-notes (modulation).
@@ -82,3 +83,28 @@ graduated to the shared per-voice drive path** in `sound.h` (the tanh of an asym
 driven wave injected DC → a click on the env ramp; reported on the organ). One-pole HP ~7Hz,
 runs only when `drv>0.001` so clean voices stay bit-identical. Fixes every driven engine at
 once. (EP keeps its own internal blocker — different signal point, the pickup nonlinearity.)
+
+## Comparing against navkit — the render A/B (a reusable process, 2026-06-08)
+
+When ours sounds different from navkit, **render navkit's actual output and A/B it** rather
+than reading its source and guessing. Tools (committed):
+- `tools/navkit-render.c` — renders any navkit preset to a WAV (needs the `~/Projects/navkit`
+  sibling; build cmd in its header). e.g. preset 180 = "Clav Funky".
+- `tools/wav-envelope.js` — plots a 100ms amplitude + brightness(HF) envelope; a real wah/tine
+  shows **brightness dropping faster than amplitude**.
+
+**Funky-clav wah — solved (2026-06-08).** Findings from the A/B:
+1. **Filter topology is a non-factor.** Chamberlin vs TPT/Cytomic SVF were objectively + audibly
+   identical at the resonances we use → the dual-filter scaffold was removed. Don't chase this.
+2. **The clav's "wah" is a fast per-note FILTER-ENVELOPE quack** baked into the patch — a resonant
+   lowpass whose cutoff snaps shut in ~100ms (brightness LEADS the body down). NOT the bus wah
+   (a bus effect, not saved in the patch, off by default) and NOT an envelope follower (which
+   hangs the filter open). epiano's clav now boots into this (wah mode "env").
+3. **The envelope follower hangs the filter open** — wrong for a percussive clav, but right for
+   sustained bass/leads. Kept as a general primitive. *(Open question the user raised: do we even
+   need the follower, given the clav wanted the env-snap? — to discuss, don't delete yet.)*
+4. The wah **sweep range/curve** matters more than anything: keep it musical (~400–2200), don't
+   sweep into the ~20Hz clamp (a bandpass passes nothing there → mud).
+
+> **Watch:** `tools/wav-envelope.js`'s brightness proxy conflates a resonant-filter PEAK with
+> perceptual brightness, so it under-shows a resonant snap — trust ears for resonant timbre.
