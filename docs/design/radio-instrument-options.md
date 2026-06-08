@@ -9,14 +9,25 @@ needs INSTR_PLUCK (shipped) · **mallet** = needs INSTR_MALLET (shipped 2026-06-
 macro taste-tuning still settling in the `mallet` cart) ·
 **FM** = needs INSTR_FM (shipped 2026-06-05; taste-tuning settling in the `fm`
 cart — note this is the FM *engine*, gap 2a; the Juno second-audible-oscillator
-plumbing, gap 2b, is still deferred) · **wave** = a `wave_set()` table recipe
-(INSTR_USER0 — roadhouse's drawbar organ and tango's bandoneón are the two
-station gigs so far; "rolling the wave" means generating the harmonic mix from
-the song seed).
+plumbing, gap 2b, is still deferred) · **organ** = needs INSTR_ORGAN (shipped +
+published 2026-06-07 — tonewheel/drawbar, usable now; the real Hammond/Vox/Farfisa
+that dub, jangle, house, and roadhouse were faking with wave_set or TRI hints) ·
+**wave** = a `wave_set()` table recipe (INSTR_USER0 — roadhouse's drawbar organ
+and tango's bandoneón are the two station gigs so far; "rolling the wave" means
+generating the harmonic mix from the song seed).
 
-All four levers are live now, so for the newer stations the question is no
-longer "which engine is missing" but "which alternatives should the seed roll".
-Exotica is the model citizen — it rolled macros per song from day one.
+⚠ **INSTR_EPIANO is NOT a station lever yet.** The engine shipped + published
+2026-06-08 (Rhodes/Wurli/Clav), but it is **PARKED for radio use**: its character
+leans on a per-voice wah that's provisional/poopy, and the real plan is **a wah as
+a proper bus effect** (instrument-engines.md §8.10). Until that lands, stations
+that want electric piano stay on the **FM** detent / **TRI+tremolo** fakes — do
+NOT retrofit any station to INSTR_EPIANO, and do NOT adopt the `epiano.c` wah
+recipe (game-music.md §"Wah is just the filter swept") into a station.
+
+The engine levers above (pluck/mallet/FM/organ/wave) are live, so for the newer
+stations the question is no longer "which engine is missing" but "which
+alternatives should the seed roll". Exotica is the model citizen — it rolled
+macros per song from day one.
 
 ---
 
@@ -55,7 +66,7 @@ DeMarco; R.E.M. uses live kit); tambourine/shaker added on upbeats.
 |---|---|---|
 | guitar | TRI+LFO / INSTR_PLUCK+LFO | **pluck** — vary `timbre` (bright pick vs softer thumb) per seed. 12-string doubling: add a second voice an octave up at -2 vol, same slot. |
 | bass | SINE+LP 600Hz | **now** — TRI+LP 700Hz is brighter (J-bass); SQUARE+LP+duty≈0.4 ≈ the Smiths' punchy bass. |
-| lead | SQUARE+duty 0.22 = whistle | **now** — TRI+LP = mellower Telecaster lead; SINE+vibrato+LP = organ hint; SAW+LP+duty = Farfisa. |
+| lead | SQUARE+duty 0.22 = whistle | **now** — TRI+LP = mellower Telecaster lead. **organ** — INSTR_ORGAN is the real organ-double / Farfisa now (the SINE+vibrato and SAW+LP+duty hints stay as fallbacks). |
 | hat | NOISE+HP | **now** — add tambourine: shorter decay + band at 5kHz sharpens it. |
 
 ---
@@ -90,10 +101,10 @@ trumpet, and sax are alternatives for the melody slot.
 
 | Slot | Current fake | Alternatives to roll |
 |---|---|---|
-| skank | TRI+env = choppy guitar | **now** — organ skank: TRI+LP lower cutoff + slower env. Electric piano skank: add pitch env blip. |
+| skank | TRI+env = choppy guitar | **organ** — INSTR_ORGAN skank (thin combo registration + a fast gate env) is the real Hammond chop now; TRI+LP fake stays as the guitar-skank night. |
 | bass | SINE+LP 420Hz | **now** — very faithful; vary `decay_ms` 220–320ms by seed for tighter/looser feel. |
 | melodica / lead | SQUARE+duty 0.38 | **now** — SINE+LP+vibrato = trumpet flutter; SQUARE+duty 0.5+HP = harmonica-ish; narrow SQUARE duty 0.12 = flute. |
-| organ bubble | TRI+vol-LFO | **now** — duty-swept SQUARE = Hammond drawbar hint; SAW+LP = thicker chord stab. |
+| organ bubble | TRI+vol-LFO | **organ** — INSTR_ORGAN is the real B3 (roll the registration macro per song: thin combo vs fuller drawbar). The old duty-swept SQUARE / SAW+LP hints stay as cheaper fallbacks. |
 
 ---
 
@@ -130,7 +141,7 @@ comes later (mid-80s); flute on EPO/Anri arrangements.
 |---|---|---|
 | guitar | TRI+env = funk chunk | **now** — narrow duty SQUARE+HP = single-coil brightness; vary env decay 40–80ms per seed. |
 | bass | TRI+pitch-env | **now** — SINE+LP = rounder; add SAW+LP variant for slap-bass brightness. |
-| lead synth | SQUARE+LFO chorus | **now** — SINE+vibrato+LP = Rhodes-hint; **FM** = real Rhodes bell overtone. The electric piano gap is the big one here. |
+| lead synth | SQUARE+LFO chorus | **now** — SINE+vibrato+LP = Rhodes-hint; **FM** = real Rhodes bell overtone (the interim epiano). INSTR_EPIANO would close this — the genre's most distinctive sound — but it's **parked for stations** (see the intro note); stay on FM until the bus wah lands. |
 | brass | SAW+fall-env | **now** — narrow SQUARE+fall-env = tighter horn stab; two-voice spread (SAW +4 semitones) = bigger section. |
 
 ---
@@ -149,7 +160,7 @@ varies: vocoder, talkbox, mono synth, or filtered sample hit. Drum machine alway
 
 | Slot | Current fake | Alternatives to roll |
 |---|---|---|
-| stab | SAW+LP = chopped chord | **now** — SQUARE+LP = organ stab; TRI+LP+attack = Rhodes-ish pluck. Filter cutoff start varies widely per seed (800–1800Hz) before the ride opens it. |
+| stab | SAW+LP = chopped chord | **now** — SQUARE+LP = organ stab; TRI+LP+attack = Rhodes-ish pluck. **organ** — INSTR_ORGAN chord through the filter ride = a real organ-chop sample night. Filter cutoff start varies widely per seed (800–1800Hz) before the ride opens it. |
 | bass | TRI+snap-env | **now** — SAW+LP = rounder disco bass; SINE+LP = very round sub-bass style. |
 | lead | SQUARE+duty 0.3 = Da Funk | **now** — SAW+LP = talkbox hint (more harmonics); SQUARE+duty 0.5 = fatter; **FM** = real talkbox formant. |
 | strings | SAW+slow-attack+LP | **now** — vary filter cutoff 700–1200Hz by seed for dark/mid strings; short attack = pizzicato stab. |
@@ -186,7 +197,7 @@ drums or sampled breaks.
 
 | Slot | Current fake | Alternatives to roll |
 |---|---|---|
-| Rhodes | TRI+tremolo+bark-env | **now** — already good. Vary tremolo rate 3.5–5Hz + depth 0.08–0.14 by seed. |
+| Rhodes | TRI+tremolo+bark-env | **now** — already good; stay here. Vary tremolo rate 3.5–5Hz + depth 0.08–0.14 by seed. (INSTR_EPIANO is the eventual upgrade but is **parked** — see intro note.) |
 | bass | SINE+LP+thump-env | **now** — TRI+LP = slightly brighter electric-bass feel. |
 | lead | TRI+vibrato = sparse hook | **now** — SINE+vibrato = trumpet flutter; SQUARE+LP = sax hint; **mallet** = vibraphone (the Nujabes sound — highest-value swap). |
 | vinyl | NOISE+HP | **now** — vary HP cutoff 3000–6000Hz by seed for dustier/cleaner pressing. |
@@ -249,7 +260,7 @@ cuts, synth brass stabs on funkier ones.
 
 | Slot | Current fake | Alternatives to roll |
 |---|---|---|
-| epiano | INSTR_FM 1:1 detent | **FM** — roll `timbre` (tine brightness) + tremolo depth per song: DX glass vs softer Rhodes night. Clav night: INSTR_PLUCK, narrow + bright, comping the same voicings. |
+| epiano | INSTR_FM 1:1 detent | **FM** — roll `timbre` (tine brightness) + tremolo depth per song: DX glass vs softer Rhodes night. Clav night: INSTR_PLUCK, narrow + bright, comping the same voicings. (INSTR_EPIANO's Rhodes/Wurli/Clav macro is the natural future chair here, but it's **parked** — see intro note; keep the FM detent for now.) |
 | bass | TRI+thump | **now** — SINE+LP = rounder ballad bass; SAW+LP brighter = the slap-adjacent cuts. |
 | chorus lead | SQUARE duty 0.12 = sax | **now** — SQUARE duty 0.3 = synth lead night; **pluck** — guitar solo lead (bright timbre, high register). Roll which session player got the solo. |
 | pad | SAW+LP strings | **now** — SAW+fall-env stabs = synth brass night (citypop's loan repaid). |
@@ -271,7 +282,7 @@ runs, and fuzz; harpsichord and marimba cameo on *Strange Days*.
 
 | Slot | Current fake | Alternatives to roll |
 |---|---|---|
-| organ | USER0 drawbar recipe | **wave** — roll the footage mix per song: current recipe = Vox night; more 2nd/4th harmonic + brighter filter = Gibson night. Roll vibrato-tab depth with it. |
+| organ | USER0 drawbar recipe | **wave** (shipped) — roll the footage mix per song: current recipe = Vox night; more 2nd/4th harmonic + brighter filter = Gibson night. Roll vibrato-tab depth with it. **organ** — INSTR_ORGAN is now an alternative to the wave_set approach (registration + scanner-chorus macros, key click built in); the shipped wave_set chairs stay — A/B them if revisiting. |
 | piano bass | INSTR_FM epiano, low | **now** — TRI+LP+thump = the session-bassist night (*L.A. Woman*); keep FM as the default — it's the signature. |
 | guitar | INSTR_PLUCK | **now** — roll `timbre` (fingerpicked vs flatpick) and add `instrument_drive` = the fuzz night. |
 | kit | shuffle/latin/straight | already rolled — leave it. |
@@ -342,10 +353,26 @@ drive; early guardia vieja ensembles used flute and guitar instead.
 - (each retrofit: live A/B toggle against the old fake — the G-key pattern from jangle/bossa/lowend)
 
 **INSTR_FM (shipped 2026-06-05 — retrofits now unblocked):**
-- Citypop lead: real Rhodes bell overtone (the epiano preset, ratio 1 + decaying brightness)
+- Citypop lead: real Rhodes bell overtone (the FM epiano detent, ratio 1 + decaying brightness) — the interim, until INSTR_EPIANO is unparked
 - Lowend Rhodes: candidate A/B against the TRI+tremolo fake
 - House lead: talkbox-adjacent growl via the feedback macro (true formant still needs §8.3)
 - (each retrofit: live A/B toggle against the old fake — the G-key pattern)
+
+**INSTR_ORGAN (shipped + published 2026-06-07 — retrofits now unblocked):**
+- Dub skank + organ bubble: the real Hammond B3 (roll the registration per song; the genre's constant) — highest-value organ item
+- Jangle lead: organ-double / Farfisa night, a real engine instead of the SINE/SAW hints
+- House stab: INSTR_ORGAN chord through the filter ride = an organ-chop sample night
+- Roadhouse: an A/B candidate against the shipped USER0 wave_set drawbar chairs
+- (each retrofit: live A/B toggle against the old fake — the G-key / BAND-panel pattern)
+- New stations it unblocks: motorik/Stereolab (Farfisa drones, native now), a gospel/soul-jazz organ trio (Jimmy Smith)
+
+**INSTR_EPIANO (shipped + published 2026-06-08 — ⚠ PARKED for stations):**
+- The dedicated Rhodes/Wurli/Clav engine. It would close the electric-piano gap
+  on citypop, lowend, yacht, cocktail, roadhouse — but **do not retrofit any
+  station to it yet.** Its character relies on a provisional per-voice wah; the
+  real plan is a wah-on-a-bus effect (instrument-engines.md §8.10). Until that
+  ships, electric-piano slots stay on the FM detent / TRI+tremolo fakes, and the
+  `epiano.c` wah recipe is **not** to be adopted into a station.
 
 **wave_set recipes (USER0 — roll the table itself from the seed):**
 - Roadhouse organ: footage mix = Vox night vs Gibson night

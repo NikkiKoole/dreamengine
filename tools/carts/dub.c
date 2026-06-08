@@ -379,10 +379,34 @@ static void play_step(long abs, double pos) {
             }
 }
 
+// ── the skank chair — A/B them live with G ────────────────────────────────
+// The offbeat chop is the reggae heartbeat, and the genre plays it on EITHER a
+// choppy guitar OR a Hammond — both authentic. dub shipped the guitar (TRI +
+// a fast cutoff-env upstroke). INSTR_ORGAN (shipped 2026-06-07) is the real
+// organ skank: the "reggae" preset (organ.c #0 — hollow, thin, NO scanner
+// motion; the upstroke chop IS the rhythm). Same evidence-gathering step as
+// jangle/bossa's guitar chair: once both sound right, the song seed rolls which
+// skank shows up. apply_voicing() re-aims the tone-knob filter over whichever
+// engine is in the slot; the desk re-asserts the echo send every phrase, and
+// setup re-applies the base send so a mid-song toggle keeps its wash.
+static int skankOrgan = 0;   // 0 = TRI guitar chop (shipped), 1 = INSTR_ORGAN reggae
+
+static void setup_skank(void) {
+    if (!skankOrgan) {
+        instrument(I_SKANK, INSTR_TRI, 1, 90, 0, 50);           // the choppy guitar
+        instrument_env(I_SKANK, 0, ENV_CUTOFF, 0, 50, 800);     //   filtered upstroke
+    } else {
+        instrument(I_SKANK, INSTR_ORGAN, 1, 90, 0, 50);         // a real Hammond chop
+        instrument_harmonics(I_SKANK, 0.06f);                   // "reggae" registration — hollow, thin
+        instrument_timbre(I_SKANK, 0.55f);                      //   (organ.c preset 0)
+        instrument_morph(I_SKANK, 0.00f);                       //   no motion — the chop is the rhythm
+    }
+    instrument_echo(I_SKANK, 0.18f);                            // base wash; the desk rides it on throws
+}
+
 // ── setup ─────────────────────────────────────────────────────────────────
 static void setup_instruments(void) {
-    instrument(I_SKANK, INSTR_TRI, 1, 90, 0, 50);            // the chop
-    instrument_env(I_SKANK, 0, ENV_CUTOFF, 0, 50, 800);
+    setup_skank();                                          // the chop — A/B'd with G (guitar vs Hammond)
 
     instrument(I_BASS, INSTR_SINE, 3, 260, 5, 130);          // deep and round
     instrument_env(I_BASS, 0, ENV_PITCH, 0, 30, 3);
@@ -392,7 +416,6 @@ static void setup_instruments(void) {
     instrument_lfo(I_MELO, 0, LFO_PITCH, 5.0f, 0.18f);
     instrument_echo(I_MELO, 0.25f);                          // melodica always sings into the tape
 
-    instrument_echo(I_SKANK, 0.18f);                         // base wash; the desk rides it on throws
     instrument_echo(I_RIM, 0.25f);                           // rim throws carry a real tail too
 
     instrument(I_ORG, INSTR_TRI, 4, 70, 3, 50);              // the bubble
@@ -456,6 +479,7 @@ void update(void) {
     if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
     if (ev & RAD_EV_TEMPO)  apply_echo_bus();          // the tape loop follows the tempo
     if (ev & RAD_EV_TONE)   apply_voicing();           // re-aim the filters live
+    if (keyp('G')) { skankOrgan = !skankOrgan; setup_skank(); apply_voicing(); }  // A/B the skank chair, mid-song
     if (ev & RAD_EV_POWER)  {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;
@@ -565,16 +589,17 @@ void draw(void) {
     rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
     rad_help_button(CLR_MEDIUM_GREEN);
-    rad_footer("SPACE next song   H help");
+    rad_footer(str("SPACE next song   G skank:%s   H help", skankOrgan ? "B3" : "gtr"));
 
     if (showHelp) {
-        static const char *HELP[8][2] = {
+        static const char *HELP[9][2] = {
             { "SPACE",      "next dubplate (rolls a new seed)" },
             { "R",          "same plate - the desk mixes anew" },
             { "[ / ]",      "back / forward through history" },
             { "LEFT/RIGHT", "feel - shifts the density curve" },
             { "UP/DOWN",    "tempo of this riddim" },
             { "T",          "tone - mellow/warm/clear/bright" },
+            { "G",          "skank: guitar chop / Hammond B3" },
             { "M",          "radio power on / off" },
             { "H or ?",     "show / hide this help" },
         };
@@ -583,7 +608,7 @@ void draw(void) {
             "the desk re-rides the faders every listen.",
             "pin it: #define DUB_SEED 0x...",
         };
-        rad_help_panel("DUB RADIO", HELP, 8, NOTES, 3, CLR_MEDIUM_GREEN);
+        rad_help_panel("DUB RADIO", HELP, 9, NOTES, 3, CLR_MEDIUM_GREEN);
     }
 
     // the jam strip — a melodica on the riddim's minor pentatonic, the vamp

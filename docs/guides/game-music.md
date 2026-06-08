@@ -437,7 +437,13 @@ Two-operator FM (shipped 2026-06-05; taste settling in the `fm` cart). Unlike
 the string and the bar it does **not** decay on its own — give it a normal
 ADSR; what it does do on its own is **mellow within each note** (the FM amount
 decays like a real DX strike), so comped chords sparkle on the attack and sit
-back in the mix as they ring. The electric-piano gap, finally:
+back in the mix as they ring. The electric-piano gap for the stations, for now:
+
+> A dedicated `INSTR_EPIANO` engine (Rhodes/Wurli/Clav) shipped 2026-06-08, but
+> it is **parked for radio use** — its voice leans on a provisional per-voice wah
+> and the real plan is a wah-on-a-bus effect (instrument-engines.md §8.10). Until
+> that lands, **FM is the station epiano** (and don't adopt the `epiano.c` wah
+> recipe below into a station). See radio-instrument-options.md intro.
 
 ```c
 instrument(I_EP, INSTR_FM, 2, 700, 3, 350);          // piano-ish ADSR — the engine needs one
@@ -463,6 +469,12 @@ this — not because it's weak, but because this guide never mentioned it and th
 recipes above never needed it. What it buys: **static timbres the basic waves can't
 make** — an organ drawbar mix, a nasal clav/reed, a brassy harmonic spread.
 Anything whose recipe is "this fixed blend of partials":
+
+> Note: for **organ** specifically there's now a dedicated `INSTR_ORGAN` engine
+> (shipped 2026-06-07) with live registration/animation macros — reach for it when
+> you want the drawbars to *move* (scanner chorus, key click). The `wave_set`
+> drawbar below is still the right call for a fixed, seed-rolled footage mix
+> (roadhouse/tango ship it that way).
 
 ```c
 // organ — drawbar sum 8'+4'+2⅔'+2' (formula lifted from waveed.c's seed())
@@ -512,6 +524,13 @@ keep taps modest (throws of 5–6 are the ceiling); and each sounding tap is a
 voice, so echo short notes (60–80ms chops echo beautifully; pads don't).
 
 ### Wah is just the filter swept (epiano.c)
+
+> ⚠ **PROVISIONAL — do not adopt into a radio station yet.** This per-voice wah is
+> a bit poopy in practice; the real plan is **a proper wah as a bus effect**
+> (instrument-engines.md §8.10). The recipe below documents what `epiano.c`
+> currently does, but stations should NOT wire it in (and INSTR_EPIANO, which
+> relies on it, is likewise parked — see the FM section above). Revisit once the
+> bus effect lands.
 
 Wah needs no FX engine — it's the per-voice SVF with a moving centre
 ([decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md): "the
