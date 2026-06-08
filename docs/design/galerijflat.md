@@ -777,6 +777,14 @@ balcony face.)
   running regardless of view, so flipping is purely a camera.
 - Hover-inspect works on both faces (maps the mirrored bay back to its home).
 
+Balcony refinements (same session, per feedback): each dwelling now has a glazed
+balcony **door** + a **taller, slightly wider** living-room window; the railing
+is the **gallery's exact bars** (slabC cap + panelC bars, same thickness) but
+**segmented per dwelling** — and the **floor slab is segmented too** (each
+balcony is a protruding box with bare wall in the gaps), so it no longer reads
+as a continuous gallery. The balcony-side **tower is a blank concrete end** (no
+shafts/cabs/stairwell — the lifts are reached from the gallery side).
+
 Still to do on the balcony: TV glow in the living room (evening), balcony
 *sitters*, a garden/courtyard ground, and a transition instead of an instant cut.
 

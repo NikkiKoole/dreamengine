@@ -1128,10 +1128,10 @@ static void draw_tower(void) {
 }
 
 // ── the balcony side: the same building seen from behind ────────────────────
-// Mirrored — the tower swaps ends and the dwelling order reverses. Each home's
-// living-room window (wider than its kitchen) carries the same curtains and
-// lit/occupant state; in front sits a private balcony with a screen and clutter.
-#define BAL_SCREEN 11   // privacy-screen top above the slab (vs the gallery's bars at 9)
+// Mirrored — the tower swaps ends and the dwelling order reverses. Each home has
+// a glazed balcony door + a tall living-room window (carrying the same curtains,
+// lit state and occupant), and its OWN little balcony: the gallery-style railing
+// (same slabC cap + panelC bars) but segmented per dwelling, not continuous.
 
 // balcony layout for the back view: tower at the opposite end, bays reversed
 static int bal_towerX(void) { return towerLeft ? bldX + NB * BW : bldX; }
@@ -1173,52 +1173,49 @@ static void draw_balcony_window(Home *h, int f, int b, int wx, int wy, int ww, i
 
 static void draw_balcony_band(int f) {
     int yb = baseY - f * FH, bx = bal_baysX();
-    rectfill(bx, yb - FH, NB * BW, 1, CLR_DARKER_GREY);    // floor slab above
-    fillp(0x8888, -1);
-    rectfill(bx, yb - FH + 1, NB * BW, 2, CLR_DARKER_GREY);
-    fillp_reset();
-    rectfill(bx, yb - SLAB_H, NB * BW, SLAB_H, slabC);     // balcony floor edge
+    int wy = yb - FH + 2;                                  // door/window top (taller than gallery)
+    int wh = FH - 2 - SLAB_H;                              // down to the floor slab
 
     for (int s = 0; s < NB; s++) {
         Home *h = &homes[f][bal_bay_home(s)];
-        int x = bx + s * BW;
-        // big living-room window across the bay, down to behind the screen
-        draw_balcony_window(h, f, bal_bay_home(s), x + 2, yb - FH + SPANDREL,
-                            BW - 4, FH - SLAB_H - SPANDREL);
-        // balcony clutter — tops peek above the privacy screen
-        if (h->balProp == 1) {                            // laundry line
-            for (int g = 0; g < 3; g++)
-                rectfill(x + 5 + g * 5, yb - BAL_SCREEN - 3, 2, 4, CURT[(f * 7 + s * 3 + g) % NCURT][0]);
-        } else if (h->balProp == 2) {                     // plants on the rail
-            for (int g = 0; g < 3; g++) {
-                pset(x + 5 + g * 6, yb - BAL_SCREEN - 1, CLR_DARK_GREEN);
-                pset(x + 5 + g * 6, yb - BAL_SCREEN - 2, CLR_GREEN);
-            }
-        }
-    }
+        int x = bx + s * BW, inX = x + 2, inW = BW - 4;    // bare wall between balconies
+        int lit = home_lit(h, tod), vac = (h->arch == A_VACANT);
 
-    // privacy screens — a solid corrugated panel per balcony (vs the gallery's bars)
-    rectfill(bx, yb - BAL_SCREEN, NB * BW, 1, slabC);     // handrail cap
-    for (int s = 0; s < NB; s++) {
-        int x = bx + s * BW;
-        fillp(0xCCCC, -1);
-        rectfill(x + 1, yb - BAL_SCREEN + 1, BW - 2, BAL_SCREEN - 1 - SLAB_H, panelC);
-        fillp_reset();
+        // glazed balcony door (a tall French door): frame + glass that lights up
+        int dx = inX;
+        rectfill(dx, wy, DW, wh, h->doorCol);
+        rectfill(dx + 1, wy + 1, DW - 2, wh - 2,
+                 lit ? CLR_LIGHT_YELLOW : (vac ? CLR_DARKER_PURPLE : CLR_DARKER_BLUE));
+        pset(dx + DW - 2, yb - 12, CLR_BROWNISH_BLACK);    // handle
+
+        // living-room window — slightly bigger and notably taller than the kitchen
+        int lwx = dx + DW + WIN_GAP, lww = inX + inW - lwx;
+        draw_balcony_window(h, f, bal_bay_home(s), lwx, wy, lww, wh);
+
+        // this dwelling's own little balcony — a protruding box, NOT a continuous
+        // gallery: floor slab + gallery-style rail (same slabC cap + panelC bars,
+        // same thickness) only across its own width, bare wall in the gaps
+        rectfill(inX, yb - SLAB_H, inW, SLAB_H, slabC);    // the balcony's own floor edge
+        rectfill(inX, yb - 9, inW, 1, slabC);              // handrail cap
+        for (int rx = inX; rx < inX + inW; rx += 3) rectfill(rx, yb - 8, 1, 6, panelC);
+
+        // balcony clutter peeking over the rail
+        if (h->balProp == 1)
+            for (int g = 0; g < 3; g++)
+                rectfill(inX + 3 + g * 5, yb - 12, 2, 4, CURT[(f * 7 + s * 3 + g) % NCURT][0]);
+        else if (h->balProp == 2)
+            for (int g = 0; g < 3; g++) { pset(inX + 3 + g * 6, yb - 10, CLR_DARK_GREEN);
+                                          pset(inX + 3 + g * 6, yb - 11, CLR_GREEN); }
     }
 }
 
 static void draw_balcony_tower(void) {
     int top = wallTop - 6, bot = SCREEN_H - GROUND_H, tx = bal_towerX();
+    // from the courtyard the lift/stair core is a blank concrete end — no shafts,
+    // no cabs (you reach the lifts from the gallery side). Just a faint panel seam.
     rectfill(tx, top, TW, bot - top, towerC);
-    int sx = tx + TW - 7;                                  // stairwell on the far side (mirrored)
-    rectfill(sx, wallTop, 4, baseY - wallTop, CLR_DARKER_BLUE);
-    for (int f = 0; f < NF; f++) {
-        int yb = baseY - f * FH;
-        if (f & 1) line(sx, yb - 4, sx + 3, yb - FH + 4, CLR_DARK_GREY);
-        else       line(sx, yb - FH + 4, sx + 3, yb - 4, CLR_DARK_GREY);
-    }
-    for (int i = 0; i < NLIFT; i++) draw_cab(i, tx + 3 + i * 10);   // same cars, mirrored side
-    rectfill(tx + 2, top - 9, TW - 4, 9, CLR_DARKER_GREY);
+    rectfill(tx + TW / 2, wallTop, 1, baseY - wallTop, CLR_DARKER_GREY);   // expansion joint
+    rectfill(tx + 2, top - 9, TW - 4, 9, CLR_DARKER_GREY);   // machine room + antenna (roof)
     line(tx + 6, top - 9, tx + 6, top - 17, CLR_DARK_GREY);
     pset(tx + 6, top - 18, blink(40) ? CLR_RED : CLR_DARK_RED);
 }
