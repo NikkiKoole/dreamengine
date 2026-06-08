@@ -759,6 +759,9 @@ static void sound_epiano_start(Voice *v) {
             float k = keep * keep;                           // upper modes fade with register
             if (i >= 4) k *= keep;                           // bell modes steeper (real Rhodes top ~ pure sine)
             a *= k * (0.3f + 0.7f * vel);                    // and brighter when struck harder
+            a *= 0.45f + 1.1f * pp;                           // timbre = HAMMER HARDNESS: scales the upper
+                                                             // modes so timbre always bites (the pickup
+                                                             // crossfade alone is flat on wurli/clav)
             if (ty == 0) a *= RHO_BLVL;                      // Rhodes bell-mode level
         }
         v->ep_amp[i] = a;
