@@ -1,6 +1,11 @@
 # motorik — the krautrock driver (Neu! × Stereolab) — build spec
 
-> **Status: spec'd, unbuilt** (2026-06-08). The one krautrock entry in
+> **Status: SHIPPED 2026-06-08** (`tools/carts/motorik.c`, station #16) — the
+> core (PROCESS FORM + modulation event + Farfisa drone + planing pad + live kit
+> + Moog bass + topline cell + the autobahn face) is built and verified. This doc
+> is now the design record **and the voices parking lot** ("Candidate voices /
+> ideas" below — the band additions to try after living with it). The one
+> krautrock entry in
 > [`future-stations.md`](future-stations.md) (the parking lot), promoted to a
 > full spec because `INSTR_ORGAN` (shipped 2026-06-07) unblocks its signature
 > timbre — the Farfisa drone — and because it proves a genuinely new arrangement
@@ -188,9 +193,15 @@ enter/leave thresholds, `modAt` + `modIv`, the lead cell, the planing path, the
 organ registration roll, the bass wave, title, dial freq.
 
 **Performance (`rnd`, never seeded):** almost nothing — this is the point.
-Maybe a ±1 hat velocity wobble. Motorik has the **least** performance variation
-of any station; the invariance is sacred. (Contrast `dub`'s desk, which re-rolls
-everything every listen.)
+Maybe a ±1 hat velocity wobble. The **rhythm-section spine is machine-invariant**
+— that's sacred. (Contrast `dub`'s desk, which re-rolls everything every listen.)
+
+> **The one allowed exception — a soloist.** If the MALLET improviser lands (see
+> the voices parking lot), it becomes the *lone performed voice over the machine*:
+> the spine stays invariant, one human floats on top, new every listen. That's the
+> most krautrock idea there is (man vs. motor, Can over the motorik bed) and the
+> same shape as dub's desk — a deliberate, framed exception, not a retreat from
+> the invariance.
 
 ---
 
@@ -221,6 +232,22 @@ everything every listen.)
   organ drone is held voices; watch the voice count doesn't leak).
 - **mobile-lint** — radios rank touch-ready via the `rad_knob_*` widgets; if the
   jam strip is included it's touch-native too.
+
+## Candidate voices / ideas (parking lot — try after living with it)
+
+The shipped band is drone + planing pad + Moog bass + topline cell + live kit.
+These are the additions to audition next, marked by readiness. **None built yet.**
+
+| voice | engine | status | the idea |
+|---|---|---|---|
+| **Vibraphone soloist** ⭐ | `INSTR_MALLET` + `improv.h` | **shipped engines — recommended next** | Promote the topline lead to the improviser: a vibes/glockenspiel **soloist** over the drone. Motorik is the easiest bed `improv.h` ever had — *no chord changes*, so just hand it the mode + a register and let it run; drive it off `curKey` so the solo lifts with the modulation. Enters at the arc plateau (`prog ≈ 0.5`), solos to the modulation. This is the Can / krautrock long-form jam ("Halleluwah"). The lone performed voice (see the seed-section exception). New customer of melody brain #2. **Wire-up note:** check `improv.h`'s mode API maps to motorik's lydian/major/mixolydian; re-verify the seeded `.w` stream stays byte-identical (the solo is performance). |
+| **Glockenspiel/vibes sparkle** | `INSTR_MALLET` (seeded cell) | shipped engine — easy | The decorative alternative to the soloist if max invariance is wanted: a *seeded* bell counter-melody / topline-doubling an octave up. The Stereolab space-age-bachelor-pad twinkle. Gate on `prog ≈ 0.4`. Lower-risk than the improviser; stays fully invariant. |
+| **Guitar ostinato** | `INSTR_PLUCK` | shipped engine — easy | The *Neu!* (Michael Rother) shimmer: one interlocking single-note 8th-note figure looping forever, reinforcing the motor. Seeded cell, fully invariant. A spine voice, not a soloist. |
+| **Wordless vocal** 🚧 | **VOICE / formant — NOT shipped** | feature driver | The *actual* Stereolab signature: Lætitia Sadier's "ba-ba" / "aah" topline in parallel maj7s. We have no voice engine — but the docs flag **Voice/formant** as a *near-free* candidate (rides the §8.3 formant SVF; macros = vowel / breathiness / formant-shift). Motorik would be its **first real customer** — the radio that *drives* the voice engine. The "radios as feature drivers" play. See [`instrument-engines.md`](instrument-engines.md) §8.9. |
+
+Build order when ready: the **vibraphone soloist** is the highest-impact and uses
+only shipped engines — do it first. The **voice engine** is the dream, but it's an
+engine port, so schedule it as a deliberate feature push, not a quick add.
 
 ## Open questions (decide at build time)
 
