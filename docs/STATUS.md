@@ -212,10 +212,17 @@ their `kind[]` tags.
         path both landed. Leslie stays a per-voice recipe / future bus item (0015, §8.10).
      5. ~~**`INSTR_EPIANO`**~~ **SHIPPED + PUBLISHED 2026-06-08** — Rhodes/Wurli/Clav, 12-mode modal
         bank + pickup nonlinearity, `epiano` showcase (§8.8.5). Post-ship tuning (by ear + the
-        navkit-render A/B, tools/navkit-render.c): the **Rhodes ring** fixed (body/bell decay split,
-        `RHO_*` consts), **timbre** given a hammer-hardness tilt so it bites on all 3, **bark** folds
-        in drive (clean→growl), clav has a fast filter-env quack. The per-voice **wah is provisional**
-        (flagged TEMP! in-cart) — the real auto-wah is a bus effect (§8.10). 🅿️ see PARKED below.
+        navkit-render A/B, tools/navkit-render.c): **timbre** given a hammer-hardness tilt so it bites
+        on all 3, **bark** folds in drive (clean→growl), clav has a fast filter-env quack. **Rhodes
+        rebuilt from MEASURED spectra (2026-06-08, second pass)** — the by-ear body/bell split (old
+        `RHO_*` consts) still left a loud sustained inharmonic 4.2× partial that read as an "untuned
+        bell"; FFT of our own render confirmed it. Replaced `RAT[0]` with the real structure
+        (harmonic body 1-6 + sparse fast inharmonic tine bells 6.27×/17.55×/34.4×) + per-mode `DEC_R`
+        + a 2nd-harmonic "voicing" crossfade (Shear 2011 / Münster & Pfeifle 2020), FFT-verified.
+        Added a **tremolo** slider (suitcase/Wurli amp wobble). Wurli/Clav are still the navkit cribs
+        and **could use the same measured pass** — they're plausible but not validated against
+        references the way Rhodes now is. The per-voice **wah is provisional** (flagged TEMP! in-cart)
+        — the real auto-wah is a bus effect (§8.10). 🅿️ see PARKED below.
      7. ~~**`INSTR_MEMBRANE`**~~ **SHIPPED 2026-06-08** — struck drumhead, 6 modal sines, buffer-free,
         `tabla` showcase (5 kit presets + drumhead viz). Ported from navkit's `processMembraneOscillator`
         with its live circular-membrane strike-position weighting (timbre) and monotonic pitch-bend chirp
