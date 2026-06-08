@@ -28,16 +28,18 @@
 //    front and center), minimalism (bass + drums + one or two elements, no
 //    more), crisp drum programming with LAYERED hits (Q-Tip stacked up to
 //    three snares into one sound — here: noise crack + sine thump fired
-//    together), and the groove template from docs/guides/game-music.md at
-//    half strength (hats rush, snare drags, bass leans, kick holds the
-//    grid, 16ths lightly swung — see the PUSH_* defines). Samplers don't
-//    drift: NO tempo wobble here — the machine is steady, the players lean.
+//    together), and the groove template from docs/guides/game-music.md as a
+//    ROLLED POCKET (tight / swung / drunk — the seed picks how hard the snare
+//    drags and the 16ths swing; the old "half strength" is now just the middle
+//    setting). WITHIN a song the machine is steady and the players lean — the
+//    tempo only changes BETWEEN songs, coupled to the pocket (drunk drags slow).
 //
 //   SPACE next song   R play it again   [ ] song history   M radio on/off
 //   LEFT/RIGHT feel (layers)   UP/DOWN tempo   H or ? help
 //
 // Seed pins the COMPOSITION (key, progression, loop cut+rotation, drum
-// pattern, title); the PERFORMANCE (ghost notes, fills, the lead's path,
+// pattern, the POCKET, the FORM — incl. whether there's a drums-only BREAK —
+// and the title); the PERFORMANCE (ghost notes, fills, the lead's path,
 // micro-jitter) re-rolls every playthrough.
 
 #define LOWEND_SEED 0   // pin a favourite song here (0 = free-roaming radio)
@@ -51,15 +53,21 @@
 #define I_HAT    10
 #define I_VINYL  11  // the dust
 
-// ── the groove template (ms, added to dly) ────────────────────────────────
-// Tuned DOWN from the guide's maximal Dilla numbers (−8/+22/+12, swing 57%)
-// after ear-testing: at radio volume the full drag read as stumbling, not
-// leaning. Half-strength keeps the head-nod. Turn it back up to taste.
-#define PUSH_KICK   0    // the kick IS the grid
-#define PUSH_HAT   -5    // hats rush, eager
-#define PUSH_SNARE 12    // the snare drags — the head-nod
-#define PUSH_BASS   7    // bass leans toward the snare's time
-#define SWING      0.08f // odd 16ths land 54% late
+// ── the pocket — THE groove axis, rolled per song (ms offsets added to dly) ─
+// The kick always IS the grid (0). What the seed rolls is how hard everyone
+// ELSE leans off it: hats rush early, the snare drags late, the bass leans
+// toward the snare's time, the odd 16ths swing. "swung" is the shipped
+// half-strength head-nod; "tight" is Premier-crisp on the grid; "drunk" is the
+// guide's full Dilla drag (which read as stumbling at radio volume on its own,
+// but as one option among three it earns its place).
+enum { P_TIGHT, P_SWUNG, P_DRUNK, NP };
+static const char *PNAME[NP] = { "tight", "swung", "drunk" };
+static const struct { int hat, snare, bass; float swing; } POCKET[NP] = {
+    { -2,  3,  2, 0.02f },   // tight — crisp, barely off the grid
+    { -5, 12,  7, 0.08f },   // swung — the shipped head-nod lean
+    { -7, 22, 12, 0.14f },   // drunk — the full behind-the-beat Dilla drag
+};
+#define PUSH_KICK 0          // the kick holds the grid in every pocket
 
 // ── chords — everything voiced lush ──────────────────────────────────────
 enum { Q_MAJ7, Q_MAJ9, Q_MAJ9S11, Q_SUS9, Q_MIN9, NQ };
@@ -88,10 +96,21 @@ static const int KICKP[4][6] = {
     { 0, 7, 16, 23, 26, -1 },
 };
 
-// the form: 8 sections of 8 bars — note the loop length usually does NOT
-// divide 8, so the sample rolls over section lines. That's authentic.
-enum { S_INTRO, S_V, S_H, S_OUTRO };
-static const int FORM[8] = { S_INTRO, S_V, S_V, S_H, S_V, S_V, S_H, S_OUTRO };
+// the form — 8-bar sections; the seed rolls one of three so a tune isn't
+// forever the same 64 bars. The "cut" form drops a drums-only BREAK in the
+// middle — the b-boy break, the bars that made these records sampleable
+// (game-music's KPM note): bass/rhodes/lead all drop out, just the kit nods
+// for 8 bars, then the section-end fill lifts back in. (The chord loop length
+// still usually doesn't divide 8, so the sample rolls over section lines —
+// that's authentic.)
+enum { S_INTRO, S_V, S_H, S_BREAK, S_OUTRO };
+#define MAXSECT 12
+static const struct { int n; int s[MAXSECT]; const char *name; } FORMS[] = {
+    { 6, { S_INTRO, S_V, S_H, S_V, S_H, S_OUTRO },                          "tape" },  // 48 bars
+    { 8, { S_INTRO, S_V, S_V, S_H, S_V, S_V, S_H, S_OUTRO },                "loop" },  // 64, the classic
+    { 9, { S_INTRO, S_V, S_V, S_H, S_BREAK, S_V, S_H, S_V, S_OUTRO },       "cut"  },  // 72, with the break
+};
+#define NFORMS 3
 
 // ── the generated song ────────────────────────────────────────────────────
 typedef struct {
@@ -99,6 +118,8 @@ typedef struct {
     int  off[8], q[8], nCh;   // the loop: 4/6/8 chords, one per half-bar
     int  loopBars;            // 2, 3 (favoured), or 4
     int  kick;                // pattern index
+    int  pocket;              // the rolled feel — tight / swung / drunk
+    int  form;                // the rolled arrangement — tape / loop / cut(break)
     char title[24];
     float freq;
     unsigned seed;
@@ -166,6 +187,11 @@ static void new_song(double pos, unsigned seed) {
 
     sng.kick = srnd(4);
 
+    // the two structural axes: the pocket (how hard everyone leans) and the form
+    sng.pocket = srnd(NP);                               // tight / swung / drunk
+    int fr = srnd(100);
+    sng.form = fr < 30 ? 0 : fr < 75 ? 1 : 2;            // 30% tape · 45% loop · 25% cut(break)
+
     cellN = 0;                                           // hook lead cell
     for (int s = 0; s < 31 && cellN < 5; s += 2)
         if (srnd(100) < (s % 8 == 0 ? 25 : 35)) cellOn[cellN++] = s;
@@ -174,7 +200,9 @@ static void new_song(double pos, unsigned seed) {
     snprintf(sng.title, sizeof sng.title, "%s %s", TW1[srnd(12)], TW2[srnd(12)]);
     sng.freq = 88.0f + srnd(190) * 0.1f;
 
-    tempo = 88 + srnd(10);                               // 88..97
+    // tempo follows the pocket — drunk drags slow, tight snaps faster
+    static const int TLO[NP] = { 90, 86, 82 }, TSPAN[NP] = { 11, 10, 9 };
+    tempo = TLO[sng.pocket] + srnd(TSPAN[sng.pocket]);   // 90..100 / 86..95 / 82..90
     bpm(tempo);
     songBase = (long)pos + 8;
     gvInit   = false;
@@ -191,7 +219,12 @@ static void fresh_song(double pos) {       // [ and ] walk the session history (
 // ── harmony lookups ───────────────────────────────────────────────────────
 static int chord_idx(long s)  { return (int)((s / 8) % sng.nCh); }   // half-bar chords
 static int root_pc(int ci)    { return (sng.keyPc + sng.off[ci]) % 12; }
-static int sect_of(long bar)  { long x = bar / 8; return (int)(x < 8 ? FORM[x] : S_OUTRO); }
+static long song_bars(void)   { return (long)FORMS[sng.form].n * 8; }
+static int  form_sects(void)  { return FORMS[sng.form].n; }
+static int  sect_of(long bar) {
+    int x = (int)(bar / 8), n = FORMS[sng.form].n;
+    return x < n ? FORMS[sng.form].s[x] : S_OUTRO;
+}
 
 // density = arrangement curve + feel shift, two separate dimensions: the hook
 // stays fuller than the verse at ANY knob position; the knob moves the whole
@@ -251,16 +284,19 @@ static void play_step(long abs, double pos) {
     int  step = (int)(s % 16);
     int  s32  = (int)(s % 32);
     long bar  = s / 16;
-    if (bar >= 64) return;
+    if (bar >= song_bars()) return;
     int  ci   = chord_idx(s);
     int  sect = sect_of(bar);
     int  lvl  = level_of(bar);
-    int  sw   = (step % 2 == 1) ? (int)(stepMs * SWING) : 0;   // swung 16ths
+    const int   pHat = POCKET[sng.pocket].hat, pSnare = POCKET[sng.pocket].snare,
+                pBass = POCKET[sng.pocket].bass;
+    int  sw   = (step % 2 == 1) ? (int)(stepMs * POCKET[sng.pocket].swing) : 0;  // swung 16ths
     int  inSlot = (int)(s % 8);                                 // step within the chord
+    bool brk  = (sect == S_BREAK);                              // drums-only b-boy break
 
     // BASS — the star of the record. Root on every chord, fat and forward;
-    // approach runs lean +12ms with the groove.
-    if (inSlot == 0 || (inSlot == 4 && chance(40)) || (inSlot == 6 && chance(45))) {
+    // approach runs lean with the groove. Drops out entirely for the break.
+    if (!brk && (inSlot == 0 || (inSlot == 4 && chance(40)) || (inSlot == 6 && chance(45)))) {
         int b = bass_near(root_pc(ci));
         int n = b, vol = 6;
         bool play = true;
@@ -272,7 +308,7 @@ static void play_step(long abs, double pos) {
             vol = 3;
         }
         if (play) {
-            schedule_hit(dly + PUSH_BASS + sw + rnd(5) - 2, n, I_BASS, vol, (int)(stepMs * 4.5));
+            schedule_hit(dly + pBass + sw + rnd(5) - 2, n, I_BASS, vol, (int)(stepMs * 4.5));
             vu += vol * 0.7f;
         }
     }
@@ -287,28 +323,28 @@ static void play_step(long abs, double pos) {
             }
         // snare drags — and it's LAYERED, the Q-Tip move: crack + thump as one
         if (step == 4 || step == 12) {
-            int lag = dly + PUSH_SNARE + rnd(4) - 2;
+            int lag = dly + pSnare + rnd(4) - 2;
             schedule_hit(lag, 62, I_SNARE, 5, 70);
             schedule_hit(lag, 55, I_KICK, 2, 40);          // the body under the crack
             vu += 2.5f;
         }
-        if ((s32 == 11 || s32 == 27) && chance(18))        // ghost snare before the drag
-            schedule_hit(dly + PUSH_SNARE + sw, 62, I_SNARE, 2, 35);
+        if ((s32 == 11 || s32 == 27) && chance(brk ? 35 : 18))   // ghost snare before the drag (busier in the break)
+            schedule_hit(dly + pSnare + sw, 62, I_SNARE, 2, 35);
         // hats rush
-        int hatEvery = (lvl >= 3) ? 1 : 2;
+        int hatEvery = (lvl >= 3 || brk) ? 1 : 2;          // the break rides 16ths
         if (step % hatEvery == 0) {
             int hv = (step % 4 == 2) ? 3 : 2;
             if (hatEvery == 1 && step % 2 == 1) hv = 1;
-            int hd = dly + PUSH_HAT + sw + rnd(3) - 1;
+            int hd = dly + pHat + sw + rnd(3) - 1;
             schedule_hit(hd < 1 ? 1 : hd, 90, I_HAT, hv, 22);
         }
-        // section-end fill (performance, never seeded)
-        if (bar % 8 == 7 && step >= 12 && chance(55))
-            schedule_hit(dly + PUSH_SNARE, 62, I_SNARE, step == 12 ? 3 : 2 + (step - 12), 30);
+        // section-end fill (performance, never seeded) — also lifts out of the break
+        if (bar % 8 == 7 && step >= 12 && chance(brk ? 80 : 55))
+            schedule_hit(dly + pSnare, 62, I_SNARE, step == 12 ? 3 : 2 + (step - 12), 30);
     }
 
     // RHODES — sparse stabs on the chord changes, tremolo doing the rest
-    if (lvl >= 1) {
+    if (lvl >= 1 && !brk) {
         if (inSlot == 0 && chance(75)) {
             lead_voices(ci);
             int dur = (sng.off[ci] == 0) ? 700 : rnd_between(280, 480);   // home rings
@@ -322,8 +358,8 @@ static void play_step(long abs, double pos) {
         }
     }
 
-    // HOOK LEAD — the cell, narrowed to each chord's tones
-    if (lvl >= 2)
+    // HOOK LEAD — the cell, narrowed to each chord's tones (out for the break)
+    if (lvl >= 2 && !brk)
         for (int i = 0; i < cellN; i++)
             if (cellOn[i] == s32 && chance(80)) {
                 int gap = (i + 1 < cellN) ? cellOn[i + 1] - s32 : 32 - s32;
@@ -419,7 +455,7 @@ void update(void) {
         while (rad_clock_step(&clk, pos, &st)) play_step(st, pos);
 
         long songStep = scheduled - songBase;
-        if (songStep >= 64L * 16) fresh_song(pos);
+        if (songStep >= song_bars() * 16) fresh_song(pos);
 
         long ss = songStep >= 0 ? songStep : 0;
         chord_label(nowChord[0], 12, chord_idx(ss));
@@ -431,11 +467,13 @@ void update(void) {
 
 #ifdef DE_TRACE
     long ss = scheduled - songBase;
-    static const char *SN[4] = { "intro", "verse", "hook", "outro" };
+    static const char *SN[5] = { "intro", "verse", "hook", "break", "outro" };
     watch("song", "%d", songCount);
     watch("sect", "%s", SN[sect_of(ss >= 0 ? ss / 16 : 0)]);
     watch("chord", "%s", nowChord[0]);
     watch("loopBars", "%d", sng.loopBars);
+    watch("pocket", "%s", PNAME[sng.pocket]);
+    watch("form", "%s", FORMS[sng.form].name);
 #endif
 }
 
@@ -477,7 +515,7 @@ void draw(void) {
     if (radioOn) {
         print(sng.title, 154, 58, CLR_ORANGE);
         char l2[32];
-        snprintf(l2, 32, "%.1f FM  key %s", sng.freq, PCNAME[sng.keyPc]);
+        snprintf(l2, 32, "key %s   %s", PCNAME[sng.keyPc], PNAME[sng.pocket]);
         print(l2, 154, 70, CLR_DARK_ORANGE);
         snprintf(l2, 32, "%d bpm #%08X", tempo, sng.seed);
         print(l2, 154, 82, CLR_DARK_ORANGE);
@@ -494,9 +532,9 @@ void draw(void) {
         char lb[16];
         snprintf(lb, 16, "%d-bar loop", sng.loopBars);
         print(lb, 152, 120, CLR_ORANGE);
-        static const char *SN[4] = { "intro", "verse", "hook", "outro" };
+        static const char *SN[5] = { "intro", "verse", "hook", "break", "outro" };
         print(SN[sect_of(bar)], 240, 120, CLR_MEDIUM_GREY);
-        rad_phrase_dots(208, 132, 8, bar / 8, CLR_ORANGE);
+        rad_phrase_dots(208, 132, form_sects(), bar / 8, CLR_ORANGE);
     }
 
     // knobs + power LED

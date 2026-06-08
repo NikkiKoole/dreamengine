@@ -22,9 +22,13 @@
 //     earning their first station slot.
 //
 // Per-song roll (game-music.md "the same band every night"): the seed picks
-// the qñit, the key, the vamp, the head cell, the bass ostinato, and the
-// timbres — two SPACE presses = two records. The solos are PERFORMANCE (engine
-// rnd): R replays the song, the vibes/horn never solo it the same way twice.
+// the qñit, the key, the vamp, the head cell, the bass ostinato, the timbres —
+// and, the three axes that stop every tune sounding the same: the GROOVE (a
+// sparse ballad / the syncopated swing / a driving 6/8 — the ear's first lock),
+// the FORM (a short sketch / the full set / a long jam — so songs differ in
+// length and shape, not just notes), and the TEMPO (coupled to the groove, so a
+// ballad really is slower). Two SPACE presses = two records. The solos are
+// PERFORMANCE (engine rnd): R replays the song, never the same solo twice.
 //
 //   SPACE next song   R play it again   [ ] song history   M radio on/off
 //   LEFT/RIGHT feel (density curve)   UP/DOWN tempo   T tone   B band   H help
@@ -64,15 +68,31 @@ static const int QENET[NQ][7] = {
 static const char *QNAME[NQ] = { "tizita", "bati", "anchihoye", "ambassel" };
 static const bool  QMINORISH[NQ] = { false, false, true, true };   // display tag
 
-// ── the form — 8 sections x 8 bars; the two solos are the centrepiece ──────
+// ── the form — 8-bar sections; the seed rolls one of three arrangements so a
+// tune isn't forever the same 64 bars. The sketch drops a solo (40 bars); the
+// set is the classic head/solo/head shape (64); the jam DOUBLES each solo to
+// 16 bars (88). Solo lengths are read off the form, so the tension arc stretches
+// to fit. ───────────────────────────────────────────────────────────────────
 enum { S_INTRO, S_HEAD, S_VSOLO, S_HSOLO, S_OUTRO };
-static const int FORM[8] = { S_INTRO, S_HEAD,  S_HEAD, S_VSOLO,
-                             S_HEAD,  S_HSOLO, S_HEAD, S_OUTRO };
+#define MAXSECT 12
+static const struct { int n; int s[MAXSECT]; const char *name; } FORMS[] = {
+    { 5,  { S_INTRO, S_HEAD, S_VSOLO, S_HEAD, S_OUTRO },                                   "sketch" },
+    { 8,  { S_INTRO, S_HEAD, S_HEAD, S_VSOLO, S_HEAD, S_HSOLO, S_HEAD, S_OUTRO },           "set" },
+    { 11, { S_INTRO, S_HEAD, S_HEAD, S_VSOLO, S_VSOLO, S_HEAD,
+            S_HSOLO, S_HSOLO, S_HEAD, S_HEAD, S_OUTRO },                                    "jam" },
+};
+#define NFORMS 3
 static const char *SECTNAME[5] = { "intro", "head", "vibes solo", "horn solo", "outro" };
+
+// ── the groove — the seed rolls the percussion feel (the ear locks onto this
+// first): a sparse tizita ballad, the syncopated chik-chika swing, a driving 6/8.
+enum { G_BALLAD, G_SWING, G_DRIVE, NG };
+static const char *GNAME[NG] = { "ballad", "swing", "drive" };
 
 // ── the generated song ────────────────────────────────────────────────────
 typedef struct {
     int  qenet, keyPc;
+    int  form, groove;         // rolled per song: the arrangement + the percussion feel
     int  secondOff;            // semitone offset of the 2nd vamp centre (qñit tone)
     int  vampKind;             // 0 = pure tonic drone · 1 = alt /8 bars · 2 = alt /4
     int  droneIv[3];           // the held keys voicing (3 qñit intervals)
@@ -186,7 +206,14 @@ static void new_song(double pos, unsigned seed) {
     snprintf(sng.title, sizeof sng.title, "%s %s", TW1[srnd(12)], TW2[srnd(12)]);
     sng.freq = 88.0f + srnd(190) * 0.1f;
 
-    tempo = 88 + srnd(22);                      // 88..110 — relaxed, swung-ish
+    // the two big "different song" axes: the arrangement and the groove
+    int fr     = srnd(100);
+    sng.form   = fr < 30 ? 0 : fr < 75 ? 1 : 2;       // 30% sketch · 45% set · 25% jam
+    sng.groove = srnd(NG);                             // ballad / swing / drive
+
+    // tempo follows the groove — a ballad really is slower, drive really faster
+    static const int TLO[NG] = { 70, 88, 104 }, TSPAN[NG] = { 16, 18, 19 };
+    tempo = TLO[sng.groove] + srnd(TSPAN[sng.groove]); // 70..85 / 88..105 / 104..122
     bpm(tempo);
     apply_band_overrides();
     songBase = (long)pos + 8;
@@ -200,7 +227,22 @@ static void fresh_song(double pos) {
 }
 
 // ── form / harmony ────────────────────────────────────────────────────────
-static int sect_of(long bar) { long x = bar / 8; return (int)(x < 8 ? FORM[x] : S_OUTRO); }
+static int  form_sects(void) { return FORMS[sng.form].n; }
+static long song_bars(void)  { return (long)FORMS[sng.form].n * 8; }
+static int  sect_of(long bar) {
+    int x = (int)(bar / 8), n = FORMS[sng.form].n;
+    return x < n ? FORMS[sng.form].s[x] : S_OUTRO;
+}
+
+// the contiguous solo run containing `bar` (the jam doubles a solo to 16 bars):
+// where it starts and how many bars long — the improviser's arc stretches to fit
+static void solo_span(long bar, long *startBar, int *lenBars) {
+    int sect = sect_of(bar), x = (int)(bar / 8), x0 = x, x1 = x, n = FORMS[sng.form].n;
+    while (x0 > 0     && sect_of((long)(x0 - 1) * 8) == sect) x0--;
+    while (x1 + 1 < n && sect_of((long)(x1 + 1) * 8) == sect) x1++;
+    *startBar = (long)x0 * 8;
+    *lenBars  = (x1 - x0 + 1) * 8;
+}
 
 // which vamp centre is active this bar (semitone offset from the key root)
 static int drone_center(long bar) {
@@ -227,7 +269,7 @@ static void play_step(long abs, double pos) {
     int  dly  = rad_step_dly(&clk, abs, pos);
     int  step = (int)(s % 16);
     long bar  = s / 16;
-    if (bar >= 64) return;
+    if (bar >= song_bars()) return;
     int  sect = sect_of(bar);
     int  lvl  = level_of(bar);
     int  cs   = (int)(s % 32);                  // position in the 2-bar window
@@ -235,17 +277,37 @@ static void play_step(long abs, double pos) {
     int  center  = drone_center(bar);
     int  croot   = (sng.keyPc + center) % 12;
 
-    // ── PERCUSSION — congas, not a trap kit ──
+    // ── PERCUSSION — congas, not a trap kit; the seed picks the feel ──
     bool kit = sect != S_INTRO || bar % 8 >= 4;
     if (kit) {
-        if (step == 0)                                          // the kebero on the one
-            { schedule_hit(dly, 50, SL_KEB, lvl >= 1 ? 5 : 4, 220); vu += 1.4f; }
-        if (step == 3 || step == 6 || step == 11 || step == 14) // open conga, syncopated
-            { schedule_hit(dly + rnd(4), step == 6 ? 57 : 52, SL_CONGA, 3, 150); vu += 0.8f; }
-        if (lvl >= 2 && (step == 2 || step == 7 || step == 10 || step == 13) && chance(70))
-            schedule_hit(dly + rnd(4), 64 + rnd(4), SL_BONGO, 2, 80);   // bongo chatter
-        if (lvl >= 1 && step % 2 == 0)                          // shaker 8ths
-            schedule_hit(dly + rnd(6), 90, SL_SHAK, 1, 28);
+        if (sng.groove == G_BALLAD) {                           // sparse, spacious tizita
+            if (step == 0)                                      // kebero on the one, ringing
+                { schedule_hit(dly, 50, SL_KEB, lvl >= 1 ? 5 : 4, 240); vu += 1.4f; }
+            if (step == 6 || step == 14)                        // one lazy conga answer per bar
+                { schedule_hit(dly + rnd(4), 54, SL_CONGA, 3, 170); vu += 0.7f; }
+            if (lvl >= 2 && step == 10 && chance(60))
+                schedule_hit(dly + rnd(4), 64 + rnd(4), SL_BONGO, 2, 80);
+            if (lvl >= 1 && step % 4 == 0)                      // shaker on the quarters only
+                schedule_hit(dly + rnd(6), 90, SL_SHAK, 1, 24);
+        } else if (sng.groove == G_DRIVE) {                     // driving 6/8 — the fire
+            if (step == 0 || step == 8)                         // two-feel kebero pulse
+                { schedule_hit(dly, 50, SL_KEB, lvl >= 1 ? 5 : 4, 200); vu += 1.3f; }
+            if (step==2||step==5||step==8||step==11||step==14)  // rolling congas
+                { schedule_hit(dly + rnd(3), (step==5||step==11) ? 57 : 52, SL_CONGA, 3, 130); vu += 0.8f; }
+            if (lvl >= 1 && (step==3||step==7||step==10||step==13) && chance(75))
+                schedule_hit(dly + rnd(3), 64 + rnd(5), SL_BONGO, 2, 70);   // busy chatter
+            if (step % 2 == 0)                                  // shaker 8ths, always on
+                schedule_hit(dly + rnd(5), 90, SL_SHAK, 1, 30);
+        } else {                                                // G_SWING — the chik-chika heart
+            if (step == 0)                                      // the kebero on the one
+                { schedule_hit(dly, 50, SL_KEB, lvl >= 1 ? 5 : 4, 220); vu += 1.4f; }
+            if (step == 3 || step == 6 || step == 11 || step == 14) // open conga, syncopated
+                { schedule_hit(dly + rnd(4), step == 6 ? 57 : 52, SL_CONGA, 3, 150); vu += 0.8f; }
+            if (lvl >= 2 && (step == 2 || step == 7 || step == 10 || step == 13) && chance(70))
+                schedule_hit(dly + rnd(4), 64 + rnd(4), SL_BONGO, 2, 80);   // bongo chatter
+            if (lvl >= 1 && step % 2 == 0)                      // shaker 8ths
+                schedule_hit(dly + rnd(6), 90, SL_SHAK, 1, 28);
+        }
     }
 
     // ── BASS ostinato — the hypnotic vamp, locked and looping ──
@@ -286,10 +348,12 @@ static void play_step(long abs, double pos) {
     if (sect == S_VSOLO || sect == S_HSOLO) {
         bool horn    = (sect == S_HSOLO) && hornOn;
         int  slot    = horn ? I_HORN : I_VIBE;
-        long soloBar = bar - (sect == S_VSOLO ? 24 : 40);       // each solo is 8 bars
+        long startBar; int lenBars;
+        solo_span(bar, &startBar, &lenBars);                    // 8 bars, or 16 in the jam
+        long soloBar = bar - startBar;
         int  reg     = horn ? 60 : 74;
         if (soloBar == 0 && step == 0)
-            improv_begin(&solo, reg, 8, 1.0f);
+            improv_begin(&solo, reg, lenBars, 1.0f);
         if (step == 0 && bar % 2 == 0 && improv_due(&solo, soloBar))
             improv_render(&solo, soloBar, q);
         float arc = improv_arc(&solo, soloBar);
@@ -422,7 +486,7 @@ void update(void) {
         while (rad_clock_step(&clk, pos, &st)) play_step(st, pos);
 
         long songStep = scheduled - songBase;
-        if (songStep >= 64L * 16) fresh_song(pos);
+        if (songStep >= song_bars() * 16) fresh_song(pos);
         center_label(nowCtr[0], 12, 0);
         center_label(nowCtr[1], 12, sng.secondOff);
     }
@@ -435,6 +499,8 @@ void update(void) {
     long tbar = ss >= 0 ? ss / 16 : 0;
     watch("song", "%d", songCount);
     watch("qenet", "%s", QNAME[sng.qenet]);
+    watch("groove", "%s", GNAME[sng.groove]);
+    watch("form", "%s", FORMS[sng.form].name);
     watch("sect", "%s", SECTNAME[sect_of(tbar)]);
     watch("center", "%d", drone_center(tbar));
     watch("phrase", "%d", solo.phraseNo);
@@ -481,7 +547,7 @@ void draw(void) {
     if (radioOn) {
         print(sng.title, 154, 58, CLR_YELLOW);
         char l2[32];
-        snprintf(l2, 32, "%.1f FM  %s", sng.freq, QNAME[sng.qenet]);
+        snprintf(l2, 32, "%s  %s", QNAME[sng.qenet], GNAME[sng.groove]);
         print(l2, 154, 70, CLR_ORANGE);
         snprintf(l2, 32, "%d bpm #%08X", tempo, sng.seed);
         print(l2, 154, 82, CLR_ORANGE);
@@ -494,7 +560,7 @@ void draw(void) {
         int ncenters = sng.vampKind == 0 ? 1 : 2;
         rad_chord_row(nowCtr, ncenters, drone_center(bar) ? 1 : 0, 152, 104, CLR_YELLOW);
         print(SECTNAME[sect], 152, 120, CLR_YELLOW);
-        rad_phrase_dots(232, 124, 8, bar / 8, CLR_YELLOW);
+        rad_phrase_dots(232, 124, form_sects(), bar / 8, CLR_YELLOW);
     }
 
     static const char *FEEL[4] = { "alem", "mellow", "swing", "fire" };

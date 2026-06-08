@@ -267,8 +267,12 @@ static const int PUSH_BASS  = +12;    // bass leans toward the snare's time
 Numbers to steal: at 90 BPM a 16th is 167ms — useful offsets are 5–35ms (3–20% of
 a 16th). Drags larger than ~40ms stop feeling laid-back and start feeling late.
 Field note (lowend.c): the maximal template above read as *stumbling* in
-practice — the cart shipped at half strength (−5/+12/+7, swing 54%) and that's
-where the head-nod lives. Start subtle; turn it up only if the groove vanishes.
+practice — half strength (−5/+12/+7, swing 54%) is where the head-nod lives.
+lowend now **rolls the pocket per song** (tight / swung / drunk) rather than
+shipping one fixed feel — the full Dilla drag earns its place as one option among
+three. Promoting a fixed `PUSH_*` template to a per-song roll is the *pocket*
+axis; see "Same song every night?" below. Start subtle; turn it up only if the
+groove vanishes.
 Mac DeMarco-style slacker feel = everything straight but the whole kit −0/+10ms
 loose against the bass, tempo slightly unstable (`bpm()` wobbled ±1 every few bars).
 
@@ -643,13 +647,13 @@ verbatim — extraction is overdue, and the plan is written up below
 | 7 | **no chords at all — two-voice species counterpoint** | `carlos.c` | the harmony is whatever two rule-generated lines SPELL: consonance on strong beats, passing dissonance on weak, contrary motion preferred, no parallel perfect 5ths/8ves, over a seeded chaconne ground — and the feel knob slides strict canon → free counterpoint |
 | — | lounge templates + flavor rolls | `exotica.c` (borrowed-ivm6 dusk) | 4-brain's gentler cousin |
 
-**Time brains / feels**: schedule-ahead clock (`radio.h` `RadioClock`) · groove templates (`lowend.c` push/drag lanes) · swing 55–62% (`cocktail.c` has the full ride pattern) · machine-tight ±2ms (`citypop.c`/`ymo.c`/`house.c`) · lazy two-feel (`exotica.c`) · Purdie half-time shuffle + ghosts (`yacht.c`) · **TEMPO AS A VOICE — the conductor (`tango.c`)**: phrase-level rubato via live `bpm()`, eased asymmetrically (rising fast = the a-tempo snap, falling slow = the band sags together), depth seeded per song; the clock survived untouched, exactly as promised · *future:* colotomic cycles (gamelan), the process form (motorik), volatility grammar (Aphex).
+**Time brains / feels**: schedule-ahead clock (`radio.h` `RadioClock`) · groove templates (`lowend.c` push/drag lanes — now **rolled per song** as the pocket axis: tight/swung/drunk) · swing 55–62% (`cocktail.c` has the full ride pattern) · machine-tight ±2ms (`citypop.c`/`ymo.c`/`house.c`) · lazy two-feel (`exotica.c`) · Purdie half-time shuffle + ghosts (`yacht.c`) · **TEMPO AS A VOICE — the conductor (`tango.c`)**: phrase-level rubato via live `bpm()`, eased asymmetrically (rising fast = the a-tempo snap, falling slow = the band sags together), depth seeded per song; the clock survived untouched, exactly as promised · *future:* colotomic cycles (gamelan), the process form (motorik), volatility grammar (Aphex).
 
 **Melody brains**: #1 the re-pitched cell (everywhere since bossa) · **#2 THE IMPROVISER (`runtime/improv.h`)** — phrase-based solos, any mode, any register, any density; its inputs are deliberately generic: hand it a scale, a register, a length, a density and ANY instrument slot becomes a soloist · *future:* kotekan interlock (gamelan).
 
 **Bass brains**: voice-led roots (everywhere) · octave disco pop (`house.c`) · Hosono counterpoint generator (`ymo.c`) · seeded riddim/ostinato (`dub.c`, `roadhouse.c` piano bass) · **THE WALKING BASS (`cocktail.c` `walk_note()`)** — root → chord/scale motion → chromatic approach; *graduation candidate: second customer moves it to a header.*
 
-**Form brains**: 8×8 sectional + density curve (`rad_level`, everywhere) · verse/chorus + gear change (`citypop.c`, `yacht.c`) · the jam — head/solos/head (`roadhouse.c`) · the trio set + bass solo (`cocktail.c`) · THE DESK — per-phrase performance mixing (`dub.c`) · the filter ride as form (`house.c`).
+**Form brains**: 8×8 sectional + density curve (`rad_level`, everywhere) · verse/chorus + gear change (`citypop.c`, `yacht.c`) · the jam — head/solos/head (`roadhouse.c`) · the trio set + bass solo (`cocktail.c`) · THE DESK — per-phrase performance mixing (`dub.c`) · the filter ride as form (`house.c`) · **the rolled form set — variable-length arrangements, not one fixed `FORM[8]` (`addis.c` sketch/set/jam, `lowend.c` tape/loop/cut), incl. the drums-only BREAK as a form feature (`lowend.c`)**. The four structural de-samifying axes (groove · form · pocket · tempo) and how to roll them: see "Same song every night?" above.
 
 **Performance channels** (never seeded): the improviser's solos · THE AVIARY — aleatoric calls (`exotica.c`) · the desk (`dub.c`) · humanize jitter (everywhere).
 
@@ -848,7 +852,97 @@ Implementation gotchas, learned from the existing carts:
 
 New stations should build this in from day one; existing carts retrofit
 opportunistically (house and ymo first — newest, and the synth genres wear
-timbre variation most naturally).
+timbre variation most naturally). The timbre roll fixes *who's playing*; its
+sibling below fixes *what they play* — do both and a station plays records.
+
+## Same song every night? — the structural axes (groove · form · pocket · tempo)
+
+The timbre roll above fixes *who's playing*; this fixes *what they play*.
+Station-owner feedback (2026-06-08, on addis): *"I love the sound, but all the
+songs are sort of samey."* Same diagnosis shape as the timbre one — it's about
+**which axes the seed rolls**.
+
+A song's identity is the sequence of `srnd()` calls in `new_song()`. The trap is
+easy to fall into: roll the **least audible** axes (pitch content) and hold the
+**most audible** ones fixed. The ear locks on in this order —
+
+> **groove → tempo → structure → instrumentation → … → pitch-class content (last)**
+
+— so a station that rolls the mode, the key, and the melody cell but keeps one
+hardcoded drum pattern, one fixed `FORM[8]`, and a ±5% tempo produces tunes that
+*are* "the same song with a different doodle on top." addis (pre-2026-06-08)
+rolled qñit/key/cells/timbre and held groove, form, and length fixed — and that's
+exactly what it sounded like.
+
+The fix: roll the structural axes too, from the same composition seed, within
+style bounds. Ranked by payoff (= salience):
+
+1. **Groove — the percussion feel.** The single biggest win, because the ear
+   hears it first. Roll 2–3 named feels (addis: ballad / swing / drive — the kit
+   pattern, density, and accent map all change). Two grooves read as two songs
+   even with identical harmony. `yacht.c` already did this (session / Purdie /
+   CR-78); addis and lowend now do too.
+2. **Form + length — the arrangement.** Promote the fixed
+   `static const int FORM[8]` to a *rolled set of templates with different
+   lengths* — a short sketch, the classic, a long jam. Not every tune should be
+   64 bars. A template can also carry a structural *feature*: lowend's "cut" form
+   drops a drums-only **break** in the middle (bass/rhodes/lead all cut out for 8
+   bars — the sampleable b-boy bars). `motorik.c` rolls a continuous length
+   (48–96 bars); addis/lowend roll discrete templates.
+3. **Pocket — the per-lane timing personality** (boom-bap, swing, anything
+   groove-led). The `PUSH_*` lane offsets (§4 Groove templates) are usually a
+   fixed `#define`; roll them per song instead (lowend: tight / swung / drunk).
+   This is what lets one station be Premier-crisp on one tune and Dilla-drunk on
+   the next.
+4. **Tempo — coupled to the groove/pocket.** A ±5% tempo band is inaudible as "a
+   different song." Widen it, and *couple* it so a ballad genuinely drags and a
+   driver genuinely pushes (addis: ballad 70–85 / swing 88–105 / drive 104–122;
+   lowend's tempo follows the pocket).
+
+### The implementation pattern
+
+Promote the fixed structure to seed-rolled data, exactly like the timbre roll:
+
+```c
+// before: one fixed arrangement
+static const int FORM[8] = { S_INTRO, S_HEAD, /* ... */ };
+static int sect_of(long bar){ long x=bar/8; return x<8?FORM[x]:S_OUTRO; }
+
+// after: a rolled set with variable length + length/section-count helpers
+static const struct { int n; int s[12]; const char *name; } FORMS[] = {
+    { 5,  { S_INTRO, S_HEAD, S_VSOLO, S_HEAD, S_OUTRO }, "sketch" },
+    { 8,  { /* the classic */ }, "set" },
+    { 11, { /* a long jam */ }, "jam" },
+};
+static long song_bars(void){ return (long)FORMS[sng.form].n * 8; }  // replaces the hardcoded 64
+static int  sect_of(long bar){ int x=bar/8,n=FORMS[sng.form].n; return x<n?FORMS[sng.form].s[x]:S_OUTRO; }
+// in new_song(): int fr=srnd(100); sng.form = fr<30?0 : fr<75?1 : 2;
+```
+
+Gotchas (the ones that bit during the addis/lowend passes):
+
+1. **Kill every hardcoded `64`.** The song-length cap in `play_step` and the
+   rollover check in `update()` both assumed 8×8 bars — both must read
+   `song_bars()`. The phrase-dot count (`rad_phrase_dots`) must read the form's
+   section count, or the progress display lies about the song.
+2. **Solo/section lengths must be *read off* the form, not constants.** addis
+   computed solo start as a literal `bar - 24`; the jam form doubles a solo to 16
+   bars, so it walks the contiguous run instead (a `solo_span` helper) and feeds
+   the length to `improv_begin` — the tension arc then stretches to fit.
+3. **Roll from `srnd`, not engine `rnd()`** — same rule as the timbre roll; the
+   structure is part of what the seed IS.
+4. **Couple, don't scatter.** Tempo that follows the groove reinforces it; an
+   independent tempo roll just adds noise. One axis pulling another is what makes
+   the variation read as *intent* rather than randomness.
+
+Acceptance test (same as the timbre roll): **two SPACE presses should sound like
+two different records.** Seed caveat: adding `srnd()` calls reorders the stream,
+so old pinned `#seeds` render different songs afterward — fine for a feature add,
+and a non-issue while `<NAME>_SEED` is 0 (flag it either way).
+
+Worked examples: **addis** (groove + form + coupled tempo), **lowend** (pocket +
+form-with-break + coupled tempo). With the timbre roll above, the two refits are
+what turn "one session band replaying one tune" into a station that plays records.
 
 ## Future stations → moved
 
