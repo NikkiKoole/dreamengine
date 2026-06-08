@@ -96,36 +96,43 @@ static bool solo_is_chord_pc(const SoloCtx *cx, int midi) {
 static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent) {
     if (keyp(SOLO_KEY)) { solo_open_f = !solo_open_f; if (!solo_open_f) solo_kill(); }
 
-    // ── closed: a small finger-sized "jam" tab (tap or J to open) ──────────
+    // ── the toggle tab (right edge, present in BOTH states) ────────────────
+    // tap it to open or close; J does the same. Lit = open.
+    int tw = 34, tx = x + w - tw;
+    static int tab_id;
+    ui_reg(&tab_id, tx, y, tw, h, 0);
+    UiCap *tc = ui_cap_for(&tab_id);
+    if (tc && tc->released &&
+        tc->rx >= tx - UI_HIT_PAD && tc->rx < tx + tw + UI_HIT_PAD &&
+        tc->ry >= y - UI_HIT_PAD && tc->ry < y + h + UI_HIT_PAD) {
+        solo_open_f = !solo_open_f;
+        if (!solo_open_f) solo_kill();
+    }
+    bool tabHot = tc != 0 || ui_hover(tx, y, tw, h);
+    bool tabFill = solo_open_f || tabHot;
+
+    // ── closed: just the tab ───────────────────────────────────────────────
     if (!solo_open_f) {
-        int tw = 34, tx = x + w - tw, ty = y;
-        static int tab_id;
-        ui_reg(&tab_id, tx, ty, tw, h, 0);
-        UiCap *tc = ui_cap_for(&tab_id);
-        if (tc && tc->released &&
-            tc->rx >= tx - UI_HIT_PAD && tc->rx < tx + tw + UI_HIT_PAD &&
-            tc->ry >= ty - UI_HIT_PAD && tc->ry < ty + h + UI_HIT_PAD)
-            solo_open_f = true;
-        bool hot = tc != 0 || ui_hover(tx, ty, tw, h);
-        rectfill(tx, ty, tw, h, hot ? accent : CLR_DARKER_GREY);
-        rect(tx, ty, tw, h, accent);
-        print("jam", tx + (tw - text_width("jam")) / 2, ty + (h - 6) / 2, hot ? CLR_BLACK : accent);
+        rectfill(tx, y, tw, h, tabFill ? accent : CLR_DARKER_GREY);
+        rect(tx, y, tw, h, accent);
+        print("jam", tx + (tw - text_width("jam")) / 2, y + (h - 6) / 2, tabFill ? CLR_BLACK : accent);
         return;
     }
 
-    // ── open: the scale-locked strip ──────────────────────────────────────
+    // ── open: the scale-locked keybed in [x, tx), tab on the right ─────────
+    int sw = tx - x - 2;                                    // keybed width (gap before tab)
     int notes[48];
     int nn = solo_notes(cx, notes, 48);
-    if (nn == 0) { solo_open_f = false; solo_kill(); return; }
-    int cw = w / nn;
+    if (nn == 0 || sw < nn) { rectfill(x, y, sw, h, CLR_BLACK); }
+    int cw = nn > 0 ? sw / nn : sw;
     if (cw < 1) cw = 1;
 
     static int strip_id;
-    ui_reg(&strip_id, x, y, w, h, 0);
+    ui_reg(&strip_id, x, y, sw, h, 0);
     UiCap *c = ui_cap_for(&strip_id);
 
     int cell = -1, midi = -1;
-    if (c) {
+    if (c && nn > 0) {
         int px = (c->released ? c->rx : c->cx) - x;
         cell = px / cw;
         cell = cell < 0 ? 0 : cell >= nn ? nn - 1 : cell;
@@ -156,7 +163,7 @@ static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent
     if (ui_released(&strip_id)) solo_kill();
 
     // ── draw the keybed ────────────────────────────────────────────────────
-    rectfill(x, y, w, h, CLR_BLACK);
+    rectfill(x, y, sw, h, CLR_BLACK);
     for (int i = 0; i < nn; i++) {
         int col = (i == cell)                       ? CLR_WHITE
                 : solo_is_chord_pc(cx, notes[i])    ? accent
@@ -164,8 +171,12 @@ static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent
                                                     : CLR_DARK_GREY;
         rectfill(x + i * cw + 1, y + 1, cw - 2, h - 2, col);
     }
-    rect(x, y, w, h, accent);
-    print("J", x + 2, y - 8, accent);                       // the close hint
+    rect(x, y, sw, h, accent);
+
+    // the tab, lit (tap to close)
+    rectfill(tx, y, tw, h, accent);
+    rect(tx, y, tw, h, accent);
+    print("jam", tx + (tw - text_width("jam")) / 2, y + (h - 6) / 2, CLR_BLACK);
 }
 
 #endif // SOLO_H

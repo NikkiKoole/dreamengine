@@ -1,5 +1,6 @@
 #include "studio.h"
-#include "radio.h"   // the shared station chassis (PRNG, clock, voice-leading, chrome)
+#include "radio.h"
+#include "solo.h"    // the jam layer — a scale-locked solo strip over the changes   // the shared station chassis (PRNG, clock, voice-leading, chrome)
 #include <stdio.h>
 #include <math.h>
 
@@ -44,6 +45,7 @@
 #define I_KICK  9
 #define I_SNARE 10
 #define I_HAT   11
+#define I_SOLO  12  // the jam-strip lead — a glossy solo synth over the changes
 
 // ── chords ────────────────────────────────────────────────────────────────
 enum { Q_MAJ7, Q_MAJ9, Q_DOM7, Q_DOM9, Q_DOM13, Q_ALT7, Q_MIN7, Q_MIN9, Q_MIN6, NQ };
@@ -356,6 +358,11 @@ static void setup_instruments(void) {
     instrument(I_HAT, INSTR_NOISE, 0, 16, 2, 70);            // sustain>0 so the open hat
     instrument_filter(I_HAT, FILTER_HIGH, 8000, 2);          // actually washes; low res — a
                                                              // resonant highpass on noise whistles
+
+    instrument(I_SOLO, INSTR_SQUARE, 6, 170, 6, 220);        // the jam lead — glossy, sits on top
+    instrument_duty(I_SOLO, 0.32f);
+    instrument_lfo(I_SOLO, 0, LFO_PITCH, 5.6f, 0.16f);       // a singing chorus-vibrato
+    instrument_filter(I_SOLO, FILTER_LOW, 4200, 3);          // brighter than the comp lead
 }
 
 // ── update ────────────────────────────────────────────────────────────────
@@ -536,6 +543,17 @@ void draw(void) {
         };
         rad_help_panel("CITY POP RADIO", HELP, 8, NOTES, 3, CLR_PINK);
     }
+
+    // the jam strip — solo on the key's pentatonic (it rides the +2 gear change
+    // with the song), the current chord's tones lit (J or tap the corner)
+    int chord[4]; {
+        Ch c = chord_at(bar);
+        for (int k = 0; k < 4; k++) chord[k] = (root_pc(c, bar) + QT[c.q][k]) % 12;
+    }
+    int soloRoot = (sng.keyPc + (bar >= MOD_BAR ? 2 : 0)) % 12;
+    static const int PENT[5] = { 0, 2, 4, 7, 9 };
+    SoloCtx jc = { soloRoot, PENT, 5, chord, 4, I_SOLO, 72, 91, false };
+    solo_strip(&jc, 28, 170, 250, 18, CLR_PINK);
 
     ui_end();
 }
