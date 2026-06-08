@@ -367,8 +367,11 @@ static void play_step(long abs, double pos) {
         vu += 0.4f;
     }
 
-    // MELODICA — far-east phrases, always swimming in echo
-    if (lvl >= 2 && dkMelo)
+    // MELODICA — far-east phrases, always swimming in echo. Unlike the lay-out
+    // stations, dub TRADES: the melodica drops out only while the player is
+    // holding a strip note (solo_playing) and fills the gaps when they rest —
+    // and the tape echo tail bridges every handoff. Call-and-response, not silence.
+    if (lvl >= 2 && dkMelo && !solo_playing())
         for (int i = 0; i < sng.cellN; i++)
             if (sng.cellOn[i] == s32 && chance(80)) {
                 int gap = (i + 1 < sng.cellN) ? sng.cellOn[i + 1] - s32 : 32 - s32;

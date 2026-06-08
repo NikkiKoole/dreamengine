@@ -765,6 +765,50 @@ fix instead of ten hand-copies. The estimated arithmetic: core ≈ 300–350
 header lines; each cart sheds ≈ 150–220; and stations eleven+ (gamelan,
 Italo, the Doors) start from a scaffold instead of a copy of dub.c.
 
+## The jam layer — a scale-locked solo over the radio (`solo.h`)
+
+Added 2026-06. The radios *generate*; the jam layer lets you *play along* without
+being able to play wrong. `runtime/solo.h` is the companion to `radio.h`: a
+horizontal strip of only the in-key notes (current chord's tones lit),
+monophonic with portamento so drags slide like a stylophone/Omnichord. The
+station supplies the **voice** (an `I_SOLO` instrument tuned to sit on top of the
+mix); solo.h owns the **interaction** (capture via ui.h's per-finger model, so
+mouse+touch for free, scale-lock, glide, optional beat-quantize, octave shift,
+the strip + the closed "jam" tab). Usage is one `SoloCtx` fill + one
+`solo_strip()` call between `ui_begin/ui_end` — see the header.
+
+**Why this is the right shape for the toy thesis.** The radios sound good
+*because you can't touch them*. An editable step-grid would let a player tap
+cells and make it sound *worse* — the generation magic evaporates. The jam strip
+is the opposite: **additive performance over fixed generation**, scale-locked so
+every note lands. You only ever make it *more* yours, never wreck it. That
+"can't play wrong" principle is the candidate answer for how the whole tinydaws
+direction (`design/tinydaws.md`) should let people interact — perform on top, not
+edit underneath. A recorded/looped strip is plausibly tinydaws' first *lane* (the
+lead — the one you'd rather perform than program).
+
+### Making room — the station must yield its own lead
+
+The design problem that bit first: most stations *also* play a melodic lead
+(bossa's flute, jangle's whistle, dub's melodica). With the strip live you have
+**two soloists in the same register**, and two leads at once is mud — true on a
+real bandstand too. So the station owes the player room: gate its own lead
+block on one of solo.h's two signals. The strip never silences the station (it
+can't know which voice is the lead — only the station does), so it's a one-line
+guard you add per station.
+
+| Strategy | Signal | Feel | Used by |
+|---|---|---|---|
+| **Lay out** | `!solo_open()` | Open the tab → station lead stops launching notes; the sounding note rings to its end (finishes on the beat, no chop), then yields. A held/legato lead routes through its existing trail-off so it releases instead of cutting. Brief hole if you open-and-don't-play = an invitation, not a bug. The default. | bossa, citypop, jingle, jangle |
+| **Trade** | `!solo_playing()` | Station lead drops out *only while a strip note is held*, fills the gaps when you rest — call-and-response / trading fours. No hole, busiest/most alive. Best where a tail bridges the handoff. | dub (the tape echo makes the trade gorgeous) |
+| **Duck** | (vol) | Keep the lead but quieter while you play. Truest to a mixing desk, but our notes are scheduled-ahead at fixed vol so retro-quieting is awkward — Trade is the practical stand-in. Unused so far. | — |
+
+**Curation rule:** only put the strip on stations whose idiom *has* a soloist to
+step in for. The five above were chosen for exactly that. Beatless/textural
+stations (ambient, satie) have no lead to make room, and a solo pad just fights
+the texture — they get no strip by design. The make-room contract also lives in
+`solo.h`'s header comment (the toolkit's own doc); this section is the "why."
+
 ## The same band every night — per-song timbre rolls (family-wide refit)
 
 Station-owner feedback (2026-06-05, while listening to house radio): *"it's the
