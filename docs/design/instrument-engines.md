@@ -294,8 +294,13 @@ independently shippable:
    macro to span the head); `timbre` is navkit's live circular-membrane strike-position weighting
    (center thump ↔ edge ring + slap click); `morph` is the monotonic pitch-bend chirp (raised →
    settles, navkit's model). Showcase: the **tabla** cart (5 kit presets, the drumhead viz).
-9. **Bowed / Pipe** — after the organ proves the held-note surface, and pending the
-   one-buffer-pack verification (§8.9 rows). Then **`INSTR_PIANO` (StifKarp) /
+9. **Pipe / Bowed** — the rest of the continuous-excitation family reed unblocked.
+   **`INSTR_PIPE`** (flute/recorder/pan pipe) — **SHIPPED 2026-06-09** (25): an STK jet-drive
+   flute, bore reuses `ks_buf` + a tiny `jetBuf[64]`, reusing reed's whole breath/vibrato/chiff
+   surface; harmonics = overblow, timbre = breath air, morph = embouchure. Design + STEP-0: §8.8.8.
+   **Bowed** (violin/cello) stays parked — STEP-0 (2026-06-09) found navkit's model *unstable*
+   (erratic envelope, crest 12.6 vs a clean voice's ~2–5), a real friction-stability DSP project,
+   not a clean port; revisit only as a deliberate effort. Then **`INSTR_PIANO` (StifKarp) /
    `INSTR_GUITAR`/`INSTR_HARP`** — the genuinely buffered pair (piano's `ks2Buffer[2048]`
    second string, guitar's KS string + body resonator) on the pluck-validated path.
 10. **Formant filter** + the **effects layer** (§8.10 — buses vs. master; reverb / delay /
@@ -1007,6 +1012,64 @@ after: "much better."
 > - General: the macro→physical ranges + the chiff/vibrato depths are ear-set starting points, not
 >   final. Tune against the navkit reference WAVs (`/tmp/reed_*.wav`) and real recordings.
 
+### 8.8.8 Engine #8: PIPE (flute/recorder/pan pipe) — the step-1 design (2026-06-09)
+
+The playbook's paper round for `INSTR_PIPE` — roadmap §8.5 step 9, the **second blown voice** and
+the reed's close cousin. An STK jet-drive flute (Cook/Scavone): a single **bore delay line** + a
+short **jet delay** + a nonlinear **jet deflection** (`tanh`) that self-oscillates. Where the reed
+is a *pressure-driven valve*, the pipe is an *air jet* striking the labium edge — but both are
+self-oscillating held voices, so `INSTR_PIPE` **reuses the reed's whole surface**: the held-note
+path, the breath-noise turbulence, the humanized vibrato, the attack chiff. This is the
+lowest-risk port on the board *because* reed paved it.
+
+**Scope finding — STEP-0 audition + source dig (2026-06-09), and it's the cleanest yet.** Rendered
+navkit's pipe preset (109 Pipe Flute) across the range with `tools/navkit-render.c`:
+
+- **Rock-stable C3→G6** — crest 5.4–5.8, RMS dead-even (0.36–0.39), 0 clipped, DC ≈ 0 at *every*
+  pitch. The opposite of navkit's bowed (which lurched, crest 12.6, erratic envelope — auditioned
+  and rejected). No register icepick like PD's reso. So no stability fight: the model just works.
+  (Reference WAVs: `/tmp/fl_pipeflute_{c3,g4,g5,g6}.wav`.)
+- **Cheap buffer tier — fits `ks_buf` like reed.** `initPipe` sizes the bore at `SR/(freq·boreScale)`
+  capped at **1023**, and the oscillator reads only `lowerBuf` (the struct's `upperBuf` is vestigial —
+  seeded but never read). So the bore **reuses `ks_buf` as-is**; the only new state is a tiny
+  `jetBuf[64]` (the lip→labium travel delay) + a few scalars. *Not* the heavy banded/StifKarp
+  buffered tier.
+- **The breath excitation already exists** — `excitation = tanh(jetOut · gain) · breath`. navkit's
+  `breath` scalar is exactly where our reed breath-noise injects, so the turbulence/air work
+  transfers wholesale. A flute is *more* air than a reed, so it leans on this even harder.
+- **navkit ships `overblow = 0` on both presets** (109 Flute, 110 Recorder) — so the octave
+  register-jump (the flute's signature, sitting right in the jet gain `2 + overblow·8`) is **unused
+  by the reference**, exactly like reed's morph was ours to exercise. We dial it in.
+- **Embouchure is the live tone axis** — it sets both the mouth-end `feedbackGain` (`0.5 + embou·0.4`)
+  *and* the jet delay length (`jetLen = 3 + (1−embou)·8`, longer jet = easier to overblow). The two
+  presets differ almost entirely by it: flute `embou 0.6`, recorder `0.35` (breathier, medieval).
+
+| macro | maps to | the taste decision (made here, on paper) |
+|---|---|---|
+| **harmonics** | **overblow** (jet gain `2 → 10`) | register + brightness: pure fundamental → overblown octave flageolet → bright harmonics. The flute identity; navkit leaves it at 0 so it's ours to exercise (cf. reed's morph). Continuous, not snapped — it's a smooth gain, every quarter-turn audible. **Watch:** high gain may screech at the top; `tanh` bounds it but verify the sweep doesn't destabilize (the named risk, cf. reed's choke / PD's icepick). |
+| **timbre** | **breath air** — excitation level + breath-noise amount (reusing reed's turbulence) | pure ↔ airy/breathy, the *defining* flute texture. A flute is mostly air; this is the strongest perceptual knob, and we already own the machinery. |
+| **morph** | **embouchure** — `feedbackGain` + live `jetLen` | the lip over the hole: hollow/dark ↔ focused/bright, and it eases the overblow. Live-modulatable (the held-voice CV gesture); recomputing `jetLen` per-sample from morph makes it a true live macro, not an init-only param. |
+
+`bore` (navkit's 4th param) only ±10%s the length here, so it folds into a per-preset constant, not
+a macro. **Realism from day one** (the reed lesson — don't ship the bare port): port `breath`
+turbulence, the humanized pitch-vibrato, the attack chiff (the flute "tu" tongued onset is *very*
+characterful), and the slow breath drift, all from the reed build — a flute that's never heard
+a synth-tooter phase.
+
+**Mechanics:** buffer-free beyond `ks_buf` reuse. Per-`Voice`: bore read/write indices (or reuse
+reed's if the two never coexist on a voice — they're distinct wave ids, so safe), `jetBuf[64]` +
+its index, the open-end LP state, the DC blocker, jet length, `initFreq`, a `pp_on` guard, and the
+shared breath/vibrato/drift/chiff state. Pitch (§8.8.1): bore read length = `boreLen / pitch_mul`
+(fractional) — satisfied by construction. Held voice (`note_on`, infinite gate) like reed/organ;
+amp ADSR gates the fadeout.
+
+**Build order — STEP-0 done; cart presets = acceptance tests:** concert flute (the clean anchor) ·
+recorder (breathy, low embouchure) · pan pipe (airy, more breath noise) · an **overblown** voice
+(harmonics up — the octave flageolet) · a **breath-swell demo** (morph/breath as live CV). Showcase:
+a **pipe** cart (the reed cart's sibling — bore viz → a fipple/jet mouth, the overblow register
+shown). Id `INSTR_PIPE` = **25** (24 is the in-flight `INSTR_VOICE`); wire all four places + the
+soundcheck tripwire after `sound.h`.
+
 ### 8.9 Candidate engine catalog (running wishlist)
 
 The set we'd *like*, beyond the first-bite engines (§8.5). Adding one is mostly: port the
@@ -1023,7 +1086,7 @@ the table's only job is to say what those three mean for each. Grow it freely.
 | **Voice / formant** | formant SVF + buzz (§8.3) | free (reuses SVF) | vowel (a→e→i→o→u) | breathiness / brightness | formant shift (size/gender) | choir "aah", vocal-organ, talkbox. Comes near-free with the §8.3 filter |
 | **Bowed string** (violin/cello) | `processBowedOscillator` (Smith/McIntyre waveguide) | nut+bridge lines, **sum = one period → likely packs into the one `ks_buf`** (split at the bow point; verify at port) | bow position (sul tasto ↔ ponticello) | bow pressure (smooth ↔ scratchy stick-slip) | bow velocity / swell | sustained strings that *speak* — attack scratch, swells. Wants held notes (§6); macros-as-CV is its natural surface |
 | **Reed** (clarinet ↔ sax) | `processReedOscillator` (pressure-driven reed valve) | one `boreBuf[1024]` — **fits today's `ks_buf` as-is** | **bore conicity** (clarinet hollow-odd ↔ sax full) — literally navkit's `bore`, the dominant axis | **reed edge** — stiffness+aperture compound (stiffness *alone* is too weak — STEP-0) | **breath expression CV** *inside* the viable window (the model chokes, doesn't overblow — STEP-0) | the *blown* family's workhorse + the first **self-oscillating held** voice; klezmer to smoky jazz on one knob. **Design + STEP-0: §8.8.7** (2026-06-08) |
-| **Pipe / flute** (Fletcher/Verge jet-drive) | `processPipeOscillator` | upper+lower bore halves (sum ≈ bore; same one-buffer pack as bowed) + tiny `jetBuf[64]` | overblow (fundamental ↔ octave flageolet) | breath noise (pure ↔ airy) | embouchure | airy flutes, pan pipes, organ-flue color; breathy attacks for free |
+| **Pipe / flute** (STK jet-drive) | `processPipeOscillator` | **one bore line fits `ks_buf` as-is** (only `lowerBuf` is read; `upperBuf` vestigial) + tiny `jetBuf[64]` | **overblow** (fundamental ↔ octave flageolet) — jet gain | **breath air** (pure ↔ airy, reuses reed turbulence) | **embouchure** (feedback + jet length) | airy flutes, pan pipes, organ-flue color; breathy attacks for free. **SHIPPED 2026-06-09** as `INSTR_PIPE` (25) — design + STEP-0: §8.8.8 |
 | **Brass** (lip-valve waveguide) | `processBrassOscillator` (2nd-order lip mass-spring + bore) | one `boreBuf[1024]` — **fits `ks_buf` as-is** | bore conicity (trumpet ↔ horn) | blow pressure (soft ↔ brassy blare — the rip/blare *is* the model) | mute (open ↔ harmon) | a real lip model, not an approximation. *(Was the prepared answer if FM brass failed its §8.8.3 stress test — FM passed, so this is no longer queued; port it when a station wants the genuine rip/blare)* |
 | **PD / phase distortion** (Casio CZ) | `processPDOscillator` — **2 floats, 8 wavetypes incl. 3 resonant** | free (cheapest in the catalog) | wavetype (snapped detents, like FM's ratio table) | static distortion amount (filter-like brightness / reso-peak position, zero filter) | **DCW-envelope depth** — an attack→settle sweep of distortion (the CZ "wowww"; navkit omits this, we build it from the second EG) | CZ basses, synth-brass, the famous resonant sweeps; deeply chiptune-adjacent — strong identity fit, near-zero cost. **Full design: §8.8.6** (2026-06-08) |
 | **Membrane** (tabla/conga/bongo/djembe/tom) | `processMembraneOscillator` (`:1754`, `MembraneSettings` `synth.h:437` — 6 modal sines at circular-membrane Bessel ratios) | free (~100 B — mallet-family cost) | head character (tabla ↔ djembe mode spread / tension) | **strike position** (center thump ↔ edge ring — the model reweights modes physically; conga open/slap/mute in one knob) | **pitch-bend depth/decay** (the tabla bayan *glissando* — baked into the model) | hand percussion the analog 808/909 recipes can't reach — bend + strike-pos are exactly what sine+pitch-env approximations lack. World-music radio fuel (promoted from the census NO list 2026-06-05). **SHIPPED 2026-06-08** as `INSTR_MEMBRANE` (22) — see §8.5 step 8 for the macro mapping + the one deviation from the port (harmonics also crossfades the *ratios*, tuned↔Bessel) |
