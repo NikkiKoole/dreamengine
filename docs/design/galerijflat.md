@@ -1,6 +1,6 @@
 # galerijflat — an experimental/arty cart (design seed)
 
-**Status: building — step 12 (cab capacity 4, recognisable riders, wandering occupants) complete.** Cart:
+**Status: building — step 13 (hover-inspect: who lives here) complete.** Cart:
 `tools/carts/galerijflat.c`, registered in `index.json`, clean. This doc is the
 shared understanding for a cart designed/built across multiple sessions.
 Decisions are marked ✓. **Next agent: start at "Handoff" at the bottom.**
@@ -282,9 +282,9 @@ they want** — it's the building's circulation pump and its metronome.
    (step 6 / sys 7) + walker→light causality (step 7) — walkers queue at the
    lift, board, ride, alight, and the home they enter lights up while the one
    they leave goes dark. The patchwork is now testimony, not random twinkle.
-3. **Interactivity**: pure ambient watch-piece, or light mouse play — hover a
-   window to hear/see a hint of that household, click to ring a doorbell?
-   (Mouse API is in: `mouse_x/y`, `mouse_pressed`; see orion for patterns.)
+3. **Interactivity**: hover-inspect is in (step 13) — mousing a door shows an
+   info panel (house number, who lives there, home/out, treatment, sill, hours).
+   Still open: click to ring a doorbell / audio hint per household.
 4. **Sound**: wind (the galerij is windy!), distant traffic, doors, lift ding,
    snippets of TV/radio from lit windows. The audio API has instruments +
    filters (see trafficjam's engine drone for the ambient-bed pattern).
@@ -668,7 +668,23 @@ vice-versa. Now it's a proper **directional LOOK** with up/down hall calls:
   Period/phase vary per home (`f*53 + b*97`). Applies to both the night shadow
   and the day figure.
 
-## Handoff — next agent starts here (2026-06-08, session 12 complete)
+### Step 13 — hover-inspect: who lives at this door (2026-06-08, session 12)
+
+Groundwork for the flip (and a payoff in itself): mouse a front door and a panel
+tells you the household. `Home` gains `nameIdx`/`age`/`nRes`, rolled per
+archetype; `NAMES[]` is a mixed-bag resident list. House numbers — pulled off the
+*facade* in step 1 as noise — return here as the unit address only on hover.
+
+- `draw_inspect()` (end of `draw()`, after `pal_reset` so it's crisp): hit-tests
+  the dwelling cell under `mouse_x/y`, outlines the door in `CLR_LIGHT_YELLOW`,
+  and draws a panel near the cursor (clamped on-screen).
+- Panel: **Nr. (f+1)·100+(b+1)**, name + age, household kind (`elderly, alone` /
+  `couple` / `family of N` / `student` / `- to let -`), **Home/Out** (green/grey,
+  from `home_present()` = `occ` if known else the wake/sleep window), window
+  treatment, sill style, and `up HH:MM bed HH:MM`.
+- Uses `FONT_SMALL` (4×6); panel 100×68, 9px line pitch.
+
+## Handoff — next agent starts here (2026-06-08, session 13 complete)
 
 **Repo state.** `tools/carts/galerijflat.c`, in `index.json`, clean.
 Directional hall calls (step 11) on top of the step-10 window occupants.

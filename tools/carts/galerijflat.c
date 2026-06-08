@@ -63,6 +63,7 @@ typedef struct {
     int   fillPat;             // fillp pattern for this household's treatment
     float wake_h, sleep_h;
     int   occ;                 // presence override: -1 follow schedule, 0 left (dark), 1 home (lit)
+    int   nameIdx, age, nRes;  // who lives here (for the hover panel)
 } Home;
 
 typedef struct {
@@ -183,6 +184,13 @@ static const int WALK_HAIR[] = {
     CLR_BROWNISH_BLACK, CLR_DARK_BROWN, CLR_BROWN, CLR_LIGHT_GREY,
 };
 #define N_WALK_HAIR 4
+
+// resident first names for the hover panel — the mix you'd find in a real slab
+static const char *NAMES[] = {
+    "Henk", "Truus", "Wim", "Annie", "Cor", "Riet", "Bram", "Sanne",
+    "Kees", "Greet", "Dirk", "Ans", "Fatima", "Youssef", "Aylin", "Marco",
+};
+#define N_NAMES 16
 
 // ── tint — average blend table (from blendlab) ───────────────────────────────
 // All 32 palette entries are remapped through t_avg[filter] each frame.
@@ -344,6 +352,16 @@ static void roll_home(Home *h) {
         h->wake_h  = rnd_float_between(9.0f, 12.0f);
         h->sleep_h = rnd_float_between(24.0f, 27.0f);
         break;
+    }
+
+    // who lives here (shown on hover)
+    h->nameIdx = rnd(N_NAMES);
+    switch (h->arch) {
+    case A_ELDER:   h->age = rnd_between(66, 86); h->nRes = chance(70) ? 1 : 2; break;
+    case A_COUPLE:  h->age = rnd_between(30, 58); h->nRes = 2; break;
+    case A_FAMILY:  h->age = rnd_between(30, 46); h->nRes = 3 + rnd(3); break;
+    case A_STUDENT: h->age = rnd_between(18, 26); h->nRes = 1; break;
+    default:        h->age = 0; h->nRes = 0; break;
     }
 
     switch (h->treat) {
@@ -1014,6 +1032,103 @@ static void draw_sky(float t) {
     gradient(0, 0, SCREEN_W, horizon, top, bot, 90);
 }
 
+// ── hover inspect: who lives at the door under the pointer ──────────────────
+static const char *treat_label(int t) {
+    switch (t) {
+    case TR_VITRAGE:  return "net curtains";
+    case TR_CURTAIN:  return "curtains";
+    case TR_ROLLER:   return "roller blind";
+    case TR_VENETIAN: return "venetians";
+    default:          return "bare glass";
+    }
+}
+static const char *sill_label(int s) {
+    switch (s) {
+    case SI_SYMM:   return "tidy plants";
+    case SI_RANDOM: return "cluttered sill";
+    default:        return "bare sill";
+    }
+}
+// are they home right now? occ if we've watched them; else the wake/sleep window
+static int home_present(Home *h) {
+    if (h->arch == A_VACANT) return 0;
+    if (h->occ == 1) return 1;
+    if (h->occ == 0) return 0;
+    float s = h->sleep_h;
+    if (s > 24.0f) return (tod >= h->wake_h) || (tod < s - 24.0f);
+    return (tod >= h->wake_h && tod < s);
+}
+static void hhmm(char *b, float hf) {
+    int hh = (int)hf % 24, mm = (int)((hf - (int)hf) * 60.0f);
+    b[0]='0'+hh/10; b[1]='0'+hh%10; b[2]=':'; b[3]='0'+mm/10; b[4]='0'+mm%10; b[5]=0;
+}
+
+static void draw_inspect(void) {
+    int mx = mouse_x(), my = mouse_y(), hf = -1, hb = -1;
+    for (int f = 0; f < NF && hf < 0; f++) {
+        int yb = baseY - f * FH;
+        if (my < yb - FH || my >= yb) continue;       // not this band
+        for (int b = 0; b < NB; b++) {
+            int cx = baysX + b * BW;
+            if (mx >= cx && mx < cx + BW) { hf = f; hb = b; break; }
+        }
+    }
+    if (hf < 0) return;
+    Home *h = &homes[hf][hb];
+
+    // highlight the hovered front door
+    int yb = baseY - hf * FH, dx = baysX + hb * BW + BAY_PAD, dy = yb - FH + SPANDREL;
+    rect(dx - 1, dy - 1, DW + 2, FH - SLAB_H - SPANDREL - GALLERY_FLOOR + 2, CLR_LIGHT_YELLOW);
+
+    int num = (hf + 1) * 100 + (hb + 1);
+    int vacant = (h->arch == A_VACANT);
+    int pw = 100, ph = vacant ? 28 : 68;
+    int px = mx + 6, py = my - 4;
+    if (px + pw > SCREEN_W) px = mx - pw - 6; if (px < 0) px = 0;
+    if (py + ph > SCREEN_H) py = SCREEN_H - ph; if (py < 0) py = 0;
+    rectfill(px, py, pw, ph, CLR_DARKER_BLUE);
+    rect(px, py, pw, ph, CLR_LIGHT_GREY);
+
+    font(FONT_SMALL);
+    int tx = px + 4, ty = py + 4;
+    char nb[8] = { 'N','r','.',' ', '0'+num/100, '0'+(num/10)%10, '0'+num%10, 0 };
+    print(nb, tx, ty, CLR_LIGHT_YELLOW); ty += 9;
+
+    if (vacant) {
+        print("- to let -", tx, ty, CLR_MEDIUM_GREY);
+        font(FONT_NORMAL); return;
+    }
+
+    char nm[16]; int k = 0;
+    for (const char *p = NAMES[h->nameIdx]; *p && k < 9; p++) nm[k++] = *p;
+    nm[k++] = ','; nm[k++] = ' '; nm[k++] = '0'+h->age/10; nm[k++] = '0'+h->age%10; nm[k] = 0;
+    print(nm, tx, ty, CLR_WHITE); ty += 9;
+
+    char fam[12];
+    const char *desc;
+    switch (h->arch) {
+    case A_ELDER:   desc = (h->nRes > 1) ? "elderly couple" : "elderly, alone"; break;
+    case A_COUPLE:  desc = "couple"; break;
+    case A_FAMILY:  { int j = 0; for (const char *s = "family of "; *s; s++) fam[j++] = *s;
+                      fam[j++] = '0'+h->nRes; fam[j] = 0; desc = fam; } break;
+    case A_STUDENT: desc = "student"; break;
+    default:        desc = ""; break;
+    }
+    print(desc, tx, ty, CLR_LIGHT_GREY); ty += 9;
+
+    int present = home_present(h);
+    print(present ? "Home" : "Out", tx, ty, present ? CLR_GREEN : CLR_MEDIUM_GREY); ty += 9;
+    print(treat_label(h->treat), tx, ty, CLR_INDIGO); ty += 9;
+    print(sill_label(h->sill), tx, ty, CLR_INDIGO); ty += 9;
+
+    char w1[6], s1[6]; hhmm(w1, h->wake_h); hhmm(s1, h->sleep_h);
+    int xx = print("up ", tx, ty, CLR_DARK_GREY);
+    xx = print(w1, xx, ty, CLR_LIGHT_GREY);
+    xx = print(" bed ", xx, ty, CLR_DARK_GREY);
+    print(s1, xx, ty, CLR_LIGHT_GREY);
+    font(FONT_NORMAL);
+}
+
 void draw(void) {
     cls(0);
     int horizon = SCREEN_H - GROUND_H;
@@ -1074,4 +1189,6 @@ void draw(void) {
                     tint_on ? CLR_DARK_GREY : CLR_MEDIUM_GREY);
         font(FONT_NORMAL);
     }
+
+    draw_inspect();   // hover a door → who lives there
 }
