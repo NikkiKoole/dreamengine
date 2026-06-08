@@ -1,5 +1,6 @@
 #include "studio.h"
 #include "radio.h"   // the shared station chassis (PRNG, clock, voice-leading, chrome)
+#include "solo.h"    // the jam layer — a scale-locked solo strip over the changes
 #include <stdio.h>
 #include <math.h>
 
@@ -47,6 +48,7 @@
 #define I_FLUTE  7   // breathy lead
 #define I_SHAKER 8   // 16th-note caxixi
 #define I_RIM    9   // cross-stick clave
+#define I_SOLO   10  // the jam-strip lead — a present flute over the changes
 
 // ── chord qualities ───────────────────────────────────────────────────────
 enum { Q_MAJ7, Q_MIN7, Q_DOM7, Q_M7B5, Q_MIN6, NQUAL };
@@ -352,6 +354,10 @@ static void setup_instruments(void) {
     instrument(I_RIM, INSTR_NOISE, 0, 28, 0, 18);            // woody cross-stick
     instrument_filter(I_RIM, FILTER_BAND, 1800, 9);
     instrument_env(I_RIM, 0, ENV_PITCH, 0, 20, 18);
+
+    instrument(I_SOLO, INSTR_SINE, 20, 140, 6, 200);         // the jam flute — sits on top
+    instrument_lfo(I_SOLO, 0, LFO_PITCH, 5.6f, 0.22f);       // a singing vibrato
+    instrument_filter(I_SOLO, FILTER_LOW, 3600, 2);          // brighter than the comp flute
 }
 
 // ── update ────────────────────────────────────────────────────────────────
@@ -490,5 +496,15 @@ void draw(void) {
         rad_help_panel("BOSSA RADIO", HELP, 8, NOTES, 3, CLR_ORANGE);
     }
 
-    ui_end();                                // resolve this frame's knob grabs
+    // the jam strip — solo over the changes on the key's pentatonic, the
+    // current chord's tones lit (J or tap the corner to open)
+    int chord[4]; {
+        int f = sng.prog[bar_to_prog(bar)], q = F_QUAL[f], rp = root_pc(f);
+        for (int k = 0; k < 4; k++) chord[k] = (rp + QTONES[q][k]) % 12;
+    }
+    static const int PENT[5] = { 0, 2, 4, 7, 9 };
+    SoloCtx jc = { sng.keyPc, PENT, 5, chord, 4, I_SOLO, 72, 91, false };
+    solo_strip(&jc, 28, 170, 250, 18, CLR_ORANGE);
+
+    ui_end();                                // resolve this frame's knob + jam grabs
 }
