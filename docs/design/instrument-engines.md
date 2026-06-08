@@ -968,6 +968,27 @@ membrane's 22); wire it in all four places (`studio.h` `INSTR_*` + house-style c
 `studioDocs.js`, `shell.js` — the synth lives in `sound.h`, not `studio.c`), and run the soundcheck
 tripwire after touching `sound.h` (CLAUDE.md → "After touching `runtime/sound.h`").
 
+**SHIPPED 2026-06-08** as `INSTR_REED` (23) — engine + showcase cart (poly + a mono/slide mode,
+key `V`, legato portamento via `note_pitch`/`note_glide`). **Realism pass (same day):** the bare
+waveguide port read as a "synth tooter" (ear-test verdict from a former clarinettist — the model
+is a minimal 1983 single-delay waveguide, and like navkit it shipped with *no* breath noise). Added
+the three cues it was missing: **breath turbulence** injected into the driving pressure so the bore
+resonates it (the #1 cue; scales with breath + the `morph` macro), an **attack chiff** (~28ms
+breathy onset, suppressed on mono slides), and a **humanized vibrato** (wandering rate/depth, moved
+mostly into pitch, + a slow breath random-walk so the steady state is never dead-flat). Verdict
+after: "much better."
+
+> **OPEN — still needs ear-tuning (not blocking, revisit when convenient):**
+> - **The output brightness `tilt` is UNVERIFIED — the one likely-undone thing.** It was added
+>   pre-realism-pass to force audible `timbre` travel (STEP-0 found reed stiffness too weak on its
+>   own). It's a synthetic EQ boost and the prime suspect for any remaining *electronic* edge on the
+>   bright presets. Now that breath + drift carry the life, **A/B removing or softening it** — it may
+>   no longer be earning its keep. First knob to revisit.
+> - **Per-preset breath amounts want tuning by ear** — a tenor sax wants more air than an oboe; the
+>   current `air = 0.10 + morph·0.12` is one global curve. Consider a per-voice trim.
+> - General: the macro→physical ranges + the chiff/vibrato depths are ear-set starting points, not
+>   final. Tune against the navkit reference WAVs (`/tmp/reed_*.wav`) and real recordings.
+
 ### 8.9 Candidate engine catalog (running wishlist)
 
 The set we'd *like*, beyond the first-bite engines (§8.5). Adding one is mostly: port the
