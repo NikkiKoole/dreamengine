@@ -187,8 +187,8 @@ typedef struct {
     // formants with a continuous vowel morph. EXPERIMENTAL: the raw params live FLAT in vox_p[]
     // (poked by voice_param() — the voxlab fat prototype) instead of riding the 3 macro knobs,
     // so we can audition which three deserve to become harmonics/timbre/morph. vowels-only for now.
-    float  vox_p[7];                 // raw param TARGETS 0..1 (voice_param idx): vowel/size/breath/openQ/tilt/vibDepth/vibRate
-    float  vox_s[7];                 // slewed copies (per-sample one-pole → no zipper on slider moves)
+    float  vox_p[10];                // raw param TARGETS 0..1 (voice_param idx, must hold VOX_NPARAM): vowel/size/breath/openQ/tilt/vibDepth/vibRate/nasality/openness/frontness
+    float  vox_s[10];                // slewed copies (per-sample one-pole → no zipper on slider moves)
     float  vox_glot_ph;              // glottal pulse phase
     float  vox_tilt_lp;              // spectral-tilt 1-pole state
     float  vox_vib_ph;               // vibrato LFO phase
@@ -1245,7 +1245,8 @@ static inline float sound_pipe_sample(Voice *v, float pitch_mul) {
 // to become the public harmonics/timbre/morph macros. navkit crib: processVoicFormOscillator /
 // vfPhonemeTable (navkit/soundsystem/engines/synth_oscillators.h). The formant SVF here is the
 // same Chamberlin topology as navkit's processFormantFilter and dreamengine's own filter().
-#define VOX_NPARAM 7
+#define VOX_NPARAM 10   // 0 vowel·1 size·2 breath·3 openq·4 tilt·5 vibDepth·6 vibRate + EXPERIMENTAL 7 nasality·8 openness(F1)·9 frontness(F2)
+_Static_assert(VOX_NPARAM <= 10, "grow Voice.vox_p[]/vox_s[] (sized [10]) before raising VOX_NPARAM");
 // vowel path U→O→A→E→I (close-back → open → close-front): F1..F4 (Hz) + relative amps.
 // Trimmed from navkit's vfPhonemeTable vowel rows; bandwidths are derived from the centre freq.
 static const float vox_vowel_f[5][4] = {
@@ -1299,7 +1300,8 @@ static const int   vox_cons_plos[VC_COUNT]   = { 1, 1, 1, 0, 0, 0, 0, 0 };
 
 // note-on: seed a neutral "ah" so a bare note(60, INSTR_VOICE, …) speaks; voice_param overrides live
 static void sound_voice_start(Voice *v) {
-    const float def[VOX_NPARAM] = { 0.5f, 0.33f, 0.10f, 0.5f, 0.30f, 0.15f, 0.5f };
+    const float def[VOX_NPARAM] = { 0.5f, 0.33f, 0.10f, 0.5f, 0.30f, 0.15f, 0.5f,
+                                    0.0f, 0.5f, 0.5f };   // nasality off · openness/frontness neutral (×1.0)
     for (int i = 0; i < VOX_NPARAM; i++) v->vox_p[i] = v->vox_s[i] = def[i];
     v->vox_glot_ph = v->vox_tilt_lp = v->vox_vib_ph = 0.0f;
     for (int i = 0; i < 4; i++) { v->vox_f_low[i] = 0.0f; v->vox_f_band[i] = 0.0f; }
@@ -1341,6 +1343,23 @@ static inline float sound_voice_sample(Voice *v, float pitch_mul) {
         vfreq[i] = vox_vowel_f[vi][i] * (1.0f - vf) + vox_vowel_f[vi+1][i] * vf;
         vamp[i]  = vox_vowel_a[vi][i] * (1.0f - vf) + vox_vowel_a[vi+1][i] * vf;
     }
+    // EXPERIMENTAL vowel modifiers (auditioning in voxlab; idx 7/8/9 — none wired to the API):
+    //   nasality (7) — morph the vowel toward a nasal formant config (low F1, damped) → honk/hum.
+    //   openness (8) → F1 and frontness (9) → F2: the 2D-vowel split, each on its own knob.
+    //   0.5 = neutral (×1.0), so they leave the 1D-path vowel untouched until you push them —
+    //   lets us hear whether the vowel wants to be a 2D plane and whether nasality earns an axis.
+    float nasal = v->vox_s[7];
+    if (nasal > 0.001f) {
+        const float nf[4] = { 250.0f, 1100.0f, 2500.0f, 3400.0f };   // nasal target (M-ish, low F1)
+        float nb = nasal * 0.75f;
+        for (int i = 0; i < 4; i++) vfreq[i] = vfreq[i] * (1.0f - nb) + nf[i] * nb;
+        vamp[0] *= (1.0f - nasal * 0.5f);                            // nasals damp the first formant
+    }
+    // octave-symmetric multiplier: ×1.0 at 0.5 (neutral, so the 1D vowel is untouched), out to
+    // ≈×0.31 / ×3.25 at the edges (±1.7 octaves). Wide enough to reach inhuman/creature formant
+    // placements, but controlled (centered, predictable) — not the old out-of-bounds chaos.
+    vfreq[0] *= exp2f((v->vox_s[8] - 0.5f) * 3.4f);   // openness → F1
+    vfreq[1] *= exp2f((v->vox_s[9] - 0.5f) * 3.4f);   // frontness → F2
     // consonant ONSET: for the first vox_cons_dur seconds of the note, blend the consonant's
     // formants → the vowel (smoothstep "opening"), inject its noise (hiss/burst), and gate the
     // glottal voicing in (unvoiced fricatives only voice up as they open). Then it's pure vowel.
