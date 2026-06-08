@@ -1,6 +1,6 @@
 # galerijflat — an experimental/arty cart (design seed)
 
-**Status: building — step 13 (hover-inspect: who lives here) complete.** Cart:
+**Status: building — step 14 (real households: multiple residents) complete.** Cart:
 `tools/carts/galerijflat.c`, registered in `index.json`, clean. This doc is the
 shared understanding for a cart designed/built across multiple sessions.
 Decisions are marked ✓. **Next agent: start at "Handoff" at the bottom.**
@@ -684,22 +684,48 @@ archetype; `NAMES[]` is a mixed-bag resident list. House numbers — pulled off 
   treatment, sill style, and `up HH:MM bed HH:MM`.
 - Uses `FONT_SMALL` (4×6); panel 100×68, 9px line pitch.
 
-## Handoff — next agent starts here (2026-06-08, session 13 complete)
+### Step 14 — real households: multiple residents per home (2026-06-08, session 13)
+
+A "family of 4" was one name + one walker. Now each household holds its actual
+people, who come and go independently.
+
+- `Home` drops the single `occ`/`nameIdx`/`age` for a `Resident res[MAXRES]`
+  array (`{nameIdx, age, kid, away}`) + `nRes`. `roll_home` fills it: elder 1–2,
+  couple 2, family 3–5 (2 adults + children aged 2–16), student 1; everyone
+  starts home.
+- Presence is per-resident now. `residents_home(h)` counts those not `away`.
+  `home_lit` = someone home AND within the waking window (replaces the old
+  three-state `occ`). The window occupant draws whenever someone's home (night
+  shadow / daytime blue figure, gated to real daytime so the asleep case stays
+  dark).
+- Walkers carry `resIdx`. `spawn_walker` picks a household + a resident in the
+  right state for the trip (a leaver must be home, an arriver must be out — skip
+  the spawn if nobody qualifies), sets `away=1` on stepping out, back to `0` when
+  they reach their door. So a family of 4 generates up to four separate walkers
+  coming and going, and the window darkens only when the *last* one leaves.
+- Inspect panel lists every resident — name, age, and in/out (kids in grey,
+  adults white) — under the household kind. Panel height scales with `nRes`.
+- Busier as a result (peak ~27 active evening, rarely empty); the single lift
+  still copes for now. Second lift is the next step.
+
+## Handoff — next agent starts here (2026-06-08, session 14 complete)
 
 **Repo state.** `tools/carts/galerijflat.c`, in `index.json`, clean.
-Directional hall calls (step 11) on top of the step-10 window occupants.
+Real multi-resident households (step 14) on top of the step-13 hover inspect.
 
 **What's done:** static facade + clock/light schedules + global tint + full
 detail pass + gallery walkers + glazed lift car + a real elevator (directional
 LOOK with up/down hall calls) + walker→light causality + a ground lobby +
-join-order queues that shuffle forward + bigger rush crowds + occupants visible
-in the windows (night shadow on the curtain, day figure behind the glass).
+join-order queues that shuffle forward + bigger rush crowds + occupants in the
+windows + hover-inspect panel + **real households (multiple residents, each
+their own walker)**.
 
-**Next build steps:** sys 4 (the flip to the balcony side — one model, two
-mirrored views) → sound (lift ding on door-open, the hum while travelling,
-wind) → import the keyframed sky from the `dutchsky` cart. `MAXW` is now 60;
-front-of-queue boarding is still instant (waiters teleport into the cab from
-their slot — a "walk into the cab" step is the obvious next polish).
+**Next build steps (user's plan):** a SECOND lift car in the tower to handle the
+fuller building → then sys 4, the balcony flip (one model, two mirrored views).
+After: sound (lift ding, travelling hum, wind) → import the keyframed sky from
+`dutchsky`. `MAXW` is 60; front-of-queue boarding is still instant (a "walk into
+the cab" step is optional polish). The household model (residents + presence) is
+now the thing the flip will render on both faces.
 
 **The bake loop** (~10s per iteration):
 ```bash
