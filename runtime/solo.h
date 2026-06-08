@@ -50,7 +50,9 @@
 // it shapes is the station's call (game-music.md → "the jam layer"). The strip
 // applies VOL/BRIGHT to the held voice itself; SOLO_Y_OFF + solo_y() lets a
 // cart map the 0..1 height to anything bespoke (echo send, a second LFO, …).
-enum { SOLO_Y_OFF, SOLO_Y_VOL, SOLO_Y_BRIGHT };
+enum { SOLO_Y_OFF, SOLO_Y_VOL, SOLO_Y_BRIGHT, SOLO_Y_SEND };
+// SOLO_Y_SEND rides the instrument's echo send (instrument_echo) — the dub move,
+// lean up to drench the note in tape echo; only use it where an echo bus runs.
 
 typedef struct {
     int  root;                // key root pitch class (0..11)
@@ -185,6 +187,7 @@ static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent
         float v = cx->yMin + vy * (cx->yMax - cx->yMin);
         if      (cx->ymode == SOLO_Y_VOL)    note_vol(solo_handle, (int)(v + 0.5f));
         else if (cx->ymode == SOLO_Y_BRIGHT) note_cutoff(solo_handle, (int)v);
+        else if (cx->ymode == SOLO_Y_SEND)   instrument_echo(cx->instr, v);
     }
 
     // ── draw the keybed ────────────────────────────────────────────────────

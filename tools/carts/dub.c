@@ -1,5 +1,6 @@
 #include "studio.h"
 #include "radio.h"   // the shared station chassis (PRNG, clock, voice-leading, chrome)
+#include "solo.h"    // the jam layer — a scale-locked melodica over the riddim
 #include <stdio.h>
 #include <math.h>
 
@@ -48,6 +49,7 @@
 #define I_RIM   10
 #define I_HAT   11
 #define I_SIREN 12  // the meltdown toy
+#define I_SOLO  13  // the jam-strip melodica — sings into the tape echo
 
 // ── harmony: minor vamps, 4-bar cycles ────────────────────────────────────
 enum { Q_MIN7, Q_MAJ, NQ };
@@ -410,6 +412,12 @@ static void setup_instruments(void) {
     instrument_duty(I_SIREN, 0.25f);
     instrument_env(I_SIREN, 0, ENV_PITCH, 0, 220, 12);
     instrument_filter(I_SIREN, FILTER_LOW, 1800, 4);
+
+    instrument(I_SOLO, INSTR_SQUARE, 12, 170, 6, 200);       // the jam melodica — reedy, present
+    instrument_duty(I_SOLO, 0.40f);
+    instrument_lfo(I_SOLO, 0, LFO_PITCH, 5.0f, 0.20f);       // the reed wobble
+    instrument_filter(I_SOLO, FILTER_LOW, 2200, 2);          // a touch brighter than the comp melodica
+    instrument_echo(I_SOLO, 0.30f);                          // sings into the tape (the strip rides the send)
 }
 
 // ── update ────────────────────────────────────────────────────────────────
@@ -577,6 +585,17 @@ void draw(void) {
         };
         rad_help_panel("DUB RADIO", HELP, 8, NOTES, 3, CLR_MEDIUM_GREEN);
     }
+
+    // the jam strip — a melodica on the riddim's minor pentatonic, the vamp
+    // chord's tones lit. vertical RIDES THE ECHO SEND: lean up and the note
+    // drenches into the tape (J or tap the corner)
+    int chord[4]; {
+        Ch c = chord_at(bar);
+        chord[0] = root_pc(c);
+        for (int k = 0; k < 3; k++) chord[k + 1] = (root_pc(c) + QV[c.q][k]) % 12;
+    }
+    SoloCtx jc = { sng.keyPc, PENT, 5, chord, 4, I_SOLO, 64, 84, false, SOLO_Y_SEND, 0.12f, 0.9f };
+    solo_strip(&jc, 28, 170, 250, 18, CLR_MEDIUM_GREEN);
 
     ui_end();
 }
