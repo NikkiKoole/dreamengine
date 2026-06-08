@@ -686,7 +686,15 @@ static void update_lift(void) {
                 break;
             }
         }
-        if (ad <= 0.5f) { carFloor = liftTarget; lift_decide(); }   // reached the sweep end
+        if (ad <= 0.5f) {                               // reached the sweep end (incl. GROUND,
+            carFloor = liftTarget;                      // which is off the FH grid the pass-through
+            if (lift_wants_stop(carFloor)) {            // check above scans — so service it here)
+                liftCarY = floor_y(carFloor);
+                liftState = LIFT_DOORS; liftClosing = 0; liftDoorTimer = DOOR_HOLD;
+            } else {
+                lift_decide();
+            }
+        }
         break; }
 
     case LIFT_DOORS:
@@ -745,17 +753,18 @@ void update(void) {
     update_lift();
 #ifdef DE_TRACE
     {
-        int na = 0, nw = 0, nr = 0;
+        int na = 0, nw = 0, nr = 0, wmask = 0, gwait = 0;
         for (int i = 0; i < MAXW; i++) {
             if (!walkers[i].active) continue;
             na++;
-            if (walkers[i].state == WK_WAIT) nw++;
+            if (walkers[i].state == WK_WAIT) { nw++; wmask |= 1 << (walkers[i].floor + 1); if (walkers[i].floor == GROUND) gwait++; }
             if (walkers[i].state == WK_RIDING) nr++;
         }
         watch("active", "%d", na);
         watch("liftSt", "%d", liftState); watch("carF", "%d", carFloor);
         watch("tgt", "%d", liftTarget);   watch("dir", "%d", liftDir);
         watch("riders", "%d", nr);        watch("waiting", "%d", nw);
+        watch("wmask", "%d", wmask);      watch("gwait", "%d", gwait);
         watch("lit", "%d", dbg_lit);
     }
 #endif

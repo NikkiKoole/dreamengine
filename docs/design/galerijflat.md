@@ -602,6 +602,16 @@ Tightening the circulation so it reads honestly, and turning the crowd up.
   on purpose (morning 32 / evening 30 / trickle 60 / night 220) so the **queues
   visibly grow** — morning rush climbs past 30 waiting / ~40 active before
   draining after 09:00; evening idles ~10–21 active.
+- **Bugfix (same session): the lift skipped the GROUND stop.** Grid floors open
+  their doors via the pass-through alignment check in `LIFT_MOVING`, but GROUND
+  sits off the `FH` grid, so it was only ever reached through the sweep-end
+  (`ad<=0.5`) branch — which called `lift_decide()` and bounced the car straight
+  back up *without opening*. Result: a car full of ground-bound riders would
+  arrive at the lobby, never open, and climb away — nobody on or off, queues
+  stuck. Fix: the sweep-end branch now opens the doors when the arrival floor
+  `lift_wants_stop` (covers GROUND and any off-grid endpoint), else decides.
+  Verified across seeds: doors open at GROUND every cycle, no sustained stalls.
+  (Trace adds `wmask`/`gwait` under `DE_TRACE` to see which floors hold waiters.)
 
 ## Handoff — next agent starts here (2026-06-08, session 9 complete)
 
