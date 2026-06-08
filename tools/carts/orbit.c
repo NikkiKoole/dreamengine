@@ -4,20 +4,58 @@
 // ============================================================================
 // ORBIT  —  a gravity sandbox.  Build a rocket, launch, fail miserably.
 //
-// One honest physics core: point-mass inverse-square gravity. The SAME
-// integrator runs the live ship and the dotted PREDICTED PATH, so the dots
-// never lie — they show exactly where you'd coast if you cut the engine now.
-// Watch the path bend as you burn; the instant it closes into a loop that
-// clears the surface, you're in orbit.
-//
 //   ◄ / ►        steer (rotate the rocket)
 //   Z (hold)     thrust  — on the pad it only lifts if TWR > 1
 //   SPACE        stage / relaunch from the wreck screen
 //   R            reset to the pad
 //   1 / 2 / 3    swap rocket: balanced · finless tumbler · underpowered
 //
-// MVP-1: the rocket is hardcoded (three test designs). The parts-bin builder
-// bolts onto this same core next.
+// ── what this is ─────────────────────────────────────────────────────────────
+// A sibling of coaster.c and galerijflat.c: a *systemic sandbox toy*. You set a
+// thing up, then watch the system tell you the truth. Coaster: draw a track,
+// gravity runs it. Galerijflat: a building that lives on its own clock. Here:
+// point a rocket, burn, and let orbital mechanics judge your design. A
+// Kerbal-Space-Program-in-miniature — and like KSP, the 95% where the rocket
+// betrays you is the loop, not the rare success.
+//
+// The chosen KSP "transcendent moment": the first time the predicted path curves
+// all the way around and *closes into a loop clear of the ground* — "I'm in
+// orbit." Everything is built to make that one moment land.
+//
+// ── the one honest core ──────────────────────────────────────────────────────
+// Point-mass inverse-square gravity. The SAME integrator (grav_acc + symplectic
+// Euler) runs the live ship AND the dotted PREDICTED PATH (predict()), so the
+// dots never lie: they show exactly where you'd coast if you cut the engine now.
+// Watch the path bend as you burn. This shared-core honesty is the whole design
+// — never give the prediction its own cheaper math, or it will start lying.
+//
+// ── why the world is big and gravity is gentle (DON'T "fix" this) ────────────
+// The load-bearing tuning insight, learned the hard way. A small/light planet
+// has a low escape velocity, which leaves almost no delta-v room: any rocket
+// powerful enough to orbit is powerful enough to fling itself to escape, and the
+// high surface gravity forces sub-second burns you can't fly by hand. A big,
+// heavy planet (R_PLANET 120, G_SURF 8) fixes BOTH at once — higher escape
+// velocity = room for bound orbits, and burn_time ∝ sqrt(R/g)/TWR, so low g
+// buys long, steerable burns. If orbits ever balloon to a speck-sized planet or
+// burns get twitchy, the lever is the world scale, not the rocket.
+//
+// ── the delta-v knife-edge ────────────────────────────────────────────────────
+// With 1-button thrust (no throttle), the gap between "falls short of orbit"
+// (~circular velocity) and "escapes" (~1.41× that) is narrow, so FALCON is tuned
+// to sit right around escape velocity. A clean orbit therefore wants a deliberate
+// TWO-burn: gravity-turn up, coast to apoapsis, then a *small* prograde nudge at
+// the apex to lift periapsis off the surface (watch the PERI number climb). The
+// real cure for fiddliness is a throttle — or the builder's delta-v budget.
+//
+// ── how each failure is produced (not magic) ─────────────────────────────────
+//   TWR < 1     → update_pad() never leaves the pad; it just shudders + smokes.
+//   finless     → update_fly() aero term DIVERGES (any tilt grows) + a constant
+//                 lean seeds it → it cartwheels. Fins flip the sign → weathervane.
+//   out of fuel → thrust cuts, you coast, gravity wins, you fall back and smash.
+//
+// MVP-1: the rocket is hardcoded (DESIGNS[] — three test designs that exercise
+// the failure taxonomy). MVP-2 bolts a parts-bin builder onto this same core,
+// feeding DESIGNS[] from parts you snap together instead of these literals.
 // ============================================================================
 
 // ── world / physics tuning ──────────────────────────────────────────────────
