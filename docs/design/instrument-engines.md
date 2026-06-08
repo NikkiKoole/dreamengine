@@ -282,7 +282,10 @@ independently shippable:
 7. **`INSTR_REED`** (clarinet↔sax) — first true wind; one bore line fits `ks_buf` as-is,
    zero architecture work. *(The swap clause is moot: FM's brass stress test **passed**
    2026-06-05 — §8.8.3 post-ship findings — so reed keeps this slot; waveguide Brass
-   stays a catalog row for when a real lip model is wanted.)*
+   stays a catalog row for when a real lip model is wanted.)* **Design + STEP-0 render
+   findings: §8.8.7** (2026-06-08) — the first *self-oscillating* held voice; STEP 0 revised
+   the macro mapping (stiffness is a weak timbre axis, the model chokes instead of overblowing,
+   harmonica is out of scope — all clamped to the self-oscillation window).
 8. **`INSTR_MEMBRANE`** — tabla/conga/djembe, ~100 B mallet-pattern port; hand percussion
    (strike-pos + pitch-bend) for the world-music stations. **SHIPPED 2026-06-08** — `INSTR_MEMBRANE`
    (22), six modal sines, buffer-free; `harmonics` crossfades tuned-harmonic (tabla) ↔ navkit's
@@ -881,6 +884,90 @@ ear-tuned, not read off the source. Then the cart presets (= the acceptance test
   **register-scaled**: cap the reso multiplier *lower as the note rises* (cheap: scale the `·7`
   by `(1 − freqNorm)` like EP's register rolloff, §8.8.5). Tune the curve by ear during the build.
 
+### 8.8.7 Engine #7: REED (clarinet↔sax) — the step-1 design (2026-06-08)
+
+The playbook's paper round for `INSTR_REED` — roadmap §8.5 step 7, and a milestone: the **first
+true continuous-excitation (blown) voice.** Unlike everything shipped so far — pluck/mallet/EP/
+membrane *strike* and ring down, organ/PD are oscillators *gated* by the amp envelope — the reed
+**self-oscillates**: a pressure-driven feedback loop that sings for as long as it's blown. So
+it's the first engine that genuinely *needs* the held-note + macros-as-CV surface (§6); the organ
+(§8.8.4) proved that plumbing, but the organ would survive as a struck voice — the reed would not.
+This is the engine the whole wind family (bowed/pipe, §8.5 step 9) is waiting behind.
+
+The model (`processReedOscillator`, `synth_oscillators.h:587`; `ReedSettings` `synth.h:840`) is the
+canonical McIntyre/Schumacher/Woodhouse (1983) reed valve: a **bore delay line** + a **nonlinear
+reed reflection** at the mouthpiece. Mouth pressure drives a reed gap whose flow recirculates
+through the bore; the bore's reflected pressure modulates the reed. Buffer: the bore is navkit's
+`boreBuf[1024]` — it **reuses our `ks_buf[SOUND_KS_MAX]` (1024) as-is** (reed is a distinct wave
+id; it never shares a voice with the Karplus pluck path), so **zero new buffer** — only a handful
+of scalar state floats, exactly like the organ added its `org_*` fields. Cost: one fractional
+delay read + ~10 mults/sample — pluck-class.
+
+**Scope finding — STEP 0 first, and it *reshaped* the design (this is the wah-detour scar, §8.8.2,
+earning its keep).** Before freezing the macro mapping I rendered navkit's six reed presets (192
+Clarinet, 193–195 Soprano/Alto/Tenor Sax, 196 Oboe, 197 Harmonica) with `tools/navkit-render.c`,
+plus bore / blow-pressure / stiffness sweeps via a throwaway `/tmp/nkreedsweep.c` (the PD-spec
+trick: characterizing an axis means *driving* it in navkit-land). The renders **contradict the §8.9
+catalog row in two of its three macros** — proof that reading the source and guessing would have
+shipped the wrong knobs:
+
+- **It self-oscillates and HOLDS dead-flat** for the full 2s on clarinet/oboe/all three saxes
+  (rms steady, 0 clipped, DC ≈ 0 — the model's DC blocker is essential and works). Confirms the
+  held-voice premise, and — like PD's warp family — confirms there is **no in-note spectral motion
+  from the model itself**, so any `morph` movement is genuinely *additive*, not redundant.
+- **Bore conicity is the dominant, most musical axis.** Sweeping `bore` 0→1 (clarinet→sax) raised
+  brightness monotonically `0.006 → 0.010` (odd-only → all-harmonics) **and dropped loudness ~10 dB**
+  (rms `0.36 → 0.12` — the flared conical bell radiates highs but carries less total energy). So
+  `harmonics = bore` is the strongest knob *and* literally "which instrument" — but it needs
+  **per-position makeup gain** (~×3 at the conical end) or the sax presets bury, a register-rolloff-
+  style compensation (cf. EP §8.8.5).
+- **Reed stiffness is a WEAK brightness axis** — the catalog's premise fails. At the cylindrical
+  bore, stiffness `0.25 → 0.75` barely moved brightness (`0.006 → 0.005`). So `timbre = stiffness`
+  *alone* is not a real knob. It gets **built here** as a compound *edge* axis (see table).
+- **The model does NOT overblow musically — it CHOKES.** Pushing blow pressure past ~0.8 collapses
+  the oscillation (the reed beats shut: rms → 0.0001), and below ~0.42 it never starts. There is a
+  narrow **viability window ≈ [0.42, 0.78]**, and *within* it pressure is mostly a loudness axis.
+  So the catalog's "morph = overblown squawk" is wrong for this model; `morph` is rebuilt as breath
+  expression *inside* the safe window (table).
+- **Self-oscillation has a hard viability floor/ceiling the macros MUST clamp to.** Stiffness 1.0
+  chokes; pressure outside [0.42, 0.78] dies. And **navkit's own Harmonica (197) sits below the
+  floor → it rendered essentially silent** (rms 0.013 → 0.000). Free reeds aren't air-column-coupled
+  instruments, so **harmonica is out of scope** for this waveguide; the 5 reachable presets are
+  clarinet + soprano/alto/tenor sax + oboe. The #1 implementation rule: **every macro maps onto a
+  clamped, pre-validated physical sub-range, never the raw 0..1.**
+- **Register is stable C3–C6** (rms flat ~0.16, no choke or blow-up; boreLen `169 → 21`, the
+  fractional read holds tuning). Unlike PD's reso icepick, reed has **no high-register risk** in its
+  playing range. (Reference WAVs: `/tmp/reed_clarinet.wav`, `/tmp/reed_altosax.wav`, `/tmp/reed_oboe.wav`.)
+
+| macro | maps to | the taste decision (made here, *post-render*) |
+|---|---|---|
+| **harmonics** | **bore conicity** (continuous, clamped ~`[0, 0.95]`) — and with it the bell-LP cutoff, the open-end reflection, and the conical even-harmonic drive (all derive from `bore` in the model) + **per-position makeup gain** | the dominant axis *and* "which instrument": clarinet (cyl, odd-only, hollow chalumeau) → oboe (narrow conical, nasal) → sax (full conical, all harmonics). **Continuous, not snapped** — `bore` is a genuinely continuous physical axis (cf. membrane's continuous ratio crossfade, unlike FM/PD/organ's discrete tables), and every quarter-turn is audible (odd→all + brightness, STEP-0). The ~10 dB conical loudness drop is compensated per-position. |
+| **timbre** | **reed edge** — a *compound* knob: stiffness↑ **+ aperture↓ together**, plus a one-pole brightness tilt on the output | stiffness alone is too weak (STEP-0) — paired with aperture-narrowing (exactly how real bright reeds are built: oboe = stiff 0.9 + aperture 0.2) and a small output tilt, it becomes a strong dark↔nasal-edge axis with *guaranteed* audible travel regardless of what the waveguide does. The PD-DCW move: **build the axis the source is too weak to provide.** Clamped to the oscillating window (stiffness ≤ ~0.85). |
+| **morph** | **breath expression CV**, *strictly inside* the viable pressure window `[~0.5, ~0.75]` | the held voice's live axis (the point of §6): 0 = steady soft tone; up = breath swell + lip-vibrato deepening + a controlled lean *toward* (never across) the choke threshold → a straining growl. The model can't overblow (STEP-0), so this is the musical substitute, **built here**, and it's live-modulatable as CV — the whole reason the wind family wanted held notes. |
+
+**Mechanics:** buffer-free beyond the `ks_buf` reuse. Per-`Voice` scalar adds (~8 floats + 2 ints,
+the organ-sized footprint): bore read/write indices, the bore-loss LP state, the DC blocker taps
+(`dc_prev`/`dc_state` — **non-negotiable**, the reed carries large DC from steady blow pressure),
+the lip-vibrato phase, `initFreq` (glide/arp pitch tracking), and a `reed_on` guard (an engine id
+hit without a note-on init, like `org_on`/`mb_on`). Pitch (§8.8.1): the bore read length =
+`boreLen / pitch_mul` (fractional), so vibrato/glide/pitch-env bend it — satisfied by construction
+(navkit already does exactly this). Gate: reed is a **held** (`note_on`, infinite-gate) voice like
+organ; note_off ramps blow pressure toward 0 so the bore energy physically dissipates (a natural
+breath release), backed by the standard amp release. Seed the bore with tiny noise on note-on
+(navkit's faster-startup trick). It's the **first held voice with a self-oscillating excitation
+buffer** — so the §8.2 / stale-state guard matters here in a way it didn't for organ (which only
+borrows `ks_buf`'s head as a clean scanner delay): re-seed the bore on every note-on.
+
+**Build order — STEP 0 is done (above); the cart presets are the acceptance tests:** clarinet
+(dark hollow chalumeau — the cylindrical anchor) · alto + tenor sax (the jazz workhorse, the
+headline sound) · oboe (nasal double-reed) · a **breath-swell demo** that sweeps `morph` live to
+show the held-note CV — the gesture *no struck engine can make*. Showcase: a **reed** cart (the 5
+reachable presets + a breath/vibrato viz), and since reed is "klezmer to smoky jazz on one knob"
+it's a natural jazz/lounge or klezmer radio-station voice. Id is `INSTR_REED` = **23** (next after
+membrane's 22); wire it in all four places (`studio.h` `INSTR_*` + house-style comment,
+`studioDocs.js`, `shell.js` — the synth lives in `sound.h`, not `studio.c`), and run the soundcheck
+tripwire after touching `sound.h` (CLAUDE.md → "After touching `runtime/sound.h`").
+
 ### 8.9 Candidate engine catalog (running wishlist)
 
 The set we'd *like*, beyond the first-bite engines (§8.5). Adding one is mostly: port the
@@ -896,7 +983,7 @@ the table's only job is to say what those three mean for each. Grow it freely.
 | **AM / ring mod** | trivial (≈10 lines native) | free | modulator ratio | AM ↔ ring depth | modulator detune / wave | metallic, robotic, clangorous bells |
 | **Voice / formant** | formant SVF + buzz (§8.3) | free (reuses SVF) | vowel (a→e→i→o→u) | breathiness / brightness | formant shift (size/gender) | choir "aah", vocal-organ, talkbox. Comes near-free with the §8.3 filter |
 | **Bowed string** (violin/cello) | `processBowedOscillator` (Smith/McIntyre waveguide) | nut+bridge lines, **sum = one period → likely packs into the one `ks_buf`** (split at the bow point; verify at port) | bow position (sul tasto ↔ ponticello) | bow pressure (smooth ↔ scratchy stick-slip) | bow velocity / swell | sustained strings that *speak* — attack scratch, swells. Wants held notes (§6); macros-as-CV is its natural surface |
-| **Reed** (clarinet ↔ sax) | `processReedOscillator` (pressure-driven reed valve) | one `boreBuf[1024]` — **fits today's `ks_buf` as-is** | bore conicity (clarinet hollow-odd ↔ sax full) — literally navkit's `bore` param | reed stiffness (dark ↔ bright) | breath / aperture (soft ↔ overblown squawk) | the *blown* family's workhorse; klezmer to smoky jazz on one knob |
+| **Reed** (clarinet ↔ sax) | `processReedOscillator` (pressure-driven reed valve) | one `boreBuf[1024]` — **fits today's `ks_buf` as-is** | **bore conicity** (clarinet hollow-odd ↔ sax full) — literally navkit's `bore`, the dominant axis | **reed edge** — stiffness+aperture compound (stiffness *alone* is too weak — STEP-0) | **breath expression CV** *inside* the viable window (the model chokes, doesn't overblow — STEP-0) | the *blown* family's workhorse + the first **self-oscillating held** voice; klezmer to smoky jazz on one knob. **Design + STEP-0: §8.8.7** (2026-06-08) |
 | **Pipe / flute** (Fletcher/Verge jet-drive) | `processPipeOscillator` | upper+lower bore halves (sum ≈ bore; same one-buffer pack as bowed) + tiny `jetBuf[64]` | overblow (fundamental ↔ octave flageolet) | breath noise (pure ↔ airy) | embouchure | airy flutes, pan pipes, organ-flue color; breathy attacks for free |
 | **Brass** (lip-valve waveguide) | `processBrassOscillator` (2nd-order lip mass-spring + bore) | one `boreBuf[1024]` — **fits `ks_buf` as-is** | bore conicity (trumpet ↔ horn) | blow pressure (soft ↔ brassy blare — the rip/blare *is* the model) | mute (open ↔ harmon) | a real lip model, not an approximation. *(Was the prepared answer if FM brass failed its §8.8.3 stress test — FM passed, so this is no longer queued; port it when a station wants the genuine rip/blare)* |
 | **PD / phase distortion** (Casio CZ) | `processPDOscillator` — **2 floats, 8 wavetypes incl. 3 resonant** | free (cheapest in the catalog) | wavetype (snapped detents, like FM's ratio table) | static distortion amount (filter-like brightness / reso-peak position, zero filter) | **DCW-envelope depth** — an attack→settle sweep of distortion (the CZ "wowww"; navkit omits this, we build it from the second EG) | CZ basses, synth-brass, the famous resonant sweeps; deeply chiptune-adjacent — strong identity fit, near-zero cost. **Full design: §8.8.6** (2026-06-08) |
