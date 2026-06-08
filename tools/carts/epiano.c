@@ -9,11 +9,11 @@
 //   timbre    = brightness  (mellow, centered pickup .. bright/snappy, offset + hard hammer)
 //   morph     = bark        (0 clean fundamental .. dig-in growl — the pickup driven hard)
 //
-// THE WAH is not an engine — it's a RECIPE (decision 0015): wah is just the per-voice filter
-// swept, "the 4th use of the one SVF". Two forms, on a toggle: AUTO (an LFO_CUTOFF wobble) and
-// ENV (ENV_CUTOFF opens on each strike — the funky-clav "quack"). Zero new engine code; the
-// slider sets how deep. The classic envelope-wah Clavinet (Stevie's "Superstition") is one
-// preset away. (The DX/digital EP is INSTR_FM; this is the electromechanical one.)
+// THE WAH is a recipe — a resonant BANDPASS swept (the moving peak IS the wah vowel). Toggle
+// off / AUTO / TOUCH: AUTO is an LFO (rhythmic, plays regardless of touch); TOUCH is the
+// envelope FOLLOWER — it opens the bandpass from the note's own amplitude (fast attack, slow
+// release), so it responds to how hard you play. That's the funky envelope filter (the clav
+// preset's Stevie "Superstition" sound). (The DX/digital EP is INSTR_FM; this is the real one.)
 //
 // The named instruments are just KNOB POSITIONS (audio-notes §8.1 / §8.8.5): if pressing
 // "wurli" doesn't sound like a Wurlitzer, the MAPPING is wrong, not the preset.
@@ -43,7 +43,7 @@ static const char *SL_NAME[NSL] = { "instrument", "bright", "bark", "wah" };
 static const char *SL_LO[NSL]   = { "rhodes", "mellow", "clean", "subtle" };
 static const char *SL_HI[NSL]   = { "clav",   "bright", "growl", "deep" };
 static const char *INSTRUMENT[3]= { "RHODES", "WURLI", "CLAV" };
-static const char *WAHNAME[3]   = { "off", "auto", "env" };
+static const char *WAHNAME[3]   = { "off", "auto", "touch" };
 
 // presets = slider positions + a wah mode. harmonics lands on an instrument detent.
 typedef struct { const char *name; float v[NSL]; int wah; } Preset;
@@ -53,7 +53,7 @@ static const Preset PRESET[6] = {
     { "suitcase", { 0.15f, 0.20f, 0.12f, 0.5f }, 0 },   // mellow, clean, long
     { "wurli",    { 0.50f, 0.35f, 0.30f, 0.5f }, 0 },   // soul ballad
     { "wur buzz", { 0.50f, 0.66f, 0.82f, 0.6f }, 1 },   // cranked reed + auto-wah movement
-    { "clav",     { 0.85f, 0.75f, 0.55f, 0.7f }, 2 },   // funky bridge pickup + ENVELOPE WAH
+    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f }, 2 },   // funky bridge pickup + TOUCH-WAH (envelope follower — the Stevie "Superstition" envelope filter, responds to how hard you play)
 };
 
 static int   handle[NKEY];
@@ -117,15 +117,19 @@ static void apply_wah(void) {
     if (wah == 0) {
         instrument_filter(I_EP, FILTER_OFF, 4000, 0);
         instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);
-        instrument_env(I_EP, 0, ENV_CUTOFF, 0, 0, 0.0f);
-    } else if (wah == 1) {                       // AUTO: LFO sweeps a resonant lowpass
-        instrument_filter(I_EP, FILTER_LOW, 900, 9);
-        instrument_env(I_EP, 0, ENV_CUTOFF, 0, 0, 0.0f);
-        instrument_lfo(I_EP, 0, LFO_CUTOFF, 1.5f + amt * 6.0f, 400.0f + amt * 1400.0f);
-    } else {                                     // ENV: cutoff opens on the strike, then closes
-        instrument_filter(I_EP, FILTER_LOW, 350, 9);
+        instrument_follow(I_EP, LFO_CUTOFF, 0, 0, 0.0f);
+    } else if (wah == 1) {                       // AUTO: an LFO sweeps a resonant BANDPASS (the
+        // moving resonant peak IS the wah vowel — a lowpass just opens the top, much weaker).
+        // Rhythmic, plays regardless of touch.
+        instrument_filter(I_EP, FILTER_BAND, 1100, 12);
+        instrument_follow(I_EP, LFO_CUTOFF, 0, 0, 0.0f);
+        instrument_lfo(I_EP, 0, LFO_CUTOFF, 1.5f + amt * 6.0f, 500.0f + amt * 1300.0f);
+    } else {                                     // TOUCH: the envelope FOLLOWER opens the bandpass
+        // from the note's own amplitude (fast attack, slow release) — the funky envelope-filter
+        // that responds to how hard you play. Dig in → it opens wider; it hangs on release.
+        instrument_filter(I_EP, FILTER_BAND, 350, 12);
         instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);
-        instrument_env(I_EP, 0, ENV_CUTOFF, 2, 90 + (int)(amt * 260.0f), 900.0f + amt * 2400.0f);
+        instrument_follow(I_EP, LFO_CUTOFF, 3, 200, 1400.0f + amt * 2600.0f);
     }
 }
 
