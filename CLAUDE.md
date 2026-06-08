@@ -55,7 +55,9 @@ eventually2/
 │                       #   drives over a radio (pairs with radio.h; built on ui.h
 │                       #   capture). NOT for soloist-less stations (ambient/satie)
 │       full table + contract: docs/guides/cart-authoring.md → "Cart-land
-│       library headers"
+│       library headers". Building a SOUND/instrument cart? The shelf —
+│       docs/guides/instrument-carts.md — indexes every existing one by which
+│       of these blocks it copies; find the closest relative and start there.
 ├── editor/
 │   ├── electron/
 │   │   ├── main.cjs    # Electron main process — compiles + runs cartridges
@@ -269,6 +271,12 @@ Source-of-truth files live in `tools/carts/`; the build tool sits beside that fo
 - `tools/make-cart.js` — the build tool (CommonJS; uses `require`)
 
 **Adding a new cart:**
+
+> Making a **sound/instrument cart** (synth, machine, station, engine showcase, sound
+> toy)? Before writing, open [`docs/guides/instrument-carts.md`](docs/guides/instrument-carts.md)
+> — it indexes the whole shelf by the building block each cart copies (`radio.h` /
+> held-notes / `ui.h` / `INSTR_*`), so you start from the closest existing cart. Add a
+> row there when you ship.
 
 1. Write the C source → `tools/carts/<name>.c`
 2. *(Optional)* Add sprites/map → `tools/<name>.cart.js`. Exports `{ sprites, map, charMap, mapW, mapH }`:

@@ -50,7 +50,7 @@ working idioms. By genre:
 |---|---|
 | Sprites + recolor + tile world | `crowd.c` (+`.cart.js`), `platform.c` (+`.cart.js`), `zelda.c` |
 | Tile maps, camera, levels | `10-world.c`, `pacman.c`, `bomberman.c`, `sokoban.c` |
-| Sound / synth / rhythm | `omnichord.c`, `drummachine.c`, `moog.c`, `20-instruments.c`, `21-lfo.c`, `22-filter.c` |
+| Sound / synth / rhythm | **first read [`docs/guides/instrument-carts.md`](instrument-carts.md)** — the shelf indexes every sound cart by the block it copies (`radio.h`/held-notes/`ui.h`/`INSTR_*`) and names the closest relative to start from; then read it: `omnichord.c`, `drummachine.c`, `moog.c`, `20-instruments.c`, `21-lfo.c`, `22-filter.c` |
 | Juice & game feel | `juice.c`, `effects.c`, `particles.c` |
 | Geometry / pseudo-3D | `textured3d.c` (+`.cart.js`), `solid3d.c`, `mode7.c`, `raycaster.c`, `elite.c` |
 | Dither / fill patterns | `patterns.c`, `holes.c` |

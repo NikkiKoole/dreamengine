@@ -367,6 +367,13 @@ in [`../design/ui-widgets-notes.md`](../design/ui-widgets-notes.md).
 
 ## House conventions for instrument carts
 
+> **Building a sound/instrument cart? Start at the shelf:**
+> [`instrument-carts.md`](instrument-carts.md). It indexes every existing synth,
+> classic-machine homage, held-note instrument, engine showcase, radio station and
+> sound toy, grouped by the **building block each one copies** (`radio.h` /
+> held-notes / `ui.h` / `INSTR_*`). Find the cart closest to what you're making and
+> start from its skeleton instead of a blank file — and add a row there when you ship.
+
 **Piano-style computer keys = the GarageBand musical-typing map** (owner
 decision, 2026-06-07 — one layout to learn, not one per cart). Copy `moog.c`'s
 arrays verbatim:

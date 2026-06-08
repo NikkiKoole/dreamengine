@@ -60,6 +60,7 @@ docs/
 │   ├── BATCH-3.md                batch-3 cart index
 │   ├── cart-specs-index.md       batch-1 spec index + assembly recipe + parallel-build workflow
 │   ├── cart-specs/               per-game cart specs (individual game files, not shown in sidebar)
+│   ├── instrument-carts.md       the sound-toy shelf: every synth/machine/station/showcase cart, grouped by the building block it copies (radio.h / held-notes / ui.h / INSTR_*) — browse one to play, or find the closest relative when building a new one
 │   ├── sharing.md                ways to publish finished carts
 │   ├── debug-harness.md          deterministic record/replay/script + trace + live on-demand inspect + WAV capture/analysis (tools/play.js, tools/wav-analyze.js)
 │   ├── profiler.md               one-click CPU profiler (⏱ profile button): hot functions + call paths, frame budget, draw-call counts
