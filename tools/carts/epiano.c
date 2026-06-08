@@ -9,17 +9,17 @@
 //   timbre    = brightness  (mellow, centered pickup .. bright/snappy, offset + hard hammer)
 //   morph     = bark        (0 clean fundamental .. dig-in growl — the pickup driven hard)
 //
-// THE WAH is a recipe — a resonant BANDPASS swept (the moving peak IS the wah vowel). Toggle
-// off / AUTO / TOUCH: AUTO is an LFO (rhythmic, plays regardless of touch); TOUCH is the
-// envelope FOLLOWER — it opens the bandpass from the note's own amplitude (fast attack, slow
-// release), so it responds to how hard you play. That's the funky envelope filter (the clav
-// preset's Stevie "Superstition" sound). (The DX/digital EP is INSTR_FM; this is the real one.)
+// THE WAH is a recipe — a resonant filter swept (the moving peak IS the vowel). Four flavours
+// on the toggle, one per modulation source: off / AUTO (an LFO — rhythmic) / ENV (a FAST
+// per-note cutoff snap — the funky-clav "quack", navkit's "Clav Funky", confirmed by rendering
+// it) / TOUCH (the envelope FOLLOWER — opens from the note's amplitude, dynamic; great on
+// bass/leads). The clav boots into ENV. (The DX/digital EP is INSTR_FM; this is the real one.)
 //
 // The named instruments are just KNOB POSITIONS (audio-notes §8.1 / §8.8.5): if pressing
 // "wurli" doesn't sound like a Wurlitzer, the MAPPING is wrong, not the preset.
 //
 // controls: white keys  A S D F G H J K   ·   black keys  W E . T Y U
-//           Z / X  octave   ·   1..6 presets   ·   V wah (off/auto/env)   ·   M autoplay
+//           Z / X  octave   ·   1..6 presets   ·   V wah (off/auto/env/touch)   ·   M autoplay
 //           drag a slider (re-strikes to audition), or LEFT/RIGHT pick + UP/DOWN turn
 // MULTITOUCH: every finger is its own pointer; tap the on-screen octave +/- and wah buttons.
 
@@ -43,7 +43,7 @@ static const char *SL_NAME[NSL] = { "instrument", "bright", "bark", "wah" };
 static const char *SL_LO[NSL]   = { "rhodes", "mellow", "clean", "subtle" };
 static const char *SL_HI[NSL]   = { "clav",   "bright", "growl", "deep" };
 static const char *INSTRUMENT[3]= { "RHODES", "WURLI", "CLAV" };
-static const char *WAHNAME[3]   = { "off", "auto", "touch" };
+static const char *WAHNAME[4]   = { "off", "auto", "env", "touch" };
 
 // presets = slider positions + a wah mode. harmonics lands on an instrument detent.
 typedef struct { const char *name; float v[NSL]; int wah; } Preset;
@@ -53,7 +53,7 @@ static const Preset PRESET[6] = {
     { "suitcase", { 0.15f, 0.20f, 0.12f, 0.5f }, 0 },   // mellow, clean, long
     { "wurli",    { 0.50f, 0.35f, 0.30f, 0.5f }, 0 },   // soul ballad
     { "wur buzz", { 0.50f, 0.66f, 0.82f, 0.6f }, 1 },   // cranked reed + auto-wah movement
-    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f }, 2 },   // funky bridge pickup + TOUCH-WAH (envelope follower — the Stevie "Superstition" envelope filter, responds to how hard you play)
+    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f }, 2 },   // funky bridge pickup + ENV-WAH (the fast per-note filter quack — navkit's "Clav Funky", confirmed by rendering it)
 };
 
 static int   handle[NKEY];
@@ -112,24 +112,30 @@ static void apply_slot(void) {
 // THE WAH RECIPE — all slot-level, so every strike (keys, auditions, autoplay) inherits it.
 // wah is just the per-voice SVF swept: AUTO = an LFO on the cutoff; ENV = the cutoff envelope
 // opening on each strike (the funky-clav quack). No engine code — see decision 0015.
+// Four wah flavours — one per modulation source, so this cart also demos the three mod sources
+// (LFO / mod-env / follower) on a filter. amt = the wah slider (depth/rate).
 static void apply_wah(void) {
     float amt = val[SL_WAH];
-    if (wah == 0) {
+    instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);     // clear all three; the active mode re-arms its own
+    instrument_env(I_EP, 0, ENV_CUTOFF, 0, 0, 0.0f);
+    instrument_follow(I_EP, LFO_CUTOFF, 0, 0, 0.0f);
+    if (wah == 0) {                              // OFF
         instrument_filter(I_EP, FILTER_OFF, 4000, 0);
-        instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);
-        instrument_follow(I_EP, LFO_CUTOFF, 0, 0, 0.0f);
     } else if (wah == 1) {                       // AUTO: an LFO sweeps a resonant BANDPASS (the
-        // moving resonant peak IS the wah vowel). The sweep STAYS in a musical band (~400-2200
-        // Hz) — the old wide depth dove to the 20Hz clamp where a bandpass passes nothing, so
-        // the wah pulsed to mud. Centre 1300 ± (400..900). Rhythmic, plays regardless of touch.
+        // moving peak IS the vowel). Stays in a musical band (~400-2200) — the old wide depth
+        // dove to the 20Hz clamp where a bandpass passes nothing, so it pulsed to mud. Rhythmic.
         instrument_filter(I_EP, FILTER_BAND, 1300, 11);
-        instrument_follow(I_EP, LFO_CUTOFF, 0, 0, 0.0f);
         instrument_lfo(I_EP, 0, LFO_CUTOFF, 1.5f + amt * 6.0f, 400.0f + amt * 500.0f);
+    } else if (wah == 2) {                       // ENV: a FAST per-note quack — the FUNKY CLAV.
+        // Rendered navkit's "Clav Funky" to nail this: a resonant lowpass whose cutoff snaps
+        // open on the strike and SHUTS in ~100ms (the brightness leads the body down). This is
+        // the envelope filter clav players actually use — not a follower (which hangs open).
+        instrument_filter(I_EP, FILTER_LOW, 500, 9);
+        instrument_env(I_EP, 0, ENV_CUTOFF, 2, 110, 2000.0f + amt * 800.0f);
     } else {                                     // TOUCH: the envelope FOLLOWER opens the bandpass
-        // from the note's own amplitude (fast attack, slow release) — the funky envelope-filter
-        // that responds to how hard you play. Centre opens ~350 -> ~2300, capped (not 3kHz+).
+        // from the note's own amplitude (fast attack, slow release) — the dynamic/sustained
+        // envelope-filter that responds to how hard you play (great on bass/leads, not the clav).
         instrument_filter(I_EP, FILTER_BAND, 350, 11);
-        instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);
         instrument_follow(I_EP, LFO_CUTOFF, 3, 200, 1000.0f + amt * 1500.0f);
     }
 }
@@ -197,7 +203,7 @@ void update(void) {
         if (frame() % 14 == 0) audition();
     }
 
-    if (keyp('V')) { wah = (wah + 1) % 3; apply_wah(); audition(); }
+    if (keyp('V')) { wah = (wah + 1) % 4; apply_wah(); audition(); }
     if (keyp('M')) autoplay = !autoplay;
 
     for (int b = 0; b < NKEY; b++) if (handle[b] >= 0) note_morph(handle[b], val[SL_BARK]);
@@ -213,7 +219,7 @@ void update(void) {
             if (!freeP) continue;
             p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, -1 };
             if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) { autoplay = !autoplay; continue; }
-            if (point_in_box(tx, ty, WAH_X, WAH_Y, WAH_W, WAH_H)) { wah = (wah + 1) % 3; apply_wah(); audition(); continue; }
+            if (point_in_box(tx, ty, WAH_X, WAH_Y, WAH_W, WAH_H)) { wah = (wah + 1) % 4; apply_wah(); audition(); continue; }
             if (point_in_box(tx, ty, OCT_DN_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H)) { octave_step(-1); continue; }
             if (point_in_box(tx, ty, OCT_UP_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H)) { octave_step(+1); continue; }
             if (ty >= KNOB_Y - 26 && ty < KNOB_Y - 12) {

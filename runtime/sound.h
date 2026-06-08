@@ -742,7 +742,7 @@ static void sound_epiano_start(Voice *v) {
         { .60f, .15f, .60f, .20f, .20f, .08f, 0,0,0,0,0,0 },
         { .60f, .55f, .50f, .20f, .30f, .10f, 0,0,0,0,0,0 },
     };
-    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.9f };   // base sustain s (Wurli/Clav; Rhodes uses the tuning split)
+    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.65f };   // base sustain s (Wurli/Clav; Rhodes uses the tuning split)
     int ty = (int)(v->harm * 2.999f); if (ty < 0) ty = 0; else if (ty > 2) ty = 2;
     v->ep_type = ty;
     float pp  = v->timb;                                     // pickup position / brightness
