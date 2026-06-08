@@ -161,6 +161,10 @@ typedef struct {
     float  rd_lp;                    // bore-loss 1-pole LP state (bell radiation + wall damping)
     float  rd_dc_prev, rd_dc_state;  // DC blocker (steady blow pressure → large DC — essential)
     float  rd_vib_ph;                // lip-vibrato LFO phase
+    float  rd_noise_lp;              // breath-turbulence noise LP (the "air" in the tone)
+    float  rd_drift_ph;              // slow LFO phase — humanizes vibrato rate/depth (not a clean LFO)
+    float  rd_drift;                 // slow breath-pressure random walk (kills the dead-flat steady state)
+    int    rd_attack;                // attack-chiff samples remaining (the noisy tonguing onset)
     float  rd_tilt;                  // output-tilt LP (timbre brightness, built here — STEP-0)
     float  rd_initfreq;              // freq at note-on (bore sized for it; pitch tracking glides off it)
     int    rd_len;                   // bore delay length (half-wavelength); 0 = no note-on init
@@ -1014,7 +1018,9 @@ static void sound_reed_start(Voice *v) {
         v->ks_buf[i] = (((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f) * 0.01f;
     }
     v->rd_len = len; v->rd_idx = 0; v->rd_initfreq = f;
-    v->rd_lp = v->rd_dc_prev = v->rd_dc_state = v->rd_vib_ph = v->rd_tilt = 0.0f;
+    v->rd_lp = v->rd_dc_prev = v->rd_dc_state = v->rd_vib_ph = v->rd_tilt = v->rd_noise_lp = 0.0f;
+    v->rd_drift_ph = v->rd_drift = 0.0f;
+    v->rd_attack   = (int)(0.028f * (float)SOUND_SAMPLE_RATE);   // ~28ms breathy chiff onset
     v->rd_on = true;
 }
 
@@ -1038,12 +1044,31 @@ static inline float sound_reed_sample(Voice *v, float pitch_mul) {
     float apert = 0.70f - v->timb * 0.50f;                 // narrows with edge (the paired axis)
     float blow  = 0.52f + v->mor * 0.23f;                  // breath: [0.52,0.75], under the ~0.78 choke
     float vibd  = 0.10f + v->mor * 0.40f;                  // lean-in vibrato deepens with breath
-    // lip vibrato (~5.8 Hz) modulating mouth pressure
-    v->rd_vib_ph += 5.8f / SR;
+    // HUMANIZED lip vibrato — a real player's vibrato is not a clean LFO: rate and depth wander,
+    // and it lives mostly in PITCH with only a little pressure. A slow ~0.7Hz wobble drifts both.
+    v->rd_drift_ph += 0.7f / SR; if (v->rd_drift_ph >= 1.0f) v->rd_drift_ph -= 1.0f;
+    float wob = sinf(v->rd_drift_ph * TWO_PI);             // slow wander, shared by rate + depth
+    v->rd_vib_ph += (5.2f + 0.9f * wob) / SR;              // vibrato rate drifts ~4.3..6.1 Hz
     if (v->rd_vib_ph >= 1.0f) v->rd_vib_ph -= 1.0f;
-    float Pm = blow + sinf(v->rd_vib_ph * TWO_PI) * vibd * 0.08f;
-    // bore delay: fractional read length tracks the live pitch (vibrato/glide/pitch-env)
-    float curf = v->freq * pitch_mul; if (curf < 20.0f) curf = 20.0f;
+    float vib = sinf(v->rd_vib_ph * TWO_PI) * vibd * (0.8f + 0.2f * wob);   // depth breathes too
+    // breath turbulence — the "air" in the tone, the #1 cue that this is a REAL wind instrument
+    // (navkit omits it, so the bare port reads as a synth tooter). Lightly LP the white noise
+    // (airy, not hissy), scale by breath pressure so it vanishes when not blowing, add to the
+    // DRIVING pressure so the bore resonates it into breathy formants, not a hiss layer on top.
+    v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+    float wn = ((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f;
+    v->rd_noise_lp += 0.55f * (wn - v->rd_noise_lp);
+    v->rd_drift += 0.0007f * (wn - v->rd_drift);          // very slow random walk → wandering breath
+    float air = 0.10f + v->mor * 0.12f;                    // more air as the player leans in (breath)
+    if (v->rd_attack > 0) {                                // the chiff: a breathy noise burst at onset
+        air += 0.55f * (float)v->rd_attack / (0.028f * SR);
+        v->rd_attack--;
+    }
+    // mouth pressure: steady blow + a little vibrato + a slow drift + the resonated breath noise
+    float Pm = blow + vib * 0.045f + v->rd_drift * blow * 0.05f + blow * air * v->rd_noise_lp;
+    // bore delay: fractional read length tracks the live pitch — plus our pitch vibrato (where a
+    // real wind vibrato mostly lives), and any cart LFO/glide/pitch-env (§8.8.1)
+    float curf = v->freq * pitch_mul * (1.0f + vib * 0.011f); if (curf < 20.0f) curf = 20.0f;
     float effLen = (float)v->rd_len * v->rd_initfreq / curf;
     if (effLen < 2.0f) effLen = 2.0f;
     if (effLen > (float)v->rd_len) effLen = (float)v->rd_len;
