@@ -1,4 +1,6 @@
 #include "studio.h"
+#include "radio.h"   // shared station chassis — ambient takes the PRNG + history +
+                     // chrome, and skips the step clock (it's beatless)
 #include <stdio.h>
 #include <math.h>
 
@@ -79,14 +81,11 @@ static float det[4];             // per-pad constant detune (performance, not se
 
 static int iabs(int v) { return v < 0 ? -v : v; }
 
-// composition PRNG (xorshift32) — same contract as bossa.c: everything that
-// defines THE SONG draws from this; performance color keeps engine rnd().
-static unsigned rngState = 1;
-static unsigned srnd_u(void) {
-    rngState ^= rngState << 13; rngState ^= rngState >> 17; rngState ^= rngState << 5;
-    return rngState;
-}
-static int srnd(int n) { return (int)(srnd_u() % (unsigned)n); }
+// composition PRNG + session history live in radio.h (RadioSeed rs) — same
+// contract as bossa.c: THE SONG draws from this byte-identical xorshift stream;
+// performance color keeps engine rnd(). Beatless, so no RadioClock here.
+static RadioSeed rs;
+#define srnd(n) rad_srnd(&rs, (n))
 
 // ── song generation ───────────────────────────────────────────────────────
 static const char *TW1[] = { "Aurora","Drift","Stillness","Vapor","Glacier","Fog",
@@ -95,10 +94,7 @@ static const char *TW2[] = { "at Dawn","in Fog","Below","Adrift","at Sea","in Bl
     "Asleep","Unmoored","in Winter","Above" };
 
 static void new_song(double pos, unsigned seed) {
-    if (!seed) seed = ((unsigned)rnd(0x10000) << 16) ^ (unsigned)rnd(0x10000)
-                      ^ (unsigned)frame() * 2654435761u;
-    if (!seed) seed = 1;
-    rngState = sng.seed = seed;
+    sng.seed = rad_seed_begin(&rs, seed);   // 0 = derive fresh (same expression as ever)
 
     sng.keyPc = srnd(12);
     sng.mode  = srnd(4);
@@ -121,15 +117,9 @@ static void new_song(double pos, unsigned seed) {
     songCount++;
 }
 
-// session history — [ and ] walk back through everything the radio played
-static unsigned hist[64];
-static int histN = 0, histPos = -1;
-
-static void fresh_song(double pos) {
+static void fresh_song(double pos) {       // [ and ] walk the session history (radio.h)
     new_song(pos, 0);
-    if (histN == 64) { for (int i = 1; i < 64; i++) hist[i - 1] = hist[i]; histN--; }
-    hist[histN++] = sng.seed;
-    histPos = histN - 1;
+    rad_hist_log(&rs);
 }
 
 // ── harmony ───────────────────────────────────────────────────────────────
@@ -251,15 +241,19 @@ void update(void) {
     if (!booted) {
         bpm(60);
         setup_instruments();
-        if (AMBIENT_SEED) { new_song(pos, AMBIENT_SEED); hist[histN++] = sng.seed; histPos = 0; }
+        if (AMBIENT_SEED) { new_song(pos, AMBIENT_SEED); rad_hist_log(&rs); }
         else fresh_song(pos);
         booted = true;
     }
 
+    // ambient keeps its OWN control surface (rad_input doesn't fit it): UP/DOWN
+    // drive a float `pace`, not tempo/bpm, and the intensity keys carry side
+    // effects (wind in/out, pad volume) the shared block can't express. Only the
+    // history walk routes through radio.h.
     if (keyp(KEY_SPACE)) fresh_song(pos);
     if (keyp('R')) new_song(pos, sng.seed);                    // same dream, fresh night
-    if (keyp('[') && histPos > 0)         new_song(pos, hist[--histPos]);
-    if (keyp(']') && histPos < histN - 1) new_song(pos, hist[++histPos]);
+    if (keyp('[')) { unsigned s = rad_hist_back(&rs); if (s) new_song(pos, s); }
+    if (keyp(']')) { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
     if (keyp(KEY_RIGHT) && intensity < 3) {
         intensity++;
         if (intensity == 1 && radioOn && windH < 0 && padH[0] >= 0) {
@@ -301,15 +295,9 @@ void update(void) {
 #endif
 }
 
-// ── draw — the radio at night ─────────────────────────────────────────────
-static void knob(int x, int y, int r, float t, const char *label, int col) {
-    circfill(x, y, r, CLR_DARK_PURPLE);
-    circ(x, y, r, CLR_BLACK);
-    float a = (-0.75f + t * 1.5f) * 3.14159f;
-    line(x, y, x + (int)(sinf(a) * (r - 2)), y - (int)(cosf(a) * (r - 2)), col);
-    print(label, x - text_width(label) / 2, y + r + 3, CLR_LIGHT_GREY);
-}
-
+// ── draw — the radio at night (shared chassis knobs/help from radio.h; the
+// purple body, AM dial, aurora window and breathing LED stay ambient's own,
+// since a beatless AM station doesn't fit the FM-dial chassis) ─────────────
 void draw(void) {
     cls(CLR_BLACK);
     float t = timer();
@@ -379,29 +367,21 @@ void draw(void) {
         print(nowChord[0], 178 - cw / 2, 105, CLR_DARK_PURPLE);
         print("->", 212, 106, CLR_DARK_GREY);
         print(nowChord[1], 232, 106, CLR_LIGHT_GREY);
-        for (int i = 0; i < NCHORD; i++)                        // walk progress
-            circfill(154 + i * 9, 126, 1, i <= chordIdx ? CLR_BLUE : CLR_DARK_GREY);
+        rad_phrase_dots(154, 126, NCHORD, chordIdx, CLR_BLUE);  // the walk progress
     }
 
     // knobs + slow-breathing power LED (no beat to blink to)
     static const char *FEEL[4] = { "void", "night", "dawn", "aurora" };
-    knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_BLUE);
-    knob(218, 148, 9, (pace - 0.55f) / 1.2f, "pace", CLR_BLUE);
+    rad_knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_BLUE);
+    rad_knob(218, 148, 9, (pace - 0.55f) / 1.2f, "pace", CLR_BLUE);
     float breathe = 0.5f + 0.5f * sinf(t * 0.8f);
-    knob(262, 148, 11, radioOn ? breathe : 0, "drift", CLR_RED);
-    circfill(282, 28, 2, radioOn && breathe > 0.5f ? CLR_RED : CLR_DARK_RED);
+    rad_knob(262, 148, 11, radioOn ? breathe : 0, "drift", CLR_RED);
+    circfill(282, 28, 2, radioOn && breathe > 0.5f ? CLR_RED : CLR_DARK_RED);  // breathes, no beat
 
-    // help button + bottom hint
-    circfill(288, 172, 6, CLR_DARK_PURPLE);
-    circ(288, 172, 6, CLR_BLACK);
-    print("?", 285, 169, CLR_LIGHT_GREY);
-    print("SPACE next song   H help", 8, 190, CLR_DARK_GREY);
+    rad_help_button(CLR_INDIGO);
+    rad_footer("SPACE next song   H help");
 
     if (showHelp) {
-        rectfill(44, 40, 232, 122, CLR_BLACK);
-        rect(44, 40, 232, 122, CLR_INDIGO);
-        print("AMBIENT RADIO", 52, 46, CLR_BLUE);
-        font(FONT_SMALL);
         static const char *HELP[7][2] = {
             { "SPACE",      "next song (rolls a new seed)" },
             { "R",          "same dream again - a fresh night" },
@@ -411,13 +391,11 @@ void draw(void) {
             { "M",          "radio power on / off" },
             { "H or ?",     "show / hide this help" },
         };
-        for (int i = 0; i < 7; i++) {
-            print(HELP[i][0], 52, 60 + i * 9, CLR_BLUE);
-            print(HELP[i][1], 106, 60 + i * 9, CLR_LIGHT_GREY);
-        }
-        print("the #number on the display IS the song.", 52, 128, CLR_INDIGO);
-        print("pin it for good: #define AMBIENT_SEED 0x...", 52, 137, CLR_INDIGO);
-        print("seeded composition, plays fresh every night", 52, 146, CLR_INDIGO);
-        font(FONT_NORMAL);
+        static const char *NOTES[3] = {
+            "the #number on the display IS the song.",
+            "pin it for good: #define AMBIENT_SEED 0x...",
+            "seeded composition, plays fresh every night",
+        };
+        rad_help_panel("AMBIENT RADIO", HELP, 7, NOTES, 3, CLR_INDIGO);
     }
 }

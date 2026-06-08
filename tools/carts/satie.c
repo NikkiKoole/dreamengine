@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "radio.h"   // shared station chassis (PRNG, clock, voice-leading, chrome)
 #include <stdio.h>
 #include <math.h>
 
@@ -79,15 +80,19 @@ static const char *MARKING[6] = {
     "tres luisant", "avec etonnement", "sans sourire",
 };
 
-static Song   sng;
+static Song       sng;
+static RadioSeed  rs;                       // composition PRNG + history (radio.h)
+static RadioClock clk = { -1, 0, 238.0 };   // schedule-ahead step clock (radio.h)
+// the clock's fields under their pre-migration names — keeps the body unchanged
+#define stepMs    (clk.stepMs)
+#define songBase  (clk.songBase)
+#define scheduled (clk.scheduled)
+#define srnd(n)   rad_srnd(&rs, (n))         // SAME xorshift stream — pinned seeds depend on it
 static int    tempo     = 63;
 static int    intensity = 1;     // feel: shifts the density curve (touch + ornament here)
 static bool   radioOn   = true;
 static bool   showHelp  = false;
-static long   scheduled = -1;
-static long   songBase  = 0;
 static int    songCount = 0;
-static double stepMs    = 238.0;
 static int    gv[3]     = { 64, 67, 71 };
 static bool   gvInit    = false;
 static float  vu        = 0;
@@ -96,20 +101,9 @@ static char   nowChord[2][8];
 
 static int iabs(int v) { return v < 0 ? -v : v; }
 
-// composition PRNG (xorshift32) — same contract as the other radios
-static unsigned rngState = 1;
-static unsigned srnd_u(void) {
-    rngState ^= rngState << 13; rngState ^= rngState >> 17; rngState ^= rngState << 5;
-    return rngState;
-}
-static int srnd(int n) { return (int)(srnd_u() % (unsigned)n); }
-
 // ── piece generation ──────────────────────────────────────────────────────
 static void new_song(double pos, unsigned seed) {
-    if (!seed) seed = ((unsigned)rnd(0x10000) << 16) ^ (unsigned)rnd(0x10000)
-                      ^ (unsigned)frame() * 2654435761u;
-    if (!seed) seed = 1;
-    rngState = sng.seed = seed;
+    sng.seed = rad_seed_begin(&rs, seed);   // 0 = derive fresh (same expression as ever)
 
     sng.keyPc      = srnd(12);
     sng.gnossienne = srnd(100) < 40;
@@ -159,15 +153,9 @@ static void new_song(double pos, unsigned seed) {
     songCount++;
 }
 
-// session history — [ and ] walk back through everything the radio played
-static unsigned hist[64];
-static int histN = 0, histPos = -1;
-
-static void fresh_song(double pos) {
+static void fresh_song(double pos) {       // [ and ] walk the session history (radio.h)
     new_song(pos, 0);
-    if (histN == 64) { for (int i = 1; i < 64; i++) hist[i - 1] = hist[i]; histN--; }
-    hist[histN++] = sng.seed;
-    histPos = histN - 1;
+    rad_hist_log(&rs);
 }
 
 // ── form / harmony ────────────────────────────────────────────────────────
@@ -204,34 +192,10 @@ static void apply_voicing(void) {
     instrument_filter(I_PNOB, FILTER_LOW, (int)(1300 * m), 1);
 }
 
-// nearest-tone voice leading — ninth cart, same block
+// nearest-tone voice leading — rad_lead_to (radio.h) is the shared block; the
+// pianist's right hand lives in the 55..76 register.
 static void lead_voices(Pc c) {
-    int pcs[3];
-    for (int k = 0; k < 3; k++) pcs[k] = (c.pc + QV[c.q][k]) % 12;
-    if (!gvInit) {
-        for (int k = 0; k < 3; k++) {
-            int target = 60 + k * 4;
-            int dd = ((pcs[k] - target) % 12 + 18) % 12 - 6;
-            gv[k] = target + dd;
-        }
-        gvInit = true;
-    } else {
-        bool used[3] = { false, false, false };
-        for (int v = 0; v < 3; v++) {
-            int bestJ = -1, bestC = 0, bestD = 99;
-            for (int j = 0; j < 3; j++) {
-                if (used[j]) continue;
-                int dd = ((pcs[j] - gv[v]) % 12 + 18) % 12 - 6;
-                if (iabs(dd) < bestD) { bestD = iabs(dd); bestJ = j; bestC = gv[v] + dd; }
-            }
-            used[bestJ] = true;
-            gv[v] = bestC;
-        }
-    }
-    for (int k = 0; k < 3; k++) {
-        while (gv[k] < 55) gv[k] += 12;
-        while (gv[k] > 76) gv[k] -= 12;
-    }
+    rad_lead_to(c.pc, QV[c.q], gv, 3, 55, 76, &gvInit);
 }
 
 // the singing hand: stepwise above all, in the piece's scale
@@ -259,8 +223,7 @@ static int pick_mel(Pc c) {
 static void play_step(long abs, double pos) {
     long s = abs - songBase;
     if (s < 0) return;
-    int dly = (int)((abs - pos) * stepMs);
-    if (dly < 1) dly = 1;
+    int dly = rad_step_dly(&clk, abs, pos);
     int  step = (int)(s % BARSTEPS);
     long bar  = s / BARSTEPS;
     if (bar >= 64) return;
@@ -330,35 +293,28 @@ void update(void) {
     if (!booted) {
         setup_instruments();
         apply_voicing();
-        if (SATIE_SEED) { new_song(pos, SATIE_SEED); hist[histN++] = sng.seed; histPos = 0; }
+        if (SATIE_SEED) { new_song(pos, SATIE_SEED); rad_hist_log(&rs); }
         else fresh_song(pos);
         scheduled = (long)pos;
         booted = true;
     }
 
-    if (keyp(KEY_SPACE)) fresh_song(pos);
-    if (keyp('R')) new_song(pos, sng.seed);
-    if (keyp('[') && histPos > 0)         new_song(pos, hist[--histPos]);
-    if (keyp(']') && histPos < histN - 1) new_song(pos, hist[++histPos]);
-    if (keyp(KEY_RIGHT) && intensity < 3) intensity++;
-    if (keyp(KEY_LEFT)  && intensity > 0) intensity--;
-    if (keyp(KEY_UP)   && tempo < 80) { tempo += 2; bpm(tempo); }
-    if (keyp(KEY_DOWN) && tempo > 48) { tempo -= 2; bpm(tempo); }
-    if (keyp('T')) { toneSel = (toneSel + 1) % 4; apply_voicing(); }
-    if (keyp('M')) {
-        radioOn = !radioOn;
+    // the shared input block (radio.h): feel/tempo/tone/help handled inside, the
+    // cart reacts to the events. tone has 4 felts; re-aim the piano filters on T.
+    int ev = rad_input(&tempo, 48, 80, 2, &intensity, &toneSel, 4, &radioOn, &showHelp);
+    if (ev & RAD_EV_NEW)    fresh_song(pos);
+    if (ev & RAD_EV_REPLAY) new_song(pos, sng.seed);
+    if (ev & RAD_EV_BACK)   { unsigned s = rad_hist_back(&rs); if (s) new_song(pos, s); }
+    if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
+    if (ev & RAD_EV_TONE)   apply_voicing();
+    if (ev & RAD_EV_POWER)  {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;
     }
-    if (keyp('H')) showHelp = !showHelp;
-    if (mouse_pressed(MOUSE_LEFT)) {
-        int hx = mouse_x() - 288, hy = mouse_y() - 172;
-        if (hx * hx + hy * hy < 81) showHelp = !showHelp;
-    }
 
     if (radioOn) {
-        long target = (long)pos + 1;
-        while (scheduled < target) { scheduled++; play_step(scheduled, pos); }
+        long st;
+        while (rad_clock_step(&clk, pos, &st)) play_step(st, pos);
 
         long songStep = scheduled - songBase;
         if (songStep >= 64L * BARSTEPS) fresh_song(pos);
@@ -382,15 +338,9 @@ void update(void) {
 #endif
 }
 
-// ── draw — the parlour radio, rain on the window ──────────────────────────
-static void knob(int x, int y, int r, float t, const char *label, int col) {
-    circfill(x, y, r, CLR_MEDIUM_GREY);
-    circ(x, y, r, CLR_DARKER_GREY);
-    float a = (-0.75f + t * 1.5f) * 3.14159f;
-    line(x, y, x + (int)(sinf(a) * (r - 2)), y - (int)(cosf(a) * (r - 2)), col);
-    print(label, x - text_width(label) / 2, y + r + 3, CLR_DARKER_GREY);
-}
-
+// ── draw — the parlour radio, rain on the window (shared chrome knobs/help
+// from radio.h; the porcelain body, white FM dial and rainy-Paris window stay
+// satie's own — a light radio doesn't fit the dark chassis face) ───────────
 void draw(void) {
     cls(CLR_DARKER_BLUE);
     float t = timer();
@@ -470,24 +420,17 @@ void draw(void) {
             circfill(152 + i * 7, 132, 1, i <= bar / 8 ? CLR_DARK_GREY : CLR_LIGHT_GREY);
     }
 
-    // knobs + power LED
+    // knobs + power LED (dark-red on porcelain; the LED still beats the bar)
     static const char *FEEL[4] = { "meuble", "reverie", "salon", "ardent" };
-    knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_DARK_RED);
-    knob(218, 148, 9, (tempo - 48) / 32.0f, "tempo", CLR_DARK_RED);
-    knob(262, 148, 11, toneSel / 3.0f, TONENAME[toneSel], CLR_DARK_RED);
-    circfill(282, 28, 2, radioOn && beat_pos() < 0.25f ? CLR_DARK_RED : CLR_MEDIUM_GREY);
+    rad_knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_DARK_RED);
+    rad_knob(218, 148, 9, (tempo - 48) / 32.0f, "tempo", CLR_DARK_RED);
+    rad_knob(262, 148, 11, toneSel / 3.0f, TONENAME[toneSel], CLR_DARK_RED);
+    rad_power_led(radioOn, CLR_DARK_RED, CLR_MEDIUM_GREY);
 
-    // help button + hint
-    circfill(288, 172, 6, CLR_MEDIUM_GREY);
-    circ(288, 172, 6, CLR_DARKER_GREY);
-    print("?", 285, 169, CLR_DARKER_GREY);
-    print("SPACE next piece   H help", 8, 190, CLR_MEDIUM_GREY);
+    rad_help_button(CLR_DARK_RED);
+    rad_footer("SPACE next piece   H help");
 
     if (showHelp) {
-        rectfill(44, 40, 232, 122, CLR_BLACK);
-        rect(44, 40, 232, 122, CLR_LIGHT_YELLOW);
-        print("SATIE RADIO", 52, 46, CLR_LIGHT_YELLOW);
-        font(FONT_SMALL);
         static const char *HELP[8][2] = {
             { "SPACE",      "next piece (rolls a new seed)" },
             { "R",          "same piece again - a fresh take" },
@@ -498,13 +441,11 @@ void draw(void) {
             { "M",          "radio power on / off" },
             { "H or ?",     "show / hide this help" },
         };
-        for (int i = 0; i < 8; i++) {
-            print(HELP[i][0], 52, 58 + i * 9, CLR_YELLOW);
-            print(HELP[i][1], 106, 58 + i * 9, CLR_WHITE);
-        }
-        print("the #number on the display IS the piece.", 52, 132, CLR_LIGHT_YELLOW);
-        print("pin it for good: #define SATIE_SEED 0x...", 52, 141, CLR_LIGHT_YELLOW);
-        print("furniture music, as the man intended. 1917.", 52, 150, CLR_LIGHT_YELLOW);
-        font(FONT_NORMAL);
+        static const char *NOTES[3] = {
+            "the #number on the display IS the piece.",
+            "pin it for good: #define SATIE_SEED 0x...",
+            "furniture music, as the man intended. 1917.",
+        };
+        rad_help_panel("SATIE RADIO", HELP, 8, NOTES, 3, CLR_LIGHT_YELLOW);
     }
 }

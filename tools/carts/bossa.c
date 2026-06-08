@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "radio.h"   // the shared station chassis (PRNG, clock, voice-leading, chrome)
 #include <stdio.h>
 #include <math.h>
 
@@ -118,24 +119,23 @@ typedef struct {
     unsigned seed;         // the whole composition, replayable from this one number
 } Song;
 
-// composition PRNG (xorshift32) — everything that defines THE SONG draws from
-// this, so a seed replays the same tune. performance jitter keeps engine rnd().
-static unsigned rngState = 1;
-static unsigned srnd_u(void) {
-    rngState ^= rngState << 13; rngState ^= rngState >> 17; rngState ^= rngState << 5;
-    return rngState;
-}
-static int  srnd(int n)     { return (int)(srnd_u() % (unsigned)n); }
-static bool schance(int p)  { return (int)(srnd_u() % 100u) < p; }
-
-static Song   sng;
+// composition PRNG + session history live in radio.h (RadioSeed rs); srnd is the
+// SAME xorshift stream as before the migration — pinned seeds depend on it byte
+// for byte. performance jitter keeps engine rnd().
+static Song       sng;
+static RadioSeed  rs;                       // composition PRNG + history (radio.h)
+static RadioClock clk = { -1, 0, 119.0 };   // schedule-ahead step clock (radio.h)
+// the clock's fields under their pre-migration names — keeps the body textually
+// unchanged (smallest possible diff over the original)
+#define stepMs    (clk.stepMs)
+#define songBase  (clk.songBase)
+#define scheduled (clk.scheduled)
+#define srnd(n)    rad_srnd(&rs, (n))
+#define schance(p) (srnd(100) < (p))
 static int    tempo      = 126;
 static int    intensity  = 2;        // 0 bass+gtr · 1 +shaker · 2 +rim+melody · 3 everything louder
 static bool   radioOn    = true;
-static long   scheduled  = -1;       // last absolute 16th-step we scheduled
-static long   songBase   = 0;        // absolute step where the current song starts
 static int    songCount  = 0;
-static double stepMs     = 119.0;
 static int    gv[3]      = { 64, 67, 71 };  // guitar voices (midi), led chord to chord
 static int    gtrPluck   = 0;              // 0 = TRI fake, 1 = INSTR_PLUCK real string
 static bool   gvInit     = false;
@@ -144,6 +144,7 @@ static bool   melOn      = true;     // does the cell play this 2-bar instance?
 static float  vu         = 0;        // VU needle drive
 static char   nowChord[3][8];        // prev / current / next chord names for the display
 static bool   showHelp   = false;    // H or the ? button
+static int    toneSel    = 0;        // bossa has no tone knob — rad_input gets ntone=0
 
 static int iabs(int v) { return v < 0 ? -v : v; }
 
@@ -163,10 +164,7 @@ static const char *TW2[] = { "de Verao","do Mar","da Manha","do Rio","de Marco",
     "da Lua","do Vento","de Abril","da Praia","do Sol" };
 
 static void new_song(double pos, unsigned seed) {
-    if (!seed) seed = ((unsigned)rnd(0x10000) << 16) ^ (unsigned)rnd(0x10000)
-                      ^ (unsigned)frame() * 2654435761u;
-    if (!seed) seed = 1;
-    rngState = sng.seed = seed;
+    sng.seed = rad_seed_begin(&rs, seed);   // 0 = derive fresh (same expression as ever)
 
     sng.keyPc = srnd(12);
     gen_section(sng.prog,     F_I);
@@ -199,15 +197,9 @@ static void new_song(double pos, unsigned seed) {
     songCount++;
 }
 
-// session history — [ and ] walk back through everything the radio played
-static unsigned hist[64];
-static int histN = 0, histPos = -1;
-
-static void fresh_song(double pos) {
+static void fresh_song(double pos) {       // [ and ] walk the session history (radio.h)
     new_song(pos, 0);
-    if (histN == 64) { for (int i = 1; i < 64; i++) hist[i - 1] = hist[i]; histN--; }
-    hist[histN++] = sng.seed;
-    histPos = histN - 1;
+    rad_hist_log(&rs);
 }
 
 // ── harmony helpers ───────────────────────────────────────────────────────
@@ -228,35 +220,12 @@ static int func_at(long s) {
 
 static int root_pc(int f) { return (sng.keyPc + F_OFF[f]) % 12; }
 
-// move each guitar voice to the nearest tone of the new chord (greedy nearest
-// assignment, no voice re-stacking → smooth, composed-sounding comping)
+// move each guitar voice to the nearest tone of the new chord — rad_lead_to
+// (radio.h) is the shared block, the single biggest "sounds composed" trick;
+// this just resolves the function into root + the quality's voicing intervals.
+// guitar register window: 58..82.
 static void lead_voices(int f) {
-    int pcs[3];
-    for (int k = 0; k < 3; k++) pcs[k] = (root_pc(f) + QVOICE[F_QUAL[f]][k]) % 12;
-    if (!gvInit) {
-        for (int k = 0; k < 3; k++) {
-            int target = 62 + k * 5;
-            int d = ((pcs[k] - target) % 12 + 18) % 12 - 6;
-            gv[k] = target + d;
-        }
-        gvInit = true;
-    } else {
-        bool used[3] = { false, false, false };
-        for (int v = 0; v < 3; v++) {
-            int bestJ = -1, bestC = 0, bestD = 99;
-            for (int j = 0; j < 3; j++) {
-                if (used[j]) continue;
-                int d = ((pcs[j] - gv[v]) % 12 + 18) % 12 - 6;   // nearest octave copy
-                if (iabs(d) < bestD) { bestD = iabs(d); bestJ = j; bestC = gv[v] + d; }
-            }
-            used[bestJ] = true;
-            gv[v] = bestC;
-        }
-    }
-    for (int k = 0; k < 3; k++) {        // keep the comp in guitar register
-        while (gv[k] < 58) gv[k] += 12;
-        while (gv[k] > 82) gv[k] -= 12;
-    }
+    rad_lead_to(root_pc(f), QVOICE[F_QUAL[f]], gv, 3, 58, 82, &gvInit);
 }
 
 // melody: pick the chord tone (or 9th) nearest the walker, with a little drift
@@ -282,8 +251,7 @@ static int pick_mel(int f) {
 static void play_step(long abs, double pos) {
     long s = abs - songBase;
     if (s < 0) return;                              // between songs: air
-    int dly = (int)((abs - pos) * stepMs);
-    if (dly < 1) dly = 1;
+    int dly = rad_step_dly(&clk, abs, pos);
     int step = (int)(s % 16);                       // 16th within the bar
     int s32  = (int)(s % 32);                       // position in the 2-bar pattern
     int f    = func_at(s);
@@ -398,35 +366,28 @@ void update(void) {
 
     if (!booted) {
         setup_instruments();
-        if (BOSSA_SEED) { new_song(pos, BOSSA_SEED); hist[histN++] = sng.seed; histPos = 0; }
+        if (BOSSA_SEED) { new_song(pos, BOSSA_SEED); rad_hist_log(&rs); }
         else fresh_song(pos);
         scheduled = (long)pos;
         booted = true;
     }
 
-    if (keyp(KEY_SPACE)) fresh_song(pos);
-    if (keyp('R')) new_song(pos, sng.seed);                            // same chart, fresh take
-    if (keyp('[') && histPos > 0)         new_song(pos, hist[--histPos]);
-    if (keyp(']') && histPos < histN - 1) new_song(pos, hist[++histPos]);
-    if (keyp(KEY_RIGHT) && intensity < 3) intensity++;
-    if (keyp(KEY_LEFT)  && intensity > 0) intensity--;
-    if (keyp(KEY_UP)   && tempo < 152) { tempo += 4; bpm(tempo); }
-    if (keyp(KEY_DOWN) && tempo > 100) { tempo -= 4; bpm(tempo); }
-    if (keyp('M')) {
-        radioOn = !radioOn;
+    // the shared input block (radio.h): feel/tempo/help handled inside, the cart
+    // reacts to the events. ntone=0 — bossa has no tone knob.
+    int ev = rad_input(&tempo, 100, 152, 4, &intensity, &toneSel, 0, &radioOn, &showHelp);
+    if (ev & RAD_EV_NEW)    fresh_song(pos);
+    if (ev & RAD_EV_REPLAY) new_song(pos, sng.seed);                   // same chart, fresh take
+    if (ev & RAD_EV_BACK)   { unsigned s = rad_hist_back(&rs); if (s) new_song(pos, s); }
+    if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
+    if (ev & RAD_EV_POWER)  {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;        // rejoin the broadcast mid-song
     }
     if (keyp('G')) { gtrPluck = !gtrPluck; setup_gtr(); }    // A/B the guitar chair, mid-song
-    if (keyp('H')) showHelp = !showHelp;
-    if (mouse_pressed(MOUSE_LEFT)) {       // the little ? button on the chassis
-        int hx = mouse_x() - 288, hy = mouse_y() - 172;
-        if (hx * hx + hy * hy < 81) showHelp = !showHelp;
-    }
 
     if (radioOn) {
-        long target = (long)pos + 1;       // schedule one step ahead of the clock
-        while (scheduled < target) { scheduled++; play_step(scheduled, pos); }
+        long st;                           // schedule one step ahead of the clock
+        while (rad_clock_step(&clk, pos, &st)) play_step(st, pos);
 
         long songStep = scheduled - songBase;
         if (songStep >= (long)sng.choruses * 512) fresh_song(pos);   // station moves on
@@ -450,48 +411,27 @@ void update(void) {
 #endif
 }
 
-// ── draw — the radio face ────────────────────────────────────────────────
-static void knob(int x, int y, int r, float t, const char *label, int col) {
-    circfill(x, y, r, CLR_DARK_BROWN);
-    circ(x, y, r, CLR_BLACK);
-    float a = (-0.75f + t * 1.5f) * 3.14159f;        // sweep -135°..+135°
-    line(x, y, x + (int)(sinf(a) * (r - 2)), y - (int)(cosf(a) * (r - 2)), col);
-    print(label, x - text_width(label) / 2, y + r + 3, CLR_DARK_PEACH);
-}
-
+// ── draw — the radio face (shared chassis from radio.h; the window art — the
+// speaker grille pulsing with the VU — stays bossa's own) ──────────────────
 void draw(void) {
     cls(CLR_DARKER_BLUE);
     long songStep = scheduled - songBase;
+    long bar = songStep >= 0 ? (songStep / 16) % 32 : 0;
 
-    // body
-    rectfill(20, 16, 280, 168, CLR_DARK_BROWN);
-    rectfill(24, 20, 272, 160, CLR_BROWN);
+    rad_body(CLR_BROWN, CLR_ORANGE);     // warm brown shell, a tropical accent
+    rad_dial(sng.freq, CLR_ORANGE);
 
-    // dial strip
-    rectfill(32, 26, 256, 18, CLR_LIGHT_PEACH);
-    rect(32, 26, 256, 18, CLR_DARK_BROWN);
-    for (int fq = 88; fq <= 107; fq++) {
-        int x = 36 + (fq - 88) * 13;
-        line(x, 38, x, 42, CLR_DARK_BROWN);
-        if (fq % 4 == 0) {
-            char t[8]; snprintf(t, 8, "%d", fq);
-            print(t, x - 6, 29, CLR_DARK_BROWN);
-        }
-    }
-    int nx = 36 + (int)((sng.freq - 88.0f) * 13.0f);
-    line(nx, 27, nx, 43, CLR_RED);
-    circfill(nx, 27, 1, CLR_RED);
-
-    // speaker grille — pulses gently with the VU
+    // window — the speaker grille, pulsing gently with the VU
     rectfill(34, 52, 102, 116, CLR_DARK_BROWN);
     for (int x = 38; x < 132; x += 4)
         line(x, 56, x, 164, (x / 4) % 2 ? CLR_BLACK : CLR_DARK_BROWN);
     int pr = 24 + (int)(vu * 1.2f);
     if (radioOn) circ(85, 110, pr > 50 ? 50 : pr, CLR_BLACK);
+    rect(34, 52, 102, 116, CLR_DARK_GREY);
 
-    // display window
+    // display
     rectfill(148, 52, 142, 44, CLR_BLACK);
-    rect(148, 52, 142, 44, CLR_DARK_GREY);
+    rect(148, 52, 142, 44, CLR_ORANGE);
     if (radioOn) {
         print(sng.title, 154, 58, CLR_LIME_GREEN);
         char l2[32];
@@ -502,44 +442,35 @@ void draw(void) {
     } else
         print("- radio off -", 170, 70, CLR_DARK_GREY);
 
-    // chord readout: prev / CURRENT / next
+    // chord readout: prev / CURRENT / next — bossa's own three-chord look
     if (radioOn) {
         print(nowChord[0], 152, 106, CLR_DARK_PEACH);
         int cw = text_width(nowChord[1]);
-        rectfill(214 - cw / 2 - 3, 102, cw + 6, 13, CLR_LIGHT_PEACH);
-        print(nowChord[1], 214 - cw / 2, 105, CLR_DARK_BROWN);
+        rectfill(214 - cw / 2 - 3, 102, cw + 6, 13, CLR_ORANGE);
+        print(nowChord[1], 214 - cw / 2, 105, CLR_BLACK);
         print(nowChord[2], 288 - text_width(nowChord[2]), 106, CLR_DARK_PEACH);
 
         // AABA form + bar dots
-        long bar = songStep >= 0 ? (songStep / 16) % 32 : 0;
         const char *FORM = "AABA";
         for (int i = 0; i < 4; i++) {
             char c[2] = { FORM[i], 0 };
             print(c, 166 + i * 14, 122, i == bar / 8 ? CLR_WHITE : CLR_MEDIUM_GREY);
         }
-        for (int i = 0; i < 8; i++)
-            circfill(236 + i * 7, 126, 1, i <= bar % 8 ? CLR_YELLOW : CLR_DARK_GREY);
+        rad_phrase_dots(236, 126, 8, bar % 8, CLR_YELLOW);
     }
 
     // knobs + power LED
     static const char *FEEL[4] = { "midnight", "cafe", "classic", "festival" };
-    knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_YELLOW);
-    knob(226, 148, 9, (tempo - 100) / 52.0f, "tempo", CLR_YELLOW);
+    rad_knob(168, 148, 9, intensity / 3.0f, FEEL[intensity], CLR_YELLOW);
+    rad_knob(218, 148, 9, (tempo - 100) / 52.0f, "tempo", CLR_YELLOW);
     float vt = vu / 12.0f;
-    knob(270, 148, 11, vt > 1 ? 1 : vt, "vu", CLR_RED);
-    circfill(282, 28, 2, radioOn && beat_pos() < 0.25f ? CLR_RED : CLR_DARK_RED);
+    rad_knob(262, 148, 11, vt > 1 ? 1 : vt, "vu", CLR_RED);
+    rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
-    // help button + bottom hint
-    circfill(288, 172, 6, CLR_DARK_BROWN);
-    circ(288, 172, 6, CLR_BLACK);
-    print("?", 285, 169, CLR_LIGHT_PEACH);
-    print(str("SPACE next song   G gtr:%s   H help", gtrPluck ? "PLUCK" : "TRI"), 8, 190, CLR_DARK_GREY);
+    rad_help_button(CLR_ORANGE);
+    rad_footer(str("SPACE next song   G gtr:%s   H help", gtrPluck ? "PLUCK" : "TRI"));
 
     if (showHelp) {
-        rectfill(44, 40, 232, 122, CLR_BLACK);
-        rect(44, 40, 232, 122, CLR_LIGHT_PEACH);
-        print("BOSSA RADIO", 52, 46, CLR_LIGHT_PEACH);
-        font(FONT_SMALL);
         static const char *HELP[8][2] = {
             { "SPACE",      "next song (rolls a new seed)" },
             { "R",          "same song again - a fresh take" },
@@ -550,13 +481,11 @@ void draw(void) {
             { "M",          "radio power on / off" },
             { "H or ?",     "show / hide this help" },
         };
-        for (int i = 0; i < 8; i++) {
-            print(HELP[i][0], 52, 60 + i * 9, CLR_YELLOW);
-            print(HELP[i][1], 106, 60 + i * 9, CLR_WHITE);
-        }
-        print("the #number on the display IS the song.", 52, 128, CLR_PEACH);
-        print("pin it for good: #define BOSSA_SEED 0x...", 52, 137, CLR_PEACH);
-        print("seeded composition, played fresh every time", 52, 146, CLR_PEACH);
-        font(FONT_NORMAL);
+        static const char *NOTES[3] = {
+            "the #number on the display IS the song.",
+            "pin it for good: #define BOSSA_SEED 0x...",
+            "seeded composition, played fresh every time",
+        };
+        rad_help_panel("BOSSA RADIO", HELP, 8, NOTES, 3, CLR_ORANGE);
     }
 }
