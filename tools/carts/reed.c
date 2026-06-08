@@ -8,21 +8,27 @@
 //   timbre    = EDGE   (0 = soft + dark reed → 1 = stiff + nasal/bright)
 //   morph     = BREATH (0 = soft steady tone → 1 = a leaning, growling breath + deeper vibrato)
 //
-// Because it HOLDS, the macros are live expression: hold a note (press-and-hold a key) and
-// sweep BREATH and you hear the player lean in — a swell no struck engine can make. The
-// reed self-oscillates only inside a pressure window, so the macros are pinned to that window
-// (push past it on a real reed and it chokes — see instrument-engines.md §8.8.7).
+// Because it HOLDS, the macros are live expression: hold a note and sweep BREATH and you hear
+// the player lean in — a swell no struck engine can make.
 //
-// The bore on the left morphs cylinder→cone with the harmonics knob; the breath meter rides
-// the morph knob; the readout prints the instrument() call to copy into your cart.
+// MONO + SLIDE (key V): a real reed is monophonic and you don't retrigger between notes — you
+// SLIDE. In mono mode one voice sounds; pressing a new key glides the breath to the new pitch
+// (note_pitch + note_glide, last-note priority — release and it slides back to the key still
+// held). The 4th slider is cart-side SLIDE (the portamento time), like tabla's ring knob. Poly
+// mode (default) blows an independent voice per key. The reed self-oscillates only inside a
+// pressure window, so the macros are pinned to it (push a real reed past it and it chokes —
+// instrument-engines.md §8.8.7).
+//
+// The bore on the left morphs cylinder→cone with harmonics; the breath meter rides morph; the
+// readout prints the instrument() call to copy into your cart.
 //
 // controls: A S D F G H J K  blow & HOLD (release to stop)   ·   Z / X octave down / up
 //           1..5 presets: clarinet / soprano sax / alto sax / tenor sax / oboe
+//           V mono/poly   ·   SPACE auto-breath swell   ·   M autoplay phrase on/off
 //           drag a slider (live on held notes), or LEFT/RIGHT pick + UP/DOWN turn it
-//           SPACE auto-breath swell on the held notes   ·   M autoplay phrase on/off
 //
-// MULTITOUCH: every finger blows its own pad — hold a chord with several fingers, or hold a
-// slider with one while a note drones. Desktop mouse = one pointer.
+// MULTITOUCH: poly — every finger blows its own pad (hold a chord); mono — the last finger down
+// wins and slides. Hold a slider with one finger while a note drones. Desktop mouse = one pointer.
 
 #include "studio.h"
 #include <math.h>
@@ -32,9 +38,10 @@
 
 static const char KEYS[NPAD] = { 'A','S','D','F','G','H','J','K' };
 
-static const char *MNAME[3] = { "harmonics", "timbre", "morph"  };
-static const char *MLO[3]   = { "clarinet",  "soft",   "still"  };
-static const char *MHI[3]   = { "sax",       "nasal",  "growl"  };
+#define NSLIDER 4   // 0..2 = engine macros, 3 = cart-side SLIDE (portamento ms, mono only)
+static const char *MNAME[NSLIDER] = { "harmonics", "timbre", "morph", "slide" };
+static const char *MLO[NSLIDER]   = { "clarinet",  "soft",   "still", "snap"  };
+static const char *MHI[NSLIDER]   = { "sax",       "nasal",  "growl", "smear" };
 
 // presets: macro positions for the five reeds the waveguide reaches (harmonica's free reed
 // sits below the self-oscillation floor — out of scope, §8.8.7). STARTING GUESSES, tuned by ear.
@@ -47,9 +54,8 @@ static const Preset PRESET[5] = {
     { "oboe",       0.55f, 0.92f, 0.50f },  // narrow conical, very stiff, nasal + penetrating
 };
 
-#define NSLIDER 3
 static int   midi_of[NPAD];
-static int   handle_of[NPAD];      // held-note handle per pad, -1 = silent
+static int   handle_of[NPAD];      // POLY: held-note handle per pad, -1 = silent
 static float glow[NPAD];
 static float knob[NSLIDER];
 static int   sel = 0;
@@ -57,9 +63,17 @@ static int   cur_preset = 0;
 static int   oct = 0;
 static bool  autoplay = true;
 static bool  breath = false;       // SPACE: auto-breath swell on held notes
+static bool  mono = false;         // V: monophonic + slide
 static float breath_lfo = 0.0f;
 static int   apos = 0;
-static float airflow = 0.0f;       // bore airflow animation phase
+static float airflow = 0.0f;
+
+// MONO state: one voice, last-note priority over a held-key stack — release the top key and
+// the breath slides back down to whatever's still held (a real reed never goes silent mid-phrase).
+static int   mono_handle = -1;
+static int   held_stack[NPAD];
+static int   held_n = 0;
+static int   active_pad = -1;      // which pad the mono voice is currently sounding (for the lit key)
 
 // per-finger pointer table — a finger blows a pad or drags a slider
 #define NPTR 10
@@ -68,8 +82,6 @@ enum { PTR_IDLE, PTR_DRAG, PTR_BLOW };
 typedef struct { int id, mode, k; } Ptr;
 static Ptr ptr[NPTR];
 
-static int km(int b) { return midi_of[b] + oct * 12; }
-
 // layout
 #define PAD_W    34
 #define PAD_X(b) (10 + (b) * (PAD_W + 4))
@@ -77,43 +89,68 @@ static int km(int b) { return midi_of[b] + oct * 12; }
 #define PAD_H    24
 #define PRE_Y    122
 #define MROW_Y   152
-#define MROW_W   72
-#define MROW_X(k) (10 + (k) * 102)
+#define MROW_W   66
+#define MROW_X(k) (8 + (k) * 78)
 // bore viz
 #define BORE_X   10
 #define BORE_Y   46
 #define BORE_W   86
 
+static int km(int b) { return midi_of[b] + oct * 12; }
+static int slide_ms(void) { return (int)(8.0f + knob[3] * knob[3] * 250.0f); }  // ~8..258ms, fine low end
+
 static void apply_patch(void) {
-    // attack 1, short decay, full sustain, release 4 — a held wind voice (like ORGAN/PD)
-    instrument(I_REED, INSTR_REED, 1, 0, 4, 1200);
+    instrument(I_REED, INSTR_REED, 1, 0, 4, 1200);   // held wind voice (attack 1, full sustain, release 4)
     instrument_harmonics(I_REED, knob[0]);
     instrument_timbre(I_REED, knob[1]);
     instrument_morph(I_REED, knob[2]);
 }
 
 // push the (possibly auto-breath-modulated) macros to every sounding voice — reed reads all
-// three LIVE (it's a continuous voice), so a swell or a bore change reaches a droning note.
+// three LIVE, so a swell or a bore change reaches a droning note in either mode.
 static void push_live(void) {
     float m = knob[2];
     if (breath) m = clamp(m * 0.5f + 0.5f * (0.5f + 0.5f * sinf(breath_lfo)), 0.0f, 1.0f);
-    for (int b = 0; b < NPAD; b++)
-        if (handle_of[b] >= 0) {
-            note_harmonics(handle_of[b], knob[0]);
-            note_timbre(handle_of[b], knob[1]);
-            note_morph(handle_of[b], m);
-        }
+    int h[NPAD + 1], n = 0;
+    if (mono) { if (mono_handle >= 0) h[n++] = mono_handle; }
+    else for (int b = 0; b < NPAD; b++) if (handle_of[b] >= 0) h[n++] = handle_of[b];
+    for (int i = 0; i < n; i++) {
+        note_harmonics(h[i], knob[0]);
+        note_timbre(h[i], knob[1]);
+        note_morph(h[i], m);
+    }
 }
 
-static void blow(int b) {
-    if (handle_of[b] >= 0) return;           // already sounding
-    handle_of[b] = note_on(km(b), I_REED, 6);
+static void stack_push(int b)   { for (int i = 0; i < held_n; i++) if (held_stack[i] == b) return; held_stack[held_n++] = b; }
+static void stack_remove(int b) { for (int i = 0; i < held_n; i++) if (held_stack[i] == b) { for (int j = i; j < held_n - 1; j++) held_stack[j] = held_stack[j + 1]; held_n--; return; } }
+
+// blow pad b — in mono, slide the one voice to it (legato); in poly, start its own voice.
+static void note_start(int b) {
     glow[b] = 1.0f;
+    if (mono) {
+        stack_push(b);
+        if (mono_handle < 0) mono_handle = note_on(km(b), I_REED, 6);   // first note: real attack
+        else { note_glide(mono_handle, slide_ms()); note_pitch(mono_handle, (float)km(b)); }  // legato slide
+        active_pad = b;
+    } else {
+        if (handle_of[b] < 0) handle_of[b] = note_on(km(b), I_REED, 6);
+    }
 }
-static void release(int b) {
-    if (handle_of[b] < 0) return;
-    note_off(handle_of[b]);
-    handle_of[b] = -1;
+// release pad b — in mono, slide back to the next held key (or stop if none).
+static void note_stop(int b) {
+    if (mono) {
+        stack_remove(b);
+        if (held_n == 0) { if (mono_handle >= 0) note_off(mono_handle); mono_handle = -1; active_pad = -1; }
+        else { active_pad = held_stack[held_n - 1]; note_glide(mono_handle, slide_ms()); note_pitch(mono_handle, (float)km(active_pad)); }
+    } else {
+        if (handle_of[b] >= 0) { note_off(handle_of[b]); handle_of[b] = -1; }
+    }
+}
+
+static void all_notes_off(void) {
+    for (int b = 0; b < NPAD; b++) if (handle_of[b] >= 0) { note_off(handle_of[b]); handle_of[b] = -1; }
+    if (mono_handle >= 0) note_off(mono_handle);
+    mono_handle = -1; held_n = 0; active_pad = -1;
 }
 
 static void set_preset(int p) {
@@ -126,14 +163,15 @@ static void set_preset(int p) {
 void init(void) {
     for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     for (int b = 0; b < NPAD; b++) { midi_of[b] = degree(SCALE_MAJOR, 4, b); handle_of[b] = -1; }
-    set_preset(2);   // alto sax — the headline sound
+    knob[3] = 0.45f;       // a singing default slide for mono mode
+    set_preset(2);         // alto sax — the headline sound
     bpm(96);
 }
 
 void update(void) {
     for (int b = 0; b < NPAD; b++) {
-        if (keyp(KEYS[b])) blow(b);
-        if (keyr(KEYS[b])) release(b);
+        if (keyp(KEYS[b])) note_start(b);
+        if (keyr(KEYS[b])) note_stop(b);
     }
     for (int p = 0; p < 5; p++) if (keyp('1' + p)) set_preset(p);
 
@@ -141,11 +179,12 @@ void update(void) {
     if (keyp(KEY_RIGHT)) sel = (sel + 1) % NSLIDER;
     if (key(KEY_UP) || key(KEY_DOWN)) {
         knob[sel] = clamp(knob[sel] + (key(KEY_UP) ? 0.012f : -0.012f), 0.0f, 1.0f);
-        cur_preset = -1;
+        if (sel < 3) cur_preset = -1;     // slide is cart-side, doesn't change the voice
         apply_patch();
     }
+    if (keyp('V'))       { mono = !mono; all_notes_off(); }   // swap mode — clear any stuck voices
     if (keyp(KEY_SPACE)) breath = !breath;
-    if (keyp('M')) autoplay = !autoplay;
+    if (keyp('M'))       { autoplay = !autoplay; if (!autoplay && mono && held_n == 0) all_notes_off(); }
     if (keyp('Z') && oct > -2) oct--;
     if (keyp('X') && oct <  2) oct++;
 
@@ -161,32 +200,41 @@ void update(void) {
             if (!freeP) continue;
             p = freeP; *p = (Ptr){ id, PTR_IDLE, -1 };
             if (point_in_box(tx, ty, SCREEN_W - 92, 2, 88, 12)) { autoplay = !autoplay; continue; }
-            if (ty >= PRE_Y - 2 && ty < PRE_Y + 12)
+            if (point_in_box(tx, ty, SCREEN_W - 152, 2, 50, 12)) { mono = !mono; all_notes_off(); continue; }
+            if (ty >= 122 - 2 && ty < 122 + 12)
                 for (int q = 0; q < 5; q++) if (tx >= 12 + q * 60 && tx < 12 + q * 60 + 58) { set_preset(q); break; }
             for (int k = 0; k < NSLIDER; k++)
                 if (point_in_box(tx, ty, MROW_X(k) - 2, MROW_Y - 8, MROW_W + 4, 20)) { p->mode = PTR_DRAG; p->k = sel = k; }
             if (p->mode == PTR_IDLE)
                 for (int b = 0; b < NPAD; b++)
-                    if (point_in_box(tx, ty, PAD_X(b), PAD_Y, PAD_W, PAD_H)) { p->mode = PTR_BLOW; p->k = b; blow(b); break; }
+                    if (point_in_box(tx, ty, PAD_X(b), PAD_Y, PAD_W, PAD_H)) { p->mode = PTR_BLOW; p->k = b; note_start(b); break; }
         } else if (p->mode == PTR_DRAG) {
             knob[p->k] = clamp((float)(tx - MROW_X(p->k)) / (float)MROW_W, 0.0f, 1.0f);
-            cur_preset = -1;
+            if (p->k < 3) cur_preset = -1;
             apply_patch();
         }
     }
     for (int i = 0; i < touch_ended_count(); i++)
         for (int j = 0; j < NPTR; j++)
             if (ptr[j].id == touch_ended_id(i)) {
-                if (ptr[j].mode == PTR_BLOW && ptr[j].k >= 0) release(ptr[j].k);
+                if (ptr[j].mode == PTR_BLOW && ptr[j].k >= 0) note_stop(ptr[j].k);
                 ptr[j].id = NOID;
             }
 
-    // autoplay: a slow legato phrase that lets each note bloom + the breath ride it
+    // autoplay: a slow legato phrase. POLY blows a fresh note each step; MONO drives the one
+    // voice with SLIDES (the feature on show) whenever the player isn't holding a key.
     if (autoplay && every(2)) {
         static const int seq[8] = { 0, 2, 4, 2, 5, 4, 2, 0 };
         int b = seq[apos % 8] % NPAD;
-        hit(km(b), I_REED, 6, 360);     // a sustained blown note (self-oscillates through the gate)
-        glow[b] = 1.0f;
+        if (mono) {
+            if (held_n == 0) {
+                if (mono_handle < 0) mono_handle = note_on(km(b), I_REED, 6);
+                else { note_glide(mono_handle, slide_ms()); note_pitch(mono_handle, (float)km(b)); }
+                active_pad = b; glow[b] = 1.0f;
+            }
+        } else {
+            hit(km(b), I_REED, 6, 360); glow[b] = 1.0f;   // self-oscillates through the gate
+        }
         apos++;
     }
 
@@ -198,11 +246,18 @@ void update(void) {
     watch("harm", "%.2f", knob[0]);
     watch("timb", "%.2f", knob[1]);
     watch("mor",  "%.2f", knob[2]);
+    watch("mono", "%d", mono ? 1 : 0);
+    watch("slide_ms", "%d", slide_ms());
     watch("breath", "%d", breath ? 1 : 0);
     watch("preset", "%d", cur_preset);
-    int held = 0; for (int b = 0; b < NPAD; b++) if (handle_of[b] >= 0) held++;
-    watch("held", "%d", held);
+    watch("held_n", "%d", held_n);
 #endif
+}
+
+// returns whether the voice is currently sounding on pad b
+static bool pad_on(int b) {
+    if (mono) return (mono_handle >= 0 && active_pad == b);
+    return handle_of[b] >= 0;
 }
 
 void draw(void) {
@@ -210,29 +265,26 @@ void draw(void) {
     print("REED", 8, 6, CLR_LIGHT_YELLOW);
     font(FONT_SMALL);
     print("blown waveguide engine", 50, 8, CLR_MEDIUM_GREY);
+    print_right(mono ? "V mono+slide" : "V poly", SCREEN_W - 102, 8, mono ? CLR_BLUE : CLR_DARK_GREY);
     print_right(autoplay ? "M phrase: on" : "M phrase: off", SCREEN_W - 10, 8, autoplay ? CLR_LIME_GREEN : CLR_DARK_GREY);
     font(FONT_NORMAL);
 
     // ── the bore: cylinder (harmonics 0) → cone (harmonics 1), with a reed at the mouthpiece
     rectfill(BORE_X - 2, BORE_Y - 18, BORE_W + 8, 40, CLR_DARK_BROWN);
     float bore = knob[0];
-    int mouthH = 5, bellH = (int)(5 + bore * 16);   // mouthpiece small; bell flares with conicity
+    int mouthH = 5, bellH = (int)(5 + bore * 16);
     int cx0 = BORE_X + 6, cx1 = BORE_X + BORE_W - 4;
-    int top0 = BORE_Y - mouthH, bot0 = BORE_Y + mouthH;
-    int top1 = BORE_Y - bellH,  bot1 = BORE_Y + bellH;
-    // bore body (two trapezoid edges)
-    line(cx0, top0, cx1, top1, CLR_PEACH);
-    line(cx0, bot0, cx1, bot1, CLR_PEACH);
-    line(cx1, top1, cx1, bot1, CLR_LIGHT_PEACH);    // the bell rim
-    // the reed/mouthpiece (timbre = edge: brighter = stiffer-looking)
-    circfill(cx0, BORE_Y, 3, knob[1] > 0.6f ? CLR_LIGHT_YELLOW : CLR_DARK_RED);
-    // airflow pulses travelling down the bore — speed/density rides breath (morph)
-    int held = 0; for (int b = 0; b < NPAD; b++) if (handle_of[b] >= 0) held++;
-    bool sounding = held > 0 || (autoplay);
+    line(cx0, BORE_Y - mouthH, cx1, BORE_Y - bellH, CLR_PEACH);
+    line(cx0, BORE_Y + mouthH, cx1, BORE_Y + bellH, CLR_PEACH);
+    line(cx1, BORE_Y - bellH, cx1, BORE_Y + bellH, CLR_LIGHT_PEACH);   // the bell rim
+    circfill(cx0, BORE_Y, 3, knob[1] > 0.6f ? CLR_LIGHT_YELLOW : CLR_DARK_RED);   // reed/mouthpiece (edge)
+    int held = mono ? (mono_handle >= 0 ? 1 : 0) : 0;
+    if (!mono) for (int b = 0; b < NPAD; b++) if (handle_of[b] >= 0) held++;
+    bool sounding = held > 0 || autoplay;
     if (sounding)
         for (int s = 0; s < 5; s++) {
             float ph = airflow + s * 0.6f;
-            float u = ph - floorf(ph);                 // 0..1 along the bore
+            float u = ph - floorf(ph);
             int x = cx0 + (int)(u * (cx1 - cx0));
             int h = (int)(mouthH + u * (bellH - mouthH));
             int yy = BORE_Y + (int)(sinf(ph * 6.28f) * h * 0.5f);
@@ -256,18 +308,22 @@ void draw(void) {
     const char *pname = (cur_preset >= 0) ? PRESET[cur_preset].name : "(custom)";
     print(str("voice: %s", pname), 108, 24, CLR_LIGHT_YELLOW);
     print(knob[0] < 0.5f ? "cylindrical bore - odd harmonics" : "conical bore - all harmonics", 108, 36, CLR_MEDIUM_GREY);
-    print(held > 0 ? str("blowing %d note%s - holds while held", held, held == 1 ? "" : "s")
-                   : "press & HOLD a key to blow", 108, 48, held > 0 ? CLR_PEACH : CLR_DARK_GREY);
+    if (mono)
+        print(held > 0 ? str("mono - sliding (%dms portamento)", slide_ms()) : "mono - press a key, then SLIDE to others",
+              108, 48, held > 0 ? CLR_BLUE : CLR_DARK_GREY);
+    else
+        print(held > 0 ? str("poly - blowing %d note%s", held, held == 1 ? "" : "s") : "poly - press & HOLD keys to blow",
+              108, 48, held > 0 ? CLR_PEACH : CLR_DARK_GREY);
     print(breath ? "SPACE auto-breath: swelling" : "SPACE auto-breath: off", 108, 60, breath ? CLR_LIME_GREEN : CLR_DARK_GREY);
     font(FONT_TINY);
     print(str("instrument(I, INSTR_REED, 1,0,4,1200)  h %.2f t %.2f m %.2f", knob[0], knob[1], knob[2]),
           108, 74, CLR_BLUE_GREEN);
     font(FONT_NORMAL);
 
-    // ── pads (press & hold)
+    // ── pads
     for (int b = 0; b < NPAD; b++) {
         int x = PAD_X(b);
-        bool on = handle_of[b] >= 0;
+        bool on = pad_on(b);
         if (!on) glow[b] *= 0.88f;
         int col = on ? CLR_LIGHT_YELLOW : glow[b] > 0.2f ? CLR_DARK_PEACH : CLR_DARK_BROWN;
         rectfill(x, PAD_Y, PAD_W, PAD_H, col);
@@ -281,22 +337,25 @@ void draw(void) {
         print(str("%d %s", p + 1, PRESET[p].name), 14 + p * 60, PRE_Y, p == cur_preset ? CLR_YELLOW : CLR_DARK_GREY);
     font(FONT_NORMAL);
 
-    // ── macro row (all three live on held notes)
+    // ── macro row (0..2 engine macros move live; 3 = cart-side slide, dimmed in poly)
     for (int k = 0; k < NSLIDER; k++) {
         int x = MROW_X(k), y = MROW_Y;
         bool on = (k == sel);
-        font(FONT_SMALL); print(MNAME[k], x, y - 8, on ? CLR_YELLOW : CLR_MEDIUM_GREY); font(FONT_NORMAL);
-        bar(x, y, MROW_W, 7, knob[k], on ? CLR_ORANGE : CLR_DARK_PEACH, CLR_DARK_BROWN);
+        bool dim = (k == 3 && !mono);    // slide only bites in mono mode
+        font(FONT_SMALL);
+        print(MNAME[k], x, y - 8, dim ? CLR_DARK_GREY : on ? CLR_YELLOW : CLR_MEDIUM_GREY);
+        font(FONT_NORMAL);
+        bar(x, y, MROW_W, 7, knob[k], dim ? CLR_DARK_BROWN : on ? CLR_ORANGE : CLR_DARK_PEACH, CLR_DARK_BROWN);
         font(FONT_TINY);
         print(MLO[k], x, y + 9, CLR_DARK_GREY);
         print_right(MHI[k], x + MROW_W, y + 9, CLR_DARK_GREY);
         font(FONT_NORMAL);
-        if (on) print(">", x - 9, y, CLR_YELLOW);
+        if (on) print(">", x - 8, y, CLR_YELLOW);
     }
 
     font(FONT_TINY);
-    int rx = print("A..K hold to blow   Z/X octave   1..5 voices   ", 10, SCREEN_H - 8, CLR_DARK_GREY);
-    int sx = print("SPACE breath swell", rx, SCREEN_H - 8, CLR_MEDIUM_GREY);
+    int rx = print("A..K blow   Z/X oct   1..5 voices   V mono   ", 10, SCREEN_H - 8, CLR_DARK_GREY);
+    int sx = print("SPACE breath", rx, SCREEN_H - 8, CLR_MEDIUM_GREY);
     print("   sliders: drag or arrows", sx, SCREEN_H - 8, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
