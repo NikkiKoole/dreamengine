@@ -2,7 +2,7 @@
 
 > **Genre: working handoff.** Transient pickup note for the next session, not a permanent
 > design doc — the durable knowledge lives in the docs this points at. Fold anything that
-> proves out into §8.8.x and delete the stale bits. Last updated 2026-06-07.
+> proves out into §8.8.x and delete the stale bits. Last updated 2026-06-08.
 
 ## Where we are
 
@@ -19,21 +19,26 @@ this session:
   **env**/touch (one per mod source), clav boots into **env** = a fast per-note filter-env quack
   (navkit's real funky-clav recipe), clav decay shortened. PUBLISHED 2026-06-08. The 3 macros all bite now (timbre hammer-hardness fix; bark folds in drive); wah toggle kept but flagged TEMP! (per-voice, provisional).
 - **Envelope follower** SHIPPED (2026-06-08) — `instrument_follow`/`note_follow`, the 3rd
-  modulation source (tracks the voice's own amplitude → cutoff/vol/pitch). The touch-responsive
-  auto-wah. Full 4-place wiring + tripwire. Needs its own doc section in audio-notes (modulation).
+  modulation source (tracks the voice's own amplitude → cutoff/vol/pitch). **PARKED/provisional**
+  (see PARKED below): its real home is bus-level (§8.10); no audio-notes section while it may be
+  cut or moved. Discoverable via studioDocs + 0015 Correction meanwhile. Full 4-place wiring + tripwire.
 
 Canonical state lives here (don't duplicate it — update these):
 [STATUS §5](../STATUS.md) · engine specs [§8.8.3 FM / §8.8.4 organ / §8.8.5 EP](instrument-engines.md) ·
 roadmap [§8.5](instrument-engines.md) · [ADR-0016](../decisions/0016-combo-organ-recipe-then-macro-or-engine.md).
 
-## OPEN — needs ears first (start here next session)
+## Start here next session
 
-1. **EP preset timbre check** — play `epiano.c`'s 6 presets: do rhodes/wurli/clav nail their
-   nameplates? Sweep **bark** (morph) under a held note. Try the **wah** (press `6` for the
-   clav → envelope-wah, Stevie "Superstition"). Report *how* anything's wrong (dull? no
-   attack? buzzy? rings too long?) → that translates to specific `sound.h` numbers.
-2. If good → publish (`tools/publish-cart.sh epiano`) like organ.
-3. Optional treat: a Rhodes comping under the organ (two engines together).
+Organ + epiano are shipped **and published**; their macro/wah/Rhodes tuning is done (see "Where
+we are" + the FIXED/PARKED sections). Nothing on EP is blocking. Next:
+
+1. **`INSTR_PD` (Casio CZ)** ← the next engine (roadmap §8.5 step 6, decision b079874): the cheap
+   2-float, buffer-free snack, deeply chiptune-adjacent. **Run playbook STEP 0 first** (§8.8.2):
+   render navkit's CZ preset with `tools/navkit-render.c`, characterize it + locate its layer,
+   *then* design. (That step exists because of the wah detour — don't skip it.)
+2. Optional treat: a **Rhodes comping under the organ** (two engines together).
+3. When the effects-bus layer (§8.10) eventually opens: revisit the PARKED per-voice wah +
+   envelope follower (fold into the bus wah or remove).
 
 ## ~~OPEN~~ FIXED (2026-06-08) — the Rhodes "doesn't sound Rhodesy" (prime suspect was right)
 
