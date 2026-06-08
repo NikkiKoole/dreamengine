@@ -314,12 +314,15 @@ void draw(void) {
     rect(OCT_UP_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H, CLR_BROWN);
     print("X", OCT_UP_X + 7, OCT_BTN_Y + 5, CLR_LIGHT_PEACH);
 
-    // WAH button (tappable; off/auto/env)
+    // WAH button (tappable; off/auto/env/touch) — flagged TEMP: the real "woah woah" auto-wah
+    // is a bus effect (§8.10), this per-voice version is provisional. See sound-handoff.md PARKED.
     bool won = (wah != 0);
     rectfill(WAH_X, WAH_Y, WAH_W, WAH_H, won ? CLR_DARK_ORANGE : CLR_DARKER_GREY);
     rect(WAH_X, WAH_Y, WAH_W, WAH_H, won ? CLR_ORANGE : CLR_DARK_GREY);
     font(FONT_SMALL);
     print(str("V wah: %s", WAHNAME[wah]), WAH_X + 6, WAH_Y + 6, won ? CLR_LIGHT_YELLOW : CLR_MEDIUM_GREY);
+    font(FONT_TINY);
+    print_right("TEMP!", WAH_X - 4, WAH_Y + 2, CLR_RED);
     font(FONT_NORMAL);
 
     // the manual
