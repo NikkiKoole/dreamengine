@@ -154,6 +154,18 @@ typedef struct {
     float  mb_phase[6], mb_amp[6];   // per-mode phase + decaying amplitude (the head's ring)
     int    mb_strike;                // strike-noise samples remaining (the finger/slap contact)
     bool   mb_on;                    // struck this note — guards an engine id without a note-on init
+    // reed-waveguide state (INSTR_REED): a bore delay line (REUSES ks_buf — reed is a distinct
+    // wave id, never shares a voice with the Karplus pluck path) + a pressure-driven reed valve.
+    // The first SELF-OSCILLATING held voice; every macro clamps to navkit's oscillation window
+    // (it chokes/dies outside it — STEP-0, instrument-engines.md §8.8.7). Re-seeded on note-on.
+    float  rd_lp;                    // bore-loss 1-pole LP state (bell radiation + wall damping)
+    float  rd_dc_prev, rd_dc_state;  // DC blocker (steady blow pressure → large DC — essential)
+    float  rd_vib_ph;                // lip-vibrato LFO phase
+    float  rd_tilt;                  // output-tilt LP (timbre brightness, built here — STEP-0)
+    float  rd_initfreq;              // freq at note-on (bore sized for it; pitch tracking glides off it)
+    int    rd_len;                   // bore delay length (half-wavelength); 0 = no note-on init
+    int    rd_idx;                   // bore write index into ks_buf
+    bool   rd_on;                    // note-on init guard (engine id hit without a strike → silent)
 } Voice;
 
 static Voice         voices[SOUND_VOICES];
@@ -988,6 +1000,88 @@ static inline float sound_membrane_sample(Voice *v, float pitch_mul) {
     return out * 0.9f;
 }
 
+// REED note-on: size the bore (a half-wavelength delay line one-way; the open-end reflection
+// gives the return trip → full period) and seed it with tiny noise for fast startup (navkit's
+// trick). REUSES ks_buf as the bore — reed is its own wave id, so it never collides with the
+// Karplus path on one voice. Self-oscillates from here; the amp ADSR gates it like organ/PD.
+static void sound_reed_start(Voice *v) {
+    float f = v->freq; if (f < 20.0f) f = 20.0f;
+    int len = (int)((float)SOUND_SAMPLE_RATE / f / 2.0f);   // half-wavelength, one-way bore
+    if (len > SOUND_KS_MAX - 1) len = SOUND_KS_MAX - 1;     // bottoms out ~43Hz, below reed range
+    if (len < 4) len = 4;
+    for (int i = 0; i < len; i++) {                         // seed with tiny noise (faster than silence)
+        v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+        v->ks_buf[i] = (((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f) * 0.01f;
+    }
+    v->rd_len = len; v->rd_idx = 0; v->rd_initfreq = f;
+    v->rd_lp = v->rd_dc_prev = v->rd_dc_state = v->rd_vib_ph = v->rd_tilt = 0.0f;
+    v->rd_on = true;
+}
+
+// One REED sample: the McIntyre/Schumacher/Woodhouse waveguide — mouth pressure drives a
+// nonlinear reed valve that recirculates through the bore delay; the bore's reflected pressure
+// modulates the reed (self-oscillation). Live macros, ALL clamped to the oscillation window
+// (STEP-0 §8.8.7 — outside it the model chokes silent): harmonics = BORE conicity (cylindrical
+// clarinet, odd-only + dark ↔ conical sax, all harmonics + bright — drives the bell LP, the
+// end-reflection, and the conical even-harmonic buzz, with per-position makeup gain since the
+// conical bell is ~10dB quieter); timbre = REED EDGE (stiffness + aperture narrowing together,
+// stiffness alone too weak — plus an output brightness tilt built here); morph = BREATH inside
+// a safe window (blow pressure + lip vibrato deepening — the model can't overblow, this is the
+// musical "lean-in" growl). Pitch: bore read length tracks freq*pitch_mul (§8.8.1).
+static inline float sound_reed_sample(Voice *v, float pitch_mul) {
+    if (!v->rd_on || v->rd_len <= 0) return 0.0f;          // engine id without a note-on init
+    const float TWO_PI = 6.2831853f;
+    const float SR = (float)SOUND_SAMPLE_RATE;
+    // macros → physical params, every range pinned inside the self-oscillating region
+    float bore  = v->harm * 0.95f;                         // harmonics = bore conicity (cyl→conical)
+    float stiff = 0.20f + v->timb * 0.62f;                 // ≤0.82: stiffer = brighter (but weak alone)
+    float apert = 0.70f - v->timb * 0.50f;                 // narrows with edge (the paired axis)
+    float blow  = 0.52f + v->mor * 0.23f;                  // breath: [0.52,0.75], under the ~0.78 choke
+    float vibd  = 0.10f + v->mor * 0.40f;                  // lean-in vibrato deepens with breath
+    // lip vibrato (~5.8 Hz) modulating mouth pressure
+    v->rd_vib_ph += 5.8f / SR;
+    if (v->rd_vib_ph >= 1.0f) v->rd_vib_ph -= 1.0f;
+    float Pm = blow + sinf(v->rd_vib_ph * TWO_PI) * vibd * 0.08f;
+    // bore delay: fractional read length tracks the live pitch (vibrato/glide/pitch-env)
+    float curf = v->freq * pitch_mul; if (curf < 20.0f) curf = 20.0f;
+    float effLen = (float)v->rd_len * v->rd_initfreq / curf;
+    if (effLen < 2.0f) effLen = 2.0f;
+    if (effLen > (float)v->rd_len) effLen = (float)v->rd_len;
+    float readPos = (float)v->rd_idx - effLen;
+    while (readPos < 0.0f) readPos += (float)v->rd_len;
+    int i0 = (int)readPos; if (i0 >= v->rd_len) i0 -= v->rd_len;
+    int i1 = (i0 + 1 < v->rd_len) ? i0 + 1 : 0;
+    float fr = readPos - floorf(readPos);
+    float boreReturn = v->ks_buf[i0] + fr * (v->ks_buf[i1] - v->ks_buf[i0]);
+    // bell-end LP (wall + radiation loss): cylindrical dark (heavy), conical bright (light)
+    float lpCoeff = 0.55f + bore * 0.37f;
+    v->rd_lp = v->rd_lp * (1.0f - lpCoeff) + boreReturn * lpCoeff;
+    float endRefl = -0.95f + bore * 0.10f;                 // open-bell inversion; flared bell loses less
+    // reed reflection: offset (aperture) + slope (stiffness) · pressure difference, clamped
+    float pdiff    = endRefl * v->rd_lp - Pm;
+    float reedRefl = (0.30f + apert * 0.40f) + (-0.40f - stiff * 0.50f) * pdiff;
+    if (reedRefl < -1.0f) reedRefl = -1.0f; else if (reedRefl > 1.0f) reedRefl = 1.0f;
+    float boreInput = Pm + pdiff * reedRefl;
+    // conical bores support even harmonics (sax buzz); cylindrical suppresses them
+    if (bore > 0.3f) {
+        float cd = (bore - 0.3f) * 0.7f;
+        boreInput = tanhf(boreInput * (1.0f + cd * 2.0f)) / (1.0f + cd * 2.0f);
+        boreInput += cd * boreInput * boreInput * 0.3f;    // asymmetric → even harmonics
+    }
+    v->ks_buf[v->rd_idx] = boreInput;
+    v->rd_idx++; if (v->rd_idx >= v->rd_len) v->rd_idx = 0;
+    // DC block — the reed model carries a large DC from steady blow pressure
+    float out = boreReturn;
+    float dc  = out - v->rd_dc_prev + 0.995f * v->rd_dc_state;
+    v->rd_dc_prev = out; v->rd_dc_state = dc;
+    // output brightness tilt (timbre): the waveguide alone barely brightens (STEP-0), so
+    // emphasize the high end against a slow LP of the output to guarantee audible edge travel
+    v->rd_tilt += 0.40f * (dc - v->rd_tilt);
+    float bright = dc + v->timb * 1.5f * (dc - v->rd_tilt);
+    // makeup gain: the conical bell radiates ~10dB quieter (STEP-0) — lift it so sax isn't buried
+    return bright * 1.5f * (1.0f + bore * 2.0f);
+}
+
 // One engine sample — the dispatch (engine ids >= INSTR_ENGINE_BASE). The default body is
 // PLUCK. pitch_mul carries the per-sample LFO/env pitch modulation; v->freq carries
 // note_pitch/note_glide (slewed) — so the SAME pitch machinery every oscillator answers
@@ -1000,6 +1094,7 @@ static inline float sound_engine_sample(Voice *v, float pitch_mul) {
     if (v->wave == INSTR_EPIANO) return sound_epiano_sample(v, pitch_mul);
     if (v->wave == INSTR_PD)     return sound_pd_sample(v, pitch_mul);
     if (v->wave == INSTR_MEMBRANE) return sound_membrane_sample(v, pitch_mul);
+    if (v->wave == INSTR_REED)   return sound_reed_sample(v, pitch_mul);
     int alloc = v->ks_len;
     if (alloc < 4) return 0.0f;   // engine id without a note-on init (e.g. an sfx step) — stay silent
     float f = v->freq * pitch_mul;
@@ -1169,12 +1264,14 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->org_on = false;
     v->ep_on  = false;
     v->mb_on  = false;
+    v->rd_on  = false;
     v->fm_mph = v->fm_fb = v->fm_tph = 0.0f;   // FM needs no excitation, just deterministic phases
     if      (v->wave == INSTR_PLUCK)  sound_pluck_start(v);    // excite the string
     else if (v->wave == INSTR_MALLET) sound_mallet_start(v);   // strike the bar
     else if (v->wave == INSTR_ORGAN)  sound_organ_start(v);    // arm the click + perc, clear the scanner
     else if (v->wave == INSTR_EPIANO) sound_epiano_start(v);   // build the 12 modal sines
     else if (v->wave == INSTR_MEMBRANE) sound_membrane_start(v); // strike the drumhead
+    else if (v->wave == INSTR_REED)   sound_reed_start(v);     // size + seed the bore (self-oscillates)
     v->step_samples     = 0;
     v->step_len_samples = gate_samples;
     v->rel_start        = sound_adsr_gated(gate_samples, v->a_samp, v->d_samp, v->sustain);
