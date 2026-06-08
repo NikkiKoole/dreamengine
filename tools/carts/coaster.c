@@ -109,13 +109,15 @@ static int   ride = 0;
 static float cam_x, cam_y, cam_zoom = 1, cam_angle;
 
 // g-force felt by the riders (1 = rest) + the crowd scream tied to it
-#define SCREAM_SLOT 5
+#define SCREAM_VOICES 3                 // a few different voices, not one soloist
 static float gforce = 1, gpeak = 1;     // total g-load magnitude + the lap's peak
 static float g_long, g_norm;            // load split along travel / across the seat (g)
 static float fgx = 0, fgy = 1;          // smoothed load VECTOR in g's (rest = (0,1))
 static float excite = 0;                // jerk-fed excitement envelope → drives the scream
-static float prev_vel;                  // lead signed speed last frame (for tangential accel)
-static int   scream_h = -1;             // handle of the held crowd-scream note (-1 = none)
+static float prev_vel, prev_g = 1;      // last frame's speed / g-load (for accel + jerk)
+static int   warmup = 0;                // frames to ignore jerk after a (re)start
+static int   scream_h[SCREAM_VOICES] = { -1, -1, -1 };   // held note handles (-1 = silent)
+static const int SCREAM_OFF[SCREAM_VOICES] = { -3, 1, 6 }; // pitch spread → a crowd, not unison
 
 static int ground_y(void) { return SCREEN_H - GROUND_PAD; }
 
@@ -233,6 +235,7 @@ static void init_bodies(void) {
         }
     }
     riders_primed = 0;
+    warmup = 20; prev_g = 1; gpeak = 1;               // let g settle before screaming
     if (closed && n_bodies > 0) bodies[0].vel = 40;   // nudge the train off
 }
 
@@ -357,7 +360,10 @@ static void flip_sound(void) {                          // a quick "fwip" on inv
     hit(43, INSTR_NOISE, 3, 70);
 }
 
-static void silence_scream(void) { if (scream_h >= 0) { note_off(scream_h); scream_h = -1; } }
+static void silence_scream(void) {
+    for (int i = 0; i < SCREAM_VOICES; i++)
+        if (scream_h[i] >= 0) { note_off(scream_h[i]); scream_h[i] = -1; }
+}
 
 // what the riders FEEL: net of (gravity − the cart's acceleration), projected onto
 // the seat-down axis, in g units. 1 at rest; >1 heavy (fast valley); →0/negative is
@@ -382,33 +388,41 @@ static void update_gforce(Body *lead, float dt) {
     float acx = a_t * tx + a_n * nx, acy = a_t * ty + a_n * ny;
     // load VECTOR = (gravity − cart accel), in g's, smoothed
     float Fx = clamp(-acx / GRAV, -8, 8), Fy = clamp((GRAV - acy) / GRAV, -8, 8);
-    float pfx = fgx, pfy = fgy;
     fgx = lerp(fgx, Fx, 0.25f); fgy = lerp(fgy, Fy, 0.25f);
     // split into travel-axis (launch/brake) and seat-axis (valley/airtime)
     g_long = fgx * tx + fgy * ty;
     g_norm = fgx * nx + fgy * ny;
     gforce = fsqrt(fgx * fgx + fgy * fgy);
     if (gforce > gpeak) gpeak = gforce;
-    // JERK — how fast the load is CHANGING. That's the thrill: the snap into a
-    // valley, the pop over a crest, the launch kick. A jolt pumps `excite`; it
-    // decays, so the scream rings out after the transition instead of droning.
-    float jx = (fgx - pfx) / dt, jy = (fgy - pfy) / dt;
-    float jerk = fsqrt(jx * jx + jy * jy);
-    float pump = clamp((jerk - 1.5f) * 0.06f, 0, 1);
-    excite *= 0.90f;
+    // JERK = how fast the FELT load (its magnitude) is changing. A steady curve
+    // holds a constant g, so it stays quiet; only a real jolt — slam into a
+    // valley, drop to airtime, launch kick — spikes it. The jolt pumps `excite`,
+    // which decays, so the scream fires on the transition and rings out.
+    float jerk = (gforce - prev_g) / dt; if (jerk < 0) jerk = -jerk;
+    prev_g = gforce;
+    excite *= 0.84f;                                    // shorter ring-out
+    if (warmup > 0) { warmup--; return; }               // ignore the settling transient
+    float pump = clamp((jerk - 10.0f) * 0.06f, 0, 1);   // high bar → only the real jolts
     if (pump > excite) excite = pump;
 }
 
 // the crowd scream rides the EXCITEMENT (driven by jerk): it kicks in on a jolt,
-// glides its pitch with the intensity, and fades as `excite` decays.
+// glides its pitch with the intensity, and fades as `excite` decays. More voices
+// join on bigger jolts — a little bump is one yelp, a big plunge is the whole car.
 static void update_scream(float sp) {
-    if (excite > 0.12f && sp > 50) {
-        float midi = 69 + excite * 16;                  // bigger jolt → higher pitch
-        int vol = 2 + (int)(excite * 4); if (vol > 6) vol = 6;
-        if (scream_h < 0) { scream_h = note_on((int)midi, SCREAM_SLOT, vol); note_glide(scream_h, 120); }
-        else { note_pitch(scream_h, midi); note_vol(scream_h, vol); }
-    } else if (scream_h >= 0) {
-        note_off(scream_h); scream_h = -1;
+    int want = 0;
+    if (excite > 0.18f && sp > 50)
+        want = 1 + (excite > 0.35f) + (excite > 0.55f);  // 1..3 voices by intensity
+    float midi = 69 + excite * 15;
+    int vol = 1 + (int)(excite * 1.2f); if (vol > 2) vol = 2;   // soft; layering carries it
+    for (int i = 0; i < SCREAM_VOICES; i++) {
+        if (i < want) {
+            float m = midi + SCREAM_OFF[i];
+            if (scream_h[i] < 0) { scream_h[i] = note_on((int)m, 5 + i, vol); note_glide(scream_h[i], 130); }
+            else { note_pitch(scream_h[i], m); note_vol(scream_h[i], vol); }
+        } else if (scream_h[i] >= 0) {
+            note_off(scream_h[i]); scream_h[i] = -1;
+        }
     }
 }
 
@@ -472,8 +486,6 @@ static void update_coaster(float dt) {
     watch("pos", "%.1f", lead->pos);
     watch("vel", "%.1f", lead->vel);
     watch("g", "%.2f", gforce);
-    watch("glong", "%.2f", g_long);
-    watch("gnorm", "%.2f", g_norm);
     watch("excite", "%.2f", excite);
 #endif
 }
@@ -602,12 +614,15 @@ static void handle_input(void) {
 // a ready-made loop so the cart is alive the moment it opens — a hilly closed
 // circuit with a chain-lift (hoist) up the back so it runs forever.
 void init(void) {
-    // a faked crowd-scream voice: bright saw, a resonant band-pass ≈ a vowel
-    // formant, a 6 Hz pitch wobble (the quiver), and a little rasp from drive
-    instrument(SCREAM_SLOT, INSTR_SAW, 20, 140, 6, 200);
-    instrument_filter(SCREAM_SLOT, FILTER_BAND, 1200, 11);
-    instrument_lfo(SCREAM_SLOT, 0, LFO_PITCH, 6.0f, 0.5f);
-    instrument_drive(SCREAM_SLOT, 0.25f);
+    // three faked scream voices (slots 5..7) — each a different vowel (band-pass
+    // centre), wobble rate and detune, so together they read as a few different
+    // people rather than one. Kept soft; layering does the rest.
+    instrument(5, INSTR_SAW,    20, 140, 6, 200); instrument_filter(5, FILTER_BAND,  900, 10);
+    instrument_lfo(5, 0, LFO_PITCH, 5.5f, 0.45f); instrument_drive(5, 0.18f); instrument_tune(5, -0.08f);
+    instrument(6, INSTR_SAW,    18, 140, 6, 200); instrument_filter(6, FILTER_BAND, 1300, 11);
+    instrument_lfo(6, 0, LFO_PITCH, 6.4f, 0.50f); instrument_drive(6, 0.22f);
+    instrument(7, INSTR_SQUARE, 22, 130, 6, 190); instrument_filter(7, FILTER_BAND, 1750, 10);
+    instrument_lfo(7, 0, LFO_PITCH, 7.2f, 0.42f); instrument_drive(7, 0.12f); instrument_tune(7, 0.10f);
 
     int N = 64;
     float cx = SCREEN_W / 2.0f, cy = 138, rx = 205, ry = 76;
