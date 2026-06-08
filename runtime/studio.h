@@ -307,6 +307,8 @@ void instrument_filter(int slot, int mode, int cutoff_hz, int resonance);  // mo
 #define ENV_PITCH   1   // pitch blip — drum punch / attack snap / zap. amount in semitones (+ starts sharp, settles to the note)
 #define ENV_DUTY    2   // pulse-width sweep (square/pulse slots only). amount 0.0..1.0
 void instrument_env(int slot, int which, int dest, int attack_ms, int decay_ms, float amount);  // attach mod-envelope `which` (0..1) to a slot. dest ENV_*. pluck: ENV_CUTOFF amount 1500, attack 0, decay 120. amount 0 = off
+void instrument_follow(int slot, int dest, int attack_ms, int release_ms, float amount);  // envelope FOLLOWER: tracks the slot's own amplitude (fast attack, slow release) → dest LFO_CUTOFF/VOLUME/PITCH. The touch-responsive auto-wah (FILTER_BAND + this) — play harder, it opens more. amount = Hz (cutoff); 0 = off
+void note_follow(int handle, int dest, int attack_ms, int release_ms, float amount);  // set a held note's envelope follower live — same shape as instrument_follow(); amount 0 = off
 
 // engine macros — three 0..1 knobs that EVERY modeled engine answers; what each knob sweeps
 // is per-engine (documented on the INSTR_PLUCK/MALLET/FM lines above), but the API never

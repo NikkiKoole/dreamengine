@@ -62,6 +62,9 @@ typedef struct {
     int   env_a_samp[2];            // attack, in samples
     int   env_d_samp[2];            // decay, in samples
     float env_amount[2];            // 0 = off; bipolar; units depend on dest (Hz / semitones / 0..1)
+    int   flw_dest;                 // envelope FOLLOWER dest (LFO_CUTOFF/VOLUME/PITCH) — the 3rd mod source
+    float flw_atk, flw_rel;         // per-sample smoothing coeffs (from attack/release ms)
+    float flw_amount;               // 0 = off; Hz for cutoff, 0..1 for volume(duck), semitones for pitch
     float harmonics, timbre, morph; // engine macros 0..1 (INSTR_PLUCK+) — meaning is per-engine; default 0.5
     float drive;                    // post-filter saturation 0..1; 0 = clean bypass (default — old carts unchanged)
     float echo;                     // send to THE echo bus 0..1; 0 = dry (default — old carts unchanged)
@@ -94,6 +97,8 @@ typedef struct {
     int    env_dest[2];              // mod-envelopes (AD; timer = step_samples, retriggered at note-on)
     int    env_a_samp[2], env_d_samp[2];
     float  env_amount[2];
+    int    flw_dest;                 // envelope follower: tracks this voice's own amplitude → dest
+    float  flw_atk, flw_rel, flw_amount, flw_amp;   // attack/release coeffs, depth, + the running level
     int    flt_mode;
     float  flt_cutoff, flt_q;
     float  flt_low, flt_band;   // SVF running state
@@ -260,6 +265,13 @@ static float sound_echo_coef(float t) {
     return 1.0f - expf(-6.2831853f * fc / (float)SOUND_SAMPLE_RATE);
 }
 
+// envelope-follower smoothing coefficient from a time in ms (one-pole; 0 ms = instant)
+static float sound_follow_coef(int ms) {
+    if (ms <= 0) return 1.0f;
+    float c = 1.0f - expf(-1.0f / ((float)ms * 0.001f * (float)SOUND_SAMPLE_RATE));
+    return c < 0.0f ? 0.0f : (c > 1.0f ? 1.0f : c);
+}
+
 // Request kinds for the ring buffer (main thread pushes → audio thread drains).
 // -1 in the `a` slot = "stop" for SR_SFX.
 // delay_samples: 0 = fire immediately; >0 = audio thread holds it in `delayed[]` and fires when countdown expires.
@@ -300,6 +312,8 @@ typedef enum {
     SR_INSTR_ECHO   = 27,
     SR_NOTE_ECHO    = 28,
     SR_INSTR_TUNE   = 29,
+    SR_INSTR_FOLLOW = 30,
+    SR_NOTE_FOLLOW  = 31,
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -694,6 +708,17 @@ static inline float sound_organ_sample(Voice *v, float pitch_mul) {
     return out * 0.9f;
 }
 
+// --- TEMP epiano Rhodes-ring tuning (2026-06-08) -------------------------------------------
+// The Rhodes was too "ringy" — the inharmonic tine/bell modes sustained instead of pinging and
+// dying over a warm fundamental (which also made the 3 Rhodes presets sound alike). Split the
+// Rhodes decay into a long BODY (mode 0) and a short BELL (modes >=1, the ding) + a bell level.
+// Tuned via render + wav-analyze; once the envelope's right, fold these into the per-mode decay
+// below as constants and delete this block. See sound-handoff.md.
+static float de_ept_body = 0.7f;   // Rhodes fundamental (body) decay, seconds
+static float de_ept_bell = 0.13f;  // Rhodes bell/tine decay, seconds — the "ding" length
+static float de_ept_blvl = 12.0f;  // Rhodes bell-mode level multiplier
+// -------------------------------------------------------------------------------------------
+
 // EP note-on: build the 12 modal sines from the instrument detent (harmonics), brightness
 // (timbre = pickup position), register, and strike level. The modes then ring down (struck,
 // self-decaying — mallet family); the sample fn sums them, runs the pickup nonlinearity
@@ -717,8 +742,7 @@ static void sound_epiano_start(Voice *v) {
         { .60f, .15f, .60f, .20f, .20f, .08f, 0,0,0,0,0,0 },
         { .60f, .55f, .50f, .20f, .30f, .10f, 0,0,0,0,0,0 },
     };
-    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.9f };   // base sustain s (Rhodes long, Clav short)
-    static const float TONEBAR[3]  = { 0.6f, 0.0f, 0.0f };   // Rhodes only: extends fund + 2nd
+    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.9f };   // base sustain s (Wurli/Clav; Rhodes uses the tuning split)
     int ty = (int)(v->harm * 2.999f); if (ty < 0) ty = 0; else if (ty > 2) ty = 2;
     v->ep_type = ty;
     float pp  = v->timb;                                     // pickup position / brightness
@@ -737,12 +761,18 @@ static void sound_epiano_start(Voice *v) {
             float k = keep * keep;                           // upper modes fade with register
             if (i >= 4) k *= keep;                           // bell modes steeper (real Rhodes top ~ pure sine)
             a *= k * (0.3f + 0.7f * vel);                    // and brighter when struck harder
+            if (ty == 0) a *= de_ept_blvl;                   // TEMP: Rhodes bell-mode level
         }
         v->ep_amp[i] = a;
-        float dfac = 1.0f / (1.0f + (RAT[ty][i] - 1.0f) * 0.25f);   // upper modes ring shorter
-        float dec  = BASE_DEC[ty] * (1.0f - fn * 0.4f) * dfac;
-        if (ty == 0 && i == 0) dec *= (1.0f + TONEBAR[0] * 1.5f);   // tone-bar: fund sustains
-        if (ty == 0 && i == 1) dec *= (1.0f + TONEBAR[0] * 0.6f);
+        float dec;
+        if (ty == 0) {                                       // TEMP Rhodes ring: body (mode 0) vs bell (>=1, the ding)
+            dec = (i == 0) ? de_ept_body : de_ept_bell;
+            if (i >= 1) dec *= 1.0f / (1.0f + (RAT[0][i] - 1.0f) * 0.04f);  // higher tines a touch shorter
+            dec *= (1.0f - fn * 0.4f);                       // register
+        } else {
+            float dfac = 1.0f / (1.0f + (RAT[ty][i] - 1.0f) * 0.25f);   // upper modes ring shorter
+            dec = BASE_DEC[ty] * (1.0f - fn * 0.4f) * dfac;
+        }
         if (dec < 0.02f) dec = 0.02f;
         v->ep_dec[i] = dt / dec;                             // per-sample decay fraction
     }
@@ -951,6 +981,11 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
         v->env_d_samp[e] = ins->env_d_samp[e];
         v->env_amount[e] = ins->env_amount[e];
     }
+    v->flw_dest   = ins->flw_dest;        // envelope follower (the running level starts at 0)
+    v->flw_atk    = ins->flw_atk;
+    v->flw_rel    = ins->flw_rel;
+    v->flw_amount = ins->flw_amount;
+    v->flw_amp    = 0.0f;
     v->flt_mode       = ins->flt_mode;
     v->flt_cutoff     = v->cutoff_target = ins->flt_cutoff;
     v->flt_q          = v->flt_q_target  = ins->flt_q;
@@ -1203,6 +1238,21 @@ static void sound_fire_req(SoundReq r) {
         float semis = r.b / 1000.0f;
         if (semis < -24.0f) semis = -24.0f; if (semis > 24.0f) semis = 24.0f;
         instr_bank[slot].tune_mul = powf(2.0f, semis / 12.0f);
+    } else if (r.kind == SR_INSTR_FOLLOW) {   // a=slot b=dest c=atk_ms e0=rel_ms e2=amount*1000
+        int slot = r.a;
+        if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+        instr_bank[slot].flw_dest   = r.b;
+        instr_bank[slot].flw_atk    = sound_follow_coef(r.c);
+        instr_bank[slot].flw_rel    = sound_follow_coef(r.e0);
+        instr_bank[slot].flw_amount = r.e2 / 1000.0f;
+    } else if (r.kind == SR_NOTE_FOLLOW) {    // a=dest b=atk_ms c=rel_ms e0/e1=handle e2=amount*1000
+        Voice *v = sound_held_voice(r.e0, r.e1);
+        if (v) {
+            v->flw_dest   = r.a;
+            v->flw_atk    = sound_follow_coef(r.b);
+            v->flw_rel    = sound_follow_coef(r.c);
+            v->flw_amount = r.e2 / 1000.0f;
+        }
     } else if (r.kind == SR_NOTE_ECHO) {    // a=val*1000 (live, slewed)
         echo_used = true;
         Voice *v = sound_held_voice(r.e0, r.e1);
@@ -1328,6 +1378,15 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                     else if (v->env_dest[e] == ENV_CUTOFF) cutoff    += m;
                     else if (v->env_dest[e] == ENV_DUTY)   duty      += m;
                 }
+                // envelope follower: the 3rd mod source — uses LAST sample's tracked level
+                // (flw_amp, updated just after the oscillator below), so it modulates from the
+                // voice's own amplitude. The touch-responsive auto-wah when dest = cutoff.
+                if (v->flw_amount != 0.0f) {
+                    float fm = v->flw_amp * v->flw_amount;
+                    if      (v->flw_dest == LFO_CUTOFF) cutoff    += fm;
+                    else if (v->flw_dest == LFO_PITCH)  pitch_mul *= powf(2.0f, fm / 12.0f);
+                    else if (v->flw_dest == LFO_VOLUME) { float d = fm < 0.0f ? 0.0f : (fm > 1.0f ? 1.0f : fm); trem *= 1.0f - d; }
+                }
                 if (duty < 0.05f) duty = 0.05f;
                 if (duty > 0.95f) duty = 0.95f;
                 // slot detune (instrument_tune): read LIVE from the bank each sample,
@@ -1339,6 +1398,13 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             // engine fork: wavetable oscillators below INSTR_ENGINE_BASE, modeled engines at/above
             float s = (v->wave >= INSTR_ENGINE_BASE) ? sound_engine_sample(v, pitch_mul)
                                                      : sound_osc(v->wave, v->phase, duty, &v->noise_state);
+            // envelope follower: track the PRE-filter amplitude (|s| scaled by velocity) with a
+            // fast-attack/slow-release peak detector. Used by next sample's modulation above —
+            // a 1-sample feedback, inaudible. This is what makes the auto-wah respond to touch.
+            if (v->flw_amount != 0.0f) {
+                float amp = (s < 0.0f ? -s : s) * v->vol;
+                v->flw_amp += ((amp > v->flw_amp) ? v->flw_atk : v->flw_rel) * (amp - v->flw_amp);
+            }
             if (v->sfx_idx < 0 && v->flt_mode != FILTER_OFF) {
                 if (cutoff < 20.0f) cutoff = 20.0f;
                 if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
@@ -1701,6 +1767,15 @@ void instrument_env(int slot, int which, int dest, int attack_ms, int decay_ms, 
     sound_push_ctrl(SR_INSTR_ENV, slot, which, dest, a, d, (int)(amount * 1000.0f));
 }
 
+void instrument_follow(int slot, int dest, int attack_ms, int release_ms, float amount) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_FOLLOW, slot, dest, attack_ms, release_ms, 0, (int)(amount * 1000.0f));
+}
+void note_follow(int handle, int dest, int attack_ms, int release_ms, float amount) {
+    if (handle <= 0) return;
+    sound_push_ctrl(SR_NOTE_FOLLOW, dest, attack_ms, release_ms, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, (int)(amount * 1000.0f));
+}
+
 // ── engine macros: three 0..1 knobs every modeled engine answers — six functions, forever
 //    (the count never grows with the engine roster; see audio-notes §8.1.1) ──
 
@@ -1829,6 +1904,10 @@ static void sound_init(void) {
             instr_bank[i].env_d_samp[e] = 0;
             instr_bank[i].env_amount[e] = 0.0f;  // off until instrument_env() is called
         }
+        instr_bank[i].flw_dest   = LFO_CUTOFF;
+        instr_bank[i].flw_atk    = 1.0f;
+        instr_bank[i].flw_rel    = 1.0f;
+        instr_bank[i].flw_amount = 0.0f;   // off until instrument_follow() is called
         instr_bank[i].flt_mode   = FILTER_OFF;
         instr_bank[i].flt_cutoff = 1000.0f;
         instr_bank[i].flt_q      = 1.0f;

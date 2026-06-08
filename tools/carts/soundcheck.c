@@ -52,6 +52,7 @@ void init(void) {
         instrument_filter(s, FILTER_LOW, 1200, 6);
         instrument_env(s, 0, ENV_CUTOFF, 0, 120, 900);
         instrument_env(s, 1, ENV_PITCH, 0, 40, 3);
+        instrument_follow(s, LFO_CUTOFF, 3, 200, 800);
         instrument_harmonics(s, 0.6f);
         instrument_timbre(s, 0.5f);
         instrument_morph(s, 0.4f);
@@ -124,6 +125,7 @@ void update(void) {
         note_duty(held, 0.2f);
         note_lfo(held, 0, LFO_PITCH, 6, 0.4f);
         note_env(held, 0, ENV_CUTOFF, 0, 150, 1200);
+        note_follow(held, LFO_CUTOFF, 3, 200, 1500);
         note_filter(held, FILTER_BAND);
         note_harmonics(held, 0.9f);              // engine macros ride kind 22 — no-op on a
         note_timbre(held, 0.7f);                 // wavetable slot, but the request path and
