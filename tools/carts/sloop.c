@@ -216,6 +216,13 @@ static float stabL, stabR;        // lateral reach of the hull from the COM (lef
 #define ROLL_FRIC     16.0f       // CONSTANT rolling/bearing friction (px/s^2) — what actually
                                   // STOPS a coasting rig. Drag ∝ v only asymptotes to 0 (floaty);
                                   // this constant term dominates at low speed and snaps v to rest.
+// ── idle creep: engine idles in gear → the car trundles with the throttle released ──
+// Real manual idle-in-gear (clutch out, no gas): clean in 1st (~5–10 km/h), marginal in
+// 2nd (~20, near lugging), stalls in 3rd+. We model creep ∝ idle_rpm/ratio so it tracks the
+// gear (1st ~10, 2nd ~17, 3rd ~25 km/h) and CAP it (stands in for "a tall gear would stall").
+#define IDLE_CREEP    48.0f       // creep "speed×ratio": idle holds vf ≈ IDLE_CREEP / ratio
+#define CREEP_MAX     38.0f       // cap — a too-tall gear can't idle past ~3rd-gear creep
+#define CREEP_ACCEL   55.0f       // how briskly idle eases you onto the creep speed (px/s^2)
 // ── transmission & gears (§1b) ───────────────────────────────────────────────
 // A gear ratio multiplies torque and sets the engine RPM = speed·ratio/V_REF. Low
 // gear = high ratio = lots of thrust but revs climb fast (low top speed); high gear
@@ -672,6 +679,18 @@ static void update_drive(float dt_) {
     float roll = ROLL_FRIC * dt_;
     if (vf >  roll) vf -= roll; else if (vf < -roll) vf += roll; else vf = 0;
     if (vl >  roll) vl -= roll; else if (vl < -roll) vl += roll; else vl = 0;
+
+    // --- idle creep: throttle released, in gear, no brake → the idling engine trundles you
+    //     at a gear-set floor (taller gear = faster, capped). Only pulls UP to the floor (it
+    //     won't fight drag from above). Brake overrides → sit still (a manual at a light).
+    if (!in_gas && !in_brk) {
+        float vcreep = clamp(IDLE_CREEP / ratio, 0, CREEP_MAX);
+        if (gear == 0) {                                  // reverse idles backward
+            if (vf > -vcreep) { vf -= CREEP_ACCEL * dt_; if (vf < -vcreep) vf = -vcreep; }
+        } else if (vf >= 0 && vf < vcreep) {              // forward: ease up to the floor
+            vf += CREEP_ACCEL * dt_; if (vf > vcreep) vf = vcreep;
+        }
+    }
 
     // recombine
     vx = fwx * vf + ltx * vl;

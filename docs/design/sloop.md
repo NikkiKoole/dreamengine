@@ -956,3 +956,22 @@ they're not eyeballed later — normalised peak-RPM and idle/redline % of peak):
 
 Sources: [x-engineer.org — power vs torque (dyno curves)](https://x-engineer.org/power-vs-torque/),
 [Haltech — how to read power curves](https://www.haltech.com/news-events/how-to-read-power-curves/).
+
+### Idle creep — the car trundles in gear with no throttle (2026-06-09)
+
+Player note (manual driver): with the clutch out and your foot off the gas, the idling
+engine still trundles the car at a gear-set speed — and it climbs with the gear. Looked up
+real idle-in-gear figures: **1st ≈ 5–10 km/h** (measured 3.9 mph GPS / ~5 mph diesel van /
+~3.5 mph theoretical at 800 rpm idle), **2nd ≈ ~20 km/h is the floor** before it lugs below
+~1000 rpm, and **3rd+ stalls** on most cars. The mechanism: creep speed = idle_rpm ÷ (gear
+ratio × final drive), so it's **∝ 1/ratio** — taller gear, faster idle.
+
+Modelled as a per-gear creep floor `vf → IDLE_CREEP / ratio` (eased on at `CREEP_ACCEL`,
+capped at `CREEP_MAX`), applied when off-gas + off-brake + in gear; the **brake overrides**
+it (hold to sit still, like a manual at a light), and reverse idles backward. Verified:
+**1st 9.9, 2nd 16.8, 3rd 25.1 km/h** — matching the player's 10 / 15–20 / 25. Tuned so 1st
+hits ~10 (their car idles a touch high vs the ~6–8 textbook); the *shape* is the real
+1/ratio law. The cap stands in for the real stall/lug in tall gears (we chose the forgiving
+no-stall model back in §1b). Sources:
+[Promaster forum — 1st-gear idle speed](https://www.promasterforum.com/threads/first-gear-idle-speed-and-how-to-engage-it.40914/),
+[GR86 forum — how slow in 2nd before lugging](https://www.gr86.org/threads/how-slow-can-you-go-in-2nd-gear.10665/).
