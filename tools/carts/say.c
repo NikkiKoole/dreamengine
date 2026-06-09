@@ -12,7 +12,10 @@
 // What it exercises with existing calls:
 //   • CONNECTED SPEECH on ONE held note — re-firing voice_consonant() on an already-held
 //     note resets vox_cons_t, so it re-articulates a consonant MID-NOTE. That turns the
-//     "one syllable per note" voice into CVCVCV chains ("ba-loo-nee-doh") without retriggering.
+//     "one syllable per note" voice into connected chains without retriggering.
+//   • VARIED SYLLABLE SHAPES — RANDOM builds language-like simlish from a mix of V / CV / VC /
+//     CVC (codas wired through the existing voice_coda() near each syllable's end) plus the odd
+//     diphthong glide (vowel→vowel within a syllable) — not a monotonous da-da-da CV string.
 //   • PITCH CONTOUR — note_pitch() driven every frame along a per-syllable shape (flat / rise
 //     / fall / peak), plus phrase-level declination (pitch drifts down across a statement).
 //   • INTONATION by mode — statement = final fall · question = final rise · exclaim = wider + hard fall.
@@ -44,11 +47,18 @@ enum { SH_FLAT, SH_RISE, SH_FALL, SH_PEAK };
 // consonant ids match sound.h VC_*: b d g m n l s sh. -1 = clean vowel onset.
 static const char *CONS_TXT[9] = { "", "b", "d", "g", "m", "n", "l", "s", "sh" }; // index = id+1
 static const char *VOW_TXT[5]  = { "oo", "oh", "ah", "eh", "ee" };
-// mellow voiced pool for simlish (no hissy s/sh): none, b, d, g, m, n, l
-static const int CONS_POOL[] = { -1, 0, 1, 2, 3, 4, 5 };
-#define NCONS_POOL ((int)(sizeof(CONS_POOL) / sizeof(CONS_POOL[0])))
+// mellow voiced pools for simlish (no hissy s/sh).
+static const int ONSET_POOL[] = { 0, 1, 2, 3, 4, 5 };               // b d g m n l
+#define NONSET ((int)(sizeof(ONSET_POOL) / sizeof(ONSET_POOL[0])))
+static const int CODA_POOL[]  = { 3, 4, 5, 3, 4, 5, 0, 1, 2 };      // m n l (weighted) + b d g
+#define NCODA  ((int)(sizeof(CODA_POOL) / sizeof(CODA_POOL[0])))
 
-typedef struct { int cons; int vowel; } Syl;   // cons id (-1 none) · vowel 0..4
+// a syllable is one of V / CV / VC / CVC, optionally with a diphthong glide:
+//   cons  = onset consonant id, -1 = none (bare-vowel onset)
+//   vowel = the (first) vowel 0..4
+//   vow2  = diphthong target vowel 0..4, -1 = no glide (pure vowel)
+//   coda  = closing consonant id, -1 = none (open syllable)
+typedef struct { int cons; int vowel; int vow2; int coda; } Syl;
 #define MAXSYL 8
 static Syl phrase[MAXSYL];
 static int nsyl = 4;
@@ -94,6 +104,8 @@ static int   stimer  = 0;      // frames into current syllable
 static int   sdur    = 1;      // total frames for current syllable
 static float ca, cb, cpk;      // contour relative-semitone endpoints + peak for current syllable
 static int   csh = SH_FLAT;
+static int   coda_fired = 0;   // has this syllable's coda been triggered yet?
+static int   coda_at    = 0;   // frame within the syllable at which to fire the coda
 
 #define PANX 8
 #define PANY 16
@@ -132,8 +144,11 @@ static float contour_pitch(float a, float b, float pk, int sh, float p) {
 
 static void trigger_syllable(int i) {              // fire the i-th syllable on the HELD note
     plan(i, &ca, &cb, &cpk, &csh, &sdur);
-    voice_param(voice, VP_VOWEL, phrase[i].vowel * 0.25f);
+    voice_coda(voice, -1);                         // clear the previous syllable's coda, if any
     voice_consonant(voice, phrase[i].cons);        // re-articulate mid-note (resets vox_cons_t)
+    voice_param(voice, VP_VOWEL, phrase[i].vowel * 0.25f);
+    coda_fired = 0;
+    coda_at = (int)(sdur * 0.62f);                 // close on the coda in the syllable's back third
     stimer = 0;
 }
 
@@ -150,8 +165,11 @@ static void start_say(void) {
     voice_param(voice, VP_TILT,   ch->tilt);
     voice_param(voice, VP_VIBD,   0.0f);
     voice_param(voice, VP_VOWEL,  phrase[0].vowel * 0.25f);
+    voice_coda(voice, -1);
     voice_consonant(voice, phrase[0].cons);
     note_pitch(voice, p0);
+    coda_fired = 0;
+    coda_at = (int)(sdur * 0.62f);
     stimer = 0;
     playing = 1;
 }
@@ -159,21 +177,27 @@ static void start_say(void) {
 static void gen_phrase(void) {
     nsyl = 3 + rnd(4);                                  // 3..6 syllables
     for (int i = 0; i < nsyl; i++) {
-        phrase[i].cons  = CONS_POOL[rnd(NCONS_POOL)];
+        // ONSET: first syllable always opens on a consonant; others 75% CV, 25% bare vowel
+        int hasOnset   = (i == 0) || (rnd(100) < 75);
+        phrase[i].cons = hasOnset ? ONSET_POOL[rnd(NONSET)] : -1;
         phrase[i].vowel = rnd(5);
+        // DIPHTHONG: 25% glide to a different vowel within the syllable ("ai", "ou")
+        phrase[i].vow2 = (rnd(100) < 25) ? rnd(5) : -1;
+        if (phrase[i].vow2 == phrase[i].vowel) phrase[i].vow2 = -1;
+        // CODA: 32% close on a consonant → VC / CVC (the rest stay open, V / CV)
+        phrase[i].coda = (rnd(100) < 32) ? CODA_POOL[rnd(NCODA)] : -1;
     }
-    phrase[0].cons = CONS_POOL[1 + rnd(NCONS_POOL - 1)];   // open on a real consonant, not silence
     if (emph >= nsyl) emph = -1;
 }
 
 void init(void) {
     instrument(SLOT, INSTR_VOICE, 35, 60, 7, 160);
     ch = &CHARS[0];
-    // a pleasant default phrase: "ba loo nee doh"
-    phrase[0] = (Syl){ 0, 2 };   // b + ah
-    phrase[1] = (Syl){ 5, 0 };   // l + oo
-    phrase[2] = (Syl){ 4, 4 };   // n + ee
-    phrase[3] = (Syl){ 1, 1 };   // d + oh
+    // a pleasant default phrase showing the shapes: "bam loo-i nee dol"
+    phrase[0] = (Syl){ 0, 2, -1,  3 };   // b + ah + m   (CVC)
+    phrase[1] = (Syl){ 5, 0,  4, -1 };   // l + oo→ee    (CV diphthong)
+    phrase[2] = (Syl){ 4, 4, -1, -1 };   // n + ee       (CV)
+    phrase[3] = (Syl){ 1, 1, -1,  5 };   // d + oh + l   (CVC)
     nsyl = 4;
 }
 
@@ -205,6 +229,16 @@ void update(void) {
         float p = (sdur > 0) ? (float)stimer / (float)sdur : 1.0f;
         if (p > 1.0f) p = 1.0f;
         note_pitch(voice, contour_pitch(ca, cb, cpk, csh, p));
+        // diphthong: glide the vowel across the syllable toward vow2
+        float vt = (phrase[si].vow2 >= 0)
+                 ? lerp((float)phrase[si].vowel, (float)phrase[si].vow2, p)
+                 : (float)phrase[si].vowel;
+        voice_param(voice, VP_VOWEL, vt * 0.25f);
+        // coda: close the syllable on a consonant in its back third
+        if (phrase[si].coda >= 0 && !coda_fired && stimer >= coda_at) {
+            voice_coda(voice, phrase[si].coda);
+            coda_fired = 1;
+        }
         if (stimer >= sdur) {
             si++;
             if (si >= nsyl) {
@@ -261,12 +295,16 @@ void draw(void) {
             if (k) line(prevx, prevy, x, y, col);
             prevx = x; prevy = y;
         }
-        // syllable label (cons + vowel)
-        char lbl[6]; int ln = 0;
+        // syllable label: onset + vowel (+ diphthong target) + coda
+        char lbl[8]; int ln = 0;
         const char *c = CONS_TXT[phrase[i].cons + 1];
         if (c[0]) { lbl[ln++] = c[0]; if (c[1]) lbl[ln++] = c[1]; }
         const char *vw = VOW_TXT[phrase[i].vowel];
-        lbl[ln++] = vw[0]; if (vw[1]) lbl[ln++] = vw[1]; lbl[ln] = 0;
+        lbl[ln++] = vw[0]; if (vw[1]) lbl[ln++] = vw[1];
+        if (phrase[i].vow2 >= 0) lbl[ln++] = VOW_TXT[phrase[i].vow2][0];   // glide target
+        const char *cd = CONS_TXT[phrase[i].coda + 1];
+        if (cd[0]) { lbl[ln++] = cd[0]; if (cd[1]) lbl[ln++] = cd[1]; }
+        lbl[ln] = 0;
         print_centered(lbl, sx + sw / 2, PANY + PANH - 9, cur ? CLR_WHITE : CLR_MEDIUM_GREY);
     }
     rect(PANX, PANY, PANW, PANH, CLR_DARK_GREY);
