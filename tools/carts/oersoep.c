@@ -13,6 +13,7 @@
 // difference from rollswarm (which only ever lets you eat down, never be eaten).
 //
 //   MOUSE / touch : the cell always swims toward the pointer
+//   SPACE / R-clk : DASH — a stamina-gated burst to break away from a hunter
 //   at MATE       : reach the glowing twin to evolve
 //   in the EDITOR : Left/Right pick a part, Z confirm
 //   Z             : choose mouth on the title, replay when it's over
@@ -68,6 +69,8 @@ STATE {
     float px, py, vx, vy;     // cell centre + velocity
     float r;                  // body radius
     float health, maxhealth;
+    float stamina;            // 0..1 dash energy — drains while bursting, recharges idle
+    bool  was_dashing;        // edge-detect for the whoosh
     float dna, dna_cap;
     int   tier;               // 1..TIERS
     int   diet;
@@ -159,6 +162,7 @@ void init(void) {
     S->px = WORLDW / 2.0f; S->py = WORLDH / 2.0f; S->vx = S->vy = 0;
     S->r = 5.0f;
     S->maxhealth = 120; S->health = 120;
+    S->stamina = 1.0f; S->was_dashing = false;
     S->tier = 1; S->dna = 0; S->dna_cap = 12;
     S->diet = D_HERB; S->parts = 0;
     S->combo = 0; S->hitstop = S->flash = S->ifr = 0;
@@ -305,21 +309,35 @@ void update(void) {
     if (S->ifr > 0) S->ifr--;
     S->flagphase += 14;
 
+    // DASH — a short burst of speed to break away from a hunter. Costs stamina that
+    // drains while held and recharges when you let it idle, so it's an escape tool
+    // with a real bottom: you can't dash forever.
+    bool want_dash = key(KEY_SPACE) || mouse_down(1) || btn(0, BTN_A) || btn(1, BTN_A);
+    bool dashing   = want_dash && S->stamina > 0.02f;
+    if (dashing) S->stamina = clamp(S->stamina - 0.022f, 0, 1);
+    else         S->stamina = clamp(S->stamina + 0.0055f, 0, 1);
+    if (dashing && !S->was_dashing) hit(72, INSTR_NOISE, 3, 70);   // whoosh on takeoff
+    S->was_dashing = dashing;
+    S->flagphase += dashing ? 26 : 0;                              // tail whips faster
+
     follow((int)S->px, (int)S->py, WORLDW, WORLDH);   // set camera BEFORE mouse_world read
     float tx = mouse_world_x(), ty = mouse_world_y();
     float dx = tx - S->px, dy = ty - S->py;
     float d = fsqrt(dx * dx + dy * dy);
     if (d > 3.0f) {
         float accel = PART(P_FLAG) ? 0.34f : 0.24f;
+        if (dashing) accel *= 2.4f;
         S->vx += dx / d * accel;
         S->vy += dy / d * accel;
     }
-    float cap = capspeed();
+    float cap = dashing ? capspeed() * 1.9f : capspeed();
     float sp = fsqrt(S->vx * S->vx + S->vy * S->vy);
     if (sp > cap) { S->vx = S->vx / sp * cap; S->vy = S->vy / sp * cap; }
     S->vx *= 0.90f; S->vy *= 0.90f;
     S->px = clamp(S->px + S->vx, S->r, WORLDW - S->r);
     S->py = clamp(S->py + S->vy, S->r, WORLDH - S->r);
+    if (dashing && sp > 1.5f)                          // a faint trail in your wake
+        puff(S->px - S->vx, S->py - S->vy, 1, CLR_TRUE_BLUE);
 
     step_flock();
 
@@ -560,8 +578,9 @@ void draw(void) {
         rectfill(180, 88, 100, 40, CLR_DARK_RED);   rect(180, 88, 100, 40, CLR_RED);
         print_centered("X  CARNIVORE", 230, 96, CLR_WHITE);
         print_centered("eats meat + cells", 230, 110, CLR_RED);
-        rectfill(0, 162, SCREEN_W, 12, CLR_BLACK);
-        print_centered("swim toward the cursor - eat - evolve", SCREEN_W / 2, 164, CLR_LIGHT_GREY);
+        rectfill(0, 156, SCREEN_W, 22, CLR_BLACK);
+        print_centered("swim toward the cursor - eat - evolve", SCREEN_W / 2, 160, CLR_LIGHT_GREY);
+        print_centered("hold SPACE / right-click = dash away", SCREEN_W / 2, 170, CLR_YELLOW);
         return;
     }
 
@@ -570,15 +589,20 @@ void draw(void) {
 
     // ===== HUD =====
     rectfill(0, 0, SCREEN_W, 18, CLR_DARKER_PURPLE);
-    bar(6, 3, 90, 5, S->health / S->maxhealth, CLR_RED, CLR_DARK_RED);
-    print(str("T%d", S->tier), 100, 2, CLR_WHITE);
+    bar(6, 3, 64, 4, S->health / S->maxhealth, CLR_RED, CLR_DARK_RED);                   // health
+    bar(74, 3, 64, 4, S->stamina, S->stamina > 0.15f ? CLR_YELLOW : CLR_DARK_ORANGE,     // dash energy
+        CLR_DARKER_GREY);
+    print(str("T%d", S->tier), 144, 2, CLR_WHITE);
     const char *dn = S->diet == D_HERB ? "HERB" : S->diet == D_CARN ? "CARN" : "OMNI";
-    print(dn, 122, 2, S->diet == D_HERB ? CLR_LIME_GREEN : S->diet == D_CARN ? CLR_RED : CLR_YELLOW);
+    print(dn, 166, 2, S->diet == D_HERB ? CLR_LIME_GREEN : S->diet == D_CARN ? CLR_RED : CLR_YELLOW);
     print_right(str("size %d", (int)S->r), SCREEN_W - 6, 2, CLR_LIGHT_GREY);
     bar(6, 10, SCREEN_W - 12, 4, clamp(S->dna / S->dna_cap, 0, 1), CLR_PINK, CLR_DARKER_GREY);
 
     if (S->mating)
         print_centered("DNA FULL - find your mate", SCREEN_W / 2, 24, CLR_PINK);
+    // teach the dash until you first use it (stamina drops below full)
+    else if (S->mode == M_SWIM && S->tier == 1 && S->stamina > 0.999f)
+        print_centered("hold SPACE / right-click to DASH", SCREEN_W / 2, SCREEN_H - 10, CLR_YELLOW);
 
     // editor overlay
     if (S->mode == M_EDITOR) {

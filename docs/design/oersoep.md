@@ -43,6 +43,11 @@ choose mouth (herbivore / carnivore)
 - **Steering:** swim toward the cursor with momentum + drag (agar.io feel), wiggling flagellum
   tail. `camera()`/`follow()` set in `update()` before reading `mouse_world_*` (sticky-state
   gotcha). Cursor-only — the cell always swims toward the pointer.
+- **Dash:** hold SPACE / right-click / Z for a speed burst (~1.9× cap) to break away from a
+  hunter. Gated by a stamina meter that drains while held and recharges when idle — an escape
+  tool with a real bottom, not infinite. Added because the honest predator pressure was *too*
+  honest: without a burst, a base cell is only fractionally faster than a hunter, so a single
+  unlucky pin meant death. The dash gives agency without removing the threat.
 - **Diet gate:** herbivore eats plant flecks only; carnivore eats meat gobbets + smaller cells;
   the **jaw** part promotes you to omnivore (eat everything). Predation on *you* is
   diet-independent — big mouths eat anyone.
