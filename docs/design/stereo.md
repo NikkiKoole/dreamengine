@@ -45,6 +45,26 @@ That's the **entire engine surface**: two functions + one constant, wired the fo
 - **Positional audio** (pan follows a sprite's screen-x) — stays **cart-land** (ADR-0006): the cart
   computes pan from the entity and calls `note_pan`. The engine owns no camera→pan mapping.
 
+### Why a patchable modrack PAN module waits for the effects bus (§8.10)
+
+We looked at adding a stereo **block to modrack** and hit a structural wall worth recording, because
+it reframes what our engine *is*. In real Eurorack there are **no voices** — only voltages on cables;
+audio and CV are the same signal. A hardware panner is just a module audio flows *through* (one in →
+L/R out, a CV input setting the balance), so **auto-pan falls out of the patch** (LFO's CV → the
+panner's CV in) with no special feature. And crucially, pan/stereo lives at the **end of the chain**
+(the output/mixer stage), never "on the voice" — which is exactly our §8.10 "stereo is bus-level"
+call, arrived at independently. Hardware agrees for the same reason: once you're panning, the voice's
+job is done.
+
+Our engine, though, is **not** a patchable modular — it's a fixed-architecture poly synth (16 baked
+voices: oscillator+filter+VCA+output welded together, summed straight to the master). There are no
+audio-rate cables between modules to intercept, so `instrument_pan`/`note_pan` as a **voice parameter**
+is the correct model for what we actually are. **modrack is a modular *skin* over that fixed engine** —
+it can fake CV→parameter modulation (LFO → cutoff), but it can't fake an audio cable into a panner,
+because the audio never leaves a voice as a patchable signal. A true patchable PAN/output module in
+modrack therefore needs an **audio-domain output bus between modules** — which *is* the §8.10 effects
+layer. So: **pan-as-voice-parameter until §8.10 lands; a patchable modrack PAN block after.**
+
 ## The pan-law decision — LINEAR, center unchanged
 
 Two laws, one real trade:
