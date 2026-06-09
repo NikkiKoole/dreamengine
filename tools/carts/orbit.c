@@ -22,6 +22,18 @@
 // all the way around and *closes into a loop clear of the ground* — "I'm in
 // orbit." Everything is built to make that one moment land.
 //
+// Three milestones now ride that same honest core, in KSP's own order of escalation:
+//   ORBIT ACHIEVED  — the predicted path closes clear of the ground (above).
+//   WELCOME HOME     — reach orbit, then set back down softly (a *round trip*, not a
+//                      crash): try_contact() rewards a gentle planet landing only
+//                      after orbit_done.
+//   MUN ENCOUNTER    — the coast reaches a SECOND, static gravity well (the Mun).
+//                      grav_acc() sums both wells, so the SAME predict() that draws
+//                      your orbit also bends the dotted path around the Mun the
+//                      instant your apoapsis reaches it. No new math — just a second
+//                      attractor. (Closing a loop *around* the Mun, and a moving Mun,
+//                      are the next phase — see the Mun tuning block below.)
+//
 // ── the one honest core ──────────────────────────────────────────────────────
 // Point-mass inverse-square gravity. The SAME integrator (grav_acc + symplectic
 // Euler) runs the live ship AND the dotted PREDICTED PATH (predict()), so the
@@ -65,6 +77,26 @@
 #define G_SURF     8.0f           // surface gravity px/s^2
 #define MU         (G_SURF * R_PLANET * R_PLANET)   // gravitational parameter G*M
 #define DESPAWN_R  (R_PLANET * 14)   // drift past here = gone (a true escape coasts out)
+
+// ── the Mun — a second, STATIC gravity well ───────────────────────────────────
+// Deliberately fixed in space: predict() integrates the exact same two wells the
+// live ship feels, so the dotted path stays honest (the cart's whole principle).
+// A *moving* Mun would force predict() to propagate the Mun's future position
+// across its lookahead — patched-conics / SOI territory, a later phase. Two fixed
+// attractors + one test mass is fully deterministic and DOES admit closed orbits
+// around either body, so a real Mun orbit is reachable on this same core.
+// Distance is the tuning lever (like world scale for the planet): too close/heavy
+// and the Mun yanks you off the pad; too far/light and the window is a needle.
+#define R_MUN      42.0f          // Mun radius (world px)
+#define G_MUN      6.0f           // Mun surface gravity px/s^2
+#define MU_MUN     (G_MUN * R_MUN * R_MUN)   // Mun gravitational parameter
+#define MUN_X      240.0f         // Mun centre (world px) — up & east of the pad.
+#define MUN_Y      -200.0f        //   Distance ~310 px sits just inside FALCON's
+                                  //   apoapsis reach (~330), so a committed eastward
+                                  //   gravity turn coasts THROUGH it — an achievement,
+                                  //   not a gimme. Place it past ~340 and no stock
+                                  //   rocket can climb to it; distance is the lever.
+#define MUN_SOI    (R_MUN * 3.5f) // predicted pass within here = "encounter"
 
 #define CTRL_AUTH  150.0f         // steering authority (deg/s^2 from ◄/►)
 #define ANG_DAMP   0.6f           // angular velocity damping per second
@@ -125,6 +157,7 @@ static float sx, sy, vx, vy;      // world position / velocity
 static float ang, angVel;         // heading (deg, 0 = nose toward space at pad) + spin
 static int   thrusting;
 static int   orbit_done, escaped; // one-shot celebration flags
+static int   mun_enc;             // one-shot: predicted path reached the Mun
 
 // flight recorder
 static float maxAlt, maxSpeed, tAloft;
@@ -135,6 +168,8 @@ static float predPx[PRED_PTS], predPy[PRED_PTS];
 static int   predN;
 static int   predCrash, predEllipse, predEscape;
 static float predApo, predPeri;   // distances from planet centre
+static int   predMunEnc;          // predicted path passes within the Mun's SOI
+static float predMunClosest;      // closest predicted approach to the Mun centre
 
 // camera (smoothed)
 static float cam_x, cam_y, cam_zoom = 1;
@@ -173,12 +208,19 @@ static float cur_thrust(void) {
 static float vis_half(void) { return 5.0f + 4.5f * (nstages - activeStage); }
 
 static void grav_acc(float x, float y, float *ax, float *ay) {
-    float r2 = x * x + y * y;
-    float r = fsqrt(r2);
+    // planet at the origin
+    float dx = x, dy = y, r2 = dx * dx + dy * dy, r = fsqrt(r2);
     if (r < 1) r = 1;
     float a = MU / r2;
-    *ax = -a * x / r;
-    *ay = -a * y / r;
+    *ax = -a * dx / r;
+    *ay = -a * dy / r;
+    // + the Mun (static well) — this single addition is what makes the predicted
+    // path bend around the Mun, for free, in both the live ship and predict().
+    dx = x - MUN_X; dy = y - MUN_Y; r2 = dx * dx + dy * dy; r = fsqrt(r2);
+    if (r < 1) r = 1;
+    a = MU_MUN / r2;
+    *ax += -a * dx / r;
+    *ay += -a * dy / r;
 }
 
 // nose direction from heading. ang=0 → straight up (0,-1); +ang turns clockwise.
@@ -241,7 +283,7 @@ static void reset_pad(void) {
     activeStage = 0;
     phase = ST_PAD;
     ang = 0; angVel = 0; vx = vy = 0;
-    thrusting = 0; orbit_done = 0; escaped = 0;
+    thrusting = 0; orbit_done = 0; escaped = 0; mun_enc = 0;
     maxAlt = maxSpeed = tAloft = 0;
     fate = 0;
     // sit on the pad at the top of the planet, nose pointing to space
@@ -254,6 +296,7 @@ static void reset_pad(void) {
 // ── trajectory prediction (gravity-only coast from the current state) ─────────
 static void predict(void) {
     predN = 0; predCrash = 0; predEllipse = 0; predEscape = 0;
+    predMunEnc = 0; predMunClosest = 1e9f;
     float px = sx, py = sy, pvx = vx, pvy = vy;
     float r0 = fsqrt(px * px + py * py);
     predApo = r0; predPeri = r0;
@@ -276,6 +319,15 @@ static void predict(void) {
             if (predN < PRED_PTS) { predPx[predN] = px; predPy[predN] = py; predN++; }
             break;
         }
+        // distance to the Mun — track the closest approach + a hard impact
+        float mdx = px - MUN_X, mdy = py - MUN_Y;
+        float rm = fsqrt(mdx * mdx + mdy * mdy);
+        if (rm < predMunClosest) predMunClosest = rm;
+        if (rm <= R_MUN) {              // path runs straight into the Mun
+            predCrash = 1;
+            if (predN < PRED_PTS) { predPx[predN] = px; predPy[predN] = py; predN++; }
+            break;
+        }
         if (rr > DESPAWN_R) break;      // escape: stop drawing once it's left the frame
         float a = angle_to(0, 0, (int)px, (int)py);
         float da = a - prevA;
@@ -283,6 +335,7 @@ static void predict(void) {
         swept += da; prevA = a;
         if (af(swept) >= 358) { predEllipse = 1; break; }   // a full closed orbit
     }
+    predMunEnc = predMunClosest < MUN_SOI;   // did the coast graze the Mun's pull?
 }
 
 // ── input ──────────────────────────────────────────────────────────────────────
@@ -362,6 +415,39 @@ static void exhaust(float dt_) {
     }
 }
 
+// contact with a body (planet or Mun). returns 1 if it ended the flight.
+// the "up" normal is radial from THAT body's centre, so the landing test works
+// the same whether you're setting down on the planet or the Mun.
+static int try_contact(float cx, float cy, float radius, int is_mun) {
+    float dx = sx - cx, dy = sy - cy;
+    float r = fsqrt(dx * dx + dy * dy);
+    if (r > radius + vis_half() * 0.6f) return 0;
+    float fx, fy; nose_dir(ang, &fx, &fy);
+    float nx = dx / r, ny = dy / r;              // local "up" (radial from body)
+    float fdotn = fx * nx + fy * ny;             // 1 = nose straight up
+    float spd = fsqrt(vx * vx + vy * vy);
+    float c = clamp(fdotn, -1, 1); float tilt = (1 - c) * 90;
+    if (spd < LAND_SPEED && fdotn > cos_deg(LAND_TILT) && af(angVel) < 40) {
+        phase = ST_WRECK; thrusting = 0;
+        sx = cx + nx * (radius + vis_half()); sy = cy + ny * (radius + vis_half());
+        vx = vy = 0;
+        if (is_mun) {                            // set down on another world
+            fate = "THE MUN. You landed on another world.";
+            hit(72, INSTR_SINE, 6, 360); hit(79, INSTR_SINE, 5, 420);
+        } else if (orbit_done) {                 // round trip: orbit → home alive
+            fate = "Welcome home, Kerbonaut.";
+            hit(67, INSTR_SINE, 6, 340); hit(72, INSTR_SINE, 5, 380);
+        } else {
+            fate = "Touchdown. (You... landed?)";
+            hit(60, INSTR_SINE, 5, 200);
+        }
+    } else {
+        explode(spd > 90 ? "High-velocity lithobraking."
+              : tilt > 40 ? "Came in sideways." : "Rapid Unscheduled Disassembly.");
+    }
+    return 1;
+}
+
 static void update_fly(float dt_) {
     float fx, fy; nose_dir(ang, &fx, &fy);
     float m = mass();
@@ -408,22 +494,9 @@ static void update_fly(float dt_) {
     if (spd > maxSpeed) maxSpeed = spd;
     tAloft += dt_;
 
-    // ground contact
-    if (r <= R_PLANET + vis_half() * 0.6f) {
-        float nx = sx / r, ny = sy / r;          // local "up" (radial)
-        float fdotn = fx * nx + fy * ny;          // 1 = nose straight up
-        float tilt = 0; { float c = clamp(fdotn, -1, 1); tilt = (1 - c) * 90; }
-        if (spd < LAND_SPEED && fdotn > cos_deg(LAND_TILT) && af(angVel) < 40) {
-            phase = ST_WRECK; fate = "Touchdown. (You... landed?)";
-            thrusting = 0; hit(60, INSTR_SINE, 5, 200);
-            sx = nx * (R_PLANET + vis_half()); sy = ny * (R_PLANET + vis_half());
-            vx = vy = 0;
-        } else {
-            explode(spd > 90 ? "High-velocity lithobraking."
-                  : tilt > 40 ? "Came in sideways." : "Rapid Unscheduled Disassembly.");
-        }
-        return;
-    }
+    // contact with either body (planet first, then the Mun)
+    if (try_contact(0, 0, R_PLANET, 0)) return;
+    if (try_contact(MUN_X, MUN_Y, R_MUN, 1)) return;
     if (r > DESPAWN_R) { phase = ST_WRECK; fate = "Drifted out of range."; return; }
 
     // engine sound while burning
@@ -468,6 +541,11 @@ void update(void) {
             hit(72, INSTR_SINE, 5, 300); hit(76, INSTR_SINE, 4, 320); hit(79, INSTR_SINE, 4, 360);
         }
         if (!escaped && predEscape) { escaped = 1; hit(55, INSTR_SINE, 4, 400); }
+        // the new transcendent beat: the coast now reaches all the way to the Mun
+        if (!mun_enc && predMunEnc) {
+            mun_enc = 1;
+            hit(67, INSTR_SINE, 5, 320); hit(71, INSTR_SINE, 4, 360); hit(74, INSTR_SINE, 4, 380);
+        }
     } else predN = 0;
 
 #ifdef DE_TRACE
@@ -479,6 +557,8 @@ void update(void) {
     watch("apo", "%.0f", predApo - R_PLANET);
     watch("ang", "%.0f", ang);
     watch("angvel", "%.0f", angVel);
+    watch("munclose", "%.0f", predMunClosest - R_MUN);
+    watch("munenc", "%d", predMunEnc);
 #endif
 }
 
@@ -488,6 +568,11 @@ static void update_camera(void) {
     float r = fsqrt(sx * sx + sy * sy);
     float ext = r;
     if (phase == ST_FLY && predN > 1) { if (predApo > ext) ext = predApo; }
+    // once the coast reaches the Mun, pull back far enough to keep it in frame
+    if (phase == ST_FLY && predMunEnc) {
+        float dm = fsqrt((float)MUN_X * MUN_X + (float)MUN_Y * MUN_Y) + R_MUN + 30;
+        if (dm > ext) ext = dm;
+    }
     if (ext < R_PLANET + 40) ext = R_PLANET + 40;
 
     float tz = (SCREEN_H * 0.42f) / ext;          // fit the extent to ~84% of height
@@ -560,6 +645,16 @@ static void draw_planet(void) {
     circ(0, 0, (int)R_PLANET, CLR_LIME_GREEN);
     // launch pad marker at the top
     line(-4, (int)(-R_PLANET - 1), 4, (int)(-R_PLANET - 1), CLR_LIGHT_GREY);
+}
+
+static void draw_mun(void) {
+    int mx = (int)MUN_X, my = (int)MUN_Y;
+    circfill(mx, my, (int)R_MUN, CLR_MEDIUM_GREY);
+    // lit edge toward the planet-ward side + a couple of craters
+    circfill(mx - (int)(R_MUN * 0.3f), my - (int)(R_MUN * 0.25f), (int)(R_MUN * 0.42f), CLR_LIGHT_GREY);
+    circ(mx + (int)(R_MUN * 0.25f), my + (int)(R_MUN * 0.10f), (int)(R_MUN * 0.18f), CLR_DARK_GREY);
+    circ(mx - (int)(R_MUN * 0.35f), my + (int)(R_MUN * 0.35f), (int)(R_MUN * 0.12f), CLR_DARK_GREY);
+    circ(mx, my, (int)R_MUN, CLR_LIGHT_GREY);
 }
 
 static void draw_marker(float r, int up, int col, const char *label) {
@@ -645,6 +740,10 @@ static void hud(void) {
         snprintf(buf, sizeof buf, "PERI %4.0f", predPeri - R_PLANET);
         print(buf, SCREEN_W - 72, 22, CLR_TRUE_BLUE);
     }
+    if (phase == ST_FLY && predMunEnc) {
+        snprintf(buf, sizeof buf, "MUN %5.0f", predMunClosest - R_MUN);
+        print(buf, SCREEN_W - 72, 30, CLR_MEDIUM_GREY);
+    }
 
     // status banners
     if (phase == ST_PAD)
@@ -653,6 +752,8 @@ static void hud(void) {
         print("ORBIT ACHIEVED", SCREEN_W / 2 - 52, 6, CLR_GREEN);
     else if (escaped && phase == ST_FLY)
         print("ESCAPE TRAJECTORY", SCREEN_W / 2 - 64, 6, CLR_LIGHT_PEACH);
+    if (mun_enc && phase == ST_FLY)
+        print("MUN ENCOUNTER", SCREEN_W / 2 - 52, 14, CLR_LIGHT_PEACH);
 
     if (phase == ST_WRECK) {
         int bx = SCREEN_W / 2 - 80, by = SCREEN_H / 2 - 34;
@@ -680,6 +781,7 @@ void draw(void) {
     camera_ex((int)cam_x, (int)cam_y, cam_zoom, 0);
 
     draw_planet();
+    draw_mun();
     if (phase == ST_FLY) draw_path();
     draw_particles();
     if (phase != ST_WRECK) draw_rocket();
