@@ -76,7 +76,15 @@
 // transmission with G: 1-GEAR (direct drive, the electric feel) / AUTO (auto-shifts
 // in band) / MANUAL (Q/E shift — over-rev or lug if you pick wrong). Reverse is a
 // GEAR (Q at a stop), so the brake (X) is pure deceleration. Engine pitch tracks RPM
-// and drops on each upshift. Per-engine-kind curves (diesel/steam/…) are still to come.
+// and drops on each upshift.
+//
+// ── engine kinds (§1a): distinct powerband curves + power-to-weight ──────────
+// The engine is rig-wide and has a KIND (cycle with K in BUILD): electric / gas /
+// diesel / steam / nuclear. A kind is just power + mass + a DELIVERY curve — electric
+// flat (snappy off the line), gas revvy (mid-band peak), diesel low-end grunt, steam
+// spool-up (a boiler that builds over ~4 s), nuclear huge + flat. delivery(kind,rpm)
+// is the only kind-aware line in the drive loop; power sets top speed (= thrust/drag,
+// so the strong kinds raise the ceiling) and power÷mass sets acceleration. Nothing faked.
 // ============================================================================
 
 // ── part vocabulary ──────────────────────────────────────────────────────────
@@ -94,6 +102,29 @@ enum { P_NONE, P_FRAME, P_ENGINE, P_WHEEL, P_CASTER, P_SEAT, P_DRIVE, P_KINDS };
 typedef struct { float mass, power, grip, roll, drive; int col; const char *name; } PartKind;
 static PartKind KIND[P_KINDS];   // filled in init() (avoid designated inits for libtcc)
 
+// ── engine kinds (§1a) — rig-wide, cycled in BUILD with K ─────────────────────
+// The same honest rule as everything else: an engine is just POWER + MASS + a
+// DELIVERY curve (how torque comes on with revs — see delivery() below). Picking a
+// kind only changes those numbers; the felt differences (snappy electric, revvy gas,
+// diesel grunt, steam spool-up, nuclear shove) fall straight out of delivery(kind,rpm)
+// and the EXISTING thrust/mass math — there is NO per-kind branch in the drive loop.
+// Engines still SUM and share one rig-wide kind (hybrids / per-engine kinds are parked
+// to rung 6). `power` also sets TOP SPEED (= thrust/drag): the strong kinds out-thrust
+// the old generic engine, which is what raises the 112 km/h ceiling — and power÷mass
+// (power-to-weight) sets ACCELERATION. So a kind change moves both, honestly.
+// The last two are the EXTREME demos (beyond §1a): a RACE powertrain (huge power, TALL
+// gearing, light → ~300 km/h) and a TRACTOR (grunt + ULTRA-SHORT gearing → geared out
+// at ~45 km/h). They prove how wide the honest range is. The trick that lets them exist
+// without a global re-tune: GEARING is part of the engine kind (`vref` below) — a real
+// powertrain differs exactly this way. A tall vref pushes the top-gear redline (= the hard
+// speed ceiling) out to 300; a tiny vref pulls it in to 45. No extra gears in the H-gate.
+enum { EK_ELECTRIC, EK_GAS, EK_DIESEL, EK_STEAM, EK_NUCLEAR, EK_RACE, EK_TRACTOR, EK_KINDS };
+typedef struct { float power, mass, vref; int deftrans, col; const char *name, *feel; } EngineSpec;
+static EngineSpec ENG[EK_KINDS];   // filled in init() (no designated inits for libtcc)
+static int   eng_kind = EK_GAS;    // rig-wide engine kind (a BUILD setting; persists)
+static float boiler;               // steam ONLY: boiler pressure 0..1 — the spool-up state, the
+                                   // one kind that needs a per-rig variable (builds while running)
+
 // ── the rig: a grid of parts ─────────────────────────────────────────────────
 // Rung 1 had one hardcoded layout; here we toggle between a few PRESET rigs (1-4)
 // to FEEL how the derived physics changes with the build — orbit's playbook (its
@@ -105,7 +136,7 @@ static PartKind KIND[P_KINDS];   // filled in init() (avoid designated inits for
 #define CELL 7.0f                  // world px per cell
 static int grid[GH][GW];
 
-#define NDES 8
+#define NDES 10
 static const int DESIGNS[NDES][GH][GW] = {
     { // 0 BUGGY — balanced 4-wheeler, engine centred: drives clean
         { P_WHEEL, P_FRAME, P_FRAME,  P_WHEEL, P_NONE,  P_NONE },
@@ -147,6 +178,21 @@ static const int DESIGNS[NDES][GH][GW] = {
         { P_FRAME, P_SEAT,  P_ENGINE, P_FRAME, P_NONE, P_NONE },
         { P_DRIVE, P_FRAME, P_FRAME,  P_DRIVE, P_NONE, P_NONE },
     },
+    { // 8 SUPERCAR — low (2-row → slippery), light, rear-drive + the RACE engine → ~300 km/h
+        { P_DRIVE, P_FRAME, P_ENGINE, P_FRAME, P_WHEEL, P_NONE },
+        { P_DRIVE, P_FRAME, P_SEAT,   P_FRAME, P_WHEEL, P_NONE },
+        { P_NONE,  P_NONE,  P_NONE,   P_NONE,  P_NONE,  P_NONE },
+    },
+    { // 9 TRUCK — big, heavy, wide, 6 wheels + the TRACTOR engine (short gears) → ~45 km/h grunt
+        { P_DRIVE, P_FRAME, P_FRAME,  P_FRAME, P_FRAME, P_DRIVE },
+        { P_DRIVE, P_SEAT,  P_ENGINE, P_FRAME, P_FRAME, P_DRIVE },
+        { P_WHEEL, P_FRAME, P_FRAME,  P_FRAME, P_FRAME, P_WHEEL },
+    },
+};
+// the engine kind each preset loads with (-1 = keep the player's current kind). The first 8
+// leave the kind alone (they're handling demos); SUPERCAR/TRUCK set the extreme powertrains.
+static const int DES_ENGINE[NDES] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, EK_RACE, EK_TRACTOR,
 };
 static const char *DES_NAME[NDES] = {
     "BUGGY \x07 balanced",
@@ -157,6 +203,8 @@ static const char *DES_NAME[NDES] = {
     "FWD \x07 front-drive, planted",
     "RWD \x07 rear-drive, tail-happy",
     "4WD \x07 all-drive, grippy",
+    "SUPERCAR \x07 RACE V12, ~300 km/h",
+    "TRUCK \x07 TRACTOR grunt, ~45 km/h",
 };
 static int cur_des = 0;
 
@@ -194,12 +242,14 @@ static int   nHull;
 static float stabL, stabR;        // lateral reach of the hull from the COM (left/right) — BUILD readout
 
 // ── tuning ───────────────────────────────────────────────────────────────────
-#define ENGINE_POWER  531.0f      // forward force per engine. The WHOLE force budget (this + the
-                                  // drags + ROLL_FRIC) is scaled ~0.45× together vs the first cut:
-                                  // top speed (= thrust/drag, a ratio) is UNCHANGED, but acceleration
-                                  // (= force/mass) is ~2.2× gentler → a realistic ~9 s to 100 km/h
-                                  // (was a hypercar-ish 4 s). THAT is what finally lets you dwell in
-                                  // gears 1-3 instead of blasting through them in under a second.
+// ENGINE_POWER is the GAS baseline (the everyday engine); the other kinds scale off it
+// in the ENG[] table — `power` is now per engine-kind (§1a), not one global. The WHOLE
+// force budget (this + the drags + ROLL_FRIC) was scaled ~0.45× together vs an early cut
+// so acceleration is realistic (gas now ~8 s to 100 km/h) and you dwell in gears 1-3
+// instead of blasting through them. Raising this (and the strong kinds above it) lifts
+// top speed — top = thrust/drag, so more thrust = a higher ceiling (the engine-focus fix
+// for the slightly-low 112 km/h). Power-to-weight (power÷mass per kind) sets accel.
+#define ENGINE_POWER  600.0f      // forward force per GAS engine (other kinds scale in ENG[])
 // Drag is a FORCE (DDA's model): top speed = thrust / drag, MASS-INDEPENDENT — mass
 // sets acceleration, not top speed. Drag = base + per-wheel rolling resistance + a
 // frontal-profile aero term, so SHAPE and WHEEL COUNT set top speed, not just weight.
@@ -236,8 +286,12 @@ static float stabL, stabR;        // lateral reach of the hull from the COM (lef
 // band to manage). Reverse is a GEAR (0), so the brake is pure deceleration.
 enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 #define NGEAR         5           // forward gears (AUTO/MANUAL)
-#define V_REF         135.0f      // speed (px/s) where a ratio-1.0 gear hits redline (absorbs
-                                  // the real final-drive ~3.6 + wheel size + px↔world units)
+#define V_REF         135.0f      // DEFAULT gearing: speed (px/s) where a ratio-1.0 gear hits
+                                  // redline (absorbs the real final-drive ~3.6 + wheel size +
+                                  // px↔world units). Now a per-engine-kind value (ENG[].vref) —
+                                  // this is the gearing of the normal kinds; RACE goes much taller
+                                  // (→300 km/h), TRACTOR much shorter (→45). top-gear redline =
+                                  // vref / 0.72, which is the rig's hard top-speed ceiling.
 #define REV_RATIO     3.50f       // reverse ≈ 1st gear (real gearboxes share the ratio)
 #define REV_ENGAGE_SPD 12.0f      // shift into/out of reverse only below this (px/s) — ABOVE 1st-gear
                                   // idle creep (~8.3) so a stopped-but-creeping car still qualifies
@@ -254,6 +308,8 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 #define STALL_RPM     0.12f       // below this (while rolling) the engine cuts out
 #define VSTALL_MIN    8.0f        // ... but only above this speed (px/s) — protects idle/launch
 #define RESTART_GRACE 0.5f        // s of stall-immunity after a crank (starter catches; downshift)
+#define BOILER_RISE   0.26f       // steam: boiler pressure gained/s while running (~4 s to full spool)
+#define BOILER_FALL   0.12f       // ... and bled/s when the engine's off (slower than it builds)
 #define LAT_GRIP      32.0f       // lateral velocity killed per second (tire grip)
 #define STEER_RESP    680.0f      // steering authority (deg/s^2) at speed
 #define ANG_DAMP      5.0f        // angular self-centering (1/s)
@@ -327,14 +383,42 @@ static float af(float v) { return v < 0 ? -v : v; }
 // real-world "staged" pattern. Each gear's redline speed (V_REF/ratio) still steps up.
 static const float GEAR_RATIO[NGEAR] = { 3.50f, 2.05f, 1.38f, 0.94f, 0.72f };
 
-// the powerband: torque ÷ peak-torque vs normalised RPM, fitted to a real NA-gasoline dyno
-// (Honda 2.0 SI): idle ≈ 0.61, PEAK at ≈ 0.66 of redline, ≈ 0.79 still pulling at redline —
-// then the rev limiter cuts hard past 1.0 (over-revving a too-low gear is the bite). The
-// low-rpm side is flat-ish (idle floor 0.6) — real curves don't sag to a parabola down low.
-static float powerband(float r) {
-    if (r > 1.0f) return clamp(0.79f - (r - 1.0f) * 9.0f, 0.0f, 0.79f); // rev limiter
-    float d = r - 0.66f;
-    return clamp(1.0f - 1.82f * d * d, 0.6f, 1.0f);                     // peak 1.0 @ 0.66 redline
+// ── delivery(kind, rpm, boiler): the powerband per engine kind (§1a) ──────────
+// Torque ÷ peak-torque vs normalised RPM. ONE function, branched only by kind — the
+// whole "how engines handle" story. Each curve is fitted to the real dyno data captured
+// in docs/design/sloop.md (the §1a reference table): peak-RPM, idle %, redline %. The
+// drive loop calls this once for thrust = power · throttle · delivery · ratio; nothing
+// else is kind-aware. Over-revving past redline (a too-low gear) cuts via the limiter.
+// (This is the CURVE shape only — each kind's power/mass/gearing/sound live in the
+//  "ENGINE TUNING" block in init(); that's the place to start when tuning a kind.)
+static float delivery(int kind, float r, float blr) {
+    switch (kind) {
+    case EK_ELECTRIC:                                // max torque from a standstill, tapering
+        if (r > 1.0f) return clamp(0.9f - (r - 1.0f) * 7.0f, 0.0f, 0.9f);   // toward the motor's
+        return clamp(1.15f - 0.6f * r, 0.5f, 1.1f);                         // max revs (EV feel)
+    case EK_DIESEL: {                                // grunt: peaks LOW (~0.45), broad flat, weak top
+        if (r > 1.0f) return clamp(0.7f - (r - 1.0f) * 9.0f, 0.0f, 0.7f);   // (Toyota D-4D dyno:
+        if (r < 0.45f) return clamp(0.80f + r * 0.45f, 0.0f, 1.0f);         //  idle ~80%, peak 0.45,
+        return clamp(1.0f - (r - 0.45f) * 0.55f, 0.7f, 1.0f);              //  ~70% at redline)
+    }
+    case EK_STEAM:                                   // spool-up: delivery IS the boiler pressure —
+        return clamp(blr, 0.0f, 1.0f) * 0.95f;       // sluggish until it builds, then steady
+    case EK_NUCLEAR:                                 // flat + immense, no band to manage — just go
+        if (r > 1.0f) return clamp(1.0f - (r - 1.0f) * 6.0f, 0.0f, 1.0f);
+        return 1.0f;
+    case EK_RACE:                                    // turbo/exotic: early boost, broad flat plateau
+        if (r > 1.0f) return clamp(0.92f - (r - 1.0f) * 9.0f, 0.0f, 0.92f);  // (Saab 2.0T dyno feel:
+        return clamp(0.62f + r * 1.4f, 0.0f, 1.0f);                          //  spools to a flat top)
+    case EK_TRACTOR: {                               // pure grunt: massive low-end, falls off hard up top
+        if (r > 1.0f) return clamp(0.6f - (r - 1.0f) * 9.0f, 0.0f, 0.6f);
+        if (r < 0.35f) return clamp(0.9f + r * 0.6f, 0.0f, 1.0f);            // peaks very low
+        return clamp(1.0f - (r - 0.35f) * 0.7f, 0.55f, 1.0f);               // then droops away
+    }
+    case EK_GAS:                                     // NA gasoline (Honda 2.0 SI): broad mid peak
+    default:                                          //  idle 0.61, PEAK @ 0.66 redline, 0.79 at redline
+        if (r > 1.0f) return clamp(0.79f - (r - 1.0f) * 9.0f, 0.0f, 0.79f); // rev limiter
+        { float d = r - 0.66f; return clamp(1.0f - 1.82f * d * d, 0.6f, 1.0f); }
+    }
 }
 
 // ── support-hull geometry (all in COM-local px) ───────────────────────────────
@@ -407,8 +491,9 @@ static void recompute_body(void) {
             int p = grid[r][c];
             PartKind *k = &KIND[p];
             if (k->mass <= 0) continue;
+            float pm = (p == P_ENGINE) ? ENG[eng_kind].mass : k->mass;   // engine mass = the kind's
             float cx = (c + 0.5f) * CELL, cy = (r + 0.5f) * CELL;
-            M += k->mass; comX += k->mass * cx; comY += k->mass * cy;
+            M += pm; comX += pm * cx; comY += pm * cy;
             wheelGrip += k->grip; wheelRoll += k->roll;
             if ((c + 1) * CELL > frontX) frontX = (c + 1) * CELL;
             if (r < minRow) minRow = r;
@@ -447,10 +532,12 @@ static void recompute_body(void) {
     I = 0;
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) {
-            PartKind *k = &KIND[grid[r][c]];
+            int p = grid[r][c];
+            PartKind *k = &KIND[p];
             if (k->mass <= 0) continue;
+            float pm = (p == P_ENGINE) ? ENG[eng_kind].mass : k->mass;
             float dx = (c + 0.5f) * CELL - comX, dy = (r + 0.5f) * CELL - comY;
-            I += k->mass * (dx * dx + dy * dy);
+            I += pm * (dx * dx + dy * dy);
         }
     if (I <= 0) I = 1;
 
@@ -473,8 +560,9 @@ static void recompute_body(void) {
 static void reset_vehicle(void) {
     recompute_body();
     sx = 0; sy = 0; vx = vy = 0; ang = 0; angVel = 0;
-    heat = 0; tip_amt = 0; gear = 1; rpm = 0;   // trans_mode persists (player setting)
+    heat = 0; tip_amt = 0; gear = 1; rpm = 0;   // trans_mode + eng_kind persist (player settings)
     engine_on = 1; stalled = 0; restart_grace = 0;   // fresh rig starts cranked
+    boiler = 0;                                  // steam starts cold → you feel it spool up
     wheel_ang = 0;
     for (int i = 0; i < MAXSKID; i++) skid[i].life = 0;
     for (int i = 0; i < MAXSPARK; i++) spark[i].life = 0;
@@ -483,13 +571,19 @@ static void reset_vehicle(void) {
 // live readout estimates — the same formulas the drive core uses, so BUILD shows
 // the truth about a rig before you ever drive it.
 static float est_top_speed(void) {
-    float thrust = nEngines * KIND[P_ENGINE].power;
-    // traction cap: too few wheels can't lay down all the engine's power (rolling support)
-    float tract = wheelRoll * GROUND_GRIP * GRIP_TO_FORCE;
+    // the SAME force balance the drive core reaches at terminal: geared, delivered thrust near
+    // redline vs (aero/rolling drag·v + the constant ROLL_FRIC force) — then capped by the
+    // gearing ceiling (top-gear redline = vref/topratio), which is what actually limits the
+    // strong kinds. So the BUILD number tracks what you'll really top out at, per engine kind.
+    float topratio = (ENG[eng_kind].deftrans == TR_SINGLE) ? SINGLE_RATIO : GEAR_RATIO[NGEAR - 1];
+    float thrust = nEngines * ENG[eng_kind].power * delivery(eng_kind, 0.9f, 1.0f) * topratio;
+    float tract = driveRoll * GROUND_GRIP * GRIP_TO_FORCE;     // powered wheels cap the laid-down force
     if (tract > 0 && thrust > tract) thrust = tract;
-    // include scrape drag so a cantilevered build shows its real (lower) top speed
     float drag = DRAG_BASE + DRAG_WHEEL * nWheels + DRAG_AERO * frontalCells + SCRAPE_DRAG * nDrag;
-    return drag > 0 ? thrust / drag : 0;
+    float vdrag = (drag > 0) ? (thrust - ROLL_FRIC * M) / drag : 0;   // drag-limited top
+    if (vdrag < 0) vdrag = 0;
+    float cap = ENG[eng_kind].vref / topratio;                 // gearing ceiling (top-gear redline)
+    return (vdrag < cap) ? vdrag : cap;
 }
 static float est_turn_rate(void) {                 // steady deg/s at speed
     float turnEase = REF_GYRO / (I / M + REF_GYRO);
@@ -500,6 +594,10 @@ static void load_design(int idx) {
     cur_des = (idx + NDES) % NDES;
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) grid[r][c] = DESIGNS[cur_des][r][c];
+    if (DES_ENGINE[cur_des] >= 0) {                 // some presets carry an engine kind (the extremes)
+        eng_kind = DES_ENGINE[cur_des];
+        trans_mode = ENG[eng_kind].deftrans;
+    }
     reset_vehicle();
 }
 
@@ -566,6 +664,13 @@ static void do_ignition(void) {                       // crank or kill (key I or
     else           { stalled = 0; hit(26, INSTR_NOISE, 2, 90); }
 }
 static void do_trans(void) { trans_mode = (trans_mode + 1) % 3; gear = 1; }   // cycle SINGLE/AUTO/MANUAL
+// cycle the rig-wide engine kind (BUILD). Mass changes → recompute the body; also drop the
+// transmission to the kind's sensible default (electric → 1-GEAR, combustion → AUTO).
+static void do_kind(void) {
+    eng_kind = (eng_kind + 1) % EK_KINDS;
+    trans_mode = ENG[eng_kind].deftrans; gear = 1;
+    recompute_body();
+}
 
 // a labelled cockpit button: fills with `actcol` when active, shows label + key hint
 static void dash_btn(int x, int y, int w, int h, const char *lbl, const char *keyhint, int active, int actcol) {
@@ -596,9 +701,12 @@ static void handle_input(void) {
     if (keyp('6')) load_design(5);   // FWD
     if (keyp('7')) load_design(6);   // RWD
     if (keyp('8')) load_design(7);   // 4WD
+    if (keyp('9')) load_design(8);   // SUPERCAR (RACE engine → ~300 km/h)
+    if (keyp('0')) load_design(9);   // TRUCK (TRACTOR engine → ~45 km/h)
 
     if (mode == MODE_BUILD) {
         if (keyp('R')) clear_grid();           // R clears the grid to empty
+        if (keyp('K')) do_kind();              // K cycles the rig's engine kind (§1a)
         // part-select hotkeys mirror the palette
         if (keyp('F')) sel_part = P_FRAME;
         if (keyp('E')) sel_part = P_ENGINE;
@@ -718,24 +826,31 @@ static void update_drive(float dt_) {
     }
 
     // --- transmission: ratio sets RPM + multiplies torque; reverse drives backward
+    float curvref = ENG[eng_kind].vref;             // gearing per engine kind = the speed scale:
+                                                    // top-gear redline = vref/0.72 is the hard ceiling
     float ratio = (trans_mode == TR_SINGLE) ? SINGLE_RATIO
                 : (gear == 0) ? REV_RATIO : GEAR_RATIO[gear - 1];
     float gdir  = (gear == 0) ? -1.0f : 1.0f;
-    rpm = clamp(af(vf) * ratio / V_REF, 0, 1.15f);
+    rpm = clamp(af(vf) * ratio / curvref, 0, 1.15f);
     // --- stall: lug a too-tall gear below idle revs while still rolling → it cuts out.
-    // Skipped briefly after a crank (RESTART_GRACE) so re-ignition always takes and you
-    // get a beat to downshift; SINGLE (electric) and reverse never stall.
+    // Only the COMBUSTION kinds (gas/diesel) stall — electric/nuclear have no idle to lose,
+    // and steam is gated by its boiler, not revs. SINGLE and reverse never stall either.
+    // Skipped briefly after a crank (RESTART_GRACE) so re-ignition always takes.
+    int combusts = (eng_kind == EK_GAS || eng_kind == EK_DIESEL);
     if (restart_grace > 0) restart_grace -= dt_;
-    if (engine_on && restart_grace <= 0 && trans_mode != TR_SINGLE && gear >= 1
+    if (engine_on && restart_grace <= 0 && combusts && trans_mode != TR_SINGLE && gear >= 1
         && rpm < STALL_RPM && af(vf) > VSTALL_MIN) {
         engine_on = 0; stalled = 1;
         hit(28, INSTR_NOISE, 3, 200);                 // the cough as it dies
     }
     if (!engine_on) rpm = 0;                           // dead engine → tach drops to zero
-    // SINGLE (electric): instant flat torque that just tapers toward the motor's max revs —
-    // no powerband to chase, snappy off the line, moderate top (the single-speed EV trade).
-    float gmul = (trans_mode == TR_SINGLE) ? SINGLE_RATIO * clamp(1.15f - 0.6f * rpm, 0.2f, 1.15f)
-                                           : powerband(rpm) * ratio;
+    // steam boiler: pressure builds while the engine runs (the spool-up), bleeds when off.
+    // delivery(EK_STEAM,…) reads it, so a freshly-cranked steam rig is sluggish for ~4 s.
+    if (engine_on) boiler = clamp(boiler + BOILER_RISE * dt_, 0, 1.0f);
+    else           boiler = clamp(boiler - BOILER_FALL * dt_, 0, 1.0f);
+    // the powerband per engine KIND × the gear ratio (low gear = more thrust, revs climb
+    // fast). delivery() is the only kind-aware line; SINGLE folds its one flat ratio in here.
+    float gmul = delivery(eng_kind, rpm, boiler) * ratio;
 
     // --- engine: thrust through the gear, + the yaw torque from an off-centre engine
     float throttle = (in_gas && engine_on) ? 1.0f : 0.0f;  // gas drives in the gear's direction (dead engine = no thrust)
@@ -743,7 +858,7 @@ static void update_drive(float dt_) {
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) {
             if (grid[r][c] != P_ENGINE) continue;
-            float t = KIND[P_ENGINE].power * throttle * gmul * gdir;
+            float t = ENG[eng_kind].power * throttle * gmul * gdir;
             float oy = (r + 0.5f) * CELL - comY;     // lateral offset of this engine
             thrust += t;
             eng_torque += -oy * t;                   // off the centre-line → it yaws
@@ -791,7 +906,10 @@ static void update_drive(float dt_) {
     //     at a gear-set floor (taller gear = faster, capped). Only pulls UP to the floor (it
     //     won't fight drag from above). Brake overrides → sit still (a manual at a light).
     if (!in_gas && !in_brk && engine_on) {
-        float vcreep = IDLE_CREEP / ratio;            // idle RPM in this gear → 1/ratio law
+        // idle holds a CONSTANT rpm (IDLE_CREEP/V_REF) whatever the gearing → creep speed scales
+        // with vref, so a tall-geared supercar idles faster and a short-geared tractor crawls,
+        // and neither false-stalls (idle rpm stays above STALL_RPM regardless of vref).
+        float vcreep = IDLE_CREEP * (curvref / V_REF) / ratio;   // idle RPM in this gear → 1/ratio law
         if (gear == 0) {                                  // reverse idles backward
             if (vf > -vcreep) { vf -= CREEP_ACCEL * dt_; if (vf < -vcreep) vf = -vcreep; }
         } else if (vf >= 0 && vf < vcreep) {              // forward: ease up to the floor
@@ -887,10 +1005,23 @@ static void engine_sound_init(void) {
 }
 static void engine_sound(int audible) {
     if (!audible) { if (eng_voice >= 0) { note_off(eng_voice); eng_voice = -1; } return; }
-    float r     = clamp(rpm, 0, 1.0f);
-    float pitch = 24.0f + r * 28.0f;                           // low; idle ~24, redline ~52
+    float r = clamp(rpm, 0, 1.0f);
+    // per-kind voice (§1a): base pitch + span + brightness. Electric whines high & open;
+    // diesel/steam growl low & muffled; nuclear a steady mid hum; gas the mid default.
+    // (SOUND only — power/mass/gearing/curve live in the "ENGINE TUNING" block in init().)
+    float pbase, pspan; int cbase, bright;
+    switch (eng_kind) {
+    case EK_ELECTRIC: pbase = 34; pspan = 28; cbase = 520; bright = 1; break;   // high, open whine
+    case EK_DIESEL:   pbase = 19; pspan = 22; cbase = 160; bright = 0; break;   // low, muffled growl
+    case EK_STEAM:    pbase = 18; pspan = 18; cbase = 140; bright = 0; break;   // low, soft chuff
+    case EK_NUCLEAR:  pbase = 28; pspan = 22; cbase = 320; bright = 0; break;   // steady mid hum
+    case EK_RACE:     pbase = 32; pspan = 38; cbase = 480; bright = 1; break;   // high, screaming wail
+    case EK_TRACTOR:  pbase = 15; pspan = 14; cbase = 120; bright = 0; break;   // very low, lugging chug
+    case EK_GAS: default: pbase = 24; pspan = 28; cbase = 220; bright = 0; break;
+    }
+    float pitch = pbase + r * pspan;                           // idle low, climbs to redline
     int   vol   = in_gas ? 5 : 3;                              // idle/creep quieter than under power
-    int   cut   = 220 + (int)((r * 0.75f + (in_gas ? 0.25f : 0.0f)) * 1500);  // opens with revs/throttle
+    int   cut   = cbase + (int)((r * (bright ? 0.9f : 0.75f) + (in_gas ? 0.25f : 0.0f)) * 1500);
     if (eng_voice < 0) { eng_voice = note_on((int)pitch, INSTR_ENGINE, vol); note_glide(eng_voice, 70); }
     note_pitch (eng_voice, pitch);                             // glided → smooth rev tracking
     note_vol   (eng_voice, vol);
@@ -936,6 +1067,8 @@ void update(void) {
     watch("trans", "%d", trans_mode);
     watch("engine_on", "%d", engine_on);
     watch("stalled", "%d", stalled);
+    watch("ekind", "%d", eng_kind);
+    watch("boiler", "%.2f", boiler);
 #endif
 }
 
@@ -1107,6 +1240,9 @@ static const char *drive_label(void) {
     return off > CELL * 0.5f ? "FWD pull" : off < -CELL * 0.5f ? "RWD push" : "AWD";
 }
 
+// a part's colour — engine cells tint to the rig's engine KIND, everything else fixed
+static int part_col(int p) { return (p == P_ENGINE) ? ENG[eng_kind].col : KIND[p].col; }
+
 // ── vehicle: draw each occupied cell as a rotated quad ───────────────────────
 static void draw_cell(int r, int c, int p) {
     float lx = (c + 0.5f) * CELL - comX, ly = (r + 0.5f) * CELL - comY;
@@ -1115,7 +1251,7 @@ static void draw_cell(int r, int c, int p) {
     rot(lx - h, ly - h, &ax, &ay); rot(lx + h, ly - h, &bx, &by);
     rot(lx + h, ly + h, &cx2, &cy2); rot(lx - h, ly + h, &dx, &dy);
     int xy[8] = { (int)ax, (int)ay, (int)bx, (int)by, (int)cx2, (int)cy2, (int)dx, (int)dy };
-    int col = dragging[r][c] ? hot_col() : KIND[p].col;   // scraping cells glow
+    int col = dragging[r][c] ? hot_col() : part_col(p);   // scraping cells glow
     polyfill(xy, 4, col);
     if (p == P_CASTER || p == P_DRIVE) {          // a hub dot: grey = swivel caster, orange = powered
         float px, py; rot(lx, ly, &px, &py);
@@ -1158,6 +1294,7 @@ static void hud(void) {
 
     // --- top of screen: rig identity (dim) + the zone's limit (a road sign) ----
     print(DES_NAME[cur_des], 4, 4, CLR_DARK_GREY);
+    print(ENG[eng_kind].name, 4, 12, ENG[eng_kind].col);   // the rig's engine kind (§1a)
     print_centered(ZONE_NAME[cur_zone], SCREEN_W / 2, 4, CLR_YELLOW);
     if (nDrag > 0) {                         // scrape heat — shown only while it bites
         print("SCRAPE", SCREEN_W - 52, 4, hot_col());
@@ -1281,7 +1418,7 @@ static void draw_build(void) {
         int by = 38 + i * 20;
         if (ui_button(6, by, 60, 17, PAL_LBL[i])) sel_part = PAL[i];
         if (PAL[i] == sel_part) rect(5, by - 1, 62, 19, CLR_WHITE);     // selection ring
-        if (PAL[i] != P_NONE) rectfill(56, by + 4, 8, 8, KIND[PAL[i]].col);  // colour chip
+        if (PAL[i] != P_NONE) rectfill(56, by + 4, 8, 8, part_col(PAL[i]));  // colour chip
         if (PAL[i] == P_DRIVE) pset(60, by + 7, CLR_ORANGE);            // powered-hub mark
     }
 
@@ -1292,7 +1429,7 @@ static void draw_build(void) {
             int p = grid[r][c];
             if (p == P_NONE) { rect(x, y, ED_CELL, ED_CELL, CLR_DARK_GREY); }
             else {
-                rectfill(x + 1, y + 1, ED_CELL - 2, ED_CELL - 2, KIND[p].col);
+                rectfill(x + 1, y + 1, ED_CELL - 2, ED_CELL - 2, part_col(p));
                 rect(x, y, ED_CELL, ED_CELL, dragging[r][c] ? CLR_RED : CLR_DARKER_GREY);
                 if (dragging[r][c])               // hangs past the wheels → will scrape
                     rect(x + 1, y + 1, ED_CELL - 2, ED_CELL - 2, CLR_ORANGE);
@@ -1332,9 +1469,14 @@ static void draw_build(void) {
     int rx = 206, ry = 40;
     print("READOUT", rx, ry, CLR_LIGHT_GREY); ry += 11;
     snprintf(buf, sizeof buf, "MASS  %4.1f", M);             print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
-    snprintf(buf, sizeof buf, "TOPSPD %3.0f", est_top_speed()); print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
+    snprintf(buf, sizeof buf, "TOPSPD %3.0f km/h", est_top_speed() * KMH); print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
     snprintf(buf, sizeof buf, "TURN  %4.0f", est_turn_rate()); print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
-    snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels); print(buf, rx, ry, CLR_MEDIUM_GREY); ry += 9;
+    snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels); print(buf, rx, ry, CLR_MEDIUM_GREY); ry += 11;
+    // engine KIND (§1a) — cycle with K or this button. Sets power / mass / delivery curve,
+    // so it moves TOPSPD + accel + the engine note. Cells tint to the kind's colour.
+    if (ui_button(rx, ry, 82, 15, ENG[eng_kind].name)) do_kind();
+    ry += 16;
+    print(ENG[eng_kind].feel, rx, ry, ENG[eng_kind].col); ry += 11;
     // drivetrain: front = pull (stable), rear = push (loose); no drive wheels = AWD
     print(drive_label(), rx, ry, nDrive == 0 ? CLR_MEDIUM_GREY :
           (driveX - comX) < -CELL * 0.5f ? CLR_ORANGE : CLR_TRUE_BLUE); ry += 9;
@@ -1359,8 +1501,8 @@ static void draw_build(void) {
     }
 
     print("BUILD", 6, 4, CLR_WHITE);
-    print("TAB drive   click place/erase   1-8 templates   R clear",
-          SCREEN_W / 2 - 152, SCREEN_H - 12, CLR_MEDIUM_GREY);
+    print("TAB drive  click place/erase  1-0 templates (9 super,0 truck)  K engine  R clear",
+          SCREEN_W / 2 - 200, SCREEN_H - 12, CLR_MEDIUM_GREY);
 
     ui_end();
 
@@ -1405,6 +1547,37 @@ void init(void) {
     KIND[P_CASTER] = (PartKind){ 1.5f, 0,            0.12f,1.0f, 0,    CLR_DARK_GREY,   "caster" };
     KIND[P_SEAT]   = (PartKind){ 1.2f, 0,            0,    0,    0,    CLR_BLUE,        "seat" };
     KIND[P_DRIVE]  = (PartKind){ 1.6f, 0,            1.0f, 1.0f, 1.0f, CLR_BLACK,       "drive" };
+
+    // ╔══ ENGINE TUNING — START HERE ════════════════════════════════════════════════════════╗
+    // Each engine kind is ONE row below. To tune the feel, edit the row — three dials:
+    //   • power → thrust. Raises BOTH top speed and acceleration.
+    //   • mass  → acceleration ONLY (accel = power÷total-mass). Top speed is mass-independent.
+    //   • vref  → the GEARING = the top-speed CEILING, and it reads directly in km/h:
+    //             vref 300 ⇒ caps at ~300 km/h, vref 45 ⇒ ~45. (Exact because the km/h factor
+    //             KMH and the top-gear ratio are both 0.72 — keep them equal or this breaks.)
+    //             Whether a rig actually REACHES its vref ceiling depends on power vs drag:
+    //             strong + slippery hits it (RACE), weak/heavy/draggy drag-limits BELOW it.
+    // So: "I want a 250 km/h car" → set vref 250 + enough power to reach it. "make it launch
+    // harder" → more power or less mass. The BUILD readout (est_top_speed) shows the result live.
+    //
+    // Two deeper knobs, only if you want to reshape HOW power arrives (not how much):
+    //   • torque CURVE shape → delivery() up top, one `case` per kind.
+    //   • engine SOUND       → engine_sound(), one line per kind.
+    // Add a whole new kind = enum (EK_*) + a row here + a delivery() case + an engine_sound()
+    // case (+ optionally a preset rig in DESIGNS[] / DES_ENGINE[]). GAS uses ENGINE_POWER as the
+    // baseline anchor (it carries the force-budget calibration); the rest are absolute numbers.
+    // ╚════════════════════════════════════════════════════════════════════════════════════════╝
+    //                                power        mass  vref     deftrans   colour            name        feel
+    ENG[EK_ELECTRIC] = (EngineSpec){ 540.0f,       4.0f,  V_REF,   TR_SINGLE, CLR_TRUE_BLUE,    "ELECTRIC", "flat \x07 snappy" };
+    ENG[EK_GAS]      = (EngineSpec){ ENGINE_POWER, 4.0f,  V_REF,   TR_AUTO,   CLR_RED,          "GAS",      "revvy mid-band" };
+    ENG[EK_DIESEL]   = (EngineSpec){ 660.0f,       6.5f,  V_REF,   TR_AUTO,   CLR_ORANGE,       "DIESEL",   "low-end grunt" };
+    ENG[EK_STEAM]    = (EngineSpec){ 520.0f,       9.0f,  V_REF,   TR_AUTO,   CLR_BROWN,        "STEAM",    "spool-up" };
+    ENG[EK_NUCLEAR]  = (EngineSpec){ 820.0f,       14.0f, V_REF,   TR_AUTO,   CLR_LIME_GREEN,   "NUCLEAR",  "huge \x07 flat" };
+    // the EXTREMES — gearing (vref) is what unlocks the range: RACE geared TALL (top-gear
+    // redline ~417 px/s = 300 km/h) with the power to reach it; TRACTOR geared ULTRA-SHORT
+    // (redline ~62 px/s = 45 km/h) with bottomless grunt. Tune verified headless below.
+    ENG[EK_RACE]     = (EngineSpec){ 950.0f,       4.0f,  300.0f,  TR_AUTO,   CLR_PINK,         "RACE V12", "scream \x07 ~300" };
+    ENG[EK_TRACTOR]  = (EngineSpec){ 1100.0f,      16.0f, 45.0f,   TR_AUTO,   CLR_DARK_GREEN,   "TRACTOR",  "grunt \x07 ~45" };
 
     load_design(0);                       // start on the balanced buggy
     cam_x = sx - SCREEN_W / 2.0f;

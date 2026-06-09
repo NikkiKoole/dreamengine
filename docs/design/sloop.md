@@ -1,6 +1,7 @@
 # sloop — build-your-own-vehicle, travel a procedural world (design seed)
 
-**Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (scrape) + 2.55 (tipping) + 2.6 (drivetrain FWD/RWD) + 2.7 (gears/transmission) done.** Cart:
+**Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (scrape) + 2.55 (tipping) + 2.6 (drivetrain FWD/RWD) + 2.7 (gears/transmission) + 2.7-engines (per-kind powerband
++ power-to-weight + extreme 45–300 km/h range) done.** Cart:
 `tools/carts/sloop.c`, registered in `index.json`, lint clean. Captures a design
 conversation (2026-06-09).
 A new entry in the "legendary series" alongside `coaster` and `orbit`
@@ -450,7 +451,9 @@ off-centre torque. sloop already goes beyond it on those (our `I` and `eng_torqu
 | Top speed mass-INDEPENDENT | drag is a force; mass sets accel, not top speed (DDA's insight) | 1.95 | ✅ |
 | **Wheel type: caster vs fixed** | casters (piano dolly/cart) give support but ~no lateral grip → slides any way, no nose-tracking; fixed wheels track forward | 2 (part vocab) | ✅ |
 | **Unsupported cells scrape** | a cell cantilevered past the wheel span drags on the floor: extra drag + lateral anchor + off-centre yaw, with sparks/heat/grind. Wheels become *spatial*, not a scalar; wheel-spam costs mass+drag, too few wheels drags | 2.5 | ✅ |
-| **Engine delivery curve** | how power comes on with speed: electric flat (snappy), gas revvy (mid-range band), diesel low-end grunt, steam spool-up. One `delivery(kind,u)` curve; see §1a | 2.7 | ⬜ |
+| **Engine delivery curve** | how power comes on with speed: electric flat (snappy), gas revvy (mid-range band), diesel low-end grunt, steam spool-up, nuclear huge+flat. One `delivery(kind,rpm)` curve; see §1a | 2.7 | ✅ |
+| **Engine power-to-weight → top speed + accel** | each kind sets power + mass: power sets thrust (→ top speed via thrust/drag), power÷mass sets accel. The strong kinds out-thrust the old generic engine, raising the 112 km/h ceiling | 2.7 | ✅ |
+| **Gearing per engine kind (the speed scale)** | a kind carries its own `vref` (gearing), so the top-gear redline — the hard speed ceiling — moves with it. Unlocks the extreme range: RACE V12 geared tall → 300 km/h, TRACTOR geared ultra-short → ~45 km/h, no global re-tune | 2.7 | ✅ |
 | **Transmission / gears** | a gear ratio trades torque ↔ top speed; RPM rises in a gear, drops on a shift. single (electric/EV = 1 gear) / automatic / manual×5 (wrong gear lugs or over-revs). Reverse is a gear, not a brake function. Engine pitch tracks RPM (the satisfying sound). See §1b | 2.7 | ✅ |
 | **Muscle throttle (stamina + rhythm)** | foot/hand crank: each press = one stroke (`THR_IMPULSE`), gated by a stamina meter; the no-fuel starter rig. See §1a | 2.8 | ⬜ |
 | **Wheel area / ground pressure** | traction = f(wheel area ÷ mass) per terrain; heavy-on-few-wheels bogs in sand | 3 (biomes) | ⬜ |
@@ -1104,3 +1107,56 @@ climb per gear is long enough that the held-voice engine sound actually sweeps.
 
 (Top speed itself reads a touch low at 112 km/h — deferred to the engine-focus phase, where
 power-to-weight / aero per engine kind is the right place to raise it.)
+
+### Rung 2.7-engines — per-kind powerband, power-to-weight, and the extreme range (2026-06-09)
+
+The §1a half of "engine powerband + transmission" that 2.7 left open: distinct engine KINDS,
+each with its own delivery curve — plus the engine-focus follow-on (raise the 112 km/h), which
+opened straight into a player request for **extreme** examples (a 300 km/h supercar, a 45 km/h
+truck). All landed together, all emergent, no per-kind branch in the drive loop.
+
+- ✓ **`delivery(kind, rpm)` — one curve, branched only by kind.** Replaced the single generic
+  `powerband()`. Each curve is fitted to the real-dyno reference table already captured above:
+  **electric** flat from a standstill, tapering toward max revs (the EV snap); **gas** the Honda
+  2.0 NA curve (peak @ 0.66 redline); **diesel** low-end grunt (peaks ~0.45, flat, weak top);
+  **steam** `delivery = boiler` (a 0..1 spool-up state that builds over ~4 s while the engine
+  runs — the one kind that needs a per-rig variable); **nuclear** flat + immense. The drive loop
+  calls it once for `thrust = power · throttle · delivery · ratio`; nothing else is kind-aware.
+- ✓ **Engine is rig-wide with a KIND** (cycle **K** in BUILD; a sensible default transmission
+  comes with it — electric → 1-GEAR, combustion → AUTO). `ENG[]` holds power + mass + colour +
+  feel per kind. Engine cells tint to the kind's colour, the DRIVE HUD + BUILD readout name it,
+  and the held engine voice gets a per-kind profile (electric whines high/bright, diesel/steam
+  growl low/muffled, nuclear a steady hum, race a scream). Engines still SUM and share one kind
+  (hybrids parked to rung 6). Only gas/diesel can stall (electric/nuclear/steam have no idle to
+  lose) — the one extra line in the stall gate.
+- ✓ **Power-to-weight raises the ceiling, honestly.** `power` sets thrust (→ top speed via
+  thrust/drag), `power÷mass` sets accel. The strong kinds out-thrust the old generic 531-engine,
+  so the top — which stays mass-INDEPENDENT — climbs. Gas is now the baseline (`ENGINE_POWER`
+  600) at **122 km/h / 0-100 in 6 s** (was 112 / 9 s); the spread runs electric 90 · steam 93 ·
+  diesel 110 · gas 122 · nuclear 139 km/h on the buggy.
+- ✓ **The extreme range — gearing is part of the engine kind.** The blocker for a 300 km/h car
+  was the gearbox, not power: top gear (0.72) redlines at `V_REF/0.72 = 135 km/h`, a hard ceiling
+  on every rig. The fix that needs no global re-tune: give each kind its own **`vref`** (gearing),
+  so the top-gear redline moves with the kind. Two extreme kinds (beyond §1a): **RACE V12** (huge
+  power, light, `vref` 300 → redlines at ~417 px/s = **300 km/h**) and **TRACTOR** (bottomless
+  grunt, `vref` 45 → geared out at ~62 px/s = **45 km/h**). Two example rigs load them — template
+  **9 = SUPERCAR** (low 2-row slippery RWD body), **0 = TRUCK** (heavy wide 6-wheeler). Idle creep
+  was reformulated to hold a constant idle rpm regardless of `vref` (creep speed scales with
+  gearing) so neither extreme false-stalls; the normal kinds (`vref` = `V_REF`) are byte-for-byte
+  unchanged.
+- ✓ **`est_top_speed()` made honest.** The BUILD readout now solves the same terminal balance the
+  drive core reaches — geared, delivered thrust near redline minus the constant `ROLL_FRIC·M`
+  force, capped by the gearing ceiling — and shows **km/h** (matching DRIVE + the zone signs). The
+  supercar's BUILD readout reads **TOPSPD 300 km/h**, the truck **45**, and they drive exactly that.
+- ✓ **Verified headless** (per-kind WOT + the two example rigs, `--trace`): supercar tops **300.0
+  km/h** (gear 5, rpm 1.00 — at the cap), 0-100 in 1.1 s / 0-200 in 4.6 s; truck tops **45.6 km/h**
+  (geared out, rpm 1.01); the five §1a kinds land 90–139 km/h as above; gas-at-531 re-measured at
+  111 km/h / 8.9 s confirms the calibration. Visual dumps confirm the pink RACE rig at speed and
+  the wide green TRACTOR truck rendering correctly.
+
+**Still open:** muscle engines (foot/hand crank, `THR_IMPULSE` + stamina — rung 2.8); fuel /
+sources as the clock (battery/tank/firebox/recharge — rung 6); the hybrid active-engine toggle
+(rung 6). Steam's boiler is a delivery state only — it doesn't yet consume fuel/water (rung 6).
+RACE/TRACTOR are demo powertrains beyond the §1a roster (they bundle gearing as a vehicle-class
+shorthand); if the part vocabulary later justifies an explicit gearbox part, the per-kind `vref`
+is where that knowledge already lives.
