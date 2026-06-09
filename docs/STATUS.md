@@ -480,6 +480,19 @@ their `kind[]` tags.
 **Smaller open items (no design doc yet):** looping ambience (`drone`)/`volume`/mute. Noted
 in [`POLISH_TODO.md`](POLISH_TODO.md).
 
+**Noise is value-noise + the seeding idiom** *(new 2026-06-09, surfaced building the
+`procplaces` procgen testbed)*. The engine's `noise`/`noise2`/`noise3` (`studio.c:2911`) is
+**value noise, not Perlin** — it hashes lattice *values* and smoothstep-interpolates them
+(Perlin interpolates *gradients*), so it has faint axis-aligned grid artifacts at low
+frequency. Fine for terrain/density/fog; worth knowing before leaning on it for anything
+needing isotropy. Crucially it **is seedable today**, even though `noise`/`noise2` take no
+seed: `noise2(x,y)` == `noise3(x,y,0)`, so **`noise3(x, y, (float)seed)` with an INTEGER seed
+is a fully-independent, repeatable field** (the z-slice folds through `noise_hash`
+independently; an integer z = no interpolation bleed). The `procplaces` cart uses exactly
+this (both its generators) and verifies byte-identical re-renders. **Open question:** add a named seeded
+helper (`noise2_seeded(x,y,seed)`?) and/or document the `noise3`-as-seed idiom + the
+value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "can't seed it."
+
 **`sprite-draw.js` next steps:**
 - ~~Gap audit~~ **DONE** — `ovalfill`, `rrectfill`, `ngonfill`, `polyfill`, `noise` added (2026-06-04).
 - **Remaining Tier 2** — `starfill`, `arcfill`, `thickline`, `vgradient`/`hgradient`, `bezier`. Lower priority; current set covers most sprites.
