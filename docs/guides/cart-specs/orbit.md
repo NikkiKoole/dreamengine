@@ -38,7 +38,7 @@ Status: 🟢 reachable now · 🟡 wired but gated · 🔴 needs a new mechanic
 | 1 | **ORBIT ACHIEVED** | 🟢 | Predicted path closes into a loop clear of the ground. The core beat. |
 | 2 | **WELCOME HOME** (orbit → land back safely) | 🔴 | `try_contact()` *rewards* a soft planet landing after `orbit_done` — but see "ceiling" below: practically unreachable today. |
 | 3 | **MUN ENCOUNTER** (reach a 2nd gravity well) | 🟢 | `grav_acc()` sums planet + a static Mun, so the same `predict()` bends the path around the Mun once your apoapsis reaches it. Banner + chime fire. |
-| 4 | **MUN ORBIT** (capture into a loop *around* the Mun) | 🔴 | The natural next build — the Mun's version of milestone 1. |
+| 4 | **MUN ORBIT** (capture into a loop *around* the Mun) | 🟡→🔴 | Detector **scaffolded** (a second swept-angle accumulator in `predict()`, `predMunOrbit` + a `MUN ORBIT` banner/chime) but it **cannot fire yet**: at the Mun's current distance no stable capture orbit physically exists, and FALCON arrives out of fuel. Blocked on physics + a throttle, not on detection. See "Mun orbit is blocked on physics" below. |
 | 5 | **MUN LANDING** | 🟡 | Reward text already exists in `try_contact()`; unreachable until capture (4) exists. |
 | 6 | **MUN LANDING + RETURN** | 🔴 | The full round trip. The hard, satisfying one. |
 | 7 | Interplanetary (Minmus, Duna…) | 🔴 | Far future. |
@@ -60,13 +60,44 @@ The two levers that turn "impossible" into "hard-but-fair" are exactly the next-
 items: **Mun-orbit capture** and **a throttle** (the header calls throttle "the real cure
 for fiddliness").
 
+## Mun orbit is blocked on physics, not detection (finding, 2026-06-09)
+The **detector half is built** — `predict()` now carries a second swept-angle accumulator
+around the Mun's centre (the Mun's version of the planet 358° check), gated so it only
+counts a loop that stays bound to the Mun, plus `predMunOrbit`/`predMunPeri`, a `MUN
+ORBIT` banner, a chime, and `munorbit`/`munperi` trace fields. Building it was the easy
+part. Trying to *test* it surfaced the real blocker, in two layers:
+
+1. **No fuel.** Flying FALCON to the Mun (gravity-turn east, coast to apoapsis) arrives on
+   a fast flyby with **`twr` already 0** — both stages spent ~4 s in. There is nothing left
+   for a capture burn. Confirms the "current ceiling" section: a throttle (or a higher-Δv
+   design) is a hard prerequisite.
+2. **No stable orbit to capture *into*.** The deeper problem. The Mun sits only ~312 px
+   from the planet; the planet's tide matches the Mun's pull at ~95 px from the Mun while
+   the Mun *surface* is at 42 px — a razor-thin band. In practice it's worse than thin:
+   seeding a textbook circular velocity at 46–80 px from the Mun (even after relocating the
+   Mun to ~600 px, where it dominates 6:1) produces a path that **crashes into the Mun or
+   escapes back toward the planet within a single revolution** — never a closed loop. So
+   the detector, correctly, never fires: there is no captured trajectory in the current
+   world for it to recognise. (It *does* stay silent on a flyby — no false positive — which
+   was the one thing testable today.)
+
+**What milestone 4 actually needs, in order:**
+1. **A capture regime that exists.** Move the Mun farther out and/or re-tune `MU_MUN` /
+   `MUN_SOI` until a hand-reachable, *stable* orbital band exists around it — verify with a
+   seeded circular orbit that the predicted path closes a full loop before the build of any
+   piloting. Also suspect the **prediction timestep** (`PDT 0.045`): over `PRED_MAX` steps a
+   coarse symplectic-Euler step can inject enough energy to unbind a tight orbit, so a finer
+   `PDT` (or adaptive step near the Mun) may be part of the fix. Until a seeded orbit fires
+   `predMunOrbit`, the detector's 2×SOI reset bound and 358° threshold are **unvalidated
+   guesses** (so marked in the code).
+2. **Throttle** — the capture burn needs partial thrust to be flyable (see below).
+3. Only then is the detector worth trusting, and milestone 5 (Mun landing) falls out of it.
+
 ## Roadmap (in build order)
-1. **Mun-orbit capture (do this next).** A retrograde braking burn near the Mun drops you
-   into a closed loop *around* it. Two hooks: (a) the closed-orbit test in `predict()`
-   (the 358°-swept-angle check) currently measures the angle swept around the *planet*
-   only — Mun orbit needs a **second accumulator** measuring the angle swept around the
-   *Mun's* centre; (b) you must have braked into capture for it to close. **Unlocks
-   milestone 5 (Mun landing) for almost free** — that's why it's first.
+1. **Mun-orbit capture (do this next).** Detector is scaffolded; the work left is the
+   *physics* above — a Mun placement/tuning that admits a stable capture orbit (validated by
+   a seeded test), likely a finer prediction step, then the throttle for the braking burn.
+   **Unlocks milestone 5 (Mun landing) for almost free** once it works — that's why it's first.
 2. **Throttle.** Partial thrust (not just on/off) makes precise landing burns flyable —
    the cure for the delta-v knife-edge. Unlocks soft landings (2 and 5) as *reliable*.
 3. **Mouse interaction — maneuver nodes.** The real KSP map-view verb: click your orbit

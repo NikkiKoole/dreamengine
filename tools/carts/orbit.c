@@ -162,6 +162,7 @@ static float ang, angVel;         // heading (deg, 0 = nose toward space at pad)
 static int   thrusting;
 static int   orbit_done, escaped; // one-shot celebration flags
 static int   mun_enc;             // one-shot: predicted path reached the Mun
+static int   mun_orbit;           // one-shot: predicted path closed a loop around the Mun
 
 // flight recorder
 static float maxAlt, maxSpeed, tAloft;
@@ -174,6 +175,8 @@ static int   predCrash, predEllipse, predEscape;
 static float predApo, predPeri;   // distances from planet centre
 static int   predMunEnc;          // predicted path passes within the Mun's SOI
 static float predMunClosest;      // closest predicted approach to the Mun centre
+static int   predMunOrbit;        // predicted path closes a loop WITHIN the Mun's SOI
+static float predMunPeri, predMunApo;  // Mun-relative peri/apo while inside the SOI
 
 // camera (smoothed)
 static float cam_x, cam_y, cam_zoom = 1;
@@ -287,7 +290,7 @@ static void reset_pad(void) {
     activeStage = 0;
     phase = ST_PAD;
     ang = 0; angVel = 0; vx = vy = 0;
-    thrusting = 0; orbit_done = 0; escaped = 0; mun_enc = 0;
+    thrusting = 0; orbit_done = 0; escaped = 0; mun_enc = 0; mun_orbit = 0;
     maxAlt = maxSpeed = tAloft = 0;
     fate = 0;
     // sit on the pad at the top of the planet, nose pointing to space
@@ -301,6 +304,9 @@ static void reset_pad(void) {
 static void predict(void) {
     predN = 0; predCrash = 0; predEllipse = 0; predEscape = 0;
     predMunEnc = 0; predMunClosest = 1e9f;
+    predMunOrbit = 0; predMunPeri = 1e9f; predMunApo = 0;
+    int   munIn = 0;          // currently inside the Mun's SOI this pass?
+    float munSwept = 0, munPrevA = 0;
     float px = sx, py = sy, pvx = vx, pvy = vy;
     float r0 = fsqrt(px * px + py * py);
     predApo = r0; predPeri = r0;
@@ -331,6 +337,37 @@ static void predict(void) {
             predCrash = 1;
             if (predN < PRED_PTS) { predPx[predN] = px; predPy[predN] = py; predN++; }
             break;
+        }
+        // Mun-orbit detection (PROVISIONAL — see orbit.md "Mun orbit is blocked on
+        // physics, not detection"). Accumulate the angle swept around the Mun while
+        // the path stays in the Mun's neighbourhood; reset the instant it RECEDES.
+        // 358° swept without receding = a loop bound to the Mun (a capture), not a
+        // flyby (recedes having swept <360) nor a big planet orbit (recedes). This
+        // logic is UNVALIDATED against a real captured path: at the Mun's current
+        // distance no stable capture orbit exists to fire it (a circular seed
+        // crashes or escapes within one revolution). The 2×SOI reset bound and the
+        // 358° threshold are best-guesses to be re-tuned once a throttle + a farther
+        // Mun make capture reachable and real captured paths can be measured.
+        if (rm < MUN_SOI * 2.0f) {
+            float ma = angle_to((int)MUN_X, (int)MUN_Y, (int)px, (int)py);
+            if (!munIn) {               // just entered the SOI — start fresh
+                munIn = 1; munSwept = 0; munPrevA = ma;
+                predMunPeri = rm; predMunApo = rm;
+            } else {
+                if (rm < predMunPeri) predMunPeri = rm;
+                if (rm > predMunApo)  predMunApo = rm;
+                float mda = ma - munPrevA;
+                if (mda > 180) mda -= 360; else if (mda < -180) mda += 360;
+                munSwept += mda; munPrevA = ma;
+                // closed loop clear of the Mun's surface = MUN ORBIT
+                if (af(munSwept) >= 358 && predMunPeri > R_MUN + 4) {
+                    predMunOrbit = 1;
+                    if (predN < PRED_PTS) { predPx[predN] = px; predPy[predN] = py; predN++; }
+                    break;
+                }
+            }
+        } else {
+            munIn = 0;                   // left the SOI — any partial sweep is void
         }
         if (rr > DESPAWN_R) break;      // escape: stop drawing once it's left the frame
         float a = angle_to(0, 0, (int)px, (int)py);
@@ -550,6 +587,11 @@ void update(void) {
             mun_enc = 1;
             hit(67, INSTR_SINE, 5, 320); hit(71, INSTR_SINE, 4, 360); hit(74, INSTR_SINE, 4, 380);
         }
+        // the milestone above the encounter: the coast now CLOSES around the Mun
+        if (!mun_orbit && predMunOrbit) {
+            mun_orbit = 1;
+            hit(74, INSTR_SINE, 5, 320); hit(78, INSTR_SINE, 4, 360); hit(81, INSTR_SINE, 4, 420);
+        }
     } else predN = 0;
 
 #ifdef DE_TRACE
@@ -563,6 +605,8 @@ void update(void) {
     watch("angvel", "%.0f", angVel);
     watch("munclose", "%.0f", predMunClosest - R_MUN);
     watch("munenc", "%d", predMunEnc);
+    watch("munorbit", "%d", predMunOrbit);
+    watch("munperi", "%.0f", predMunOrbit ? predMunPeri - R_MUN : -1.0f);
 #endif
 }
 
@@ -744,7 +788,12 @@ static void hud(void) {
         snprintf(buf, sizeof buf, "PERI %4.0f", predPeri - R_PLANET);
         print(buf, SCREEN_W - 72, 22, CLR_TRUE_BLUE);
     }
-    if (phase == ST_FLY && predMunEnc) {
+    if (phase == ST_FLY && predMunOrbit) {
+        snprintf(buf, sizeof buf, "M-APO %4.0f", predMunApo - R_MUN);
+        print(buf, SCREEN_W - 72, 30, CLR_MEDIUM_GREY);
+        snprintf(buf, sizeof buf, "M-PERI %3.0f", predMunPeri - R_MUN);
+        print(buf, SCREEN_W - 72, 38, CLR_MEDIUM_GREY);
+    } else if (phase == ST_FLY && predMunEnc) {
         snprintf(buf, sizeof buf, "MUN %5.0f", predMunClosest - R_MUN);
         print(buf, SCREEN_W - 72, 30, CLR_MEDIUM_GREY);
     }
@@ -756,7 +805,9 @@ static void hud(void) {
         print("ORBIT ACHIEVED", SCREEN_W / 2 - 52, 6, CLR_GREEN);
     else if (escaped && phase == ST_FLY)
         print("ESCAPE TRAJECTORY", SCREEN_W / 2 - 64, 6, CLR_LIGHT_PEACH);
-    if (mun_enc && phase == ST_FLY)
+    if (mun_orbit && phase == ST_FLY)
+        print("MUN ORBIT", SCREEN_W / 2 - 36, 14, CLR_GREEN);
+    else if (mun_enc && phase == ST_FLY)
         print("MUN ENCOUNTER", SCREEN_W / 2 - 52, 14, CLR_LIGHT_PEACH);
 
     if (phase == ST_WRECK) {
