@@ -235,6 +235,8 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 #define V_REF         135.0f      // speed (px/s) where a ratio-1.0 gear hits redline (absorbs
                                   // the real final-drive ~3.6 + wheel size + px↔world units)
 #define REV_RATIO     3.50f       // reverse ≈ 1st gear (real gearboxes share the ratio)
+#define REV_ENGAGE_SPD 12.0f      // shift into/out of reverse only below this (px/s) — ABOVE 1st-gear
+                                  // idle creep (~8.3) so a stopped-but-creeping car still qualifies
 #define SINGLE_RATIO  0.95f       // the one direct-drive ratio (electric): flat, strong, no band
 #define AUTO_UP       0.90f       // AUTO upshifts above this rpm (revs high → you HEAR the gear)
 #define AUTO_DOWN     0.42f       // AUTO downshifts below this rpm
@@ -693,14 +695,17 @@ static void update_drive(float dt_) {
         heat = clamp(heat + HEAT_RISE * dt_, 0, 1.0f);
     }
 
-    // --- shifting: manual (Q/E) or auto; reverse is gear 0 (only when ~stopped) ---
-    if (in_up) {                                     // E: out of reverse, or upshift
-        if (gear == 0) { if (af(vf) < 5.0f) { gear = 1; shift_snd = 1; } }
+    // --- shifting: reverse (gear 0) sits "below 1st" — down at a near-stop engages it,
+    //     up returns to 1st; the R↔1 swap zeroes forward speed so it's a clean change, not
+    //     a jarring flip. MANUAL also steps the forward gears with up/down; AUTO/SINGLE keep
+    //     reverse a manual choice but auto-manage the forward gears below. -----------------
+    if (in_up) {                                     // E / gate-up: out of reverse, or upshift
+        if (gear == 0) { if (af(vf) < REV_ENGAGE_SPD) { gear = 1; vf = 0; shift_snd = 1; } }
         else if (trans_mode == TR_MANUAL && gear < NGEAR) { gear++; shift_snd = 1; }
     }
-    if (in_down) {                                   // Q: downshift, or into reverse at rest
+    if (in_down) {                                   // Q / gate-down: downshift, or into reverse
         if (trans_mode == TR_MANUAL && gear > 1) { gear--; shift_snd = 1; }
-        else if (gear >= 1 && af(vf) < 5.0f) { gear = 0; shift_snd = 1; }
+        else if (gear >= 1 && af(vf) < REV_ENGAGE_SPD) { gear = 0; vf = 0; shift_snd = 1; }
     }
     if (trans_mode == TR_SINGLE && gear > 1) gear = 1;          // single keeps one forward gear
     if (trans_mode == TR_AUTO && gear >= 1) {                   // auto-shift to stay in the band
@@ -1184,21 +1189,34 @@ static void hud(void) {
     circfill(DIAL_CX, DIAL_CY, 2, CLR_LIGHT_GREY);
     font(FONT_SMALL); print_centered("RPM", DIAL_CX, DIAL_CY + DIAL_R - 10, CLR_MEDIUM_GREY); font(FONT_NORMAL);
 
-    // STICKSHIFT GATE — tap upper half to up-shift (E), lower to down-shift (Q)
+    // STICKSHIFT GATE — a real H-pattern knob (1·3·5 top / 2·4·R bottom). Tap the upper
+    // half to up-shift, lower half to down-shift (keys E / Q). The ball rides the engaged
+    // gear; R glows when you're slow enough to drop into it from a stop.
     int su = ctl_held(STK_X, STK_Y, STK_W, STK_H / 2);
     int sd = ctl_held(STK_X, STK_Y + STK_H / 2, STK_W, STK_H / 2);
-    rectfill(STK_X, STK_Y, STK_W, STK_H, CLR_DARKER_GREY);
+    rectfill(STK_X, STK_Y, STK_W, STK_H, CLR_BLACK);
     rect(STK_X, STK_Y, STK_W, STK_H, CLR_DARK_GREY);
-    int colx[3] = { STK_X + 9, STK_X + 21, STK_X + 33 };
-    int gtopy = STK_Y + 14, gboty = STK_Y + STK_H - 8, gmidy = (gtopy + gboty) / 2;
-    line(colx[0], gmidy, colx[2], gmidy, CLR_MEDIUM_GREY);          // gate channel
-    for (int c = 0; c < 3; c++) line(colx[c], gtopy, colx[c], gboty, CLR_MEDIUM_GREY);
+    int colx[3]  = { STK_X + 9, STK_X + 21, STK_X + 33 };
+    int gtopy = STK_Y + 13, gboty = STK_Y + STK_H - 14, gmidy = (gtopy + gboty) / 2;
+    for (int c = 0; c < 3; c++) line(colx[c], gtopy, colx[c], gboty, CLR_LIGHT_GREY);  // chrome H
+    line(colx[0], gmidy, colx[2], gmidy, CLR_LIGHT_GREY);                              // ... + channel
     int gi   = (gear == 0) ? 2 : (gear - 1) / 2;                    // column: 1/2 · 3/4 · 5/R
-    int gtop = (gear != 0) && ((gear - 1) % 2 == 0);                // odd gears up, even down, R down
-    circfill(colx[gi], gtop ? gtopy : gboty, 3, engine_on ? CLR_WHITE : CLR_DARK_GREY);
-    // up/down labels in the 8×8 font (the small fonts lack the ▲▼ glyphs)
-    print_centered("\x1e" "E", STK_X + STK_W / 2, STK_Y + 1,          su ? CLR_WHITE : CLR_MEDIUM_GREY);   // up E
-    print_centered("\x1f" "Q", STK_X + STK_W / 2, STK_Y + STK_H - 8,  sd ? CLR_WHITE : CLR_MEDIUM_GREY);   // down Q
+    int gtop = (gear != 0) && ((gear - 1) % 2 == 0);               // odd gears up, even + R down
+    int can_rev = (gear >= 1 && spd < REV_ENGAGE_SPD);             // could drop into reverse right now
+    static const char *TOPN[3] = { "1", "3", "5" };
+    static const char *BOTN[3] = { "2", "4", "R" };
+    for (int c = 0; c < 3; c++) {
+        int ton = gtop && c == gi, bon = !gtop && c == gi;
+        int bcol = (c == 2 && can_rev) ? CLR_ORANGE : (sd ? CLR_LIGHT_GREY : CLR_MEDIUM_GREY);
+        print_centered(TOPN[c], colx[c], STK_Y + 2,         ton ? CLR_WHITE : (su ? CLR_LIGHT_GREY : CLR_MEDIUM_GREY));
+        print_centered(BOTN[c], colx[c], STK_Y + STK_H - 9, bon ? CLR_WHITE : bcol);
+    }
+    circfill(colx[gi], gtop ? gtopy : gboty, 3, engine_on ? CLR_WHITE : CLR_DARK_GREY);   // shift ball
+    circ(colx[gi], gtop ? gtopy : gboty, 3, CLR_LIGHT_GREY);
+    font(FONT_TINY);                                              // tiny key hints (keep it photo-clean)
+    print("E", STK_X + 2, STK_Y + 2,          su ? CLR_WHITE : CLR_DARK_GREY);
+    print("Q", STK_X + 2, STK_Y + STK_H - 7,  sd ? CLR_WHITE : CLR_DARK_GREY);
+    font(FONT_NORMAL);
 
     // RIGHT BUTTONS — ignition (lit when running) / transmission / build
     dash_btn(BTN_X, IGN_Y, BTN_W, BTN_H, engine_on ? "IGN ON" : "IGN OFF", "I", engine_on, CLR_GREEN);

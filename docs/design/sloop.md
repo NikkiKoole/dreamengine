@@ -1052,3 +1052,22 @@ OR'd into the existing key reads, so all three input paths coexist. Built on `ta
 rather than `ui.h` capture: the zones don't overlap, so two fingers (hold gas + tap shift) just
 work. Verified by scripting mouse clicks through the harness — IGN toggles the engine, TRANS →
 MANUAL, gate-upper/lower shift up/down. `mobile-lint`: **touch-ready**.
+
+### Reverse fix + a real H-gate (2026-06-09)
+
+Two coupled issues a playtest surfaced. **(1) Reverse was practically unreachable.** Engaging
+it required `|vf| < 5` px/s, but 1st-gear idle creep *holds* the car at ~8.3 px/s — so a
+"stopped" car was always creeping faster than the gate allowed, and pressing reverse silently
+did nothing unless you happened to also hold the brake. Fix: a `REV_ENGAGE_SPD` of 12 px/s
+(above the 8.3 creep, below a real roll) for the R↔1 swap, and zero forward velocity on that
+swap so it's a clean change rather than a jarring flip. Now reverse engages from a standstill
+creep in **every** mode — verified headless (AUTO, idle-creeping at 8.3 → tap down → gear 0,
+backs up under gas). The model is consistent: reverse sits "below 1st"; down at a near-stop
+engages it, up returns to 1st; MANUAL also steps the forward gears, AUTO/SINGLE auto-manage
+them but leave reverse a manual choice.
+
+**(2) The gate didn't *show* reverse.** Redrew the stickshift as a real H-pattern knob (player
+reference photo): **1·3·5** across the top, **2·4·R** across the bottom, chrome verticals joined
+by the centre channel, and a ball riding the engaged gear. R glows orange when you're slow
+enough to drop into it — so "how do I reverse?" answers itself. The upper/lower tap zones still
+shift up/down (tiny E/Q key hints kept in the corners).
