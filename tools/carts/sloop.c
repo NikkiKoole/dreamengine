@@ -237,6 +237,8 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 #define BALANCE_K     0.4f        // lever: front-heavy understeers, rear-heavy oversteers
 #define GRIP_TO_FORCE 2000.0f     // wheel grip → max traction force
 #define GROUND_GRIP   1.0f        // road: plenty (sand/mud come in rung 3)
+#define KMH           0.72f       // px/s → km/h for the readout (top ~166 px/s ≈ 120 km/h,
+                                  // so the SPEED number lines up with the zone limit signs)
 #define DRIFT_GRIP_MULT 0.13f     // handbrake: lateral grip drops to this fraction
 #define SKID_SLIP     28.0f       // lateral speed (px/s) where tires start marking
 // ── ground-scrape: a cell hanging past the wheel span drags on the floor ──────
@@ -879,7 +881,8 @@ static void draw_course(void) {
         int cx = kx * p;
         line(cx - hw, T, cx - hw, B, CLR_LIGHT_GREY);
         line(cx + hw, T, cx + hw, B, CLR_LIGHT_GREY);
-        for (int y = ifloordiv(T, 24) * 24; y < B; y += 24) line(cx, y, cx, y + 11, CLR_YELLOW);
+        if (cur_zone != Z_CITY)               // city streets are one-way → no centre line
+            for (int y = ifloordiv(T, 24) * 24; y < B; y += 24) line(cx, y, cx, y + 11, CLR_YELLOW);
         if (cur_zone == Z_SUPER)
             for (int y = ifloordiv(T, 20) * 20; y < B; y += 20) {
                 line(cx - hw / 2, y, cx - hw / 2, y + 9, CLR_MEDIUM_GREY);
@@ -890,7 +893,8 @@ static void draw_course(void) {
         int cy = ky * p;
         line(L, cy - hw, R, cy - hw, CLR_LIGHT_GREY);
         line(L, cy + hw, R, cy + hw, CLR_LIGHT_GREY);
-        for (int x = ifloordiv(L, 24) * 24; x < R; x += 24) line(x, cy, x + 11, cy, CLR_YELLOW);
+        if (cur_zone != Z_CITY)
+            for (int x = ifloordiv(L, 24) * 24; x < R; x += 24) line(x, cy, x + 11, cy, CLR_YELLOW);
         if (cur_zone == Z_SUPER)
             for (int x = ifloordiv(L, 20) * 20; x < R; x += 20) {
                 line(x, cy - hw / 2, x + 9, cy - hw / 2, CLR_MEDIUM_GREY);
@@ -979,7 +983,7 @@ static void hud(void) {
     float spd = fsqrt(vx * vx + vy * vy);
     print(DES_NAME[cur_des], 4, 4, CLR_WHITE);
     print(ZONE_NAME[cur_zone], SCREEN_W / 2 - 24, 4, CLR_YELLOW);   // road zone + its limit
-    snprintf(buf, sizeof buf, "SPEED %4.0f", spd);   print(buf, 4, 14, CLR_LIGHT_GREY);
+    snprintf(buf, sizeof buf, "%3.0f km/h", spd * KMH);   print(buf, 4, 14, CLR_LIGHT_GREY);
     snprintf(buf, sizeof buf, "MASS  %4.1f", M);     print(buf, 4, 22, CLR_LIGHT_GREY);
     snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels);
     print(buf, 4, 30, CLR_MEDIUM_GREY);

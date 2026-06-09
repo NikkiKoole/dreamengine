@@ -894,3 +894,10 @@ world position → stable + headless-renderable. The HUD shows the current zone 
 frames in each ring — all five read distinctly. **Note:** the zone is picked from the
 camera centre so the whole screen is one zone; crossing a ring still nudges house/field
 decoration in/out (acceptable for the schematic pass; rung 3's solid roads will smooth it).
+
+**Follow-ups (same day):** the SPEED readout now reads **km/h** (`spd · KMH`, 0.72 — top
+~166 px/s ≈ 120 km/h) so it lines up with the zone limit signs; the limits aren't enforced
+yet but the number is now meaningful against them (groundwork for rung 3 "speeding bites").
+And **city streets are one-way** — no yellow centre line (two-way) like town/rural; the
+centre dash is gated out of `Z_CITY`, so the city reads as a tight one-way grid and town
+now matches rural's two-way treatment.
