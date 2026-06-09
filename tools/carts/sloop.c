@@ -193,6 +193,9 @@ static float stabL, stabR;        // lateral reach of the hull from the COM (lef
 #define DRAG_WHEEL    1.5f        // lever: each wheel adds rolling resistance (grip↑, top speed↓)
 #define DRAG_AERO     3.9f        // lever: drag per cell of frontal profile (narrow = fast)
 #define BRAKE         240.0f      // extra deceleration when braking (px/s^2)
+#define ROLL_FRIC     16.0f       // CONSTANT rolling/bearing friction (px/s^2) — what actually
+                                  // STOPS a coasting rig. Drag ∝ v only asymptotes to 0 (floaty);
+                                  // this constant term dominates at low speed and snaps v to rest.
 #define REVERSE       0.55f       // reverse throttle fraction
 #define LAT_GRIP      32.0f       // lateral velocity killed per second (tire grip)
 #define STEER_RESP    680.0f      // steering authority (deg/s^2) at speed
@@ -570,6 +573,14 @@ static void update_drive(float dt_) {
     vl -= vl * grip * dt_;
     if (scraping)                                    // a dragging belly also anchors sideways
         vl -= vl * clamp((SCRAPE_LAT * nDrag) / M, 0, 1.0f / dt_) * dt_;
+
+    // --- rolling friction: a CONSTANT decel (rolling/bearing resistance) that drag ∝ v
+    //     can't provide — it's what actually brings a coasting rig to a full STOP and
+    //     snaps the last creep to zero (no more floaty asymptote). Engine thrust easily
+    //     overcomes it, so it barely touches accel/top speed; it bites at low speed.
+    float roll = ROLL_FRIC * dt_;
+    if (vf >  roll) vf -= roll; else if (vf < -roll) vf += roll; else vf = 0;
+    if (vl >  roll) vl -= roll; else if (vl < -roll) vl += roll; else vl = 0;
 
     // recombine
     vx = fwx * vf + ltx * vl;

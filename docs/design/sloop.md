@@ -218,6 +218,14 @@ case that genuinely needs the toggle.
 > full traction). Templates `1`–`8` now. Verified: FWD `driveoff +9.8`, RWD `−9.8`, 4WD `−0.6`.
 > (NB: which wheels *steer* is a separate, still-unbuilt lever — see per-axle, rungs 3–4.)
 
+> **Rolling friction (2026-06-09 fix).** The rig felt floaty — it never quite stopped when
+> coasting. Cause: deceleration was *only* velocity-proportional drag (`drag·v`), which
+> asymptotes toward 0 but never reaches it (that's the aero model). Added `ROLL_FRIC`, a
+> **constant** decel (rolling/bearing friction, mass-independent) applied to `vf`/`vl` and
+> snapping tiny velocities to exactly 0 — what actually stops a real vehicle. Engine thrust
+> dwarfs it, so accel is unaffected and top speed drops only ~12% (buggy ~120→106); it bites
+> at low speed and brings the rig to a clean, dead stop in ~1.8 s from cruising.
+
 ### 2. Fuel & range (the clock)
 
 Tanks hold fuel; engines burn it ∝ throttle·power. Range is the real constraint that
