@@ -103,9 +103,12 @@ cart-land before any new API. The `say` probe does exactly that.
 
 - **Connected speech works on ONE held note.** Re-firing `voice_consonant()` on an
   already-held note resets `vox_cons_t`, so it re-articulates the consonant *mid-note* — turning
-  the "one syllable per note" voice into CVCVCV chains ("ba-loo-nee-doh") on a single `note_on`,
-  no retrigger. **So a dedicated mid-note-consonant API is not *required* to prototype speech** —
-  the open question is whether the onset-morph *reads* as a true inter-vocalic stop or needs one.
+  the "one syllable per note" voice into connected syllable chains on a single `note_on`, no
+  retrigger. `say`'s RANDOM now builds language-like simlish from a mix of **V / CV / VC / CVC**
+  shapes (codas wired through `voice_coda()` fired in each syllable's back third), not a
+  monotonous CV string. **So a dedicated mid-note-consonant API is not *required* to prototype
+  speech** — the open question is whether the re-fired onset/coda morph *reads* as a true
+  inter-vocalic / syllable-closing stop or needs a purpose-built one.
 - **Pitch contour = per-frame `note_pitch()`** along a per-syllable shape (flat/rise/fall/peak)
   plus phrase-level declination. Intonation falls out as data: statement = final fall, question =
   final rise, exclaim = hard fall; **emphasis** = a syllable gets a pitch *accent* (peak) + longer
@@ -124,7 +127,10 @@ cart-land before any new API. The `say` probe does exactly that.
 3. **Schwa (reduced vowel)** — unstressed syllables collapse to it; without it everything
    over-enunciates. A trivial vowel row.
 4. **Diphthong / vowel-glide target within a note** — "I", "oh", "now"; also makes *singing* far
-   more natural. Already listed under enrichment above.
+   more natural. **Now cart-prototyped in `say`** (a per-frame `note_pitch`-style lerp of the
+   VOWEL param toward a second vowel across the syllable) — so, like breath in `voxlab`, it's
+   auditionable by ear; the open question is whether the cart-land lerp is enough or the engine
+   wants a first-class diphthong target.
 
 The contour/timing/stress layer itself stays a **cart recipe**; only if it proves universal does a
 `voice_phrase()` convenience earn a place.
