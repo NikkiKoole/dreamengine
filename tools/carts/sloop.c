@@ -50,6 +50,15 @@
 // Cells *between* the wheels are carried by the wheelbase (you don't need a wheel
 // under every cell). So losing a wheel makes the rig scrape, and wheel-spam costs you
 // mass + drag. The sparks/heat are metal-on-tarmac — offroad becomes a furrow (rung 3).
+//
+// ── rung 2.55: dynamic tipping (the build tips when you corner) ──────────────
+// 2.5's scrape is STATIC — a cell always on the floor. This is DYNAMIC: cornering
+// load shifts the COM toward the turn's OUTSIDE, and if it leaves the SUPPORT
+// POLYGON (the convex hull of the wheels) the rig tips onto an unsupported corner —
+// the lateral grip collapses (it pushes wide / breaks loose) and the corner scrapes.
+// A 4-wheeler's quad rarely tips; a 3-wheeler's triangle tips toward its missing
+// corner but corners clean the other way (asymmetric, emergent from the geometry).
+// A single-track rig (<3 wheels, a bike) is exempt — we don't model lean, it balances.
 // ============================================================================
 
 // ── part vocabulary ──────────────────────────────────────────────────────────
@@ -127,6 +136,19 @@ static float balance;             // COM vs wheelbase: +1 front-heavy (understee
 static int dragging[GH][GW];      // 1 = this occupied cell hangs past the wheel span
 static int nDrag;                 // how many cells are scraping the floor
 
+// ── dynamic stability: the support polygon (convex hull of the wheels) ─────────
+// 2.5's scrape is STATIC (a cell permanently off the ground). Tipping is DYNAMIC:
+// under cornering load the COM shifts toward the OUTSIDE of the turn, and if it
+// leaves the support polygon the rig tips onto an unsupported corner → transient
+// scrape + lateral grip collapse. A 4-wheeler has a roomy quad; a 3-wheeler has a
+// triangle with a short edge, so it tips turning toward the missing corner but not
+// the other way. <3 non-collinear wheels = single-track (a bike) — assumed to
+// balance (we don't model lean), so it's exempt. Hull stored in COM-local px.
+#define MAXHULL 20
+static float hullX[MAXHULL], hullY[MAXHULL];
+static int   nHull;
+static float stabL, stabR;        // lateral reach of the hull from the COM (left/right) — BUILD readout
+
 // ── tuning ───────────────────────────────────────────────────────────────────
 #define ENGINE_POWER  2600.0f     // forward force units per engine at full throttle
 // Drag is a FORCE (DDA's model): top speed = thrust / drag, MASS-INDEPENDENT — mass
@@ -154,6 +176,10 @@ static int nDrag;                 // how many cells are scraping the floor
 #define SCRAPE_MINSPD 10.0f       // below this speed nothing scrapes (kinetic friction only when moving)
 #define HEAT_RISE     1.4f        // heat gained per second per dragging cell while moving
 #define HEAT_COOL     0.8f        // heat lost per second when not scraping
+// ── dynamic stability (tipping under cornering load) ─────────────────────────
+#define STAB_H        0.022f      // COM-height stand-in: lateral-g → COM load-shift (px per px/s^2)
+#define STAB_GRIP_LOSS 0.85f      // fraction of lateral grip lost when fully tipped (tires unload)
+#define DEG2RAD       0.017453f   // angVel is deg/s; centripetal accel needs rad/s
 
 // ── skid marks (laid in world space while the tires scrub) ───────────────────
 #define MAXSKID 512
@@ -167,6 +193,7 @@ typedef struct { float x, y, vx, vy; int life, col; } Spark;
 static Spark spark[MAXSPARK];
 static int   spark_head;
 static float heat;                // 0..1, rises while cells scrape under load, cools off
+static float tip_amt;             // 0..1, how hard the rig is tipping this frame (HUD)
 
 // ── rigid body state (sx,sy = the COM in world space; rotation pivots about it) ─
 static float sx, sy;              // world position of the COM
@@ -184,12 +211,69 @@ static int sel_part = P_WHEEL;    // palette selection; P_NONE = the eraser
 
 static float af(float v) { return v < 0 ? -v : v; }
 
+// ── support-hull geometry (all in COM-local px) ───────────────────────────────
+// Build the convex hull of the wheel/caster positions (monotone chain). <3 points
+// or all-collinear collapses to a degenerate hull → treated as single-track.
+static float cross2(float ox, float oy, float ax, float ay, float bx, float by) {
+    return (ax - ox) * (by - oy) - (ay - oy) * (bx - ox);
+}
+static void build_hull(float *px, float *py, int n) {
+    nHull = 0;
+    if (n < 1) return;
+    // sort points by x then y (insertion sort — n is tiny)
+    for (int i = 1; i < n; i++) {
+        float kx = px[i], ky = py[i]; int j = i - 1;
+        while (j >= 0 && (px[j] > kx || (px[j] == kx && py[j] > ky))) {
+            px[j + 1] = px[j]; py[j + 1] = py[j]; j--;
+        }
+        px[j + 1] = kx; py[j + 1] = ky;
+    }
+    float hx[MAXHULL * 2], hy[MAXHULL * 2]; int k = 0;
+    for (int i = 0; i < n; i++) {                       // lower hull
+        while (k >= 2 && cross2(hx[k-2], hy[k-2], hx[k-1], hy[k-1], px[i], py[i]) <= 0) k--;
+        hx[k] = px[i]; hy[k] = py[i]; k++;
+    }
+    int lower = k + 1;
+    for (int i = n - 2; i >= 0; i--) {                  // upper hull
+        while (k >= lower && cross2(hx[k-2], hy[k-2], hx[k-1], hy[k-1], px[i], py[i]) <= 0) k--;
+        hx[k] = px[i]; hy[k] = py[i]; k++;
+    }
+    nHull = (k > 1) ? k - 1 : k;                        // last point repeats the first
+    if (nHull > MAXHULL) nHull = MAXHULL;
+    for (int i = 0; i < nHull; i++) { hullX[i] = hx[i]; hullY[i] = hy[i]; }
+}
+// signed distance from a local point to the hull: >0 inside (dist to nearest edge),
+// <0 outside. <3 hull points = single-track → always "inside" (it balances).
+static float hull_margin(float px, float py) {
+    if (nHull < 3) return 999.0f;
+    float area = 0;
+    for (int i = 0; i < nHull; i++) { int j = (i + 1) % nHull; area += hullX[i]*hullY[j] - hullX[j]*hullY[i]; }
+    float w = (area >= 0) ? 1.0f : -1.0f;               // winding sign
+    float minD = 1e9f;
+    for (int i = 0; i < nHull; i++) {
+        int j = (i + 1) % nHull;
+        float ex = hullX[j] - hullX[i], ey = hullY[j] - hullY[i];
+        float len = fsqrt(ex * ex + ey * ey); if (len < 1e-4f) continue;
+        float d = w * (ex * (py - hullY[i]) - ey * (px - hullX[i])) / len;
+        if (d < minD) minD = d;
+    }
+    return minD;
+}
+// how far the COM can shift along the lateral axis (0,dir) before leaving the hull
+static float lateral_reach(float dir) {
+    if (nHull < 3) return 999.0f;                       // single-track: not a tip risk
+    float t = 0;
+    while (t < 40.0f && hull_margin(0, t * dir) > 0) t += 0.5f;
+    return t;
+}
+
 // ── derive body properties from the part grid ────────────────────────────────
 static void recompute_body(void) {
     M = 0; comX = 0; comY = 0; wheelGrip = 0; wheelRoll = 0; frontX = 0; nEngines = 0; nWheels = 0;
     int minRow = GH, maxRow = -1;
     float wMinX = 1e9f, wMaxX = -1e9f;     // wheelbase extent (x of frontmost/rearmost wheel)
     int sMinR = GH, sMaxR = -1, sMinC = GW, sMaxC = -1;  // support span, in CELL INDICES (wheels+casters)
+    float supX[GH * GW], supY[GH * GW]; int nSup = 0;    // support positions (world-local px) for the hull
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) {
             int p = grid[r][c];
@@ -204,6 +288,7 @@ static void recompute_body(void) {
             if (p == P_ENGINE) nEngines++;
             if (k->roll > 0) {                 // a support point (wheel or caster)
                 nWheels++;
+                supX[nSup] = cx; supY[nSup] = cy; nSup++;
                 if (cx < wMinX) wMinX = cx; if (cx > wMaxX) wMaxX = cx;
                 if (r < sMinR) sMinR = r; if (r > sMaxR) sMaxR = r;
                 if (c < sMinC) sMinC = c; if (c > sMaxC) sMaxC = c;
@@ -211,6 +296,11 @@ static void recompute_body(void) {
         }
     if (M <= 0) M = 1;
     comX /= M; comY /= M;
+    // support polygon: hull of the wheels, in COM-local px (drives the tip model)
+    for (int i = 0; i < nSup; i++) { supX[i] -= comX; supY[i] -= comY; }
+    build_hull(supX, supY, nSup);
+    stabL = lateral_reach(+1.0f);          // how far the COM can shift each way before
+    stabR = lateral_reach(-1.0f);          // leaving the hull (BUILD readout)
     // frontal profile: how many cells tall the rig is ACROSS the direction of travel
     // (forward is +x, so the perpendicular span is the rows) — the aero cross-section.
     frontalCells = (maxRow >= minRow) ? (maxRow - minRow + 1) : 1;
@@ -249,7 +339,7 @@ static void recompute_body(void) {
 static void reset_vehicle(void) {
     recompute_body();
     sx = 0; sy = 0; vx = vy = 0; ang = 0; angVel = 0;
-    heat = 0;
+    heat = 0; tip_amt = 0;
     for (int i = 0; i < MAXSKID; i++) skid[i].life = 0;
     for (int i = 0; i < MAXSPARK; i++) spark[i].life = 0;
 }
@@ -375,6 +465,27 @@ static void update_drive(float dt_) {
             }
     }
 
+    // --- dynamic stability: cornering load shifts the COM toward the turn's ----
+    //     OUTSIDE; if it leaves the support hull the rig tips onto an unsupported
+    //     corner → transient scrape + the loaded tires let go (lateral grip
+    //     collapses, so the rig pushes wide / breaks loose). 2.5's scrape is a cell
+    //     ALWAYS on the floor; this is the *build* tipping under cornering load. A
+    //     4-wheeler's quad rarely tips; a 3-wheeler's triangle tips toward its gap.
+    float aLat  = vf * (angVel * DEG2RAD);          // centripetal accel (px/s^2), signed
+    float loadY = -aLat * STAB_H;                   // COM load-shift along local lateral (outside)
+    float reach = (loadY >= 0) ? stabL : stabR;     // hull reach on the loaded side
+    float over  = af(loadY) - reach;                // px past the hull edge → tipping
+    int   tipping = (nHull >= 3 && over > 0 && spd0 > SCRAPE_MINSPD);
+    tip_amt = tipping ? clamp(over / (reach + CELL), 0, 1) : 0;
+    if (tipping) {                                   // the outside corner digs in
+        float oySign = (loadY >= 0) ? 1.0f : -1.0f;
+        if (rnd_float() < clamp(spd0 / 200.0f, 0.1f, 0.8f)) {
+            float wx, wy; rot(frontX - comX - CELL, oySign * (reach + CELL * 0.5f), &wx, &wy);
+            throw_spark(wx, wy, fwx * spd0, fwy * spd0);
+        }
+        heat = clamp(heat + HEAT_RISE * dt_, 0, 1.0f);
+    }
+
     // --- engine: sum thrust + the yaw torque from any off-centre engine --------
     float throttle = in_gas ? 1.0f : (in_brk && vf <= 5.0f ? -REVERSE : 0.0f);
     float thrust = 0, eng_torque = 0;
@@ -403,6 +514,7 @@ static void update_drive(float dt_) {
     // --- tire grip: bleed the sideways velocity away (the car-feel line) -------
     // the handbrake breaks the tires loose — same grip term, turned down → drift.
     float lat_mult = in_hand ? DRIFT_GRIP_MULT : 1.0f;
+    lat_mult *= (1.0f - STAB_GRIP_LOSS * tip_amt);   // tipping unloads the tires → they let go
     float grip = clamp((wheelGrip * GROUND_GRIP / M) * LAT_GRIP * lat_mult, 0, 1.0f / dt_);
     vl -= vl * grip * dt_;
     if (scraping)                                    // a dragging belly also anchors sideways
@@ -490,6 +602,9 @@ void update(void) {
     watch("bal", "%.2f", balance);
     watch("ndrag", "%d", nDrag);
     watch("heat", "%.2f", heat);
+    watch("tip", "%.2f", tip_amt);
+    watch("stabL", "%.1f", stabL);
+    watch("stabR", "%.1f", stabR);
 #endif
 }
 
@@ -638,6 +753,7 @@ static void hud(void) {
     snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels);
     print(buf, 4, 30, CLR_MEDIUM_GREY);
     if (in_hand && spd > 8) print("DRIFT", 4, 40, CLR_YELLOW);
+    if (tip_amt > 0.05f) print("TIP!", 4, 48, CLR_ORANGE);   // tipping onto an unsupported corner
     if (nDrag > 0) {                       // scraping warning + heat bar
         snprintf(buf, sizeof buf, "SCRAPE x%d", nDrag);
         print(buf, SCREEN_W - 74, 4, hot_col());
@@ -686,6 +802,21 @@ static void draw_build(void) {
     print("\x10", ED_X + GW * ED_CELL + 2, ED_Y + GH * ED_CELL / 2 - 3, CLR_YELLOW);
     print("front \x10", ED_X + 64, ED_Y - 9, CLR_MEDIUM_GREY);
 
+    // support polygon — the hull of the wheels, drawn over the grid. The COM living
+    // inside a roomy quad = stable; a 3-wheeler's triangle with the COM near an edge
+    // = tips that way. Makes the tip model visible the way the COM crosshair does.
+    if (nHull >= 3) {
+        int col = (stabL < CELL * 0.6f || stabR < CELL * 0.6f) ? CLR_ORANGE : CLR_DARK_GREEN;
+        for (int i = 0; i < nHull; i++) {
+            int j = (i + 1) % nHull;
+            int x0 = ED_X + (int)((hullX[i] + comX) / CELL * ED_CELL);
+            int y0 = ED_Y + (int)((hullY[i] + comY) / CELL * ED_CELL);
+            int x1 = ED_X + (int)((hullX[j] + comX) / CELL * ED_CELL);
+            int y1 = ED_Y + (int)((hullY[j] + comY) / CELL * ED_CELL);
+            line(x0, y0, x1, y1, col);
+        }
+    }
+
     // COM crosshair on the grid — shifts live as you place parts
     if (M > 1.01f) {
         int cx = ED_X + (int)(comX / CELL * ED_CELL), cy = ED_Y + (int)(comY / CELL * ED_CELL);
@@ -704,7 +835,17 @@ static void draw_build(void) {
     snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels); print(buf, rx, ry, CLR_MEDIUM_GREY); ry += 9;
     const char *bl = balance > 0.12f ? "understeer" : balance < -0.12f ? "oversteer" : "neutral";
     print(bl, rx, ry, balance > 0.12f ? CLR_ORANGE : balance < -0.12f ? CLR_TRUE_BLUE : CLR_MEDIUM_GREY);
-    ry += 11;
+    ry += 9;
+    // stability: how far the COM can shift sideways before leaving the support polygon.
+    // single-track (<3 wheels) balances; a 3-wheeler's triangle is tippy toward its gap.
+    if (nWheels > 0) {
+        const char *st; int sc;
+        if (nHull < 3)                                  { st = "single-track"; sc = CLR_MEDIUM_GREY; }
+        else if (stabL < CELL * 0.6f || stabR < CELL * 0.6f) { st = "tippy turns"; sc = CLR_ORANGE; }
+        else                                            { st = "stable"; sc = CLR_TRUE_BLUE; }
+        print(st, rx, ry, sc); ry += 9;
+    }
+    ry += 2;
     if (nEngines == 0) { print("no engine!", rx, ry, CLR_RED); ry += 9; }
     if (nWheels == 0)  { print("no wheels!", rx, ry, CLR_RED); ry += 9; }
     if (nDrag > 0) {                              // cells cantilevered past the wheels

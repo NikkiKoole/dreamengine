@@ -1,6 +1,6 @@
 # sloop — build-your-own-vehicle, travel a procedural world (design seed)
 
-**Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (unsupported cells scrape) done.** Cart:
+**Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (scrape) + 2.55 (dynamic tipping) done.** Cart:
 `tools/carts/sloop.c`, registered in `index.json`, lint clean. Captures a design
 conversation (2026-06-09).
 A new entry in the "legendary series" alongside `coaster` and `orbit`
@@ -365,7 +365,7 @@ off-centre torque. sloop already goes beyond it on those (our `I` and `eng_torqu
 | **Muscle throttle (stamina + rhythm)** | foot/hand crank: each press = one stroke (`THR_IMPULSE`), gated by a stamina meter; the no-fuel starter rig. See §1a | 2.7 | ⬜ |
 | **Wheel area / ground pressure** | traction = f(wheel area ÷ mass) per terrain; heavy-on-few-wheels bogs in sand | 3 (biomes) | ⬜ |
 | **Per-axle grip** | front-steer/rear-drive split → rear-only handbrake, true oversteer drift | 3–4 | ⬜ |
-| **Stability / tippiness** | tall narrow high-COM rig spins out / "tips" above a lateral-g threshold vs track width (the 2-D stand-in for roll, since we don't model z) | 3–4 | ⬜ |
+| **Dynamic stability / tipping** | cornering load shifts the COM toward the turn's outside; leaving the support polygon (hull of the wheels) tips the rig → transient scrape + lateral grip collapse. A 3-wheeler tips toward its gap but not the other way (asymmetric); single-track (bike) exempt. The 2-D stand-in for roll | 2.55 | ✅ |
 | **Fuel burn ∝ power; damaged engine power ∝ HP** | range as the clock; a half-wrecked engine gives half thrust | 3–4 | ⬜ |
 | **Plating absorbs collision shock for its cell** | armour trade (mass↑, speed↓, survives hits) | 4 (breakage) | ⬜ |
 
@@ -653,3 +653,40 @@ ground. Resolves the bike observation directly and gives wheel-spam a real downs
 and drag would be *worse* (it digs in rather than skating). When biomes land, gate
 `throw_spark()`/heat on a hard-surface terrain flag and swap in a dust/furrow effect with
 a higher off-road `SCRAPE_DRAG`. Noted at `throw_spark()` in the cart. Today: all tarmac.
+
+### Rung 2.55 — dynamic tipping under cornering load (2026-06-09)
+
+Player-reported follow-on to 2.5: take *one* wheel off a 4-wheel car and it still drove
+fine. 2.5's scrape is **static** (a cell permanently off the ground), so a 3-wheeler —
+whose three corners still span the bounding box — never scraped. But it *should* be
+unstable: a real 3-wheeler tips onto its missing corner when you corner toward it. This
+rung adds the **dynamic** half: the build tips under cornering load.
+
+- ✓ **Support polygon.** `recompute_body()` builds the convex hull (monotone chain) of the
+  wheel/caster positions, in COM-local px. `hull_margin()` gives signed distance to the
+  hull (>0 inside); `lateral_reach(±1)` raycasts how far the COM can shift each way before
+  leaving it (`stabL`/`stabR`). **<3 non-collinear wheels = single-track** (a bike) → exempt
+  (we don't model lean; it's assumed to balance), so the motorbike preset is untouched.
+- ✓ **Tip = the load leaving the hull.** In a turn, lateral-g (`vf · yaw-rate`) shifts the
+  COM toward the **outside** by `aLat · STAB_H` (`STAB_H` = the COM-height stand-in — our
+  2-D proxy for roll, since there's no z). If the shift exceeds the hull reach on the loaded
+  side → `tip_amt` (0..1, how far past). Effect: **lateral grip collapses** (`× (1 −
+  STAB_GRIP_LOSS · tip_amt)` → the tires let go, rig pushes wide / breaks loose) + a
+  **transient scrape** at the digging corner (reuses 2.5's sparks + heat). HUD shows `TIP!`.
+- ✓ **Asymmetric for free.** A 3-wheeler's triangle has a short edge toward the gap, so it
+  tips turning *that* way and corners clean the other — the geometry alone produces it; no
+  per-rig tuning. The front/rear character (understeer vs oversteer) still rides on the
+  existing `balance` term, which already shifts when you remove a front vs rear wheel.
+- ✓ **Visible in BUILD.** The support polygon is **drawn over the editor grid** (green =
+  stable, orange = tippy), the COM crosshair sits inside it, and a `stable / tippy turns /
+  single-track` readout. Same "see the physics before you drive" payoff as the COM marker.
+- ✓ **Verified** (headless: buggy → BUILD → erase a front corner → DRIVE → corner both
+  ways): intact `stabL 7.0 / stabR 7.0`; 3-wheel `stabL 6.5 / stabR 1.0` (one side
+  collapses), `ndrag:0` (no static scrape); hard turn toward the weak side → `tip 0.25` +
+  slide + heat, toward the strong side → `tip 0.00`, clean. The asymmetry confirmed.
+
+**Why it's separate from per-axle grip (still rung 3–4):** tipping here collapses the
+*whole* rig's lateral grip (→ understeer/push). True per-axle behaviour — front-only vs
+rear-only grip loss giving distinct understeer vs power-on oversteer — needs grip applied
+at each wheel, which is the per-axle lever. 2.55 is the body-level stand-in; it reads as
+"the rig lets go," not yet "the back steps out."
