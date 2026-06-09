@@ -350,7 +350,7 @@ For now it's a playground to feel the handling against.
 
 Before the BUILD editor, prove the derived physics *reads differently per build* —
 orbit's playbook (its 1/2/3 rockets "feel each way to fail" before the parts-bin
-builder). `1`–`4` swap four preset layouts in `DESIGNS[]`; same drive core, **zero
+builder). `1`–`5` swap preset layouts in `DESIGNS[]`; same drive core, **zero
 per-rig tuning** — every difference is mass / COM / I / grip falling out of where the
 parts sit. Grid footprint widened to 6×3 (rigs pad unused cells with `P_NONE`); the
 nose marker now sits at the rig's real front edge (`frontX`), and the HUD shows the
@@ -364,6 +364,12 @@ Measured (gas to terminal, then a hard right — all emergent, headless `--trace
 | HAULER | 23.2 | 3923 | ~78 | 54°/s | heavy + long → crawls, turns lazily |
 | SPRINTER | 20.2 | 1541 | ~169 | 78°/s | twin engine → rockets, snappy |
 | JALOPY | 13.7 | 984 | ~124 | 83°/s | light, 3 wheels → loose; **pulls** |
+| MOTORBIKE | 8.2 | 383 | ~264 | 91°/s | narrow inline 2-wheeler → fastest, dartiest, slides |
+
+(`5` = MOTORBIKE, added per request: a single-row `WHEEL·ENGINE·SEAT·WHEEL` rig.
+Top speed = `thrust/(M·ROLL)`, so the feather-light bike out-runs even the twin-engine
+SPRINTER — honest, if surprising; bikes *are* fast and twitchy. Top-down rigid body,
+so it doesn't lean/tip — an accepted arcade abstraction.)
 
 JALOPY's off-centre engine fires the `eng_torque` term: heading drifts to ~2° under
 pure throttle *before any steering input* — the honest-core "asymmetric build pulls"

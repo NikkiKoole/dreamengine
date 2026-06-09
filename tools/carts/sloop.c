@@ -61,7 +61,7 @@ static PartKind KIND[P_KINDS];   // filled in init() (avoid designated inits for
 #define CELL 7.0f                  // world px per cell
 static int grid[GH][GW];
 
-#define NDES 4
+#define NDES 5
 static const int DESIGNS[NDES][GH][GW] = {
     { // 0 BUGGY — balanced 4-wheeler, engine centred: drives clean
         { P_WHEEL, P_FRAME, P_FRAME,  P_WHEEL, P_NONE,  P_NONE },
@@ -83,12 +83,18 @@ static const int DESIGNS[NDES][GH][GW] = {
         { P_FRAME, P_SEAT,  P_FRAME,  P_NONE,  P_NONE, P_NONE },
         { P_WHEEL, P_FRAME, P_WHEEL,  P_NONE,  P_NONE, P_NONE },
     },
+    { // 4 MOTORBIKE — narrow inline 2-wheeler: feather-light, darty, twitchy
+        { P_NONE,  P_NONE,   P_NONE, P_NONE,  P_NONE, P_NONE },
+        { P_WHEEL, P_ENGINE, P_SEAT, P_WHEEL, P_NONE, P_NONE },
+        { P_NONE,  P_NONE,   P_NONE, P_NONE,  P_NONE, P_NONE },
+    },
 };
 static const char *DES_NAME[NDES] = {
     "BUGGY \x07 balanced",
     "HAULER \x07 heavy, sluggish",
     "SPRINTER \x07 twin-engine, fast",
     "JALOPY \x07 off-centre, loose",
+    "MOTORBIKE \x07 narrow, darty",
 };
 static int cur_des = 0;
 
@@ -190,6 +196,7 @@ static void handle_input(void) {
     if (keyp('2')) load_design(1);
     if (keyp('3')) load_design(2);
     if (keyp('4')) load_design(3);
+    if (keyp('5')) load_design(4);
     in_gas = key('Z') || key(KEY_UP) || btn(0, BTN_A) || btn(0, BTN_UP);
     in_brk = key('X') || key(KEY_DOWN) || btn(0, BTN_B) || btn(0, BTN_DOWN);
     in_steer = (key(KEY_RIGHT) || btn(0, BTN_RIGHT)) - (key(KEY_LEFT) || btn(0, BTN_LEFT));
@@ -433,7 +440,7 @@ static void hud(void) {
     snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels);
     print(buf, 4, 30, CLR_MEDIUM_GREY);
     if (in_hand && spd > 8) print("DRIFT", 4, 40, CLR_YELLOW);
-    print("1-4 swap rig  \x1b\x1a steer  \x18\x19 gas/brake  SPACE drift",
+    print("1-5 swap rig  \x1b\x1a steer  \x18\x19 gas/brake  SPACE drift",
           SCREEN_W / 2 - 132, SCREEN_H - 12, CLR_MEDIUM_GREY);
     if (is_paused) print("PAUSED", SCREEN_W / 2 - 22, SCREEN_H / 2, CLR_WHITE);
 }
