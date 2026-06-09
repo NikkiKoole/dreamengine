@@ -68,6 +68,15 @@
 // flips which end leads — so a rear-wheel-only rig genuinely drives better backwards.
 // Place drive wheels at the front = FWD, rear = RWD, both = AWD. No drive wheels = the
 // engine powers all wheels (AWD), so the presets are unchanged.
+//
+// ── rung 2.7: transmission & gears ───────────────────────────────────────────
+// A gearbox sits between engine and wheels. A gear ratio sets the engine RPM
+// (rpm = speed·ratio/V_REF) and multiplies torque: low gear = grunt + low top,
+// tall gear = speed. powerband(rpm) is the torque curve (cut past redline). Cycle
+// transmission with G: 1-GEAR (direct drive, the electric feel) / AUTO (auto-shifts
+// in band) / MANUAL (Q/E shift — over-rev or lug if you pick wrong). Reverse is a
+// GEAR (Q at a stop), so the brake (X) is pure deceleration. Engine pitch tracks RPM
+// and drops on each upshift. Per-engine-kind curves (diesel/steam/…) are still to come.
 // ============================================================================
 
 // ── part vocabulary ──────────────────────────────────────────────────────────
@@ -196,12 +205,22 @@ static float stabL, stabR;        // lateral reach of the hull from the COM (lef
                                   // capped per-rig by tyre grip below (GRIP_TO_FORCE·grip/M),
                                   // so MORE/BETTER WHEELS = harder stops (an under-wheeled rig
                                   // can't haul up as fast). At slow speed this stops you dead.
-#define REV_DWELL     10          // frames braked at a standstill before reverse engages — lets
-                                  // a slam-brake LAND a firm stop first, then back up if held
 #define ROLL_FRIC     16.0f       // CONSTANT rolling/bearing friction (px/s^2) — what actually
                                   // STOPS a coasting rig. Drag ∝ v only asymptotes to 0 (floaty);
                                   // this constant term dominates at low speed and snaps v to rest.
-#define REVERSE       0.55f       // reverse throttle fraction
+// ── transmission & gears (§1b) ───────────────────────────────────────────────
+// A gear ratio multiplies torque and sets the engine RPM = speed·ratio/V_REF. Low
+// gear = high ratio = lots of thrust but revs climb fast (low top speed); high gear
+// = the reverse. powerband(rpm) is the torque curve: weak at idle (lug), peak mid,
+// cut past redline. SINGLE = one flat direct-drive ratio (the electric/EV feel, no
+// band to manage). Reverse is a GEAR (0), so the brake is pure deceleration.
+enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
+#define NGEAR         5           // forward gears (AUTO/MANUAL)
+#define V_REF         110.0f      // speed (px/s) where a ratio-1.0 gear hits redline
+#define REV_RATIO     2.2f        // reverse gear ratio (torquey, low top)
+#define SINGLE_RATIO  0.95f       // the one direct-drive ratio (electric): flat, strong, no band
+#define AUTO_UP       0.82f       // AUTO upshifts above this rpm
+#define AUTO_DOWN     0.34f       // AUTO downshifts below this rpm
 #define LAT_GRIP      32.0f       // lateral velocity killed per second (tire grip)
 #define STEER_RESP    680.0f      // steering authority (deg/s^2) at speed
 #define ANG_DAMP      5.0f        // angular self-centering (1/s)
@@ -240,8 +259,11 @@ static Spark spark[MAXSPARK];
 static int   spark_head;
 static float heat;                // 0..1, rises while cells scrape under load, cools off
 static float tip_amt;             // 0..1, how hard the rig is tipping this frame (HUD)
-static int   brake_dwell;         // frames held at a standstill under braking (delays reverse)
-static int   reversing;           // latched: braking past the dwell flipped us into reverse
+// ── transmission state (§1b) ─────────────────────────────────────────────────
+static int   trans_mode = TR_AUTO;  // SINGLE / AUTO / MANUAL — player setting, persists
+static int   gear = 1;            // 0 = reverse, 1..NGEAR = forward
+static float rpm;                 // 0..~1.15 normalised engine revs (tach + sound)
+static int   shift_snd;           // 1 = a gear change happened this frame (play a clunk)
 
 // ── rigid body state (sx,sy = the COM in world space; rotation pivots about it) ─
 static float sx, sy;              // world position of the COM
@@ -258,6 +280,19 @@ static int mode = MODE_DRIVE;
 static int sel_part = P_WHEEL;    // palette selection; P_NONE = the eraser
 
 static float af(float v) { return v < 0 ? -v : v; }
+
+// gear ratios, 1st→top. Each gear's redline speed (V_REF/ratio) steps UP so every gear
+// out-tops the last (1st ≈42 → 5th drag-limited ≈100); high ratio = torque, low = speed.
+static const float GEAR_RATIO[NGEAR] = { 2.6f, 2.0f, 1.53f, 1.22f, 1.0f };
+
+// the powerband: torque factor vs normalised RPM. Broad/flat across the usable range so
+// the tall top gear can still pull, a gentle idle lug, then a hard rev-limiter cut past
+// redline (1.0) — over-revving (too low a gear) is the bite. Wrong gear → wrong band.
+static float powerband(float r) {
+    if (r > 1.0f) return clamp(0.6f - (r - 1.0f) * 8.0f, 0.0f, 0.6f);   // over-rev → cut
+    float d = r - 0.6f;
+    return clamp(1.05f - 1.1f * d * d, 0.4f, 1.05f);                    // broad plateau
+}
 
 // ── support-hull geometry (all in COM-local px) ───────────────────────────────
 // Build the convex hull of the wheel/caster positions (monotone chain). <3 points
@@ -395,7 +430,7 @@ static void recompute_body(void) {
 static void reset_vehicle(void) {
     recompute_body();
     sx = 0; sy = 0; vx = vy = 0; ang = 0; angVel = 0;
-    heat = 0; tip_amt = 0; brake_dwell = 0; reversing = 0;
+    heat = 0; tip_amt = 0; gear = 1; rpm = 0;   // trans_mode persists (player setting)
     for (int i = 0; i < MAXSKID; i++) skid[i].life = 0;
     for (int i = 0; i < MAXSPARK; i++) spark[i].life = 0;
 }
@@ -431,7 +466,7 @@ static void rot(float lx, float ly, float *wx, float *wy) {
 }
 
 // ── input ─────────────────────────────────────────────────────────────────────
-static int in_gas, in_brk, in_steer, in_hand;
+static int in_gas, in_brk, in_steer, in_hand, in_up, in_down;
 static void clear_grid(void) {
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) grid[r][c] = P_NONE;
@@ -467,10 +502,13 @@ static void handle_input(void) {
     // ---- DRIVE input ----
     if (keyp('R')) reset_vehicle();
     if (keyp('P')) is_paused = !is_paused;
+    if (keyp('G')) { trans_mode = (trans_mode + 1) % 3; gear = 1; }   // cycle SINGLE/AUTO/MANUAL
     in_gas = key('Z') || key(KEY_UP) || btn(0, BTN_A) || btn(0, BTN_UP);
     in_brk = key('X') || key(KEY_DOWN) || btn(0, BTN_B) || btn(0, BTN_DOWN);
     in_steer = (key(KEY_RIGHT) || btn(0, BTN_RIGHT)) - (key(KEY_LEFT) || btn(0, BTN_LEFT));
     in_hand = key(KEY_SPACE);
+    in_up   = keyp('E');                       // shift up / out of reverse
+    in_down = keyp('Q');                       // shift down / into reverse (when stopped)
 }
 
 static void lay_skid(float x, float y) {
@@ -546,17 +584,35 @@ static void update_drive(float dt_) {
         heat = clamp(heat + HEAT_RISE * dt_, 0, 1.0f);
     }
 
-    // --- engine: sum thrust + the yaw torque from any off-centre engine --------
-    // reverse engages only once braking has LANDED a stop (dwelled at ~0), then LATCHES
-    // so the rig actually backs up — a slam-brake stops you dead first, reverses if held.
-    if (!in_brk || in_gas) reversing = 0;
-    else if (af(vf) <= 1.0f && brake_dwell >= REV_DWELL) reversing = 1;
-    float throttle = in_gas ? 1.0f : (reversing ? -REVERSE : 0.0f);
+    // --- shifting: manual (Q/E) or auto; reverse is gear 0 (only when ~stopped) ---
+    if (in_up) {                                     // E: out of reverse, or upshift
+        if (gear == 0) { if (af(vf) < 5.0f) { gear = 1; shift_snd = 1; } }
+        else if (trans_mode == TR_MANUAL && gear < NGEAR) { gear++; shift_snd = 1; }
+    }
+    if (in_down) {                                   // Q: downshift, or into reverse at rest
+        if (trans_mode == TR_MANUAL && gear > 1) { gear--; shift_snd = 1; }
+        else if (gear >= 1 && af(vf) < 5.0f) { gear = 0; shift_snd = 1; }
+    }
+    if (trans_mode == TR_SINGLE && gear > 1) gear = 1;          // single keeps one forward gear
+    if (trans_mode == TR_AUTO && gear >= 1) {                   // auto-shift to stay in the band
+        if (rpm > AUTO_UP && gear < NGEAR) { gear++; shift_snd = 1; }
+        else if (rpm < AUTO_DOWN && gear > 1) { gear--; shift_snd = 1; }
+    }
+
+    // --- transmission: ratio sets RPM + multiplies torque; reverse drives backward
+    float ratio = (trans_mode == TR_SINGLE) ? SINGLE_RATIO
+                : (gear == 0) ? REV_RATIO : GEAR_RATIO[gear - 1];
+    float gdir  = (gear == 0) ? -1.0f : 1.0f;
+    rpm = clamp(af(vf) * ratio / V_REF, 0, 1.15f);
+    float gmul = (trans_mode == TR_SINGLE) ? SINGLE_RATIO : powerband(rpm) * ratio;
+
+    // --- engine: thrust through the gear, + the yaw torque from an off-centre engine
+    float throttle = in_gas ? 1.0f : 0.0f;           // gas drives in the gear's direction
     float thrust = 0, eng_torque = 0;
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) {
             if (grid[r][c] != P_ENGINE) continue;
-            float t = KIND[P_ENGINE].power * throttle;
+            float t = KIND[P_ENGINE].power * throttle * gmul * gdir;
             float oy = (r + 0.5f) * CELL - comY;     // lateral offset of this engine
             thrust += t;
             eng_torque += -oy * t;                   // off the centre-line → it yaws
@@ -574,15 +630,14 @@ static void update_drive(float dt_) {
     //     mass-INDEPENDENT — mass only governs how fast you reach it. -----------
     float drag = DRAG_BASE + DRAG_WHEEL * nWheels + DRAG_AERO * frontalCells + scrape_drag;
     vf += ((thrust - drag * vf) / M) * dt_;
-    // braking: strong, but capped by what the tyres can grip (GRIP_TO_FORCE·grip/M) —
-    // a well-wheeled rig stops hard, an under-wheeled one can't. Works fwd or reverse.
-    if (in_brk && af(vf) > 1.0f) {
+    // braking: PURE deceleration, both directions (reverse is a gear now, not the brake).
+    // Strong, but capped by what the tyres can grip — a well-wheeled rig stops hard.
+    if (in_brk && af(vf) > 0.5f) {
         float brake = clamp(GRIP_TO_FORCE * wheelGrip * GROUND_GRIP / M, 0, BRAKE);
         float d = brake * dt_;
         if (vf > 0) { vf -= d; if (vf < 0) vf = 0; }
-        else if (throttle == 0) { vf += d; if (vf > 0) vf = 0; }   // braking while rolling back
+        else        { vf += d; if (vf > 0) vf = 0; }
     }
-    if (in_brk && af(vf) <= 1.0f) brake_dwell++; else brake_dwell = 0;
 
     // --- tire grip: bleed the sideways velocity away (the car-feel line) -------
     // the handbrake breaks the tires loose — same grip term, turned down → drift.
@@ -643,9 +698,12 @@ static void update_drive(float dt_) {
 
     // --- sound -----------------------------------------------------------------
     float spd = fsqrt(vx * vx + vy * vy);
+    if (shift_snd) { hit(40, INSTR_NOISE, 2, 45); shift_snd = 0; }   // gear-change clunk
     if (in_gas) {
+        // engine note tracks RPM: climbs within a gear, DROPS on each upshift (the
+        // satisfying gear-change), climbs again. (rpm resets per gear; spd would not.)
         t_eng_snd -= dt_;
-        if (t_eng_snd <= 0) { hit(28 + (int)(spd * 0.12f), INSTR_SAW, 3, 90); t_eng_snd = 0.08f; }
+        if (t_eng_snd <= 0) { hit(30 + (int)(rpm * 30.0f), INSTR_SAW, 3, 90); t_eng_snd = 0.08f; }
     }
     if (af(vl) > 35) {                               // tires scrubbing sideways
         t_skid_snd -= dt_;
@@ -696,6 +754,9 @@ void update(void) {
     watch("stabR", "%.1f", stabR);
     watch("ndrive", "%d", nDrive);
     watch("driveoff", "%.1f", driveX - comX);
+    watch("gear", "%d", gear);
+    watch("rpm", "%.2f", rpm);
+    watch("trans", "%d", trans_mode);
 #endif
 }
 
@@ -795,6 +856,10 @@ static int hot_col(void) {
          : heat > 0.15f ? CLR_ORANGE : CLR_RED;
 }
 
+static const char *trans_label(void) {
+    return trans_mode == TR_SINGLE ? "1-GEAR" : trans_mode == TR_AUTO ? "AUTO" : "MANUAL";
+}
+
 // drivetrain label from where power hits the ground vs the COM (front=pull, rear=push)
 static const char *drive_label(void) {
     if (nWheels == 0) return "no drive";
@@ -859,8 +924,15 @@ static void hud(void) {
         print(buf, SCREEN_W - 74, 4, hot_col());
         bar(SCREEN_W - 74, 13, 68, 4, heat, heat > 0.66f ? CLR_RED : CLR_ORANGE, CLR_DARKER_GREY);
     }
-    print("TAB build  1-8 rig  \x1b\x1a steer  \x18\x19 gas/brake  SPACE drift",
-          SCREEN_W / 2 - 140, SCREEN_H - 12, CLR_MEDIUM_GREY);
+    // transmission + gear + tach (RPM bar; reddens near the redline)
+    char gch = (gear == 0) ? 'R' : (char)('0' + gear);
+    snprintf(buf, sizeof buf, "%s  G:%c", trans_label(), gch);
+    print(buf, SCREEN_W - 84, 26, CLR_LIGHT_GREY);
+    bar(SCREEN_W - 84, 35, 78, 4, rpm, rpm > 0.92f ? CLR_RED : CLR_GREEN, CLR_DARKER_GREY);
+    print("\x1b\x1a steer   Z gas   X brake   SPACE handbrake",
+          SCREEN_W / 2 - 132, SCREEN_H - 20, CLR_MEDIUM_GREY);
+    print("TAB build   1-8 rig   Q/E gear   G auto/manual",
+          SCREEN_W / 2 - 132, SCREEN_H - 11, CLR_MEDIUM_GREY);
     if (is_paused) print("PAUSED", SCREEN_W / 2 - 22, SCREEN_H / 2, CLR_WHITE);
 }
 

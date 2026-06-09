@@ -1,6 +1,6 @@
 # sloop — build-your-own-vehicle, travel a procedural world (design seed)
 
-**Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (scrape) + 2.55 (tipping) + 2.6 (drivetrain FWD/RWD) done.** Cart:
+**Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (scrape) + 2.55 (tipping) + 2.6 (drivetrain FWD/RWD) + 2.7 (gears/transmission) done.** Cart:
 `tools/carts/sloop.c`, registered in `index.json`, lint clean. Captures a design
 conversation (2026-06-09).
 A new entry in the "legendary series" alongside `coaster` and `orbit`
@@ -451,7 +451,7 @@ off-centre torque. sloop already goes beyond it on those (our `I` and `eng_torqu
 | **Wheel type: caster vs fixed** | casters (piano dolly/cart) give support but ~no lateral grip → slides any way, no nose-tracking; fixed wheels track forward | 2 (part vocab) | ✅ |
 | **Unsupported cells scrape** | a cell cantilevered past the wheel span drags on the floor: extra drag + lateral anchor + off-centre yaw, with sparks/heat/grind. Wheels become *spatial*, not a scalar; wheel-spam costs mass+drag, too few wheels drags | 2.5 | ✅ |
 | **Engine delivery curve** | how power comes on with speed: electric flat (snappy), gas revvy (mid-range band), diesel low-end grunt, steam spool-up. One `delivery(kind,u)` curve; see §1a | 2.7 | ⬜ |
-| **Transmission / gears** | a gear ratio trades torque ↔ top speed; RPM rises in a gear, drops on a shift. single (electric/EV = 1 gear) / automatic / manual×N (wrong gear lugs or over-revs). Reverse becomes a gear, not a brake function. Engine pitch tracks RPM (the satisfying sound). See §1b | 2.7 | ⬜ |
+| **Transmission / gears** | a gear ratio trades torque ↔ top speed; RPM rises in a gear, drops on a shift. single (electric/EV = 1 gear) / automatic / manual×5 (wrong gear lugs or over-revs). Reverse is a gear, not a brake function. Engine pitch tracks RPM (the satisfying sound). See §1b | 2.7 | ✅ |
 | **Muscle throttle (stamina + rhythm)** | foot/hand crank: each press = one stroke (`THR_IMPULSE`), gated by a stamina meter; the no-fuel starter rig. See §1a | 2.8 | ⬜ |
 | **Wheel area / ground pressure** | traction = f(wheel area ÷ mass) per terrain; heavy-on-few-wheels bogs in sand | 3 (biomes) | ⬜ |
 | **Per-axle grip** | front-steer/rear-drive split → rear-only handbrake, true oversteer drift | 3–4 | ⬜ |
@@ -824,3 +824,34 @@ stable); *behind* = **pushed** (the heavy end wants to swing round → oversteer
 / push-loose / reverse-bike). The full per-tire split — front tyres washing out under power
 as true understeer vs the rears lighting up as power-on oversteer — is still the per-axle
 grip lever (rung 3–4); 2.6 applies the stability at the body level off the drive point.
+
+### Rung 2.7 — transmission & gears (2026-06-09)
+
+The §1b spec, built: a gearbox between engine and wheels, with RPM, three transmission
+types, gear-driven sound, and **reverse decoupled from the brake**.
+
+- ✓ **Powerband + ratio.** `rpm = |vf|·ratio/V_REF`; `thrust = power·throttle·powerband(rpm)·ratio`.
+  `powerband()` is a broad plateau (so the tall top gear still pulls) with a hard rev-limiter
+  cut past redline. Ratios `{2.6, 2.0, 1.53, 1.22, 1.0}` are spaced so each gear's redline
+  speed steps **up** — every gear out-tops the last (1st ≈42 → 5th drag-limited ≈100), fixing
+  a first cut where 5th topped *below* 4th.
+- ✓ **Three transmissions** (cycle with `G`): **1-GEAR** (direct drive — the electric/EV feel
+  you flagged: one flat `SINGLE_RATIO`, no band to manage, ~101 top), **AUTO** (auto-shifts in
+  band — `rpm > 0.82` up, `< 0.34` down; drives ≈ the old flat model, tops ~100), **MANUAL**
+  (`Q`/`E` shift; **wrong gear bites** — stuck in 1st over-revs and caps at ~60, a too-tall
+  gear lugs).
+- ✓ **Reverse is a gear (0).** `Q` at a standstill drops into reverse, `E` climbs out; gas
+  drives in the gear's direction. The foot brake (`X`) is now **pure bidirectional
+  deceleration** — the unrealistic "↓ = brake *and* reverse at once" is gone.
+- ✓ **Sound tracks RPM.** Engine note `hit(30 + rpm·30, INSTR_SAW)` climbs within a gear and
+  **drops on each upshift** (the satisfying gear-change), plus a `INSTR_NOISE` clunk on every
+  shift. HUD gains a gear readout (`R`/`1`–`5`), a tach (RPM bar, reddens near redline), and
+  the transmission label.
+- ✓ **Verified headless:** AUTO climbs 1→3→5, tops ~100; SINGLE stays in gear 1, ~101; MANUAL
+  stuck-in-1st caps ~60 (over-rev), upshifting reaches top; reverse hits −67. Preserves the
+  drive-feel — traction cap, drivetrain push/pull, tipping, braking all intact.
+
+**Still open (the §1a half of "engine powerband + transmission"):** per-engine-kind *curves*
+(electric flat / gas revvy / diesel grunt / steam spool) and the engine roster — 2.7 gives
+the gearbox + a single generic powerband; distinct engine kinds remain (§1a, a follow-on).
+**Stall** went the forgiving way (lug/bog, no full stall+restart) per the spec's open fork.
