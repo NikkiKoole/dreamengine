@@ -1,6 +1,6 @@
 # sloop — build-your-own-vehicle, travel a procedural world (design seed)
 
-**Status: building — MVP rung 1 (drive a fixed rig on one biome) complete.** Cart:
+**Status: building — rung 1 (drive a fixed rig) + 1.5 (handbrake drift) complete.** Cart:
 `tools/carts/sloop.c`, registered in `index.json`, lint clean. Captures a design
 conversation (2026-06-09).
 A new entry in the "legendary series" alongside `coaster` and `orbit`
@@ -299,6 +299,30 @@ settled ~75°/s at speed. Verified headless via `tools/play.js sloop script … 
 
 Colours: chassis `LIGHT_GREY`, wheels `BLACK`, engine `RED`, seat `BLUE` — wheels were
 `DARK_GREY` first and vanished against the asphalt; black reads as tires.
+
+### Rung 1.5 — drifting (the steer.c handbrake) (2026-06-09)
+
+Asked for: the drift feel from the `steer (car drift)` tutorial (`tools/carts/steer.c`),
+on this rig. steer.c's model is a single grip value the velocity lerps toward the
+heading at — low grip = the tail comes loose, marks appear when lateral slide exceeds
+the tires. sloop already decomposes forward/lateral velocity, so drift is the *same
+grip term, turned down*:
+
+- ✓ **Handbrake = hold SPACE.** While held, lateral grip drops to `DRIFT_GRIP_MULT`
+  (0.13) of normal. The back end stops killing its sideways velocity, so the nose
+  rotates while momentum carries you the old way — point one direction, slide another.
+  Release and grip snaps back, the slide is killed, and you shoot off along the nose
+  (the satisfying drift exit). Honest: one grip term, scaled — no separate drift code path.
+- ✓ **Tire marks.** A world-space pool (`MAXSKID` 512, ~150-frame fade) laid at every
+  wheel while `|lateral| > SKID_SLIP` (16 px/s) — same trigger as steer.c. Drawn under
+  the rig, black → brownish-black as they fade. Four wheels = two parallel curved pairs,
+  the classic drift signature.
+- ✓ **"DRIFT" HUD flag** + the existing skid screech (already keyed off lateral slide).
+
+Trace (gas → handbrake+steer → release): slip angle hit **~34°** mid-drift (vl −60 vs
+vf 89, heading swung to 49°) vs ~10° in a normal corner, then on release vl → −1.5 and
+forward speed recovers to ~99 — clean carve-out. Thumbnail is now a mid-drift frame
+(four trailing tire marks) rather than the static buggy.
 
 **Next — rung 2 (the BUILD flip):** mode toggle, place/remove parts on the grid,
 `recompute_body()` already does the live readouts; add the COM crosshair *in the build

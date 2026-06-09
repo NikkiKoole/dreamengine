@@ -8,6 +8,7 @@
 //   ◄ / ►        steer
 //   Z / ▲        gas
 //   X / ▼        brake / reverse
+//   SPACE (hold) handbrake — break the tires loose and DRIFT
 //   R            reset
 //
 // ── the one honest core ──────────────────────────────────────────────────────
@@ -31,6 +32,15 @@
 // one away (LAT_GRIP). Turning the heading then leaves the old velocity pointing
 // "sideways", grip kills it, and the car tracks its nose. More wheels / better
 // ground = more grip = less slide. That single line is the difference.
+//
+// ── rung 1.5: drifting (the steer.c handbrake, on this rig) ──────────────────
+// Drift is just the same line with the grip turned DOWN. Hold the handbrake and
+// lateral grip drops to DRIFT_GRIP_MULT of normal: the back end stops killing its
+// sideways velocity, so the nose rotates while momentum keeps carrying you the old
+// way — the car points one direction and slides another. Release and grip snaps
+// back, the slide is killed, and you shoot off along the nose (the drift exit).
+// Tires lay marks on the asphalt exactly while the lateral slide exceeds SKID_SLIP,
+// same trigger steer.c uses. Honest: it's the one grip term, scaled.
 // ============================================================================
 
 // ── part vocabulary ──────────────────────────────────────────────────────────
@@ -64,6 +74,14 @@ static float wheelGrip;           // Σ wheel grip
 #define ENG_YAW_K     0.9f        // how hard an off-centre engine yaws the rig
 #define GRIP_TO_FORCE 2000.0f     // wheel grip → max traction force
 #define GROUND_GRIP   1.0f        // road: plenty (sand/mud come in rung 3)
+#define DRIFT_GRIP_MULT 0.13f     // handbrake: lateral grip drops to this fraction
+#define SKID_SLIP     16.0f       // lateral speed (px/s) where tires start marking
+
+// ── skid marks (laid in world space while the tires scrub) ───────────────────
+#define MAXSKID 512
+typedef struct { float x, y; int life; } Skid;
+static Skid skid[MAXSKID];
+static int  skid_head;
 
 // ── rigid body state (sx,sy = the COM in world space; rotation pivots about it) ─
 static float sx, sy;              // world position of the COM
@@ -104,6 +122,7 @@ static void recompute_body(void) {
 static void reset_vehicle(void) {
     recompute_body();
     sx = 0; sy = 0; vx = vy = 0; ang = 0; angVel = 0;
+    for (int i = 0; i < MAXSKID; i++) skid[i].life = 0;
 }
 
 // rotate a local offset (relative to COM) into world space
@@ -114,13 +133,19 @@ static void rot(float lx, float ly, float *wx, float *wy) {
 }
 
 // ── input ─────────────────────────────────────────────────────────────────────
-static int in_gas, in_brk, in_steer;
+static int in_gas, in_brk, in_steer, in_hand;
 static void handle_input(void) {
     if (keyp('R')) reset_vehicle();
     if (keyp('P')) is_paused = !is_paused;
     in_gas = key('Z') || key(KEY_UP) || btn(0, BTN_A) || btn(0, BTN_UP);
     in_brk = key('X') || key(KEY_DOWN) || btn(0, BTN_B) || btn(0, BTN_DOWN);
     in_steer = (key(KEY_RIGHT) || btn(0, BTN_RIGHT)) - (key(KEY_LEFT) || btn(0, BTN_LEFT));
+    in_hand = key(KEY_SPACE);
+}
+
+static void lay_skid(float x, float y) {
+    skid[skid_head % MAXSKID] = (Skid){ x, y, 150 };
+    skid_head++;
 }
 
 // ── physics: the honest core ──────────────────────────────────────────────────
@@ -156,13 +181,26 @@ static void update_drive(float dt_) {
     if (in_brk && vf > 0) { vf -= BRAKE * dt_; if (vf < 0) vf = 0; }
 
     // --- tire grip: bleed the sideways velocity away (the car-feel line) -------
-    float grip = clamp((wheelGrip * GROUND_GRIP / M) * LAT_GRIP, 0, 1.0f / dt_);
+    // the handbrake breaks the tires loose — same grip term, turned down → drift.
+    float lat_mult = in_hand ? DRIFT_GRIP_MULT : 1.0f;
+    float grip = clamp((wheelGrip * GROUND_GRIP / M) * LAT_GRIP * lat_mult, 0, 1.0f / dt_);
     vl -= vl * grip * dt_;
 
     // recombine
     vx = fwx * vf + ltx * vl;
     vy = fwy * vf + lty * vl;
     sx += vx * dt_; sy += vy * dt_;
+
+    // --- skid marks: lay at every wheel while the tires are scrubbing sideways -
+    if (af(vl) > SKID_SLIP)
+        for (int r = 0; r < GH; r++)
+            for (int c = 0; c < GW; c++)
+                if (grid[r][c] == P_WHEEL) {
+                    float wx, wy;
+                    rot((c + 0.5f) * CELL - comX, (r + 0.5f) * CELL - comY, &wx, &wy);
+                    lay_skid(wx, wy);
+                }
+    for (int i = 0; i < MAXSKID; i++) if (skid[i].life > 0) skid[i].life--;
 
     // --- steering: torque about the COM, scaled by how fast you're going -------
     float speed_factor = clamp(af(vf) / 30.0f, 0, 1);
@@ -276,8 +314,9 @@ static void hud(void) {
     snprintf(buf, sizeof buf, "SPEED %4.0f", spd);   print(buf, 4, 14, CLR_LIGHT_GREY);
     snprintf(buf, sizeof buf, "MASS  %4.1f", M);     print(buf, 4, 22, CLR_LIGHT_GREY);
     snprintf(buf, sizeof buf, "HEAD  %4.0f", ang);   print(buf, 4, 30, CLR_LIGHT_GREY);
-    print("\x18\x19 gas/brake  \x1b\x1a steer  R reset",
-          SCREEN_W / 2 - 92, SCREEN_H - 12, CLR_MEDIUM_GREY);
+    if (in_hand && spd > 8) print("DRIFT", 4, 40, CLR_YELLOW);
+    print("\x18\x19 gas/brake  \x1b\x1a steer  SPACE drift  R reset",
+          SCREEN_W / 2 - 116, SCREEN_H - 12, CLR_MEDIUM_GREY);
     if (is_paused) print("PAUSED", SCREEN_W / 2 - 22, SCREEN_H / 2, CLR_WHITE);
 }
 
@@ -285,6 +324,10 @@ void draw(void) {
     cls(CLR_DARKER_GREY);                 // asphalt
     camera((int)cam_x, (int)cam_y);
     draw_ground();
+    for (int i = 0; i < MAXSKID; i++)     // tire marks burned into the road
+        if (skid[i].life > 0)
+            pset((int)skid[i].x, (int)skid[i].y,
+                 skid[i].life > 90 ? CLR_BLACK : CLR_BROWNISH_BLACK);
     draw_vehicle();
     camera(0, 0);
     hud();
