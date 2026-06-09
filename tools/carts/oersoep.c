@@ -26,6 +26,7 @@
 #define N        80           // flock size
 #define NFOOD    70           // drifting food pool
 #define NMOTE    64           // ambient motes + eat puffs
+#define NROCK     8           // algae rocks — cover that blocks movement + line of sight
 #define VIEW     22.0f        // boid neighbour radius
 #define SEP2     90.0f        // squared distance below which boids push apart
 #define FLEE_R   78.0f        // base flee/hunt sense radius (grows with your size)
@@ -67,6 +68,7 @@ typedef struct {
 
 typedef struct { float x, y, vx, vy, wob; int kind; bool alive; } Food;
 typedef struct { float x, y, vx, vy; int life, col; } Mote;
+typedef struct { float x, y, r; } Rock;
 
 STATE {
     float px, py, vx, vy;     // cell centre + velocity
@@ -92,6 +94,7 @@ STATE {
     Microbe herd[N];
     Food    food[NFOOD];
     Mote    mote[NMOTE];
+    Rock    rock[NROCK];
 };
 
 static const char *PART_NAME[4] = { "FLAGELLUM", "SPIKE", "JAW", "POISON SAC" };
@@ -99,6 +102,37 @@ static const char *PART_DESC[4] = { "swim faster", "rammers recoil", "eat anythi
 static const int   PART_BIT [4] = { P_FLAG, P_SPIKE, P_JAW, P_POISON };
 
 static void  step_flock(void);                                    // defined below init()
+
+// true if any rock sits across the segment a→b (hunter can't see you through cover)
+static bool los_blocked(float ax, float ay, float bx, float by) {
+    float dx = bx - ax, dy = by - ay;
+    float len2 = dx * dx + dy * dy;
+    for (int i = 0; i < NROCK; i++) {
+        Rock *rk = &S->rock[i];
+        float t = len2 > 0 ? ((rk->x - ax) * dx + (rk->y - ay) * dy) / len2 : 0;
+        t = clamp(t, 0, 1);
+        float cx = ax + t * dx - rk->x, cy = ay + t * dy - rk->y;
+        if (fsqrt(cx * cx + cy * cy) < rk->r) return true;
+    }
+    return false;
+}
+
+// push a moving circle out of any rock it overlaps, and kill its inward velocity
+// (so it slides along cover instead of sticking). shared by player and microbes.
+static void resolve_rocks(float *x, float *y, float rad, float *vx, float *vy) {
+    for (int i = 0; i < NROCK; i++) {
+        Rock *rk = &S->rock[i];
+        float dx = *x - rk->x, dy = *y - rk->y;
+        float dist = fsqrt(dx * dx + dy * dy);
+        float mind = rk->r + rad;
+        if (dist < mind && dist > 0.01f) {
+            float nx = dx / dist, ny = dy / dist;
+            *x = rk->x + nx * mind; *y = rk->y + ny * mind;
+            float vn = (*vx) * nx + (*vy) * ny;
+            if (vn < 0) { *vx -= vn * nx; *vy -= vn * ny; }
+        }
+    }
+}
 
 static float rcap(void)   { return 10.0f + S->tier * 6.0f; }      // radius ceiling this tier
 static float capspeed(void) {
@@ -175,6 +209,22 @@ void init(void) {
     S->won = false; S->mating = false;
     S->mode = M_START;
     for (int i = 0; i < NMOTE; i++) S->mote[i].life = 0;
+
+    // scatter algae rocks — keep the centre (your spawn) clear and don't stack them
+    for (int i = 0; i < NROCK; i++) {
+        float rr = rnd_float_between(13, 26), rx = 0, ry = 0;
+        for (int tries = 0; tries < 30; tries++) {
+            rx = rnd_between(40, WORLDW - 40); ry = rnd_between(40, WORLDH - 40);
+            if (distance((int)rx, (int)ry, WORLDW / 2, WORLDH / 2) < 90) continue;
+            bool clash = false;
+            for (int j = 0; j < i; j++)
+                if (distance((int)rx, (int)ry, (int)S->rock[j].x, (int)S->rock[j].y) < rr + S->rock[j].r + 20)
+                    { clash = true; break; }
+            if (!clash) break;
+        }
+        S->rock[i] = (Rock){ rx, ry, rr };
+    }
+
     restock();
     for (int i = 0; i < NMOTE; i++)          // a few ambient motes already drifting
         S->mote[i] = (Mote){ (float)rnd(WORLDW), (float)rnd(WORLDH),
@@ -229,7 +279,7 @@ static void step_flock(void) {
             // danger is blundering near a big mouth, not a pack converging from
             // off-screen. (Prey, below, are skittish from much farther.)
             float hunt_r = 42.0f + S->r;
-            if (pd < hunt_r && pd > 0.01f) {
+            if (pd < hunt_r && pd > 0.01f && !los_blocked(b->x, b->y, S->px, S->py)) {
                 float t = 1.0f - pd / hunt_r;
                 b->lunge = t;
                 float pull = 0.4f + t * 1.9f;
@@ -268,6 +318,7 @@ static void step_flock(void) {
         else if (sp > 0 && sp < 0.5f) { b->vx = b->vx / sp * 0.5f; b->vy = b->vy / sp * 0.5f; }
 
         b->x += b->vx; b->y += b->vy;
+        resolve_rocks(&b->x, &b->y, b->size, &b->vx, &b->vy);   // can't swim through cover
         if (b->bite_cd > 0) b->bite_cd--;
 
         if (b->x < 6)          { b->x = 6;          b->vx = -b->vx * 0.6f; }
@@ -362,6 +413,7 @@ void update(void) {
     S->vx *= 0.90f; S->vy *= 0.90f;
     S->px = clamp(S->px + S->vx, S->r, WORLDW - S->r);
     S->py = clamp(S->py + S->vy, S->r, WORLDH - S->r);
+    resolve_rocks(&S->px, &S->py, S->r, &S->vx, &S->vy);   // slide along cover, don't phase through
     if (dashing && sp > 1.5f)                          // a faint trail in your wake
         puff(S->px - S->vx, S->py - S->vy, 1, CLR_TRUE_BLUE);
 
@@ -464,6 +516,8 @@ void update(void) {
         float a = rnd(360);
         S->matex = clamp(S->px + cos_deg(a) * 140, 30, WORLDW - 30);
         S->matey = clamp(S->py + sin_deg(a) * 140, 30, WORLDH - 30);
+        float dvx = 0, dvy = 0;                       // nudge it out of any rock it landed in
+        resolve_rocks(&S->matex, &S->matey, 10, &dvx, &dvy);
         chord(55, CHORD_MAJ, INSTR_TRI, 3);
     }
     if (S->mating) {
@@ -563,6 +617,21 @@ static void draw_pond(void) {
     for (int i = 0; i < NMOTE; i++)
         if (S->mote[i].life > 0) pset((int)S->mote[i].x, (int)S->mote[i].y, S->mote[i].col);
     rect(0, 0, WORLDW, WORLDH, CLR_TRUE_BLUE);
+
+    // algae rocks — cover. lumpy mossy mounds, drawn under the cells.
+    for (int i = 0; i < NROCK; i++) {
+        Rock *rk = &S->rock[i];
+        int rx = (int)rk->x, ry = (int)rk->y, rr = (int)rk->r;
+        circfill(rx, ry, rr, CLR_DARK_GREY);
+        circfill(rx - rr / 3, ry - rr / 4, rr * 2 / 3, CLR_DARK_GREY);   // lumpiness
+        circfill(rx + rr / 3, ry + rr / 5, rr / 2, CLR_DARK_GREY);
+        circ(rx, ry, rr, CLR_DARKER_GREY);
+        for (int m = 0; m < 5; m++) {                                    // moss flecks
+            float a = i * 50 + m * 67;
+            pset(rx + (int)(cos_deg(a) * rr * 0.6f), ry + (int)(sin_deg(a) * rr * 0.6f),
+                 (m & 1) ? CLR_DARK_GREEN : CLR_MEDIUM_GREEN);
+        }
+    }
 
     if (S->mode == M_SWIM)            // faint terror ring (where the flock reacts to you)
         circ((int)S->px, (int)S->py, (int)(FLEE_R + S->r), CLR_DARK_BLUE);

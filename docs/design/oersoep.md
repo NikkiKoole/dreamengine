@@ -56,8 +56,14 @@ choose mouth (herbivore / carnivore)
   cells hunt; a middle band is neutral (bumps, neither).
 - **Spike** flips a ramming predator: it recoils and *shrinks* instead of biting you. **Poison**
   shrinks + repels any predator inside the aura.
+- **Cover:** algae rocks (8, scattered, spawn-area kept clear) are solid — they block movement
+  for you *and* the boids (everything slides along them), and crucially they **break a hunter's
+  line of sight**: duck behind one and the hunter loses you, its lunge decays, and you get a beat
+  to rest. Turns the open arena into something you play *around*, and pairs with the dash — break
+  the pin, round a rock, breathe.
 - **Tiers:** 4. Each evolution raises the radius cap and max health and restocks the pond with
-  bigger average cells, so the pressure scales like vampire's spawn curve.
+  bigger average cells, and the predator share ramps with tier — so growing makes the pond
+  *meaner*, not safer (the "too easy after the first grow" fix).
 
 ## Palette
 
