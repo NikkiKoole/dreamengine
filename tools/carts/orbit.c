@@ -4,6 +4,10 @@
 // ============================================================================
 // ORBIT  —  a gravity sandbox.  Build a rocket, launch, fail miserably.
 //
+// SPEC + ROADMAP: docs/guides/cart-specs/orbit.md — the achievement ladder, what's
+// reachable today vs. gated, and the next build (Mun-orbit capture) with code hooks.
+// This header is the deep "why"; that doc is the map above it.
+//
 //   ◄ / ►        steer (rotate the rocket)
 //   Z (hold)     thrust  — on the pad it only lifts if TWR > 1
 //   SPACE        stage / relaunch from the wreck screen
