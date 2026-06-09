@@ -1,10 +1,12 @@
 # procgen-places — varying the roads-&-cities generator (design seed)
 
-**Status: v1 shipped (2026-06-09).** The two-field matrix, road-class-by-
-hierarchy, domain-warp, and pavements are live in the cart (commit on `master`).
-v1.5 (parking, traffic lights, richer crossings, segment culling) and v2 (arced
-roads) remain open. Captures the design conversation that drove it (2026-06-09)
-about evolving the `ROADS & CITIES` generator in
+**Status: v2 shipped — tile-based (2026-06-09).** The two-field matrix, road
+classes, domain-warp, and pavements (v1) are now rendered **on a tile grid** (v2),
+which dissolved the alignment/junction/seam bugs the vector renderer kept hitting.
+v1.5 nice-to-haves (traffic lights, richer crossings, parking) and the arced-roads
+wall remain open. See **"The tile-based rewrite"** below for the locked scheme.
+Captures the design conversation that drove it (2026-06-09) about evolving the
+`ROADS & CITIES` generator in
 [`tools/carts/procplaces.c`](../../tools/carts/procplaces.c). The cart is the
 procgen testbed: a free-fly explorer shell hosting pluggable generators
 (`gens[]`), each exposing the same little vtable (draw / reseed / probe /
@@ -134,7 +136,56 @@ Most of the wishlist is cheap and local (pure function of "what's at this cell")
 | roundabouts vs crossings | done-ish | already pick roundabout (TOWN) vs zebra (CITY); expand the decision |
 | arced / non-90° roads | **hard** | the v2 wall above |
 
+## The tile-based rewrite (shipped 2026-06-09)
+
+The v1 vector renderer (rects at continuous world coords, promoted lattice *lines*)
+kept producing alignment artefacts: per-block road segments that jogged across a
+divider, pavement strips that rounded asymmetrically under fractional zoom, and a
+colour seam where a dark highway met grey arterials so crossings looked
+**unconnected**. These were whack-a-mole because the model fought the grid.
+
+**Fix: render the roads generator on a fixed TILE GRID** (like generator 2 already
+does — terrain draws 8px cells with zero alignment trouble). The valuable half — the
+two-field zone logic (`roads_zone_at`, land use, intensity, domain-warp) — is reused
+**verbatim**; only the *renderer* and *road model* changed. Each visible tile is
+classified through the same helpers and drawn as one filled cell at tile-snapped
+coords. Consequences, all good:
+
+- **Crossings connect by construction** — a tile is road-or-not regardless of which
+  axis claims it, and there's **one road surface colour** (no seam).
+- **No floating strips** — sidewalks are whole tiles, centre lines fall on tile
+  boundaries → the asymmetric-pavement bug can't recur.
+- **Collision is trivial and identical to the render** — `road_at()` classifies the
+  same tile through `roads_axis_v/h`, so sloop can never disagree with the screen.
+  The wrong-turn rule above is now structural, not a discipline.
+- **LOD built in** — zoomed out, draw bigger meta-cells; fine markings/edges only
+  when truly close. That also keeps the frame cheap and parks the sub-pixel shimmer
+  (STATUS open item 29) at the zoom where it'd show.
+
+### The tile scheme — anchored to the car, and tunable
+
+Anchored to sloop's rig so the two carts share one unit: **tile = sloop's `CELL` =
+7px**, so "the car is 3–4 tiles wide" is literally true in this grid. A **lane = 5
+tiles (35px)** — the widest planned car (4 tiles) fits with room to sit/drift. All
+of it is `#define` knobs; off by a tile? change one line and roads, sidewalks,
+centre lines, collision, and render all re-derive.
+
+| unit | value | note |
+|---|---|---|
+| `TILE` | 7px | = sloop `CELL` |
+| `LANE` | 5 tiles | widest car (4) + room |
+| `SIDEWALK` | 1 tile | built-up, non-highway |
+| `BLOCK_T` | 24 tiles | finest lattice pitch (local-street spacing) |
+| `LOT_T` | 4 tiles | building-footprint grid |
+| `ROAD_LANES[]` | 1 / 2 / 4 / 6 | local / avenue / arterial / highway |
+
+**Still open after v2:** centre-line/junction polish (zebra crossings, traffic
+lights as tiles), parking lots, and the arced-roads wall (unchanged — still a
+separate network pass if ever).
+
 ## Decisions so far
+- ✓ **Tile-based render**, tile = sloop `CELL` (7px), lane = 5 tiles — alignment,
+  junctions, and collision all fall out of the grid; the field logic is reused.
 - ✓ **Land use = R / C / I + G** (4 values; Green replaces the "nothing" tier).
 - ✓ **One world**, not biome presets — panning suburb → downtown → industrial →
   countryside in one coherent field is the magic.
