@@ -129,6 +129,15 @@ static int roads_class_of(int k) {
     if (k % 3  == 0) return RC_AVENUE;
     return RC_LOCAL;
 }
+static const int ROAD_STEP[4] = { 1, 3, 9, 27 };   // pitch multiple per class (RC_LOCAL..RC_HIGHWAY)
+// A road segment samples its zone at its pitch-bucket CENTRE, not the local block — so
+// the line's visibility & pavement stay CONSTANT over its whole pitch run (no per-100px
+// chunking, which made roads appear to jog across a divider). Both draw and road_at
+// sample here, so collision still matches what's drawn (the shared-geometry rule).
+static int roads_bucket_center(int along, int cls) {
+    int pitch = ROADS_BASE * ROAD_STEP[cls];
+    return roads_ifloordiv(along, pitch) * pitch + pitch / 2;
+}
 // Shared visibility+width: is the line of class `cls` drawn in zone `z`, how wide,
 // and is it an unpaved dirt track? Both draw and road_at call this — never inline.
 static bool roads_line_render(int cls, const Zone *z, int *hw, bool *dirt) {
@@ -158,6 +167,7 @@ static void roads_houses(int wx, int wy, int span, int n, const int *roofs, int 
         }
 }
 static void roads_towers(int wx, int wy, int span) {                 // downtown: big lit slabs
+    rectfill(wx, wy, span, span, CLR_BROWNISH_BLACK);                // dark plaza ground (no grass gutters)
     int slab[4] = { CLR_DARKER_GREY, CLR_DARK_GREY, CLR_DARKER_BLUE, CLR_INDIGO };
     int cells = 2, cw = span / cells;
     for (int i = 0; i < cells; i++)
@@ -175,6 +185,7 @@ static void roads_towers(int wx, int wy, int span) {                 // downtown
 static void roads_factory(int wx, int wy, int span) {                // industrial: big footprints
     int body[3] = { CLR_DARKER_GREY, CLR_DARK_BROWN, CLR_DARKER_PURPLE };
     unsigned h = roads_hash2(wx + roads_seed * 13, wy);
+    rectfill(wx, wy, span, span, CLR_DARKER_GREY);                   // paved lot (no grass gutters)
     rectfill(wx + 3, wy + 3, span - 6, span - 6, body[h % 3]);
     rect(wx + 3, wy + 3, span - 6, span - 6, CLR_BROWNISH_BLACK);
     for (int s = wx + 8; s < wx + span - 8; s += 9)                   // sawtooth roof / vents
@@ -231,14 +242,18 @@ static void roads_dashes_h(int y, int l, int r, int col) {
     for (int x = roads_ifloordiv(l, 24) * 24; x < r; x += 24) line(x, y, x + 11, y, col);
 }
 
-// draw the vertical lattice line owned by this cell (its LEFT edge), top→bottom of cell
-static void roads_road_v(int wx, int wy, int kx, const Zone *z) {
-    int hw; bool dirt;
+// draw the vertical lattice line owned by this cell (its LEFT edge), top→bottom of cell.
+// `detail` = draw the thin markings (curbs/dashes/pavement); off when zoomed out so they
+// don't shimmer as the world scrolls under fractional zoom (wide tarmac stays stable).
+static void roads_road_v(int wx, int wy, int kx, bool detail) {
     int cls = roads_class_of(kx);
-    if (!roads_line_render(cls, z, &hw, &dirt)) return;
+    Zone z = roads_zone_at((float)wx, (float)roads_bucket_center(wy + ROADS_BASE / 2, cls));
+    int hw; bool dirt;
+    if (!roads_line_render(cls, &z, &hw, &dirt)) return;
     int col = dirt ? CLR_DARK_BROWN : (cls == RC_HIGHWAY ? CLR_BROWNISH_BLACK : CLR_DARK_GREY);
     rectfill(wx - hw, wy, hw * 2, ROADS_BASE, col);
-    if (z->lu != LU_GREEN && z->level >= LV_MED && cls <= RC_ARTERIAL && !dirt) {   // pavement
+    if (!detail) return;
+    if (z.lu != LU_GREEN && z.level >= LV_MED && cls <= RC_ARTERIAL && !dirt) {   // pavement
         rectfill(wx - hw - 2, wy, 2, ROADS_BASE, CLR_MEDIUM_GREY);
         rectfill(wx + hw,     wy, 2, ROADS_BASE, CLR_MEDIUM_GREY);
     }
@@ -253,13 +268,15 @@ static void roads_road_v(int wx, int wy, int kx, const Zone *z) {
         }
     }
 }
-static void roads_road_h(int wx, int wy, int ky, const Zone *z) {
-    int hw; bool dirt;
+static void roads_road_h(int wx, int wy, int ky, bool detail) {
     int cls = roads_class_of(ky);
-    if (!roads_line_render(cls, z, &hw, &dirt)) return;
+    Zone z = roads_zone_at((float)roads_bucket_center(wx + ROADS_BASE / 2, cls), (float)wy);
+    int hw; bool dirt;
+    if (!roads_line_render(cls, &z, &hw, &dirt)) return;
     int col = dirt ? CLR_DARK_BROWN : (cls == RC_HIGHWAY ? CLR_BROWNISH_BLACK : CLR_DARK_GREY);
     rectfill(wx, wy - hw, ROADS_BASE, hw * 2, col);
-    if (z->lu != LU_GREEN && z->level >= LV_MED && cls <= RC_ARTERIAL && !dirt) {   // pavement
+    if (!detail) return;
+    if (z.lu != LU_GREEN && z.level >= LV_MED && cls <= RC_ARTERIAL && !dirt) {   // pavement
         rectfill(wx, wy - hw - 2, ROADS_BASE, 2, CLR_MEDIUM_GREY);
         rectfill(wx, wy + hw,     ROADS_BASE, 2, CLR_MEDIUM_GREY);
     }
@@ -296,30 +313,31 @@ static void roads_draw(float cam_x, float cam_y, float zoom) {
             Zone z = roads_zone_at(wx + B0 / 2.0f, wy + B0 / 2.0f);
             roads_fill_block(wx, wy, B0, &z);
         }
-    // pass B — roads on top (so they front the buildings; markings read at crossings)
+    // pass B — roads on top (so they front the buildings; markings read at crossings).
+    // thin markings only when zoomed in enough that they won't shimmer as you pan.
+    bool detail = zoom >= 0.55f;
     for (int kx = kx0; kx <= kx1; kx++)
         for (int ky = ky0; ky <= ky1; ky++) {
             int wx = kx * B0, wy = ky * B0;
-            Zone z = roads_zone_at(wx + B0 / 2.0f, wy + B0 / 2.0f);
-            roads_road_v(wx, wy, kx, &z);
-            roads_road_h(wx, wy, ky, &z);
+            roads_road_v(wx, wy, kx, detail);
+            roads_road_h(wx, wy, ky, detail);
         }
 }
 
 // query (this is what a consumer cart — sloop rung 3 — would call once extracted)
 static Place road_at(float x, float y) {
-    Zone z = roads_zone_at(x, y);
+    Zone z = roads_zone_at(x, y);                          // the LOT's zone (lu/level report)
     int kxn = (int)lroundf(x / ROADS_BASE), kyn = (int)lroundf(y / ROADS_BASE);
-    bool on = false; int best = RC_LOCAL;
+    bool on = false; int best = -1;
     int hw; bool dirt;
+    // each line sampled at its pitch-bucket centre — identical to what roads_road_v/h drew
     int cv = roads_class_of(kxn);
-    if (roads_line_render(cv, &z, &hw, &dirt) && fabsf(x - kxn * (float)ROADS_BASE) <= hw) { on = true; best = cv; }
+    Zone zv = roads_zone_at((float)(kxn * ROADS_BASE), (float)roads_bucket_center((int)y, cv));
+    if (roads_line_render(cv, &zv, &hw, &dirt) && fabsf(x - kxn * (float)ROADS_BASE) <= hw) { on = true; best = cv; }
     int ch = roads_class_of(kyn);
-    if (roads_line_render(ch, &z, &hw, &dirt) && fabsf(y - kyn * (float)ROADS_BASE) <= hw && ch > best) {
-        on = true; best = ch;
-    } else if (roads_line_render(ch, &z, &hw, &dirt) && fabsf(y - kyn * (float)ROADS_BASE) <= hw) {
-        on = true;
-    }
+    Zone zh = roads_zone_at((float)roads_bucket_center((int)x, ch), (float)(kyn * ROADS_BASE));
+    if (roads_line_render(ch, &zh, &hw, &dirt) && fabsf(y - kyn * (float)ROADS_BASE) <= hw && ch > best) { on = true; best = ch; }
+    if (best < 0) best = RC_LOCAL;
     return (Place){ z, on, best };
 }
 static int roads_field_col(float x, float y) {       // overlay tint: colour by land use
