@@ -165,12 +165,14 @@ static bool roads_band(int cls, const Zone *z, int *surf_t, int *side_t, bool *d
     return true;
 }
 
-// What a tile is, with respect to ONE axis's nearest lattice line.
-typedef struct { int kind; int cls; int off; bool dirt; } Band;  // kind 0 none / 1 surface / 2 sidewalk
+// What a tile is, with respect to ONE axis's nearest lattice line. `vis`+`surf`+`off`
+// are set whenever a road exists nearby (even for kind-0 tiles just off the band), so
+// callers can measure distance to a crossing for zebras / lights.
+typedef struct { int kind; int cls; int off; int surf; int line; bool vis; bool dirt; } Band;
 static Band roads_axis(int along, int across, bool vertical) {
     // `along`  = tile coord parallel to the line  (varies the bucket)
     // `across` = tile coord perpendicular         (decides surface/sidewalk/none)
-    Band b = { 0, 0, 0, false };
+    Band b = { 0, 0, 0, 0, 0, false, false };
     int k = (int)lroundf(across / (float)BLOCK_T);
     int cls = roads_class_of(k);
     int pitch = BLOCK_T * ROAD_STEP[cls];                      // bucket cadence (tiles)
@@ -182,7 +184,7 @@ static Band roads_axis(int along, int across, bool vertical) {
     if (!roads_band(cls, &z, &surf, &side, &dirt)) return b;
     int half = surf / 2;
     int off = across - k * BLOCK_T;                            // tile offset from line column
-    b.cls = cls; b.dirt = dirt; b.off = off;
+    b.cls = cls; b.dirt = dirt; b.off = off; b.surf = surf; b.line = k; b.vis = true;
     if (off >= -half && off <= surf - 1 - half) { b.kind = 1; return b; }
     if (side > 0 && ((off >= -half - side && off < -half) ||
                      (off > surf - 1 - half && off <= surf - 1 - half + side)))
@@ -218,6 +220,28 @@ static int roads_lot_color(int tx, int ty, const Zone *z) {
     }
 }
 
+// ── v1.5 tile polish: zebra crossings, traffic lights, parking ───────────────
+// zebra "rungs" across a road, on the approach to a bigger crossing
+static void roads_zebra_tile(int px, int py, bool stripes_vertical) {
+    for (int i = 1; i < TILE; i += 3)
+        if (stripes_vertical) line(px + i, py, px + i, py + TILE - 1, CLR_WHITE);
+        else                  line(px, py + i, px + TILE - 1, py + i, CLR_WHITE);
+}
+// a signal head at a major-crossing corner; the lit lamp cycles red→amber→green on
+// now() (per-crossing phase so the grid isn't synchronised)
+static void roads_light_tile(int px, int py, unsigned phase) {
+    int lamp[3] = { CLR_RED, CLR_YELLOW, CLR_GREEN };
+    int s = ((int)(now() * 0.8f) + (int)phase) % 3;
+    rectfill(px + 1, py + 1, 4, 4, CLR_BLACK);              // housing for contrast
+    rectfill(px + 2, py + 2, 2, 2, lamp[s]);               // the lit lamp
+}
+// some built-up commercial / industrial lots are parking instead of a building
+static bool roads_is_parking(int tx, int ty, const Zone *z) {
+    if ((z->lu != LU_COM && z->lu != LU_IND) || z->level < LV_MED) return false;
+    int lotx = roads_ifloordiv(tx, LOT_T), loty = roads_ifloordiv(ty, LOT_T);
+    return (roads_hash2(lotx * 3 + roads_seed * 17, loty * 3) % 5) == 0;
+}
+
 // cam/zoom match the shell's camera_ex. Enumerates visible TILES and draws each as
 // one filled cell at tile-snapped world coords; camera_ex scales. LOD: when zoomed
 // out, draw bigger meta-cells (keeps the frame cheap AND stops thin features
@@ -246,25 +270,53 @@ static void roads_draw(float cam_x, float cam_y, float zoom) {
             if (v.kind == 1 || h.kind == 1) {                       // road surface
                 bool dirt = (v.kind == 1 && v.dirt) || (h.kind == 1 && h.dirt);
                 rectfill(px, py, sz, sz, dirt ? CLR_DARK_BROWN : CLR_DARK_GREY);
-                if (detail && !dirt) {                              // centre dashes (on the grid)
+                if (detail && !dirt) {
                     bool cross = (v.kind == 1 && h.kind == 1);
-                    if (!cross && v.kind == 1 && v.cls >= RC_AVENUE && v.off == 0 && (ty & 1))
-                        line(px + TILE / 2, py, px + TILE / 2, py + TILE - 1, CLR_YELLOW);
-                    if (!cross && h.kind == 1 && h.cls >= RC_AVENUE && h.off == 0 && (tx & 1))
-                        line(px, py + TILE / 2, px + TILE - 1, py + TILE / 2, CLR_YELLOW);
+                    bool zebra = false;
+                    // zebra on the approach tile just outside a crossing (avenue+)
+                    if (v.kind == 1 && !cross && h.vis && h.cls >= RC_AVENUE) {
+                        int lo = -h.surf / 2, hi = h.surf - 1 - h.surf / 2;
+                        if (h.off == lo - 1 || h.off == hi + 1) { roads_zebra_tile(px, py, true); zebra = true; }
+                    }
+                    if (h.kind == 1 && !cross && v.vis && v.cls >= RC_AVENUE) {
+                        int lo = -v.surf / 2, hi = v.surf - 1 - v.surf / 2;
+                        if (v.off == lo - 1 || v.off == hi + 1) { roads_zebra_tile(px, py, false); zebra = true; }
+                    }
+                    // centre dashes (skip through crossings and zebra tiles)
+                    if (!cross && !zebra) {
+                        if (v.kind == 1 && v.cls >= RC_AVENUE && v.off == 0 && (ty & 1))
+                            line(px + TILE / 2, py, px + TILE / 2, py + TILE - 1, CLR_YELLOW);
+                        if (h.kind == 1 && h.cls >= RC_AVENUE && h.off == 0 && (tx & 1))
+                            line(px, py + TILE / 2, px + TILE - 1, py + TILE / 2, CLR_YELLOW);
+                    }
+                    // signal heads at all four corners of a major (avenue+) crossing
+                    if (cross && v.cls >= RC_AVENUE && h.cls >= RC_AVENUE) {
+                        bool vc = (v.off == -v.surf / 2) || (v.off == v.surf - 1 - v.surf / 2);
+                        bool hc = (h.off == -h.surf / 2) || (h.off == h.surf - 1 - h.surf / 2);
+                        if (vc && hc) roads_light_tile(px, py, roads_hash2(v.line, h.line));
+                    }
                 }
             } else if (v.kind == 2 || h.kind == 2) {                // sidewalk
                 rectfill(px, py, sz, sz, CLR_MEDIUM_GREY);
             } else {                                                // building / ground lot
                 Zone z = roads_zone_at(px + sz / 2.0f, py + sz / 2.0f);
-                int col = roads_lot_color(tx + c, ty + c, &z);
-                rectfill(px, py, sz, sz, col);
-                if (detail && z.lu != LU_GREEN && col != CLR_DARK_GREEN) {   // building footprints
-                    int ex = ((tx % LOT_T) + LOT_T) % LOT_T, ey = ((ty % LOT_T) + LOT_T) % LOT_T;
-                    if (ex == 0) line(px, py, px, py + TILE - 1, CLR_BROWNISH_BLACK);
-                    if (ey == 0) line(px, py, px + TILE - 1, py, CLR_BROWNISH_BLACK);
-                    if (z.lu == LU_COM && ex == LOT_T / 2 && ey == LOT_T / 2)
-                        pset(px + TILE / 2, py + TILE / 2, CLR_LIGHT_YELLOW);
+                if (roads_is_parking(tx + c, ty + c, &z)) {                  // parking lot
+                    rectfill(px, py, sz, sz, CLR_DARKER_GREY);
+                    if (detail) {
+                        int ex = ((tx % LOT_T) + LOT_T) % LOT_T;
+                        if (ex == 0)          line(px, py, px, py + TILE - 1, CLR_BROWNISH_BLACK);
+                        else if (ex % 2 == 1) line(px, py + 1, px, py + TILE - 2, CLR_LIGHT_GREY); // bay lines
+                    }
+                } else {
+                    int col = roads_lot_color(tx + c, ty + c, &z);
+                    rectfill(px, py, sz, sz, col);
+                    if (detail && z.lu != LU_GREEN && col != CLR_DARK_GREEN) {   // building footprints
+                        int ex = ((tx % LOT_T) + LOT_T) % LOT_T, ey = ((ty % LOT_T) + LOT_T) % LOT_T;
+                        if (ex == 0) line(px, py, px, py + TILE - 1, CLR_BROWNISH_BLACK);
+                        if (ey == 0) line(px, py, px + TILE - 1, py, CLR_BROWNISH_BLACK);
+                        if (z.lu == LU_COM && ex == LOT_T / 2 && ey == LOT_T / 2)
+                            pset(px + TILE / 2, py + TILE / 2, CLR_LIGHT_YELLOW);
+                    }
                 }
             }
         }
@@ -374,8 +426,8 @@ static Generator gens[] = {
 };
 #define N_GENS ((int)(sizeof gens / sizeof gens[0]))
 
-static float cam_x = 2973, cam_y = -260;   // world coord of screen top-left at zoom 1
-static float zoom  = 0.50f;                // open over a connected city grid (seed 1)
+static float cam_x = 2360, cam_y = 404;    // world coord of screen top-left at zoom 1
+static float zoom  = 1.20f;                // open on a signalised avenue crossing (seed 1)
 static int   seed  = 1;
 static int   cur   = 0;
 static bool  overlay = false;

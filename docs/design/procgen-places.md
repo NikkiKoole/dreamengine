@@ -179,9 +179,16 @@ centre lines, collision, and render all re-derive.
 | `LOT_T` | 4 tiles | building-footprint grid |
 | `ROAD_LANES[]` | 1 / 2 / 4 / 6 | local / avenue / arterial / highway |
 
-**Still open after v2:** centre-line/junction polish (zebra crossings, traffic
-lights as tiles), parking lots, and the arced-roads wall (unchanged — still a
-separate network pass if ever).
+**v1.5 polish shipped on the tile grid (2026-06-09):** centre-line dashes,
+**zebra crossings** (white rungs on the approach tile just outside an avenue+
+crossing), **traffic lights** (a lamp at each of the four corners of an avenue+
+crossing, cycling red→amber→green on `now()` with a per-crossing phase), and
+**parking lots** (some built-up COM/IND lots render as tarmac with bay lines
+instead of a building). All are detail-gated (drawn only when zoomed in, where
+they won't shimmer) and hash/class-gated for variety.
+
+**Still open:** the arced-roads wall (unchanged — a separate network pass if
+ever), and richer lane markings on the very wide arterials/highways.
 
 ## Decisions so far
 - ✓ **Tile-based render**, tile = sloop `CELL` (7px), lane = 5 tiles — alignment,
