@@ -330,12 +330,18 @@ void update(void) {
     S->flagphase += 14;
 
     // DASH — a short burst of speed to break away from a hunter. Costs stamina that
-    // drains while held and recharges when you let it idle, so it's an escape tool
-    // with a real bottom: you can't dash forever.
+    // drains while held and replenishes only when you SLOW DOWN: you have to stop
+    // fleeing and catch your breath to get the dash back. Sprinting around recovers
+    // almost nothing, so you can't just dash, cruise, dash again forever.
     bool want_dash = key(KEY_SPACE) || mouse_down(1) || btn(0, BTN_A) || btn(1, BTN_A);
     bool dashing   = want_dash && S->stamina > 0.02f;
-    if (dashing) S->stamina = clamp(S->stamina - 0.022f, 0, 1);
-    else         S->stamina = clamp(S->stamina + 0.0055f, 0, 1);
+    if (dashing) {
+        S->stamina = clamp(S->stamina - 0.022f, 0, 1);
+    } else {
+        float speed = fsqrt(S->vx * S->vx + S->vy * S->vy);     // last frame's speed
+        float rest  = clamp(1.0f - speed / capspeed(), 0, 1);   // 1 = nearly still, 0 = flat out
+        S->stamina  = clamp(S->stamina + 0.0008f + rest * rest * 0.011f, 0, 1);
+    }
     if (dashing && !S->was_dashing) hit(72, INSTR_NOISE, 3, 70);   // whoosh on takeoff
     S->was_dashing = dashing;
     S->flagphase += dashing ? 26 : 0;                              // tail whips faster
