@@ -25,12 +25,13 @@
   <h1>AudioWorklet spike <span class="tag">WITH coi-serviceworker</span></h1>
   <div>cross-origin isolated: <span id="iso">checking…</span></div>
   <div>SharedArrayBuffer available: <span id="sab">checking…</span></div>
-  <button id="start">▶ TAP TO START — listen for a 440 Hz tone</button>
+  <button id="start">▶ TAP TO START — listen for a dead-even click ROLL</button>
   <button id="reset" style="background:#a33;font-size:15px;padding:12px">↻ RESET — unregister SW, clear caches, reload (do this for a clean test)</button>
-  <div class="hint">Expected on GitHub Pages: the page reloads itself once (service worker
-    gaining control), isolation flips to <b>true</b>, the wasm loads, and tapping plays a
-    steady tone on the dedicated audio thread. If isolation stays <b>false</b> or the wasm
-    fails to load, the service-worker route isn't working here.</div>
+  <div class="hint">The roll is generated <b>inside the worklet</b>, sample-counted on the
+    audio thread — so it's even BY CONSTRUCTION. <b>Straight to the bone = a perfectly
+    steady roll</b>; any warble in the spacing or a dropped/gapped click means the audio
+    thread missed a render quantum. (On GitHub Pages the page first reloads itself once as
+    the service worker gains control; isolation should read <b>true</b>.)</div>
   <div id="status">booting…</div>
 </div>
 <script>

@@ -8,17 +8,30 @@
 #include <stdbool.h>
 
 static uint8_t audioStack[8192];
-static float   phase = 0.f;
 static EMSCRIPTEN_WEBAUDIO_T g_ctx = 0;
 
-// runs on the AUDIO THREAD — fills 128-sample render quanta
+// A sample-counted CLICK ROLL — the "straight to the bone" test. Spacing is a fixed
+// number of samples, counted on the AUDIO THREAD, so it is even BY CONSTRUCTION: if the
+// worklet's clock is solid you hear a dead-steady roll; any warble or gap = the audio
+// thread missing a render quantum (a dropout). ~20Hz @44.1k — a brisk, clearly-discrete
+// roll where unevenness is obvious.
+#define CLICK_INTERVAL 2205   // samples between clicks
+#define CLICK_LEN       800   // samples a click rings (~18ms)
+static int g_count    = 0;    // counts down to the next click
+static int g_clickPos = -1;   // -1 = silent, else samples into the current click
+
 static bool ProcessAudio(int numInputs, const AudioSampleFrame *inputs,
                          int numOutputs, AudioSampleFrame *outputs,
                          int numParams, const AudioParamFrame *params, void *userData) {
     for (int i = 0; i < 128; ++i) {
-        float s = sinf(phase) * 0.2f;
-        phase += 2.f * 3.14159265f * 440.f / 48000.f;
-        if (phase > 6.28318530f) phase -= 6.28318530f;
+        if (g_count <= 0) { g_clickPos = 0; g_count = CLICK_INTERVAL; }
+        g_count--;
+        float s = 0.f;
+        if (g_clickPos >= 0) {
+            float env = expf(-(float)g_clickPos / 120.0f);     // ~3ms exp decay
+            s = sinf((float)g_clickPos * 0.21f) * 0.35f * env; // ~1.5kHz tick
+            if (++g_clickPos >= CLICK_LEN) g_clickPos = -1;
+        }
         for (int ch = 0; ch < outputs[0].numberOfChannels; ++ch)
             outputs[0].data[ch * 128 + i] = s;
     }
