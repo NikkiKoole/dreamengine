@@ -144,6 +144,17 @@ scales with the number of engines. (If even six bites, the `which`-index form al
 `instrument_lfo` is an option — `note_macro(h, MACRO_TIMBRE, x)` — but named reads better for
 beginners and there are only ever three.)
 
+> **Tempted to add a 4th macro?** Don't — read [decision 0017](../decisions/0017-three-macro-core-plus-engine-aux-channel.md)
+> first. The core stays at three; everything *past* three routes into one of four lanes by *what it
+> is*: **output-shaping** (mute/wah, vibrato, slide → the universal per-voice controls
+> `note_cutoff`/`note_lfo`/`note_pitch`/…, every engine has them), **intrinsic timbre** (the 3
+> macros — and if an engine seems to want a 4th continuous axis, suspect it's really *two* engines,
+> à la HARP→GUITAR), **excitation/mode** (pizz vs arco → `eng_tune`, read at note-on), or a **timed
+> articulation event** (`voice_consonant`/`voice_coda`). `eng_tune` (note-on) and `voice_param`
+> (live) are the blessed per-engine **aux channel** — the same mechanism Plaits gives as its model
+> selector and Rings as its 4th knob. VOICE is the engine that needs the live multi-param form;
+> brass needs none of it (its mute is just `note_cutoff`).
+
 #### Where the taste lives
 
 The richness of the ~30 internal params doesn't vanish — it moves from *API* into a tiny
