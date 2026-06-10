@@ -283,6 +283,20 @@ static float wheelG[MAXWP];                    // lateral grip coefficient (whee
 static float wheelLoad[MAXWP];                 // solved vertical load (mass units; Σ ≈ M)
 static int   nWheelP;
 
+// ╔══ FEEL TUNING — START HERE (handling / drift / camera) ════════════════════════════════╗
+// Want to change how it FEELS? Find the goal, tweak the named #define(s) (all live below in their
+// labelled blocks). Engine power / top speed / gearing live separately — see "ENGINE TUNING" in init().
+//   • PUNCHIER / LOOSER DRIFT  → SLIP_MAX ↓ (tyres let go sooner) · SELF_ALIGN_K ↓ (less auto-straighten)
+//                                · DRIFT_RECOVER ↑ / DRIFT_DECAY ↓ (longer tail-out hang)
+//   • MORE GRIP / HARDER TO SLIDE → SLIP_MAX ↑ · SELF_ALIGN_K ↑
+//   • MORE / LESS WHEELSPIN     → MU_TRACTION ↓/↑ (lower = breaks traction more easily)
+//   • HANDBRAKE bite           → DRIFT_GRIP_MULT (lower = tail snaps out harder)
+//   • STEERING quick vs lazy   → STEER_RATE (wind-on) · STEER_RETURN (re-centre) · STEER_RESP (authority)
+//   • YAW calm vs darty        → GRIP_YAW_K · ANG_DAMP_AXLE
+//   • WEIGHT-TRANSFER strength → WT_LONG_K · WHEEL_H (dive / squat / tip sensitivity)
+//   • SENSE OF SPEED           → CAM_ZOOM_PULL (pull-back) · CAM_LEAD (look-ahead)
+//   • BRAKING power / coast    → BRAKE · ROLL_FRIC
+// ╚════════════════════════════════════════════════════════════════════════════════════════╝
 // ── tuning ───────────────────────────────────────────────────────────────────
 // ENGINE_POWER is the GAS baseline (the everyday engine); the other kinds scale off it
 // in the ENG[] table — `power` is now per engine-kind (§1a), not one global. The WHOLE
