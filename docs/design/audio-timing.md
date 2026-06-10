@@ -225,8 +225,8 @@ A throwaway minimal worklet (a sine via `emscripten/webaudio.h`, in
    since notes are scheduled ahead). Avoids SAB, but it's a major audio-engine split.
 
 **On-device result (2026-06-10): ✅ the worklet path is reachable on GitHub Pages.**
-A deployable spike was published to `site/coi-spike/` (`index.html` with
-`coi-serviceworker`, `nocoi.html` baseline). On an iPhone the coi page registered the
+A deployable throwaway spike (`site/coi-spike/`, **since removed** after the rollout) was
+published — `index.html` with `coi-serviceworker`, a `nocoi.html` baseline. On an iPhone the coi page registered the
 service worker, self-reloaded once, flipped `crossOriginIsolated` → true, the
 shared-memory wasm instantiated, and the **AudioWorklet sine played** — confirming
 `coi-serviceworker` provides the isolation on Pages and the worklet runs there.

@@ -134,8 +134,9 @@ They're *correlated through the extraction*, not the same thing: do the extracti
 any reason (cleanliness, a plugin) and Path B gets cheap as a byproduct, and vice-versa.
 Absent a real plugin/native-instrument push, neither is justified now. Gated on the
 product direction in [`product-notes.md`](product-notes.md) (the AUv3/Link parked items).
-**When we revisit, start from this section + `audio-timing.md` — the findings, the spike
-(`site/coi-spike/`), and the COOP/COEP + thread-sleep + shared-memory facts are all here.**
+**When we revisit, start from this section + `audio-timing.md` — the findings, and the
+COOP/COEP + thread-sleep + shared-memory facts are all here** (the throwaway `site/coi-spike/`
+spike that proved them has been removed; the shipping equivalent is `web_shell_worklet.html`).
 
 Stage 1 (atomics) hardens the shared queue native uses *today* and Path A needs — worth
 doing regardless of the eventual A/B call.
@@ -171,8 +172,8 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   `addToLibrary({ emscripten_thread_sleep: ()=>{} })` (safe: raylib on web yields via
   `emscripten_set_main_loop` and never actually sleeps, so the path is never hit — *confirm
   at runtime*); (b) **fallback** — add full `-pthread -sPTHREAD_POOL_SIZE=1` (heavier).
-  Prefer the lean stub. **RUNTIME ✅ (2026-06-10):** the combo
-  (`site/coi-spike/combo.html`) on GitHub Pages — the raylib GL window **animates**, the
+  Prefer the lean stub. **RUNTIME ✅ (2026-06-10):** the combo spike
+  (`site/coi-spike/combo.html`, since removed) on GitHub Pages — the raylib GL window **animates**, the
   worklet **roll plays dead-even**, **CPU stays low** (so the lean stub is *never hit* —
   confirmed safe, no `-pthread` needed), and the page is isolated. **Graphics + a real
   audio thread coexist in one shared-memory build. Stage 0 fully retired.**
@@ -222,8 +223,9 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   reload guard + caching. Fix = **self-heal, not always-reset**: on load, *only if*
   not-isolated AND a SW is already registered, do one clean unregister+clear+reload
   (guarded once/session to avoid loops); otherwise leave it alone. Better still for
-  production: own a single SW scope + caching so it never breaks. (Spike pages now do the
-  self-heal — `site/coi-spike/*.html`.)
+  production: own a single SW scope + caching so it never breaks. (The self-heal is what
+  `runtime/web_shell_worklet.html` ships; the throwaway `site/coi-spike/*.html` spike pages
+  that first carried it have been removed.)
 - **Stage 5 — wire the build flags** (`build-site.js` + the editor's build-web) and
   rebuild the catalog; bigger artifacts (shared memory) are expected. Acceptance test:
   `drift` is **straight** on desktop *and* phone when isolated, and still plays (at the
