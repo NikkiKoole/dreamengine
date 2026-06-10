@@ -588,6 +588,11 @@ copied it.
 - **nights** — a slot becomes a *different instrument* per song (cocktail's piano/vibes/guitar).
 - **voicings / gear-change** — same part, different tone per song (yacht's bass on TRI/SINE/SAW).
 
+> **The overlay:** this doc is *what each station plays*; [`../design/radio-genre-fidelity.md`](../design/radio-genre-fidelity.md)
+> is *what each genre would ideally want vs what we built* — the holes (faked/missing
+> instruments where a real engine sits unused, the generative brains we lack), researched
+> blind to the source then diffed against these charts.
+
 ---
 
 *(20 stations total, all on `runtime/radio.h`. This pass is complete; keep the **used by**

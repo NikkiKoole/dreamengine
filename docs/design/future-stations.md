@@ -39,6 +39,12 @@ So the newest demand rhymes with the instrument finding: the candidates that nee
 [`../guides/cart-authoring-prompt.md`](../guides/cart-authoring-prompt.md) — imagine the band,
 then shop the palette — and a high-demand station naturally *creates* the new recipes it needs.
 
+> The same demand, seen from the *shipped* stations: [`radio-genre-fidelity.md`](radio-genre-fidelity.md)
+> diffs each of the 20 stations against a blind genre-ideal and tallies the holes — which
+> confirms, from the other side, that the highest-leverage gaps are the untapped engines
+> (`VOICE`/`PIANO`/`EPIANO`/`REED`/`BOWED`) and a handful of missing generative brains
+> (a section-terrace brain, prime-length phasing, drum-led elastic tempo).
+
 ## Future stations — the parking lot
 
 Candidates ranked by **engine fit** (= the genre's essence maps onto machinery we
