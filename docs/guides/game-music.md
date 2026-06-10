@@ -646,7 +646,7 @@ verbatim — extraction is overdue, and the plan is written up below
 | 1 | functional walk + forced cadences | `bossa.c`, `cocktail.c` (jazz rate, secondary dominants, tritone sub) | pull — always comes home |
 | 2 | modal drift | `ambient.c` | float — no cadences, light shifting |
 | 3 | the vamp | `jangle.c`, `roadhouse.c` (2-chord modal) | sit — arrangement is the form |
-| 4 | stolen playbook | `jingle.c`, `citypop.c`, `house.c`, `yacht.c` (+ the mu chord as a named QUALITY) | sound like *someone* |
+| 4 | stolen playbook | `jingle.c`, `citypop.c`, `house.c`, `yacht.c`, `air.c`, `polopan.c` (the artist stations encode cited tracks as per-archetype templates; + the mu chord as a named QUALITY) | sound like *someone* |
 | 5 | sampled loop, cut + rotated | `lowend.c` | nod — loop-born harmony |
 | 6 | alternating pair | `satie.c` | rock two chords for bars on end |
 | 7 | **no chords at all — two-voice species counterpoint** | `carlos.c` | the harmony is whatever two rule-generated lines SPELL: consonance on strong beats, passing dissonance on weak, contrary motion preferred, no parallel perfect 5ths/8ves, over a seeded chaconne ground — and the feel knob slides strict canon → free counterpoint |
@@ -658,7 +658,7 @@ verbatim — extraction is overdue, and the plan is written up below
 
 **Bass brains**: voice-led roots (everywhere) · octave disco pop (`house.c`) · Hosono counterpoint generator (`ymo.c`) · seeded riddim/ostinato (`dub.c`, `roadhouse.c` piano bass) · **THE WALKING BASS (`cocktail.c` `walk_note()`)** — root → chord/scale motion → chromatic approach; *graduation candidate: second customer moves it to a header.*
 
-**Form brains**: 8×8 sectional + density curve (`rad_level`, everywhere) · verse/chorus + gear change (`citypop.c`, `yacht.c`) · the jam — head/solos/head (`roadhouse.c`) · the trio set + bass solo (`cocktail.c`) · THE DESK — per-phrase performance mixing (`dub.c`) · the filter ride as form (`house.c`) · **the rolled form set — variable-length arrangements, not one fixed `FORM[8]` (`addis.c` sketch/set/jam, `lowend.c` tape/loop/cut), incl. the drums-only BREAK as a form feature (`lowend.c`)**. The four structural de-samifying axes (groove · form · pocket · tempo) and how to roll them: see "Same song every night?" above.
+**Form brains**: 8×8 sectional + density curve (`rad_level`, everywhere) · verse/chorus + gear change (`citypop.c`, `yacht.c`) · the jam — head/solos/head (`roadhouse.c`) · the trio set + bass solo (`cocktail.c`) · THE DESK — per-phrase performance mixing (`dub.c`) · the filter ride as form (`house.c`) · **the rolled form set — variable-length arrangements, not one fixed `FORM[8]` (`addis.c` sketch/set/jam, `lowend.c` tape/loop/cut), incl. the drums-only BREAK as a form feature (`lowend.c`)** · **the artist-archetype bundle (`air.c`) — a stolen-playbook cited-song chart bundled WITH its own groove, tempo, mood and LEAD-VOICE (the lead engine itself swaps per song), rolled as one ARCHETYPE: the dial plays recognizably different songs *of one artist*, not one band re-running charts. The escalation over jingle/citypop (which roll only the chart, keeping one band): the archetype reconfigures the band**. The five structural de-samifying axes (groove · form · pocket · tempo · instrumentation/lead-voice) and how to roll them: see "Same song every night?" above.
 
 **Performance channels** (never seeded): the improviser's solos · THE AVIARY — aleatoric calls (`exotica.c`) · the desk (`dub.c`) · humanize jitter (everywhere).
 
@@ -860,7 +860,7 @@ opportunistically (house and ymo first — newest, and the synth genres wear
 timbre variation most naturally). The timbre roll fixes *who's playing*; its
 sibling below fixes *what they play* — do both and a station plays records.
 
-## Same song every night? — the structural axes (groove · form · pocket · tempo)
+## Same song every night? — the structural axes (groove · form · pocket · tempo · instrumentation)
 
 The timbre roll above fixes *who's playing*; this fixes *what they play*.
 Station-owner feedback (2026-06-08, on addis): *"I love the sound, but all the
@@ -903,6 +903,27 @@ style bounds. Ranked by payoff (= salience):
    different song." Widen it, and *couple* it so a ballad genuinely drags and a
    driver genuinely pushes (addis: ballad 70–85 / swing 88–105 / drive 104–122;
    lowend's tempo follows the pocket).
+5. **Instrumentation / lead-voice — the band itself, per song** (`air.c` +
+   `polopan.c` — the artist-station case). The per-song *timbre roll* (above) varies one band's knobs;
+   this goes further and rolls **which instrument carries the song** — the lead
+   *engine* swaps, not just its cutoff. `air.c` bundles this into each archetype: a
+   Sexy-Boy roll plays a `INSTR_PD` Moog over a fuzz bass; a Playground-Love roll
+   re-aims the *same* `I_LEAD` slot to a `INSTR_REED` tenor sax; Cherry → `INSTR_PIPE`
+   flute; Kelly → `INSTR_VOICE` vocoder — so two songs sound like two *records by the
+   same artist*, played on different instruments, not one band re-running a chart. The
+   trick that makes it cheap: `I_BASS`/`I_LEAD` are reconfigured (`instrument()` engine
+   + macros) in `new_song()` from the archetype, exactly like the timbre roll re-aims a
+   filter — instrumentation is "just numbers" too, including the `INSTR_*` id. Salience
+   note: instrumentation sits mid-list in the ear-order above, *below* groove/tempo —
+   so it reinforces an archetype whose groove/tempo already changed; rolling the lead
+   voice **without** also moving the feel reads as "same song, different patch." Couple
+   it (air bundles voice + groove + tempo + chord-template into one **archetype**), as
+   with tempo. **Two stations now do this independently** — `polopan.c` swaps its
+   topline `I_STAR` slot between `INSTR_PIPE` (the Nanga flute), `INSTR_VOICE` (the
+   Canopée/Ani-Kuni chant) and `INSTR_SINE` (Tunnel glass / Coeur sung) from the
+   archetype — so the lead-engine swap has graduated from an `air` one-off to an
+   established artist-station pattern (the catalog's second-customer rule). This is the
+   artist-archetype bundle (see the Form-brains catalog).
 
 ### The implementation pattern
 
