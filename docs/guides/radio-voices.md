@@ -383,13 +383,31 @@ to draw its own drawbar wave via `wave_set`, a 4th distinct route to "organ" (af
 
 ---
 
+## satie — Solo piano gymnopédies (Erik Satie)
+
+Solo layer: **none**.
+
+The most minimal station — **one instrument**, solo piano, two hands. No kit, no bass.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_PNO`  | right hand (melody + chords) | `tri/felt-piano` | TRI |
+| `I_PNOB` | left hand (longer, rounder) | `tri/felt-piano` (left voicing) | TRI |
+
+**Borrowing at a glance:** nothing — its own felt piano. But notable for what it *doesn't*
+use: like every charted station, it **fakes the piano on TRI** rather than the modeled
+`INSTR_PIANO`. Kin to cocktail's `tri/felt-grand`; satie's is the most sustained voicing,
+shaped for held gymnopédies. A minimalist island.
+
+---
+
 ## Stations not yet charted
 
 carlos · exotica · gamelan ·
-satie · tango · ymo
+tango · ymo
 
 (20 stations total; all on `runtime/radio.h`. Charted: italo · house · citypop · motorik ·
-cocktail · lowend · bossa · dub · jangle · jingle · addis · yacht · roadhouse (13). The
-real-engine bands build their own voices (addis brand-new families, yacht/roadhouse kin to
-existing). Remaining: the acoustic/orchestral stations satie · tango · gamelan · carlos ·
-exotica · ymo.)
+cocktail · lowend · bossa · dub · jangle · jingle · addis · yacht · roadhouse · satie (14).
+The real/acoustic stations build their own voices. Notable: no charted station uses the
+modeled `INSTR_PIANO` — they all fake pianos on TRI/SINE. Remaining: tango · gamelan ·
+carlos · exotica · ymo.)

@@ -13,7 +13,7 @@ lines of `instrument_*` calls — and so shared recipes become visible on one pa
 
 > **Status: growing.** Charted so far: **italo**, **house**, **citypop**, **motorik**,
 > **cocktail**, **lowend**, **bossa**, **dub**, **jangle**, **jingle**, **addis**, **yacht**,
-> **roadhouse** (see
+> **roadhouse**, **satie** (see
 > [`radio-voices.md`](radio-voices.md) for why we started with italo). Grow one station
 > at a time. When a new station reuses a recipe already named here, add it to that
 > preset's **used by** line rather than minting a duplicate.
@@ -559,6 +559,22 @@ each chuck its "scratch" attack.
 - tier: unique
 - origin: citypop
 - used by: citypop (`I_GTR`)
+
+### tri/felt-piano
+A soft felt piano on `INSTR_TRI` (no modeled `INSTR_PIANO`), the cut-env giving "hammer
+softness." satie's *only* instrument — solo piano, two hands at different register/tunings:
+
+| hand | recipe |
+|---|---|
+| right (`I_PNO`)  | TRI A1 D700 S1 R500 · LP 2400/1 · cut-env →600 (0/200) — melody + chords |
+| left (`I_PNOB`)  | TRI A2 D1100 S1 R700 · LP 1300/1 — longer, rounder |
+
+- tier: unique
+- origin: satie
+- used by: satie (`I_PNO` · `I_PNOB`)
+- kin: the **fake-piano-on-TRI** cluster — cocktail's `tri/felt-grand` + `sine/closed-lid-piano`
+  do the same thing (no charted station uses the modeled `INSTR_PIANO`; they all fake it). satie's
+  is the most sustained, voiced for held gymnopédies.
 
 ### tri/felt-grand
 `INSTR_TRI` · A2 D600 S2 R240 · cut-env →700 (0/70)
