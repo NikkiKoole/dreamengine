@@ -12,6 +12,10 @@
 - **Web**: a faint continuous wobble *plus* an **occasional** slip/stumble — the
   groove jumps and resettles. Tempo is right *on average* (no permanent speedup), so
   it's a **placement** problem, not a tempo problem.
+- **Web on mobile (2026-06-10, `drift` on an iPhone):** even the **TRUTH** voice —
+  the sample-accurate `schedule_hit` reference that *cannot* jitter from scheduling —
+  is audibly wobbly. That rules scheduling out as the sole cause and indicts the
+  **audio output clock itself** (see suspect #3, now confirmed).
 
 ## How timing works today
 
@@ -87,19 +91,32 @@ frame to frame. Below most listeners' threshold for slow material; audible on fa
 rhythmic steps. This is the "drunk" baseline; native's steadier clock keeps it under
 the threshold.
 
-### 3. UNCONFIRMED: main-clock vs audio-playout-clock divergence
+### 3. CONFIRMED (web, worst on mobile): the audio output clock runs on the main thread
 
-The classic web-audio issue — the main-thread scheduling clock (`performance.now`)
-and WebAudio's output clock can run at slightly different rates, so scheduled offsets
-slowly creep. **Not verified in this codebase**, and it would present as *gradual*
-creep, not the intermittent slip described — so it's a lower suspect. Confirming needs
-an on-device recording (the `--wav` harness is native + deterministic only and can't
-reproduce web jitter).
+**This is the one that wobbles TRUTH**, and it's the deeper problem. The web build
+ships **no AudioWorklet and no worker threads** — verified: neither `build-site.js`
+nor the editor's `main.cjs` passes `-sAUDIO_WORKLET`/`-sWASM_WORKERS`, and there is no
+worklet/ScriptProcessor code anywhere in the tree. With those flags absent, emscripten
++ raylib's miniaudio fall back to a **`ScriptProcessorNode`, whose `onaudioprocess`
+runs on the main thread.**
 
-### Not the cause
+So `sound_callback` (`sound.h:3279`) — which both *generates* the samples and *counts
+down* `schedule_hit`'s `delay_samples` — is interleaved with rendering and GC on the
+single main thread. On mobile (weaker CPU, busy compositor) the callback fires late and
+in bursts, producing audio in catch-up chunks rather than a smooth stream. The **output
+clock is therefore unsteady**, and "sample-accurate" loses its meaning: a note booked N
+samples out lands whenever the main thread next services the audio node. That smears
+*every* voice, **including the schedule-ahead TRUTH** — which is exactly the
+on-device finding (symptom §3). The `frame_dt` clamp (suspect #1) is a layer above this
+and cannot help it.
 
-The 1024-sample stream buffer (`sound.h:3255`, ≈23 ms) adds mostly **constant
-latency**, not jitter — it's the latency topic (`product-notes.md`), not this one.
+### Contributing: the 1024-sample buffer is small for a main-thread audio clock
+
+The 1024-sample stream buffer (`sound.h:3277`, ≈23 ms) is fine when a dedicated audio
+thread refills it on time. But when the refill happens on a contended **main** thread
+(suspect #3), 23 ms is a thin cushion — a render frame longer than that starves it.
+The buffer size isn't web-conditional. (On a steady clock it would be a pure *latency*
+contributor — the `product-notes.md` topic — not jitter.)
 
 ## Fixes (ranked)
 
@@ -119,6 +136,26 @@ latency**, not jitter — it's the latency topic (`product-notes.md`), not this 
 4. **Fix the bool** (cheap, complements #1/#2): make `beat_just_advanced` carry *how
    many* beats advanced (or have `every()` fire per crossed beat) so a multi-beat jump
    doesn't silently drop the in-between beats.
+
+### Fixes for suspect #3 (the TRUTH-wobble — the deeper one)
+
+5. **Cheap, reversible — bigger web audio buffer.** Raise
+   `SetAudioStreamBufferSizeDefault` (`sound.h:3277`) from 1024 to 2048/4096 **on web
+   only**. A deeper buffer rides over main-thread stalls (fewer underruns → steadier
+   output clock), trading latency (~46/93 ms) for steadiness. For a non-interactive
+   sequencer that's a pure win; for a live touch instrument it's a latency cost. The
+   fastest thing to A/B on a phone — does TRUTH steady up? Run the soundcheck tripwire
+   after (CLAUDE.md: any `sound.h` change).
+6. **Less main-thread load** ([`frame-pacing.md`](frame-pacing.md)): reactive rendering
+   / an `fps` cap frees main-thread time for the audio callback, so it starves less.
+   Synergistic with #5 — fewer render frames competing with the ScriptProcessor.
+7. **The real fix — AudioWorklet.** Build web audio on an `AudioWorklet`
+   (`-sAUDIO_WORKLET=1 -sWASM_WORKERS=1` + a miniaudio/raylib that targets the
+   emscripten worklet), so the callback runs on a **dedicated audio thread** with a
+   steady clock, decoupled from rendering. This is what actually makes TRUTH tight on
+   mobile. Caveat: depends on the vendored raylib/miniaudio version supporting
+   emscripten audio worklets — **needs a feasibility check** (raylib bump or a custom
+   audio backend) before it's a promise, not a one-liner.
 
 ## Verification plan
 

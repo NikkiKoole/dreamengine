@@ -3274,7 +3274,16 @@ static void sound_init(void) {
     sound_load_demo_data();
 
     if (!sound_synth_mode) {       // --wav: no device stream; the main thread pumps
+        // On web there is no AudioWorklet (build ships no -sAUDIO_WORKLET), so the
+        // audio callback runs on the MAIN thread via ScriptProcessorNode — it starves
+        // and the output clock wobbles whenever the main thread is busy (worst on
+        // mobile). A deeper buffer rides over those stalls (steadier clock) at the cost
+        // of latency. Native keeps the tight 1024. See design/audio-timing.md suspect #3.
+#ifdef PLATFORM_WEB
+        SetAudioStreamBufferSizeDefault(4096);
+#else
         SetAudioStreamBufferSizeDefault(1024);
+#endif
         sound_stream = LoadAudioStream(SOUND_SAMPLE_RATE, 32, 2);   // stereo (centered until pan API; stereo.md)
         SetAudioStreamCallback(sound_stream, sound_callback);
         PlayAudioStream(sound_stream);
