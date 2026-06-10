@@ -463,7 +463,7 @@ typedef enum {
     SR_VOICE_PARAM  = 32,   // EXPERIMENTAL INSTR_VOICE raw-param poke (voxlab): a=idx, b=val*1000
     SR_VOICE_CONS   = 33,   // EXPERIMENTAL INSTR_VOICE consonant onset (voxlab): a=consonant id (VC_*), -1 = none
     SR_VOICE_CODA   = 34,   // EXPERIMENTAL INSTR_VOICE consonant coda (voxlab): a=consonant id (VC_*), -1 = none
-    SR_VOICE_NASAL  = 35,   // INSTR_VOICE nasal color (public voice_nasal): a=amount*1000 → vox_p[7]
+    SR_VOICE_NASAL  = 39,   // INSTR_VOICE nasal color (public voice_nasal): a=amount*1000 → vox_p[7] (35-38 = the pan block)
     SR_INSTR_PAN    = 35,   // a=slot, b=pan*1000 (signed) — per-instrument stereo position (stereo.md)
     SR_NOTE_PAN     = 36,   // a=pan*1000 (signed, live/slewed), e0/e1=handle — live pan on a held note
     SR_ENG_TUNE     = 37,   // EXPERIMENTAL guitar/piano tuning poke: a=slot, b=idx (0 weight·1 attack), c=val*1000
