@@ -282,7 +282,6 @@ static int   wheelPD[MAXWP];                   // 1 = a drive wheel
 static float wheelG[MAXWP];                    // lateral grip coefficient (wheel 1.0, caster 0.12)
 static float wheelLoad[MAXWP];                 // solved vertical load (mass units; Σ ≈ M)
 static int   nWheelP;
-static int   use_wheel_model = 0;              // §8 phase 2: per-wheel force loop (toggle M); 0 = old 2-axle core
 
 // ── tuning ───────────────────────────────────────────────────────────────────
 // ENGINE_POWER is the GAS baseline (the everyday engine); the other kinds scale off it
@@ -943,7 +942,6 @@ static void handle_input(void) {
     // ---- DRIVE input: keyboard OR the on-screen cockpit (touch + mouse) ----
     if (keyp('R')) reset_vehicle();
     if (keyp('P')) is_paused = !is_paused;
-    if (keyp('M')) use_wheel_model = !use_wheel_model;   // §8: A/B the per-wheel force model vs the 2-axle core
     if (keyp('I') || ctl_hit(BTN_X, IGN_Y, BTN_W, BTN_H)) do_ignition();   // IGN button
     if (keyp('G') || ctl_hit(BTN_X, TRN_Y, BTN_W, BTN_H)) do_trans();      // TRANS button
     if (ctl_hit(BTN_X, BLD_Y, BTN_W, BTN_H)) mode = MODE_BUILD;            // BUILD button
@@ -1175,8 +1173,8 @@ static void update_drive(float dt_) {
     wt_long = lerp(wt_long, aLong, WT_LAG);
     wt_xfer = clamp(wt_long * WT_LONG_K, -WT_MAX, WT_MAX);   // + = rear loads, - = front loads
     solve_wheel_loads(wt_long, aLat);                // §8: per-wheel vertical loads for THIS frame
-    if (use_wheel_model && nWheelP >= 3) {
-        // ── §8 PHASE 2: per-wheel lateral force resolution ───────────────────────
+    if (nHull >= 3) {
+        // ── §8: per-wheel lateral force resolution — THE lateral core ────────────
         // Each wheel resists the lateral slip AT ITS POSITION, capped by a friction circle sized
         // by ITS OWN load (from the spring solve — so longitudinal + lateral transfer AND static
         // cargo all bias grip per wheel). A lifted wheel (load→0) makes ~no grip = tipping, emergent
@@ -1206,31 +1204,7 @@ static void update_drive(float dt_) {
         slide_rear = (satR >= satF);
         float sat = (satR > satF) ? satR : satF;
         slide_amt = clamp(sat / (SLIP_MAX + 1.0f), 0, 1);
-    } else if (twoAxle) {
-        float wRad = angVel * DEG2RAD;
-        float vlF = vl + wRad * aF;                  // lateral slip velocity at the front axle
-        float vlR = vl + wRad * aR;                  // ... and the rear
-        float frontLoad = clamp(1.0f - wt_xfer, WT_FLOOR, WT_CEIL);
-        float rearLoad  = clamp(1.0f + wt_xfer, WT_FLOOR, WT_CEIL);
-        // friction circle: each axle holds slip only up to its limit (SLIP_MAX), then LETS GO.
-        // The DRIVEN axle's limit shrinks with the power it lays down (the drive force eats its
-        // sideways budget): rear-drive → rear breaks loose under power = oversteer; front-drive →
-        // front washes out under power = understeer. The handbrake cuts the REAR only (tail out).
-        float capF = SLIP_MAX * tipMul * frontLoad * (1.0f - POWER_EAT * (1.0f - rearDriveFrac) * throttle);
-        float capR = SLIP_MAX * tipMul * rearLoad  * (in_hand ? DRIFT_GRIP_MULT : 1.0f)
-                                       * (1.0f - POWER_EAT * rearDriveFrac * throttle);
-        float clF = clamp(vlF, -capF, capF);         // slip the tyre actually converts to grip
-        float clR = clamp(vlR, -capR, capR);
-        float accF = clF * (frontGrip * GROUND_GRIP / M) * LAT_GRIP;   // capped corrective accel
-        float accR = clR * (rearGrip  * GROUND_GRIP / M) * LAT_GRIP;
-        vl     -= (accF + accR) * dt_;                                 // net lateral correction
-        angVel -= (accF * aF + accR * aR) * (M / I) * GRIP_YAW_K / DEG2RAD * dt_;  // the yaw couple
-        // how far past the limit each axle is → spin-out feedback (rear over = oversteer/spin)
-        float satF = af(vlF) - capF, satR = af(vlR) - capR;
-        slide_rear = (satR >= satF);
-        float sat = (satR > satF) ? satR : satF;
-        slide_amt = clamp(sat / (SLIP_MAX + 1.0f), 0, 1);
-    } else {                                          // single-track / fallback: old whole-body bleed
+    } else {                                          // single-track (bike): whole-body grip bleed
         float lat_mult = (in_hand ? DRIFT_GRIP_MULT : 1.0f) * tipMul;
         float grip = clamp((wheelGrip * GROUND_GRIP / M) * LAT_GRIP * lat_mult, 0, 1.0f / dt_);
         vl -= vl * grip * dt_;
@@ -1454,7 +1428,6 @@ void update(void) {
         watch("loadF", "%.1f", lF);    watch("loadR", "%.1f", lR);
         watch("loadRt", "%.1f", lRight); watch("loadLf", "%.1f", lLeft);
     }
-    watch("wmodel", "%d", use_wheel_model);
 #endif
 }
 
@@ -1682,7 +1655,6 @@ static void hud(void) {
     // --- top of screen: rig identity (dim) + the zone's limit (a road sign) ----
     print(DES_NAME[cur_des], 4, 4, CLR_DARK_GREY);
     print(ENG[eng_kind].name, 4, 12, ENG[eng_kind].col);   // the rig's engine kind (§1a)
-    if (use_wheel_model) print("WHEEL-MODEL \x07M", 4, 20, CLR_LIME_GREEN);   // §8 per-wheel core active
     print_centered(ZONE_NAME[cur_zone], SCREEN_W / 2, 4, CLR_YELLOW);
     if (nDrag > 0) {                         // scrape heat — shown only while it bites
         print("SCRAPE", SCREEN_W - 52, 4, hot_col());

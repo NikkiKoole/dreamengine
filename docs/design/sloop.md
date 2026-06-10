@@ -582,7 +582,7 @@ off-centre torque. sloop already goes beyond it on those (our `I` and `eng_torqu
 | **Dynamic weight transfer (longitudinal)** | the realized longitudinal accel shifts load front↔rear (low-passed like suspension), scaling each axle's grip cap: braking loads the front (turn-in, lift-off rotation), throttle loads the rear (squat, traction, the power-drift bite). The *dynamic* half of weight (static distribution → COM/I already exists) | drifts | ✅ |
 | **Self-aligning torque (caster / trail)** | the front tyres rotate the rig toward its travel direction when sliding — the car counter-steers itself. Catches a slide into a held angle instead of a spin, and assists digital counter-steer. ∝ `sin(slip)`, capped (past ~55° it's spinning, let it). The thing that makes a drift HOLD | drifts | ✅ |
 | **Ramped (analog) steering** | binary keys (−1/0/+1) wind a smoothed `steer_pos` toward full lock while held and ease back on release; a quick opposite tap trims the lock off a notch → fine counter-steer from digital/touch input. Without it a realistic drift is unholdable on a phone | drifts | ✅ |
-| **Per-wheel spring contact (the unified core)** | every wheel its own contact patch with a vertical LOAD from a spring solve (heave+pitch+roll, determinate for any N wheels); grip/drive/brake scale from load. SUBSUMES per-axle grip, longitudinal+lateral transfer, tipping (load→0), FWD/RWD power-oversteer, and self-align into one mechanism. Replaces the 2-axle bicycle. See §8 | future (post-drifts, pairs with rung-4 breakage) | ⬜ |
+| **Per-wheel spring contact (the unified core)** | every wheel its own contact patch with a vertical LOAD from a spring solve (heave+pitch+roll, determinate for any N wheels); lateral grip scales from load. SUBSUMES per-axle grip, longitudinal+lateral transfer, and tipping (load→0) into one mechanism; replaced the 2-axle bicycle for ≥3-wheel rigs (single-track keeps its bleed). See §8. *(Per-wheel DRIVE/brake force — fully emergent power-oversteer — is the remaining optional refinement.)* | drifts/§8 | ✅ |
 | **Aquaplaning / terrain grip** | `GROUND_GRIP` drops toward ~0 on water/ice/wet → the rig floats, steering does nothing; cross a puddle mid-corner → instant slide. Rides on the existing `GROUND_GRIP` hook (=1.0 road today), set per-biome | 3 (biomes) | ⬜ |
 | **Dynamic stability / tipping** | cornering load shifts the COM toward the turn's outside; leaving the support polygon (hull of the wheels) tips the rig → transient scrape + lateral grip collapse. A 3-wheeler tips toward its gap but not the other way (asymmetric); single-track (bike) exempt. The 2-D stand-in for roll | 2.55 | ✅ |
 | **Drivetrain location (FWD/RWD)** | power lays down through the *drive wheels*; drive point ahead of the COM (in travel) pulls → stable/understeer, behind pushes → loose/spin. Reversing flips it → a rear-wheel bike drives better backwards. Explicit `drive` part | 2.6 | ✅ |
@@ -1523,3 +1523,27 @@ the tuned 2-axle core stays intact and both run in one binary for A/B.
 **Next — Phase 3 (after the feel pass):** per-wheel drive/brake (power-oversteer + traction loss fully
 emergent), retire the now-redundant bolt-ons (`POWER_EAT`, the tipping `tipMul`/hull check, maybe the
 `SELF_ALIGN` aid), flip the default, delete the old 2-axle branch.
+
+### Per-wheel model — Phase 3: consolidated, per-wheel is THE core (2026-06-10)
+
+Felt good on desktop, so the migration completed: **the per-wheel model is now the unconditional
+lateral core for ≥3-wheel rigs** (single-track bikes keep their whole-body bleed). The toggle (`M`),
+the green tag, the `wmodel` watch and **the entire old 2-axle force branch are deleted** — the lateral
+block is now just `if (nHull >= 3) { per-wheel } else { single-track }`.
+
+- ✓ **Re-verified unconditionally** (no toggle): drift holds **~39°** then trails out (38.9→36→18.8,
+  speed up), buggy turn **78°/s**, power-over **−60°**, motorbike drives on the single-track path
+  (`2axle=0`, 84°/s) — all matching the validated toggle-on numbers. `recompute_body` left intact
+  (its `frontGrip`/`aF`/… still feed the BUILD readout, trace, and the `ANG_DAMP_AXLE` choice).
+- **Kept, not retired:** `POWER_EAT` (now a per-wheel cap term — power-oversteer), the `SELF_ALIGN`
+  aid (digital-input counter-steer help), and `tipMul` (single-track path only). They're not dead.
+- **Deferred (optional refinement, NOT done):** moving **drive/brake force per-wheel** (combined-slip
+  circle) so power-oversteer + traction-loss are *fully* emergent and `POWER_EAT` can retire. Flagged
+  optional because it touches the **longitudinal core** (top speed / accel / gears all key off the
+  lumped `thrust` today) → broad blast radius; the current `POWER_EAT` power-oversteer already feels
+  right. Pick it up only if we want a light drive wheel to literally spin up / lose traction.
+
+**Net:** §8's headline collapse landed — weight transfer (long + lat), tipping, and per-axle grip are
+now ONE mechanism (the spring loads), and it also makes **cargo placement bias grip per wheel** for
+free. The per-wheel load model is the natural substrate for **rung-4 breakage** (lose a wheel → loads
+redistribute on their own).
