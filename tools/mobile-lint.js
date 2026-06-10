@@ -21,7 +21,10 @@
 //   right/middle   MOUSE_RIGHT / MOUSE_MIDDLE reads — no second button on a touch screen
 //   touch>5        literal touch index ≥ 5 — iOS Safari caps at ~5 simultaneous touches
 //   tiny-target    tap()/tapp() with a literal w or h < 16 canvas px (44pt Apple HIG floor
-//                  ≈ 15–17 canvas px on a 320-wide cart fullscreen on an iPhone)
+//                  ≈ 15–17 canvas px on a 320-wide cart fullscreen on an iPhone).
+//                  FIXES: a ui.h widget panel can add ui_loupe(1) — a drag-out
+//                  magnifier for fat fingers (docs/design/loupe-notes.md); swept
+//                  grids/keybeds want pinch-zoom (gestures.h pinch_scale + camera_ex)
 //   keys-untapped  literal-arg key reads on a line with no tap/touch alternative —
 //                  the keycap-retrofit checklist for touch-capable carts. Grep-grade:
 //                  a key whose touch path lives in ANOTHER statement (a pointer-table
@@ -182,3 +185,9 @@ for (const v of ORDER) {
 }
 const counts = ORDER.map(v => [v, results.filter(r => r.verdict === v).length]).filter(([, n]) => n)
 console.log(`\n${results.length} carts: ` + counts.map(([v, n]) => `${n} ${v}`).join(', '))
+
+if (results.some(r => r.warnings.some(w => w.startsWith('tiny-target')))) {
+  console.log('\ntip: tiny-target carts — a ui.h widget panel can add ui_loupe(1), a drag-out')
+  console.log('     magnifier for fat fingers; swept grids/keybeds want pinch-zoom')
+  console.log('     (gestures.h pinch_scale + camera_ex). See docs/design/loupe-notes.md.')
+}

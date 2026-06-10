@@ -58,8 +58,12 @@ eventually2/
 │       │               #   capture, fat-finger hit pads, opt-in focus ring
 │       │               #   (mouse+touch+keyboard at once); carts with knobs/
 │       │               #   sliders/buttons include this, never hand-roll the
-│       │               #   drag machine (uikit + sfxgen are the references)
+│       │               #   drag machine (uikit + sfxgen are the references).
+│       │               #   ui_loupe(1) = one-line MAGNIFIER for tiny knobs/
+│       │               #   sliders on a phone (uiloupe; design/loupe-notes.md)
 │       ├── gestures.h  #   per-finger swipes judged at lift + pinch_scale
+│       │               #   (the mobile whole-view ZOOM for swept grids/keybeds:
+│       │               #   pinch_scale × camera_ex — modrack is the example)
 │       ├── improv.h    #   melodic improvisation for the radio stations (auto-solo)
 │       ├── radio.h     #   radio-station chrome (chassis, seeded-song plumbing,
 │       │               #   draggable rad_knob_int/_sel/_float control knobs)

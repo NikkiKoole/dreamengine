@@ -333,9 +333,9 @@ the include, and they never touch engine internals or the tcc symbol table.
 
 | Header | What it gives you | When to reach for it | Showcase carts |
 |---|---|---|---|
-| `ui.h` | cross-input widgets: `ui_button`/`ui_slider`/`ui_knob` + per-finger drag-capture, fat-finger hit pads, opt-in keyboard/gamepad focus ring | **editing a value** (slider/knob) or a **panel of mixed widgets** you want keyboard-navigable — don't hand-roll the drag-capture machine. NOT for plain hit-targets (next row) | `uikit`, `sfxgen` |
+| `ui.h` | cross-input widgets: `ui_button`/`ui_slider`/`ui_knob` + per-finger drag-capture, fat-finger hit pads, opt-in keyboard/gamepad focus ring, **`ui_loupe(1)` magnifier** (drag a corner handle → a 3× lens over the tiny widgets for fat-finger editing on a phone) | **editing a value** (slider/knob) or a **panel of mixed widgets** you want keyboard-navigable — don't hand-roll the drag-capture machine. **Small knobs/sliders cramped on a phone? `ui_loupe(1)` is one line** (see `uiloupe`, `docs/design/loupe-notes.md`). NOT for plain hit-targets (next row) | `uikit`, `sfxgen`, `uiloupe` |
 | `studio.h` `tapp()`/`tapr()` (not a header — the built-in) | "did a touch begin / end in this rect this frame" — edge-triggered, stateless, no capture | **discrete hit-targets on your own drawn surface**: toggle a grid cell, a preset chip, a transport button, a piano key | `mt70`, `drummachine`, `mallet` |
-| `gestures.h` | per-finger swipes judged at lift (`swiped`/`swiped_in`) + `pinch_scale` | touch games where fingers act independently (a swipe must survive other fingers drumming) | `touchlab` (test 9) |
+| `gestures.h` | per-finger swipes judged at lift (`swiped`/`swiped_in`) + **`pinch_scale()`** (two-finger pinch → per-frame zoom factor; feed `camera_ex`) | touch games where fingers act independently (a swipe must survive other fingers drumming); **`pinch_scale` is the mobile zoom for a dense grid/keybed you SWEEP** (vs `ui_loupe` for tiny widgets you precision-target) | `touchlab` (test 9), `modrack` (pinch-zoom) |
 | `improv.h` | melodic improvisation helpers — the *computer* solos | generative music carts that want an **auto**-soloist | `cocktail`, `roadhouse` |
 | `radio.h` | radio-station chrome: chassis draw blocks, seeded-song plumbing (PRNG/clock/voice-leading/input), draggable control knobs (`rad_knob_int`/`_sel`/`_float`) | building a new generative radio station | the radio carts, `tango`, `yacht` |
 | `solo.h` | the jam layer: a scale-locked solo strip the *player* drives (mono + glide, chord-tone highlight, per-station vertical expression `SOLO_Y_*`, octave shift, tap-to-toggle) on `ui.h` capture | letting a listener **play along** with a generative radio without playing wrong — pairs with `radio.h`. NOT for stations with no soloist (`ambient`, `satie`) | `bossa`, `citypop`, `dub`, `jangle`, `jingle` |
@@ -377,6 +377,16 @@ Rule of thumb: **value → `ui.h`; hit-target → `tapp()`; drag-across → the
 finger pool.** A standalone button is a `tapp()`; a button *inside a `ui.h`
 panel* (so it joins the focus ring) is a `ui_button`. The scope boundary lives
 in [`../design/ui-widgets-notes.md`](../design/ui-widgets-notes.md).
+
+**Cramped on a phone?** Two on-the-shelf aids, one per interaction style — don't
+shrink your layout, magnify the input instead:
+- **Precision-target small widgets** (knobs, narrow sliders you grab one at a
+  time): `ui_loupe(1)` — a draggable corner-handle lens that magnifies the `ui.h`
+  widgets 3× for fat-finger editing. One line. (`uiloupe`,
+  [`../design/loupe-notes.md`](../design/loupe-notes.md))
+- **Sweep a dense surface** (a step grid you drag-paint, a keybed you glissando):
+  whole-view zoom — `gestures.h` `pinch_scale()` × `camera_ex()`. A loupe shows
+  only a slice, so it's the wrong tool here. (`modrack` is the worked example.)
 
 ## House conventions for instrument carts
 

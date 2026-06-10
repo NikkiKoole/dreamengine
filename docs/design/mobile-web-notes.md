@@ -23,6 +23,16 @@ gallery). Findings are folded in below; touchlab's probe row in
   `tools/build-site.js` already passes `cfg.touchControls` from the `.cart.js`
   — **but no published cart sets it yet**, so every `btn()`-based game on the
   site is currently keyboard-only on a phone.
+- **Tiny-target aids (don't shrink the layout — magnify the input):**
+  - **`ui_loupe(1)`** (`ui.h`) — a draggable corner-handle 3× lens for
+    precision-hitting small knobs/sliders/buttons on a `ui.h` panel. One line;
+    shows the whole scene (built on the `zoom_rect` engine primitive). The fix
+    `mobile-lint`'s `tiny-target` warning points to. (`uiloupe`,
+    [`loupe-notes.md`](loupe-notes.md))
+  - **`pinch_scale()`** (`gestures.h`) × **`camera_ex()`** — two-finger
+    whole-view zoom, the right tool for a dense surface you *sweep* (drag-paint
+    grid, glissando keybed) where a lens-slice won't do. Shipped + working but
+    long under-used (only `modrack` wired it) — reach for it.
 - **Shell** (`runtime/web_shell.html`): aspect-preserving letterbox
   (`max-width/max-height`), `touch-action: none` + callout/zoom suppression,
   pointer capture for drag-release, rotate-your-phone hint (runtime-checked,

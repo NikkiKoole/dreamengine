@@ -38,6 +38,14 @@
 //                       (hold to accelerate), A activates a focused button.
 //                       Off by default so a cart's own d-pad gameplay is
 //                       never stolen.
+//   ui_loupe(1)       — opt-in MAGNIFIER for fat fingers on a phone: a corner
+//                       handle you drag to summon a 3x lens over the tiny
+//                       widgets; a 2nd finger edits the magnified copy, grab a
+//                       knob and drag out and it keeps turning. THE answer to
+//                       "my knobs/sliders are too small to hit on mobile". One
+//                       line; shows the whole scene (built on zoom_rect). Tune
+//                       with UI_LOUPE_ZOOM / _W / _H / _HANDLE. See
+//                       docs/design/loupe-notes.md.
 //
 // Feel: sliders are absolute (press sets the value at the press point —
 // sfxp style); knobs are relative (drag up/down from wherever you grabbed,
