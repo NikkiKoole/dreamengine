@@ -791,6 +791,35 @@ static float est_turn_rate(void) {                 // steady deg/s at speed
     float turnEase = REF_GYRO / (I / M + REF_GYRO);
     return STEER_RESP * turnEase * (1.0f - BALANCE_K * balance) / ANG_DAMP;
 }
+// estimated 0→100 km/h, by forward-integrating the launch like the drive core does: at each
+// speed take the best gear's geared+delivered thrust (capped by traction), minus drag and the
+// constant rolling-friction force (∝ mass) — F=ma stepped at 60 Hz. Returns seconds, or -1 if
+// the rig can't reach 100 (under-engined / overloaded: thrust never beats drag+roll). This is
+// the honest power-to-weight readout — it folds in mass, engines, gearing AND the torque curve.
+static float est_0_100(void) {
+    float target = 100.0f / KMH;                              // px/s for 100 km/h
+    float drag = DRAG_BASE + DRAG_WHEEL * nWheels + DRAG_AERO * frontalCells + SCRAPE_DRAG * nDrag;
+    float tract = driveRoll * GROUND_GRIP * GRIP_TO_FORCE;
+    float vref  = ENG[eng_kind].vref;
+    int   single = (ENG[eng_kind].deftrans == TR_SINGLE);
+    int   ng = single ? 1 : NGEAR;
+    float v = 0, t = 0, dt = 1.0f / 60.0f;
+    for (int step = 0; step < 1800; step++) {                 // cap at 30 s
+        float bestThrust = 0;
+        for (int g = 0; g < ng; g++) {                        // the box picks the gear that pulls hardest here
+            float ratio = single ? SINGLE_RATIO : GEAR_RATIO[g];
+            float rp = clamp(v * ratio / vref, 0, 1.1f);
+            float th = nEngines * ENG[eng_kind].power * delivery(eng_kind, rp, 1.0f) * ratio;
+            if (th > bestThrust) bestThrust = th;
+        }
+        if (tract > 0 && bestThrust > tract) bestThrust = tract;
+        float a = (bestThrust - drag * v) / M - ROLL_FRIC;    // net accel (F=ma, minus rolling friction)
+        if (a <= 0) return -1.0f;                             // can't pull any harder → never reaches 100
+        v += a * dt; t += dt;
+        if (v >= target) return t;
+    }
+    return -1.0f;
+}
 
 static void load_design(int idx) {
     cur_des = (idx + NDES) % NDES;
@@ -1888,6 +1917,17 @@ static void draw_build(void) {
     print("READOUT", rx, ry, CLR_LIGHT_GREY); ry += 11;
     snprintf(buf, sizeof buf, "MASS  %4.1f", M);             print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
     snprintf(buf, sizeof buf, "TOPSPD %3.0f km/h", est_top_speed() * KMH); print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
+    // 0-100: the honest power-to-weight readout — green = punchy, orange = sluggish, red = overloaded
+    // (can't reach 100; add an engine or drop weight). Tells you a gutless build BEFORE you drive it.
+    float zt = est_0_100();
+    if (zt < 0) { print("0-100  never", rx, ry, CLR_RED); }   // can't reach 100 — add an engine / drop weight
+    else {
+        int zc = zt < 7.0f ? CLR_GREEN : zt < 13.0f ? CLR_ORANGE : CLR_RED;
+        snprintf(buf, sizeof buf, "0-100  %.1fs", zt); print(buf, rx, ry, zc);
+    }
+    ry += 9;
+    snprintf(buf, sizeof buf, "PWR/WT %4.1f", (nEngines * ENG[eng_kind].power) / M);  // grunt per mass
+    print(buf, rx, ry, CLR_MEDIUM_GREY); ry += 9;
     snprintf(buf, sizeof buf, "TURN  %4.0f", est_turn_rate()); print(buf, rx, ry, CLR_LIGHT_GREY); ry += 9;
     snprintf(buf, sizeof buf, "ENG %d  WHL %d", nEngines, nWheels); print(buf, rx, ry, CLR_MEDIUM_GREY); ry += 11;
     // engine KIND (§1a) — cycle with K or this button. Sets power / mass / delivery curve,

@@ -1558,3 +1558,15 @@ straight. Gated above `DRIFT_TRIG` so **normal hard cornering doesn't loosen** (
 buggy turn `loose` stays 0.00; a real drift trails from 45°→29° at f220 vs 19° before, then settles).
 Rear-axle + ≥3-wheel only (single-track zeroes it). Knobs: `DRIFT_RECOVER` (how loose on exit),
 `DRIFT_DECAY` (how long the hang), `DRIFT_TRIG` (what counts as a breakaway) — all in `sloop.c`.
+
+### BUILD readouts: 0-100 + power-to-weight (2026-06-10)
+
+"Many of my vehicles don't go hard enough" → the model was fine (torque = `delivery(rpm)` curve ×
+gear ratio, then F=ma); the gap was **you couldn't SEE power-to-weight in BUILD** — an overloaded
+rig looked fine and only felt gutless once driven. Added **`est_0_100()`** (forward-integrates the
+launch like `est_top_speed()` — best-gear thrust − drag − rolling-friction, F=ma at 60 Hz; returns
+−1 if it can't reach 100) and two readout lines: **`0-100  X.Xs`** (green <7s / orange <13s / red
+"never" = overloaded, add an engine / drop weight) and **`PWR/WT`** (engines·power ÷ mass). Verified:
+stock buggy 5.3s green / PWR-WT 34.9; +4 cargo → red "never" / 13.3; +2 more engines → punchy again.
+Also the diagnostic for the *sense-of-speed* question: if a build reads fast here but feels slow to
+drive, it's a rendering/scale issue, not power.
