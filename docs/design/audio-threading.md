@@ -226,10 +226,16 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   production: own a single SW scope + caching so it never breaks. (The self-heal is what
   `runtime/web_shell_worklet.html` ships; the throwaway `site/coi-spike/*.html` spike pages
   that first carried it have been removed.)
-- **Stage 5 — wire the build flags** (`build-site.js` + the editor's build-web) and
-  rebuild the catalog; bigger artifacts (shared memory) are expected. Acceptance test:
-  `drift` is **straight** on desktop *and* phone when isolated, and still plays (at the
-  ceiling) when not.
+- **Stage 5 — wire the build flags + rollout ✅ (2026-06-10).** `build-site.js` auto-on by
+  kind (done); all **65 instrument/radio carts published** worklet-capable. Acceptance:
+  `drift`/`tb303`/`afrobeat` verified **straight** on-device, with the ScriptProcessor
+  fallback when not isolated. **Editor parity:** the editor's "Build for web" now also
+  dual-builds when settings → "audio (web)" → AudioWorklet is on (`main.cjs` + a
+  `worklet` setting), default off. *Untested in Electron from the build agent — smoke-test
+  the button before relying.* **Remaining:** the editor's `studio:publish` handler still
+  builds plain (its own emcc, separate from `build-site`) — give it the same dual-build
+  (gate on the cart's `kind`), or route its compile through `build-site.js`. Low impact
+  (publish-cart.sh/`build-site` is the primary, correct path; editor-publish is opt-in).
 
 Risks to watch: Stage 0 (graphics+threads coexistence); artifact-size/rebuild-time bump;
 iOS Safari worklet quirks + the audio-unlock gesture; and keeping the ScriptProcessor

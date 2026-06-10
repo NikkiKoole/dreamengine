@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal' }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal' }
 
 // ── key bindings ──────────────────────────────────────────────
 // Values are raylib (GLFW) keycodes — letters/digits are ASCII, specials match
@@ -81,6 +81,7 @@ function load() {
     cellW:         parseInt(localStorage.getItem('cellW')   || DEFAULTS.cellW),
     cellH:         parseInt(localStorage.getItem('cellH')   || DEFAULTS.cellH),
     touchControls: localStorage.getItem('touchControls') === '1',
+    worklet:       localStorage.getItem('worklet') === '1',
     showProfiler:  localStorage.getItem('showProfiler') === '1',
     showPublish:   localStorage.getItem('showPublish') === '1',
     welcomeCart:   localStorage.getItem('welcomeCart') || 'zoo',
@@ -247,6 +248,16 @@ export function buildSettingsPanel(el) {
   ))
   touchSection.appendChild(note('floating stick on the left, A/B on the right. carts can override with touch_controls(true/false).'))
   el.appendChild(touchSection)
+
+  // ── audio (web) ──────────────────────────────────────────────
+  const audioSection = section('audio (web)')
+  audioSection.appendChild(checkbox(
+    'AudioWorklet backend (build for web / publish)',
+    settings.worklet,
+    v => { settings.worklet = v; save('worklet', v ? '1' : '0') },
+  ))
+  audioSection.appendChild(note('dedicated-thread, sample-tight web audio (vs the main-thread ScriptProcessor). Ships a worklet build + a fallback + auto-pick loader, like instrument carts get automatically via build-site. Needs a cross-origin-isolated host to activate; falls back otherwise.'))
+  el.appendChild(audioSection)
 
   // ── startup ──────────────────────────────────────────────────
   const startupSection = section('startup')

@@ -895,27 +895,41 @@ ipcMain.handle('studio:build-web', async (_event, code, cfg) => {
     '-s USE_GLFW=3',
     '-s TOTAL_MEMORY=67108864',
     '-s EXPORTED_RUNTIME_METHODS=ccall,HEAPF32',
-    `--shell-file "${shellHtml}"`,
-    `-o "${CART_HTML}"`,
-  ]
+  ]   // baseArgs — the shell/output tail is appended per build below
 
-  const cmd = `emcc ${args.join(' ')}`
-  log('running emcc… (this takes ~10s)\n')
+  // AudioWorklet backend (settings → "audio (web)"): mirror build-site — ship BOTH a
+  // worklet build and a ScriptProcessor fallback + the auto-pick loader + coi. Default
+  // OFF, so the normal preview path is unchanged. See design/audio-threading.md.
+  const wantWorklet = !!cfg?.worklet
+  const workletFlags = [
+    '-DDE_AUDIO_WORKLET', '-s AUDIO_WORKLET=1', '-s WASM_WORKERS=1',
+    `--js-library "${path.join(RUNTIME_DIR, 'audio-worklet-stub.js')}"`,
+  ].join(' ')
+  const runEmcc = (extra) => new Promise((res, rej) =>
+    exec(`emcc ${args.join(' ')} ${extra}`, { timeout: 120000 },
+      (e, _o, se) => e ? rej(new Error((se || '').trim() || e.message)) : res()))
 
-  return new Promise(resolve => {
-    exec(cmd, { timeout: 120000 }, async (err, _stdout, stderr) => {
-      if (err) {
-        log(stderr.trim() || err.message)
-        return resolve({ ok: false, cmd, output: stderr.trim() || err.message })
-      }
-      const url = await startWebServer()
-      shell.openExternal(url)
-      log(`✓ done — opening ${url}\n`)
-      const lan = lanAddress()
-      if (lan) log(`  on your iPad/phone (same wifi): http://${lan}:${WEB_PORT}/cart.html\n`)
-      resolve({ ok: true, cmd, url, output: null })
-    })
-  })
+  log(wantWorklet ? 'running emcc (worklet + fallback)…\n' : 'running emcc… (this takes ~10s)\n')
+  try {
+    if (wantWorklet) {
+      await runEmcc(`-o "${path.join(BUILD_DIR, 'plain.js')}"`)                         // ScriptProcessor fallback
+      await runEmcc(`${workletFlags} -o "${path.join(BUILD_DIR, 'worklet.js')}"`)        // AudioWorklet (shared memory)
+      fs.copyFileSync(path.join(RUNTIME_DIR, 'web_shell_worklet.html'), CART_HTML)       // loader + coi + self-heal
+      fs.copyFileSync(path.join(RUNTIME_DIR, 'coi-serviceworker.js'), path.join(BUILD_DIR, 'coi-serviceworker.js'))
+      for (const f of ['index.js', 'index.wasm']) { const p = path.join(BUILD_DIR, f); if (fs.existsSync(p)) fs.unlinkSync(p) }
+    } else {
+      await runEmcc(`--shell-file "${shellHtml}" -o "${CART_HTML}"`)
+    }
+  } catch (e) {
+    log(String(e.message).trim())
+    return { ok: false, output: String(e.message).trim() }
+  }
+  const url = await startWebServer()
+  shell.openExternal(url)
+  log(`✓ done — opening ${url}${wantWorklet ? '  (worklet build — activates on a cross-origin-isolated host, else falls back)' : ''}\n`)
+  const lan = lanAddress()
+  if (lan) log(`  on your iPad/phone (same wifi): http://${lan}:${WEB_PORT}/cart.html\n`)
+  return { ok: true, url, output: null }
 })
 
 // open a URL in the system browser (rlog's clickable links)
