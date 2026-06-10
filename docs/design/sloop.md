@@ -1466,3 +1466,13 @@ steer responsiveness), and `WT_LONG_K` (how much brake/throttle shifts grip). Al
 top of `sloop.c` with tuning notes. Lateral (left↔right) weight transfer is still the *tipping*
 approximation — a true 4-contact model is the bigger future step if the outside-wheel-digs-in
 detail is wanted.
+
+### A basic cargo block (2026-06-10)
+
+A simple **`P_CARGO`** part — heavy dead weight (mass 8, ~2× an engine; no engine/wheel function),
+a brown crate in the BUILD palette (hotkey `O`). Shipped early (the full storage/scavenging `cargo`
+of §5 comes later) to make the **static weight-distribution** lever tangible: mount it fore vs aft
+and the COM / `balance` / `I` / per-axle load all shift. Verified headless — the same block reads
+**balance −0.25 (oversteer) at the rear vs +0.33 (understeer) at the front** of the buggy. It's also
+the intended heavy-payload **test fixture for the §8 per-wheel spring model**. Palette spacing
+tightened (20→18 px) so 8 buttons fit above the hint line.

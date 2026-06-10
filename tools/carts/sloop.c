@@ -90,7 +90,7 @@
 // ── part vocabulary ──────────────────────────────────────────────────────────
 // Addressed by enum, never raw index (CLAUDE.md data-driven rule). Each kind:
 // mass, engine power, wheel grip, colour.
-enum { P_NONE, P_FRAME, P_ENGINE, P_WHEEL, P_CASTER, P_SEAT, P_DRIVE, P_KINDS };
+enum { P_NONE, P_FRAME, P_ENGINE, P_WHEEL, P_CASTER, P_SEAT, P_DRIVE, P_CARGO, P_KINDS };
 // grip = lateral (nose-tracking) grip; roll = rolling support (traction + can-move).
 // A fixed WHEEL has both; a CASTER rolls (support) but barely grips sideways — it
 // swivels, so the rig slides any way and won't track its nose (the piano-dolly feel).
@@ -865,6 +865,7 @@ static void handle_input(void) {
         if (keyp('D')) sel_part = P_DRIVE;     // powered (driven) wheel
         if (keyp('C')) sel_part = P_CASTER;
         if (keyp('S')) sel_part = P_SEAT;
+        if (keyp('O')) sel_part = P_CARGO;     // heavy crate (dead weight)
         if (keyp('X')) sel_part = P_NONE;      // eraser
         return;
     }
@@ -1701,13 +1702,13 @@ static void draw_build(void) {
     if (ui_button(6, 6, 60, 18, "\x10 drive")) { mode = MODE_DRIVE; reset_vehicle(); }
 
     // --- part palette (left) ---------------------------------------------------
-    static const int PAL[] = { P_FRAME, P_ENGINE, P_WHEEL, P_DRIVE, P_CASTER, P_SEAT, P_NONE };
-    static const char *PAL_LBL[] = { "frame", "engine", "wheel", "drive", "caster", "seat", "erase" };
+    static const int PAL[] = { P_FRAME, P_ENGINE, P_WHEEL, P_DRIVE, P_CASTER, P_SEAT, P_CARGO, P_NONE };
+    static const char *PAL_LBL[] = { "frame", "engine", "wheel", "drive", "caster", "seat", "cargo", "erase" };
     print("PARTS", 6, 28, CLR_LIGHT_GREY);
-    for (int i = 0; i < 7; i++) {
-        int by = 38 + i * 20;
-        if (ui_button(6, by, 60, 17, PAL_LBL[i])) sel_part = PAL[i];
-        if (PAL[i] == sel_part) rect(5, by - 1, 62, 19, CLR_WHITE);     // selection ring
+    for (int i = 0; i < 8; i++) {                  // spacing tightened to 18 so 8 fit above the hint
+        int by = 38 + i * 18;
+        if (ui_button(6, by, 60, 16, PAL_LBL[i])) sel_part = PAL[i];
+        if (PAL[i] == sel_part) rect(5, by - 1, 62, 18, CLR_WHITE);     // selection ring
         if (PAL[i] != P_NONE) rectfill(56, by + 4, 8, 8, part_col(PAL[i]));  // colour chip
         if (PAL[i] == P_DRIVE) pset(60, by + 7, CLR_ORANGE);            // powered-hub mark
     }
@@ -1837,6 +1838,10 @@ void init(void) {
     KIND[P_CASTER] = (PartKind){ 1.5f, 0,            0.12f,1.0f, 0,    CLR_DARK_GREY,   "caster" };
     KIND[P_SEAT]   = (PartKind){ 1.2f, 0,            0,    0,    0,    CLR_BLUE,        "seat" };
     KIND[P_DRIVE]  = (PartKind){ 1.6f, 0,            1.0f, 1.0f, 1.0f, CLR_BLACK,       "drive" };
+    // a heavy dead-weight crate — no engine/wheel function, it's just MASS. Mount it fore vs
+    // aft to feel the static weight-distribution lever (COM / balance / I / per-axle load all
+    // shift) — and it's the ideal heavy payload to validate the §8 per-wheel model against.
+    KIND[P_CARGO]  = (PartKind){ 8.0f, 0,            0,    0,    0,    CLR_BROWN,       "cargo" };
 
     // ╔══ ENGINE TUNING — START HERE ════════════════════════════════════════════════════════╗
     // Each engine kind is ONE row below. To tune the feel, edit the row — three dials:
