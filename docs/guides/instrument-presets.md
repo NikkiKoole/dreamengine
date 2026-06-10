@@ -12,7 +12,7 @@ This file gives each recipe a **clear name** so the per-station voice charts
 lines of `instrument_*` calls — and so shared recipes become visible on one page.
 
 > **Status: growing.** Charted so far: **italo**, **house**, **citypop**, **motorik**,
-> **cocktail**, **lowend**, **bossa** (see
+> **cocktail**, **lowend**, **bossa**, **dub** (see
 > [`radio-voices.md`](radio-voices.md) for why we started with italo). Grow one station
 > at a time. When a new station reuses a recipe already named here, add it to that
 > preset's **used by** line rather than minting a duplicate.
@@ -115,10 +115,11 @@ The "dewww" — a downward pitch-swept sine, the electronic Simmons tom of '80s 
 > **The synth-drum kit vs the 808 box.** Two drum lineages run through the dance/groove
 > stations. house + italo share a characterful *808-style box* (long bridged-T
 > `drum/french-house-kick`, SQUARE metal hats) — byte-identical, **shared**. citypop,
-> motorik **and lowend** instead each hand-build a *generic synth kit* (sine kick +
+> motorik, lowend **and dub** instead each hand-build a *generic synth kit* (sine kick +
 > band-passed-noise snare + HP-noise hat) — same recipes, re-tuned per cart, so they're
-> **variant** families below. At three stations and counting, this kit is the single
-> most-rebuilt thing in the radio family — and the strongest case for a shared helper.
+> **variant** families below. At **four stations and counting**, this kit is the single
+> most-rebuilt thing in the radio family — the strongest case for a shared helper (the bass,
+> below, is the runner-up).
 
 ### drum/synth-kick
 A short downward-pitch-swept sine — the generic four-on-the-floor synth thump (distinct
@@ -129,10 +130,11 @@ from house's long bridged-T boom).
 | citypop (`I_KICK`) | SINE A0 D80 S0 R30 · pitch-env →14 (0/40) — tight 80s pop |
 | motorik (`I_KICK`) | SINE A0 D100 S0 R40 · pitch-env →12 (0/50) — the motorik thud |
 | lowend (`I_KICK`)  | SINE A0 D95 S0 R35 · pitch-env →16 (0/50) — the boom-bap "boom" |
+| dub (`I_KICK`)     | SINE A0 D110 S0 R45 · pitch-env →12 (0/55) — soft, deep one-drop |
 
-- tier: **variant** (3 stations)
+- tier: **variant** (4 stations)
 - origin: undetermined (all hand-rolled; confirm against earlier stations)
-- used by: citypop (`I_KICK`) · motorik (`I_KICK`) · lowend (`I_KICK`)
+- used by: citypop (`I_KICK`) · motorik (`I_KICK`) · lowend (`I_KICK`) · dub (`I_KICK`)
 
 ### drum/noise-snare
 A band-passed noise burst — the synth backbeat.
@@ -155,10 +157,11 @@ A high-passed noise tick.
 | citypop (`I_HAT`) | NOISE A0 D16 **S2** R70 · HP 8000/2 — sustain>0 so the open hat *washes* |
 | motorik (`I_HAT`) | NOISE A0 D12 S0 R26 · HP 8200/2 — a tight straight-8th tick |
 | lowend (`I_HAT`)  | NOISE A0 D18 S0 R14 · HP 7500/3 — closed, lo-fi, sits back |
+| dub (`I_HAT`)     | NOISE A0 D14 **S2** R60 · HP 7500/2 — sustain>0, washes (like citypop) |
 
-- tier: **variant** (3 stations; citypop's wash vs the others' tight ticks is borderline cousin)
+- tier: **variant** (4 stations; the S2 "wash" cut — citypop, dub — vs the tight ticks — motorik, lowend)
 - origin: undetermined
-- used by: citypop (`I_HAT`) · motorik (`I_HAT`) · lowend (`I_HAT`)
+- used by: citypop (`I_HAT`) · motorik (`I_HAT`) · lowend (`I_HAT`) · dub (`I_HAT`)
 
 ### noise/vinyl-dust
 `INSTR_NOISE` · A0 D10 S0 R8 · HP 4000/2
@@ -177,12 +180,17 @@ The caxixi — a 16th-note shaker, high-passed noise with a soft attack.
 - kin: HP-noise like the `drum/noise-hat` family — but a shaker, not a hat.
 
 ### noise/cross-stick
-`INSTR_NOISE` · A0 D28 S0 R18 · BP 1800/9 · pitch-env →18 (0/20)
 A woody cross-stick / rim clave — tightly band-passed noise with a quick pitch blip for the
-"tok."
-- tier: unique
-- origin: bossa
-- used by: bossa (`I_RIM`)
+"tok." Two latin/reggae stations build it nearly identically:
+
+| cart (slot) | recipe |
+|---|---|
+| bossa (`I_RIM`) | NOISE A0 D28 S0 R18 · BP 1800/9 · pitch-env →18 (0/20) |
+| dub (`I_RIM`)   | NOISE A0 D30 S0 R25 · BP 1600/7 · pitch-env →16 (0/20) · echo send 0.25 |
+
+- tier: **variant**
+- origin: bossa (or earlier; confirm)
+- used by: bossa (`I_RIM`) · dub (`I_RIM`)
 
 ### kit/cocktail-brushes
 The jazz trio kit played with **brushes** — soft, swept, the sweep is a sustained circular
@@ -218,6 +226,13 @@ becomes a short **tap**. cocktail's drums on stick nights.
 - pair: rolls against `kit/cocktail-brushes`.
 
 ## Bass
+
+> **The bass is the second-most-rebuilt voice** (runner-up to the synth kit). Almost every
+> station hand-rolls its own — and they cluster by engine: a **TRI pile** (`tri/disco-bass`,
+> `tri/upright-bass`, `tri/fingered-bass`) and a **SINE pile** (`sine/gut-bass`,
+> `sine/boom-bap-bass`, `sine/riddim-bass`), each a fingered/round bass differing mainly by
+> the pitch-env "thumb/snap." Kept separate for now (each has a real feel), but this is the
+> pile most likely to earn a `merge-on-proof` cut next. Watching it.
 
 ### saw/italo-seq-bass
 `INSTR_SAW` · A1 D120 S5 R50 · LP 700/5 · cut-env →1400 (0/60) · drive 0.25
@@ -264,6 +279,16 @@ saturation (warmth, not fuzz). Front and centre, Ron-Carter-style.
   cocktail's a clean dark gut upright. If a cluster of near-identical uprights piles up
   later, collapse it *then* — on evidence, not on suspicion.
 
+### sine/riddim-bass
+`INSTR_SINE` · A3 D260 S5 R130 · LP 420·feel/1 · pitch-env →3 (0/30)
+The dub riddim — deep, round, full of rests; the deepest thing on the dial. *The bassline is
+the song.*
+- tier: unique
+- origin: dub
+- used by: dub (`I_BASS`)
+- kin: the SINE-bass pile (`sine/gut-bass`, `sine/boom-bap-bass`) — same engine + pitch-env
+  idea, reggae-deep voicing.
+
 ### sine/gut-bass
 `INSTR_SINE` · A4 D340 S5 R130 · LP 380/1 · pitch-env →2 (0/16)
 Darker, rounder "gut strings" upright — cocktail's walking bass on its mellower nights.
@@ -300,6 +325,36 @@ tremolo** and a cutoff "bark" on the attack. The wobbly electric-piano stabs of 
 - tier: unique
 - origin: lowend
 - used by: lowend (`I_RHODES`)
+- kin: shares the TRI + volume-LFO tremolo skeleton with dub's `tri/organ-bubble`.
+
+### tri/organ-bubble
+`INSTR_TRI` · A4 D70 S3 R50 · vol-LFO 6.5 Hz/0.12 (tremolo)
+A short, tremolo'd TRI stab — dub's "organ bubble," the bouncing offbeat keys.
+- tier: unique
+- origin: dub
+- used by: dub (`I_ORG`)
+- kin: same TRI + volume-LFO tremolo idea as lowend's `tri/tremolo-rhodes` (here short &
+  bubbly, there a sustained EP).
+
+### tri/skank-chop
+`INSTR_TRI` · A1 D90 S0 R50 · cut-env →800 (0/50, filtered upstroke) · echo send
+dub's offbeat skank — a choppy filtered TRI standing in for a guitar upstroke. One of two
+ways dub builds the skank (a code choice).
+- tier: unique
+- origin: dub
+- used by: dub (`I_SKANK`, guitar mode)
+- pair: alternates with `organ/reggae-chop`.
+
+### organ/reggae-chop
+`INSTR_ORGAN` · A1 D90 S0 R50 · h0.06 t0.55 m0.00 · echo send
+A real Hammond chop on the "reggae" registration — hollow and thin, no scanner motion (the
+chop *is* the rhythm). dub's other skank voice.
+- tier: unique
+- origin: **organ.c preset 0** (the "reggae" registration) — a showcase-cart borrow, like
+  `mallet/vibes` and `organ/combo-drone` (organ.c #1). Showcase carts are the de-facto
+  preset library.
+- used by: dub (`I_SKANK`, organ mode)
+- pair: alternates with `tri/skank-chop`.
 
 ### tri/funk-guitar
 `INSTR_TRI` · A0 D140 S1 R60 · cut-env →1200 (0/60) · *(filter follows feel)*
@@ -415,6 +470,25 @@ the slot can opt into `mallet/vibes` instead).
 - tier: unique
 - origin: lowend
 - used by: lowend (`I_LEAD`, default)
+
+### square/melodica
+`INSTR_SQUARE` · A12 D160 S5 R180 · duty 0.38 · pitch-LFO 5.0 Hz/0.18 · echo send 0.25
+A reedy melodica — PWM square with a reed wobble, always singing into the tape echo. dub's
+melodic voice. Its **solo stop** (`I_SOLO`, the solo.h jam melodica) is the same opened up:
+duty 0.40, LP 2200/2, more echo (0.30), a touch brighter.
+- tier: unique
+- origin: dub
+- used by: dub (`I_MELO` comp · `I_SOLO` solo stop)
+- kin: the PWM-square family — `square/da-funk-lead`, `square/glossy-lead`, `square/siren`
+  all share the SQUARE + duty + ~5 Hz pitch-LFO skeleton, voiced very differently.
+
+### square/siren
+`INSTR_SQUARE` · A5 D200 S4 R150 · duty 0.25 · LP 1800/4 · pitch-env →12 (0/220, long rise)
+The dub "meltdown toy" — a PWM square with a long pitch-env sweep, fired as an FX siren.
+- tier: unique
+- origin: dub
+- used by: dub (`I_SIREN`)
+- kin: PWM-square family (see `square/melodica`).
 
 ### sine/breathy-flute
 `INSTR_SINE` · A25 D120 S5 R140 · LP 2600/2 · pitch-LFO 5.2 Hz/0.18 (vibrato)

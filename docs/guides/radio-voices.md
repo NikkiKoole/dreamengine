@@ -215,12 +215,41 @@ per-song seed roll.
 
 ---
 
+## dub — Roots dub (King Tubby / Augustus Pablo)
+
+Solo layer: **`solo.h`** (a scale-locked melodica the player sings over the riddim, into the
+tape echo). The desk *is* the instrument — echo throws and live sends are performance.
+
+Two clusters meet here. dub borrows the **synth kit** (kick + washing hat) and shares the
+**cross-stick** with bossa — yet its melodic front (riddim bass, melodica, organ bubble,
+siren) is its own, and its skank can be a real **organ.c** preset.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_SKANK` | offbeat chop | `tri/skank-chop` · `organ/reggae-chop` *(code choice)* | TRI / ORGAN |
+| `I_BASS`  | the riddim (the song) | `sine/riddim-bass` (kin: SINE-bass pile) | SINE |
+| `I_MELO`  | melodica (echoed) | `square/melodica` | SQUARE |
+| `I_ORG`   | organ bubble | `tri/organ-bubble` (kin: `tri/tremolo-rhodes`) | TRI |
+| `I_KICK`  | soft one-drop kick | `drum/synth-kick` ⟳ (citypop · motorik · lowend) | SINE |
+| `I_RIM`   | cross-stick crack | `noise/cross-stick` ⟳ (bossa) | NOISE |
+| `I_HAT`   | washing hat | `drum/noise-hat` ⟳ (citypop · motorik · lowend) | NOISE |
+| `I_SIREN` | meltdown toy (FX) | `square/siren` | SQUARE |
+| `I_SOLO`  | jam melodica (solo.h) | `square/melodica` (solo stop) | SQUARE |
+
+**Borrowing at a glance:** dub is a *bridge* — not sealed like bossa, not a clone like the
+dance stations. It takes the synth kit (⟳ ×3) and the cross-stick (⟳ bossa), but its
+riddim bass, melodica, organ bubble and siren are dub-original (kin-linked to existing
+families, not copies). The skank can be a literal **organ.c** preset — the 2nd showcase-cart
+borrow after `mallet/vibes`/`organ/combo-drone`.
+
+---
+
 ## Stations not yet charted
 
-addis · carlos · dub · exotica · gamelan ·
+addis · carlos · exotica · gamelan ·
 jangle · jingle · roadhouse · satie · tango · ymo · yacht
 
 (20 stations total; all on `runtime/radio.h`. Charted: italo · house · citypop · motorik ·
-cocktail · lowend · bossa. The rest of the `solo.h` group — dub/jangle/jingle — is next up;
-the `improv.h` soloists roadhouse/addis and the acoustic stations (satie/tango/gamelan/
+cocktail · lowend · bossa · dub. The rest of the `solo.h` group — jangle/jingle — is next
+up; the `improv.h` soloists roadhouse/addis and the acoustic stations (satie/tango/gamelan/
 carlos) will likely add new families rather than reuse these.)
