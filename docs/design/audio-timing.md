@@ -110,13 +110,24 @@ samples out lands whenever the main thread next services the audio node. That sm
 on-device finding (symptom §3). The `frame_dt` clamp (suspect #1) is a layer above this
 and cannot help it.
 
-### Contributing: the 1024-sample buffer is small for a main-thread audio clock
+### Contributing: the buffer size IS the swing amplitude (confirmed on-device)
 
-The 1024-sample stream buffer (`sound.h:3277`, ≈23 ms) is fine when a dedicated audio
-thread refills it on time. But when the refill happens on a contended **main** thread
-(suspect #3), 23 ms is a thin cushion — a render frame longer than that starves it.
-The buffer size isn't web-conditional. (On a steady clock it would be a pure *latency*
-contributor — the `product-notes.md` topic — not jitter.)
+The request queue drains **once per callback, at the buffer boundary**
+(`sound_callback` step 1, `sound.h:2516`). Scheduled notes then fire sample-accurately
+*within* the buffer (`:2534`) — but their countdown **originates at that boundary**.
+So a `schedule_hit` note's timing origin snaps to the audio-buffer edge: the main
+thread pushes it at frame-time, the audio thread starts counting from the next buffer
+boundary, an error of 0…one-buffer per note. As the frame phase beats against the
+buffer phase that error sweeps periodically → **swing**, with amplitude ≈ **one
+buffer**. This hits *every* scheduled voice, TRUTH included.
+
+**Proven on-device (2026-06-10):** bumping the web buffer 1024→4096 made TRUTH *more*
+swingy, not less — at 138 bpm a 16th is 108 ms and a 4096 buffer is ~93 ms, so it ate
+almost a whole step. So buffer size is a **no-win dial** on the main-thread backend:
+smaller = tighter origin-snap but more underruns; bigger = fewer underruns but worse
+swing. The genuine fix decouples the audio clock from the buffer cadence → AudioWorklet
+(fix #7). (On a steady dedicated-thread clock the buffer is a pure *latency* knob — the
+`product-notes.md` topic — not a swing source.)
 
 ## Fixes (ranked)
 
@@ -139,13 +150,14 @@ contributor — the `product-notes.md` topic — not jitter.)
 
 ### Fixes for suspect #3 (the TRUTH-wobble — the deeper one)
 
-5. **Cheap, reversible — bigger web audio buffer.** Raise
-   `SetAudioStreamBufferSizeDefault` (`sound.h:3277`) from 1024 to 2048/4096 **on web
-   only**. A deeper buffer rides over main-thread stalls (fewer underruns → steadier
-   output clock), trading latency (~46/93 ms) for steadiness. For a non-interactive
-   sequencer that's a pure win; for a live touch instrument it's a latency cost. The
-   fastest thing to A/B on a phone — does TRUTH steady up? Run the soundcheck tripwire
-   after (CLAUDE.md: any `sound.h` change).
+5. **Cheap dial — SMALLER web audio buffer (not bigger).** The buffer length ≈ the
+   worst-case swing (above), so on web shrink `SetAudioStreamBufferSizeDefault` rather
+   than grow it: 1024→**512** (≈11.6 ms) tightens the origin-snap, at the cost of more
+   underrun risk on the contended main thread. Currently set to 512 on web (native
+   keeps 1024). This is a *trade*, not a cure — it caps the swing, it doesn't remove
+   the buffer-boundary origin. Run the soundcheck tripwire after (CLAUDE.md: any
+   `sound.h` change). The 4096 experiment that *worsened* it is what proved the
+   mechanism.
 6. **Less main-thread load** ([`frame-pacing.md`](frame-pacing.md)): reactive rendering
    / an `fps` cap frees main-thread time for the audio callback, so it starves less.
    Synergistic with #5 — fewer render frames competing with the ScriptProcessor.
