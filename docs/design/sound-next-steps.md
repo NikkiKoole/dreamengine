@@ -137,6 +137,15 @@ Two properties make this the right sequencing: the cart is the effect's **accept
 (you don't know the reverb works till you've played the cathedral through it), and each one
 **pays twice** (the leslie cart also hands roadhouse/yacht their organ).
 
+> **Demand witness — Afrobeat.** The blind-band brief for the Afrobeat station voted for
+> **six** of these boxes at once (wah, reverb, tape, chorus, leslie, drive) and surfaced
+> **compression** as a *missing* roster entry — the strongest single-station case for the bus
+> so far. The itemized wants → effect mapping (incl. the "organ isn't there without Leslie"
+> and "electric bass needs amp+comp" notes) is in
+> [`afrobeat-effects-wants.md`](afrobeat-effects-wants.md); `afrobeat.c` is a ready
+> acceptance test once the bus ships. **Possible new roster entry: compression / sidechain**
+> (dbx/1176 showcase) — not currently listed above; revisit if a second station votes for it.
+
 ## Free recipe wins (no engine work — layering techniques, pieces already exist)
 
 The cheapest realism upgrades on the whole list — no engine, no decision, just technique:
