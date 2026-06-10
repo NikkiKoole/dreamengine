@@ -124,7 +124,10 @@ static void apply_patch(void) {
     instrument_harmonics(I_BRASS, knob[0]);
     instrument_timbre(I_BRASS, knob[1]);
     instrument_morph(I_BRASS, knob[2]);
-    instrument_filter(I_BRASS, FILTER_LOW, mute_cut(), mute_res());   // the bell (mute) — note_cutoff/res sweep it live below
+    if (knob[5] < 0.03f)                                              // mute OPEN = NO filter at all (identical to the bare brass)
+        instrument_filter(I_BRASS, FILTER_OFF, 0, 0);
+    else                                                             // closing the bell — a swept resonant lowpass (note_cutoff/res sweep it live below)
+        instrument_filter(I_BRASS, FILTER_LOW, (int)mute_cut(), (int)mute_res());
 }
 
 // the SPACE swell rides TIMBRE (brassiness) — a horn blooming into the blatty fortissimo.
@@ -146,8 +149,13 @@ static void push_live(void) {
         note_timbre(h[i], t);
         note_morph(h[i], knob[2]);
         note_lfo(h[i], 0, LFO_PITCH, 5.5f, knob[4] * 0.4f);   // VIBRATO — independent of morph's growl
-        note_cutoff(h[i], mute_cut());                        // MUTE — the bell, swept live (drag it = wah)
-        note_res(h[i], mute_res());
+        if (knob[5] < 0.03f) {                                // MUTE — open = bell wide open, NO filter
+            note_filter(h[i], FILTER_OFF);
+        } else {                                              // closing the bell, swept live (drag it = wah)
+            note_filter(h[i], FILTER_LOW);
+            note_cutoff(h[i], (int)mute_cut());
+            note_res(h[i], (int)mute_res());
+        }
     }
 }
 
