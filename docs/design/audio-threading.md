@@ -176,9 +176,13 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   worklet **roll plays dead-even**, **CPU stays low** (so the lean stub is *never hit* —
   confirmed safe, no `-pthread` needed), and the page is isolated. **Graphics + a real
   audio thread coexist in one shared-memory build. Stage 0 fully retired.**
-- **Stage 1 — atomics-harden the SPSC queue** (`sound.h`): `volatile` head/tail →
-  C11 `atomic_int` with acquire/release. Platform-independent; benefits native too. Verify
-  with the soundcheck tripwire (CLAUDE.md) + a native A/B that nothing regresses.
+- **Stage 1 — atomics-harden the SPSC queue ✅ (2026-06-10).** `volatile` `req_head`/
+  `req_tail`/`sound_dropped` → C11 `atomic_int` (`sound.h`): producer release-stores
+  `req_head` *after* writing the entry, consumer acquire-loads it (so a fully-written entry
+  is visible before the index advance), `sound_dropped` via relaxed atomic fetch-add (two
+  writers). Compiles on clang (native) **and** emcc (web); soundcheck tripwire passes (no
+  dropped requests). Platform-independent — hardens native *today*, ready for the worklet.
+  (No tcc concern: `sound.h` is clang-compiled into the host even in the libtcc backend.)
 - **Stage 2 — custom web worklet backend.** When isolated, instead of raylib's
   `ScriptProcessor` AudioStream, create an emscripten AudioWorklet whose `process()` calls
   our mixer (the existing `sound_callback` body) into the output buffer, draining the same

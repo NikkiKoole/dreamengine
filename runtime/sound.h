@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdatomic.h>   // lock-free SPSC request queue: main (producer) ↔ audio (consumer) thread
 
 #define SOUND_SAMPLE_RATE  44100
 #define SOUND_VOICES       16
@@ -473,8 +474,13 @@ typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samp
 #define SOUND_DELAYED_MAX 64    // pending delayed notes (strum/schedule/schedule_hit) — fast sfx steps queue several ahead
 
 static SoundReq      req_queue[SOUND_REQ_QUEUE];
-static volatile int  req_head = 0;   // written by main thread
-static volatile int  req_tail = 0;   // written by audio thread
+// Lock-free SPSC ring indices. The main (game) thread is the sole producer (advances
+// head); the audio thread is the sole consumer (advances tail). Atomic acquire/release
+// gives the cross-thread memory ordering a REAL audio thread needs — native today, the
+// web AudioWorklet later — so the consumer sees a fully-written entry before it sees the
+// advanced index. (`volatile` alone is NOT a barrier.) See design/audio-threading.md.
+static atomic_int    req_head = 0;   // produced by the main thread
+static atomic_int    req_tail = 0;   // consumed by the audio thread
 
 // audio-thread-owned holding pen for delayed requests (e.g. strum)
 static SoundReq      delayed[SOUND_DELAYED_MAX];
@@ -484,7 +490,7 @@ static int           delayed_count = 0;
 // count means sound calls were LOST (a wave_set flood, an init() define burst, …) — exactly
 // the silent class of bug that once made every wav-knob position play the default square.
 // sound_tick() screams about it via printh so it shows in the editor log / bake output.
-static volatile int sound_dropped = 0;
+static atomic_int sound_dropped = 0;   // incremented from BOTH threads → atomic RMW
 
 // musical clock (main-thread state, ticked once per frame from studio.c)
 static int   sound_bpm     = 120;
@@ -503,17 +509,20 @@ static void sound_tick(float dt) {
     // (notes that never play, instrument defines that never land). Shows in the
     // editor's log panel and in bake/play.js output — fail loud, not silent.
     static int dropped_reported = 0;
-    if (sound_dropped > dropped_reported) {
-        printh("[sound] WARNING: request queue overflow — %d sound call(s) DROPPED (notes/defines lost). Spread big bursts across frames or report this.", sound_dropped);
-        dropped_reported = sound_dropped;
+    int dropped = atomic_load_explicit(&sound_dropped, memory_order_relaxed);
+    if (dropped > dropped_reported) {
+        printh("[sound] WARNING: request queue overflow — %d sound call(s) DROPPED (notes/defines lost). Spread big bursts across frames or report this.", dropped);
+        dropped_reported = dropped;
     }
 }
 
 // dur_samples: 0 = use default 250ms (for note/schedule); >0 = custom note length (for hit).
 static void sound_push_req(SoundReqKind kind, int a, int b, int c, int delay_samples, int dur_samples) {
-    int h = req_head;
+    int h = atomic_load_explicit(&req_head, memory_order_relaxed);   // producer owns head
     int next = (h + 1) % SOUND_REQ_QUEUE;
-    if (next == req_tail) { sound_dropped++; return; }   // full — drop request (and trip the wire)
+    if (next == atomic_load_explicit(&req_tail, memory_order_acquire)) {   // full — drop (trip the wire)
+        atomic_fetch_add_explicit(&sound_dropped, 1, memory_order_relaxed); return;
+    }
     req_queue[h].kind          = kind;
     req_queue[h].a             = a;
     req_queue[h].b             = b;
@@ -521,18 +530,20 @@ static void sound_push_req(SoundReqKind kind, int a, int b, int c, int delay_sam
     req_queue[h].delay_samples = delay_samples;
     req_queue[h].dur_samples   = dur_samples;
     req_queue[h].e0 = req_queue[h].e1 = req_queue[h].e2 = 0;
-    req_head = next;
+    atomic_store_explicit(&req_head, next, memory_order_release);   // publish — entry writes happen-before the head advance
 }
 
 // Push a control request carrying the extra e0/e1/e2 payload (used by instrument()).
 static void sound_push_ctrl(SoundReqKind kind, int a, int b, int c, int e0, int e1, int e2) {
-    int h = req_head;
+    int h = atomic_load_explicit(&req_head, memory_order_relaxed);   // producer owns head
     int next = (h + 1) % SOUND_REQ_QUEUE;
-    if (next == req_tail) { sound_dropped++; return; }   // full — drop (and trip the wire)
+    if (next == atomic_load_explicit(&req_tail, memory_order_acquire)) {   // full — drop (trip the wire)
+        atomic_fetch_add_explicit(&sound_dropped, 1, memory_order_relaxed); return;
+    }
     req_queue[h] = (SoundReq){ .kind = kind, .a = a, .b = b, .c = c,
                                .delay_samples = 0, .dur_samples = 0,
                                .e0 = e0, .e1 = e1, .e2 = e2 };
-    req_head = next;
+    atomic_store_explicit(&req_head, next, memory_order_release);   // publish — entry writes happen-before the head advance
 }
 
 // ───────── helpers ─────────
@@ -2786,15 +2797,17 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
     float *out = (float*)buffer_data;
 
     // 1) drain queued requests: fire immediate, hold delayed
-    while (req_tail != req_head) {
-        SoundReq r = req_queue[req_tail];
-        req_tail = (req_tail + 1) % SOUND_REQ_QUEUE;
+    for (;;) {
+        int tail = atomic_load_explicit(&req_tail, memory_order_relaxed);          // consumer owns tail
+        if (tail == atomic_load_explicit(&req_head, memory_order_acquire)) break;  // acquire pairs with the producer's release → the entry writes are visible
+        SoundReq r = req_queue[tail];
+        atomic_store_explicit(&req_tail, (tail + 1) % SOUND_REQ_QUEUE, memory_order_release);  // free the slot for the producer
         if (r.delay_samples <= 0) {
             sound_fire_req(r);
         } else if (delayed_count < SOUND_DELAYED_MAX) {
             delayed[delayed_count++] = r;
         } else {
-            sound_dropped++;   // delayed pen full — a scheduled note was lost (tripwire)
+            atomic_fetch_add_explicit(&sound_dropped, 1, memory_order_relaxed);   // delayed pen full — a scheduled note was lost (tripwire)
         }
     }
 
