@@ -1262,10 +1262,15 @@ control — it reads 0.0¢, which is what proves the measurement itself is sound
   be a whole number of samples, so high notes round to the nearest available pitch). The
   open fix: a fractional-delay (interpolated) read tap, or a tuning correction baked per
   note. Tracked here until someone takes it.
-- **PIPE flute — genuinely out of tune.** Speaks an **octave low** AND goes badly flat as
-  it climbs: A2 −13¢, A3 −35¢, A4 −78¢, A5 −159¢. The strongest periodicity isn't near
-  the played note at all (e.g. A4=440 → ~210 Hz). This is the one that needs an engine
-  fix, not a trim — the jet/bore is locking to the wrong register at higher pitches.
+- **PIPE flute — was genuinely out of tune; MOSTLY FIXED 2026-06-11.** Spoke an **octave low**
+  AND went badly flat as it climbed: A2 −13¢, A3 −35¢, A4 −78¢, A5 −159¢. Cause: the bore was
+  sized a full wavelength, but the single open-end reflection INVERTS, so a waveguide resonates
+  at SR/(2·delay) — an octave down — and the uncompensated jet+filter loop delay added the flat.
+  Fix (`sound_pipe_start`): half-wavelength bore minus a mildly pitch-sloped loop-delay term, sized
+  with the bowed-string fractional-read trick to remove integer quantization. **Now A2–A4 within
+  ~±2¢, octave correct.** Residual: A5 (880 Hz) ≈ −65¢ — at a ~20-sample bore the fixed jet ≈ the
+  bore, so it sits on the overblow edge and pitch is hyper-sensitive (a trim can't reach 0¢); a
+  jet-length re-voicing would close it. Tracked in [STATUS](../STATUS.md) Open #31.
 
 Not a fault, correctly separated by the tool into a "transposed, not detuned" list:
 **ORGAN** reads ~an octave low because the default registration leans on the 16′

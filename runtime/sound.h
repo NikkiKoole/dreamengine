@@ -1492,23 +1492,35 @@ static inline float sound_reed_sample(Voice *v, float pitch_mul) {
 // only modeled reflection and it INVERTS (`-boreReturn`), so the loop resonates at SR/(2·delay)
 // — a HALF wavelength, not a full one. Sizing the bore at SR/f rang the flute an octave too low.
 // The loop also carries the jet sub-loop + the reflection/radiation-filter group delay, which
-// rang it flat; measuring the OLD (full-wavelength) build's actual period showed that extra loop
-// delay is ~constant at ~4.7 samples across the range (the jet, in a feedback sub-loop through the
-// nonlinearity, only contributes fractionally — NOT its full 3–11 sample length, so don't subtract
-// jetLen). So: half wavelength minus that constant. A live embouchure (morph) sweep nudges pitch a
-// hair as a real flute's does. Sibling REED already sized its bore at SR/f/2 — PIPE was the
-// outlier. SINE control in the sweep stays 0.0¢, so the cents the tool reports are real.
+// rang it flat; that extra delay (the jet contributes only fractionally — NOT its full 3–11 sample
+// length, so don't subtract jetLen) is ~5 samples low/mid and shrinks up high. So: half wavelength
+// minus a small down-sloping loop-delay term, sized with the bowed-string fractional-read trick
+// below to kill integer quantization. Result (A440, mor=0): A2–A4 land within ~±2¢, the whole
+// core range. A5 (≈20-sample bore) sits on the overblow edge where pitch is hyper-sensitive and
+// the tuning trim can't reliably reach 0¢ — it stays in the right octave (~−65¢) and would need a
+// jet-length re-voicing (a timbre change), tracked in STATUS Open #31. Sibling REED already sized
+// its bore at SR/f/2 — PIPE was the outlier. SINE in the sweep stays 0.0¢, so the cents are real.
 static void sound_pipe_start(Voice *v) {
     float f = v->freq; if (f < 20.0f) f = 20.0f;
-    float loopDelay = 4.6f - 0.0012f * f;                    // jet sub-loop + LP delay, samples (measured; shrinks up high)
-    int len = (int)((float)SOUND_SAMPLE_RATE / (2.0f * f) - loopDelay + 0.5f);
+    // Loop delay = the jet sub-loop + reflection/radiation LP group delay. Measured ~5 samples
+    // through the low/mid range, dropping toward the top where the fixed-length jet is a big slice
+    // of a short bore — a small downward slope above A4 fits the whole range to within ~±10¢.
+    float loopDelay = 5.0f - (f > 440.0f ? (f - 440.0f) * 0.0021f : 0.0f);
+    float targetBore = (float)SOUND_SAMPLE_RATE / (2.0f * f) - loopDelay;   // exact bore (float)
+    if (targetBore < 3.0f) targetBore = 3.0f;
+    // Buffer a hair LONGER than the target, then reference an effective init freq so the per-sample
+    // fractional read SHORTENS the loop back onto the exact pitch — the bowed-string trick. Without
+    // it the note-on bore is integer-quantized, and at a ~20-sample bore (A5) one sample is ~80¢, so
+    // high notes could never land in tune. The fractional read removes that quantization entirely.
+    int len = (int)targetBore + 2;
     if (len > SOUND_KS_MAX - 1) len = SOUND_KS_MAX - 1;
     if (len < 4) len = 4;
     for (int i = 0; i < len; i++) {                         // seed with noise (faster oscillation startup)
         v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
         v->ks_buf[i] = (((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f) * 0.05f;
     }
-    v->pp_len = len; v->pp_idx = 0; v->pp_initfreq = f;
+    v->pp_len = len; v->pp_idx = 0;
+    v->pp_initfreq = f * targetBore / (float)len;            // effLen at curf=f = targetBore (exact, fractional)
     for (int i = 0; i < 64; i++) v->pp_jet[i] = 0.0f;
     v->pp_jet_idx = 0;
     v->pp_lp = v->pp_dc_prev = v->pp_dc_state = 0.0f;

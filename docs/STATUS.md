@@ -688,10 +688,17 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     the new `tune-check.js`)*. Run `node tools/tune-check.js` for the live per-engine cents
     report (SINE is the 0¢ control); full first-run audit + the *why* in
     [`design/audio-notes.md`](design/audio-notes.md) §18. **The to-do list, worst first:**
-    - **`INSTR_PIPE` (flute) — the bad one.** Plays an **octave low AND progressively flat**
-      as it climbs (A2 −13¢ → A5 −159¢); the strongest periodicity isn't near the played
-      note (A4=440 → ~210 Hz). The jet/bore is locking to the wrong register up high — an
-      engine fix, not a trim.
+    - ~~**`INSTR_PIPE` (flute) — the bad one.**~~ **MOSTLY FIXED 2026-06-11.** Was an octave low
+      and progressively flat (A2 −13¢ → A5 −159¢): the bore was sized a full wavelength but the
+      inverting open-end reflection resonates at SR/(2·delay), so it rang an octave down, and the
+      uncompensated jet+filter loop delay added the flatness. Fix in `sound_pipe_start`: half-
+      wavelength bore minus a (mildly pitch-sloped) loop-delay term, sized with the bowed-string
+      fractional-read trick to kill integer quantization. **Now: A2–A4 within ~±2¢** (the core
+      range), octave correct everywhere. **Residual: A5 (880 Hz) ≈ −65¢** — at a ~20-sample bore
+      the fixed-length jet ≈ the bore, so the voice sits on the overblow edge and pitch is
+      hyper-sensitive (a 0.3-sample bore change swings it ~140¢ or flips an octave); a loop-delay
+      trim can't reach 0¢ there. Closing it needs a **jet-length re-voicing** (jetLen proportional
+      to the bore so the jet:bore ratio is pitch-invariant) — a timbre change, hence still open.
     - **`INSTR_PLUCK` / `INSTR_REED` / `INSTR_BRASS` — flatten at the top** (A5 −17 to −25¢),
       ~0¢ low down. Classic integer-sample delay-length quantization in the waveguides; the
       fix is a fractional (interpolated) delay read tap, or a per-note tuning correction.
