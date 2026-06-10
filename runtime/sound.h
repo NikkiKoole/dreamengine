@@ -1367,7 +1367,11 @@ static inline float sound_pipe_sample(Voice *v, float pitch_mul) {
 // except β comes from the harmonics macro (mapped into the wedge) instead of a fixed preset.
 static void sound_bowed_start(Voice *v) {
     float f = v->freq; if (f < 20.0f) f = 20.0f;
-    int totalLen = (int)((float)SOUND_SAMPLE_RATE / f);     // full wavelength (bow→nut + bow→bridge)
+    // Round the wavelength UP (+1), not down: the buffer must be a hair LONGER than the true
+    // length so the per-sample fractional read can SHORTEN it back exactly onto pitch (the read
+    // clamps at the buffer length — it can shrink the delay but never grow it). Rounding down left
+    // every note ringing sharp with no way to correct (up to ~24 cents on high notes).
+    int totalLen = (int)((float)SOUND_SAMPLE_RATE / f) + 1; // full wavelength (bow→nut + bow→bridge)
     if (totalLen > SOUND_KS_MAX - 1) totalLen = SOUND_KS_MAX - 1;
     if (totalLen < 4) totalLen = 4;
     // harmonics = bow position β (sul ponticello → tasto). STEP-0 wedge: 0.05–0.25 all lock.
@@ -1401,7 +1405,14 @@ static void sound_bowed_start(Voice *v) {
             v->ks_buf[i] = (((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f) * 0.005f;
         }
     }
-    v->bw_initfreq = f;
+    // TUNING. The loop delay isn't just the buffer length: it's (nutLen+brLen) PLUS the group
+    // delay of the two one-pole reflection filters (~0.5 sample, near-constant), PLUS the integer
+    // rounding of totalLen. Left uncompensated the string rings flat — and flatter up high, where
+    // half a sample is a bigger slice of the wavelength (measured ~22 cents flat at E6). Reference
+    // an EFFECTIVE base freq that folds the filter delay in, so the per-sample fractional read
+    // (ratio = curf/initfreq) lands the loop exactly on pitch across the whole range.
+    const float BW_LOOP_DELAY = 0.5f;   // reflection-filter group delay, in samples
+    v->bw_initfreq = ((float)SOUND_SAMPLE_RATE - BW_LOOP_DELAY * f) / (float)(nutLen + brLen);
     v->bw_vib_ph = v->bw_drift_ph = v->bw_drift = v->bw_noise_lp = 0.0f;
     v->bw_dc_prev = v->bw_dc_state = 0.0f;
     v->bw_attack = (int)(0.030f * (float)SOUND_SAMPLE_RATE);   // ~30ms bow-bite catch at onset
@@ -1422,7 +1433,7 @@ static inline float sound_bowed_sample(Voice *v, float pitch_mul) {
     const float TWO_PI = 6.2831853f;
     const float SR = (float)SOUND_SAMPLE_RATE;
     // macros → physical params, pinned inside the wedge
-    float pressure = 0.15f + v->timb * 0.27f;              // timbre = bow pressure [0.15,0.42]
+    float pressure = 0.12f + v->timb * 0.20f;              // timbre = bow pressure [0.12,0.32] (lowered: less scratch)
     float bowSpeed = 0.30f + v->mor  * 0.60f;              // morph = bow speed [0.30,0.90]
     float velocity = bowSpeed * 0.2f;                      // navkit's physical-range scale
     // HUMANIZED pitch vibrato — wandering rate/depth, lives in PITCH (like a real bowed string)
