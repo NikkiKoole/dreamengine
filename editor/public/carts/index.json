@@ -2866,6 +2866,16 @@
     "homage": "Frippertronics (Fripp/Eno tape loops)"
   },
   {
+    "title": "braindance fm",
+    "description": "Aphex Twin's drill'n'bass / braindance, generated forever - Path B of the Aphex problem (he's a RANGE, not a genre, so this builds ONE mode: the chopped-break chaos with a sweet, slightly-wrong melody floating over it). Beauty over brutality: strip the melody and it's jungle, strip the chaos and it's a music box - the station IS the tension between the two layers. The brains, cart-side over radio.h's clock: RHYTHM AS GRAMMAR + a VOLATILITY knob (the kit is not a pattern - anchors persist, kick on 1, snare backbeat, everything else RE-ROLLS every bar on engine rnd; volatility 0 = a near-stable loop, 1 = never the same bar twice - so R replays the track but the drums shred anew); RATCHETS (a hit becomes 3-8 sub-hits at 1/32-1/64 with vol/pitch ramps - the impossible drill rolls, sample-exact); TWO CROSSED DENSITY CURVES (the serene melodic top and the violent drums ride INDEPENDENT curves - the Flim move - drawn as the red D and teal M bars in the window); THE LURCH (sudden DROP events strip to the pad, then SLAM back with a fill); and MISTUNING AS TIMBRE (every melodic voice detuned a few cents + a sub-Hz tape-wow pitch LFO - the machine alive and slightly broken). The sweet top is a Casio CZ PD sweep-pad (the evolving wowww) + a detuned glassy music-box (MALLET); the bottom is a synth break kit + sub + a 303 acid line. The chopped Amen is FAKED (we have no sampler - that granular/time-stretch want is logged). The vibe rolls sweet / drill / funk / eerie. The window is a glitchy oscilloscope that tears with the drums over the two density bars. SPACE next track, R replay (drums shred anew), [ ] history, LEFT/RIGHT density (calm/warm/hot/mental), UP/DOWN tempo, T tone, B band (kit amen/808, topline musicbox/glock, tape warped/clean), M power, H help.",
+    "file": "braindance.cart.png",
+    "kind": [
+      "toy",
+      "instrument"
+    ],
+    "homage": "Aphex Twin (drill'n'bass / braindance)"
+  },
+  {
     "title": "clavinet",
     "description": "Hohner Clavinet D6 (1971) through an AUTO-WAH - the funk machine, and the showcase for wah(). A clavinet is a bright, short, percussive plucked-reed keyboard; run it into an envelope filter and you get the Superstition / Higher Ground talking wakka-wakka: the filter OPENS on each hard stab and quacks shut between them, following how hard you play. This is the realistic auto-wah, which (the scar) had to be a BUS effect - an envelope follower on the summed signal, not a per-note sweep, so it pumps with the groove. Sixth box in the effects family (spacecho=echo, cathedral=reverb, juno=chorus, mistress=flanger, tapeloop=tape, clavinet=auto-wah). A syncopated 16th C-minor funk riff plays itself; the WAH footswitch A/Bs the bare clav vs the talking wah; SENS sets how much your playing opens the filter, RES is the quack, MIX is dry..wet. The on-screen MOUTH opens with the wah (ooo->aah) - harder stabs, wider vowel. WAH footswitch [W], SENS/RES/MIX knobs, SPACE toggles the AUTO riff, 1..6 stab a note by hand, H help.",
     "file": "clavinet.cart.png",
