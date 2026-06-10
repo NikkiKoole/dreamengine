@@ -202,10 +202,16 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   coi-serviceworker) **TRUTH is dead-straight**, vs the audibly wobbly ScriptProcessor
   `site/drift/`. End-to-end proof: dedicated audio thread (128-sample/~2.7ms quantum)
   removes the buffer-origin swing. The whole chain holds — diagnosis → worklet → fix.
-- **Stage 3 — runtime backend pick** at `sound_init` (the `crossOriginIsolated` branch
-  above); both backends compiled into one wasm; ScriptProcessor stays the fallback.
-- **Stage 4 — coi-serviceworker in the real shell** (`web_shell.html`): the isolation +
-  one-time reload, made to coexist with existing site caching and the `?debug=1` overlay.
+- **Stage 3 — runtime backend pick ✅ (2026-06-10).** Done as a **two-build + loader**
+  (the correct shape — one shared-memory wasm can't run un-isolated). A cart opts in with
+  `worklet: true` in `.cart.js` (or `--worklet`); `build-site.js` then emits BOTH builds
+  into one dir — `plain.{js,wasm}` (ScriptProcessor) and `worklet.{js,wasm}` (AudioWorklet)
+  — plus a hand-written loader `index.html` that picks `crossOriginIsolated ? worklet.js :
+  plain.js`. `drift` opted in; verify on the single `site/drift/` URL.
+- **Stage 4 — coi-serviceworker in the shell ✅ (2026-06-10).** Done via a **separate**
+  `runtime/web_shell_worklet.html` (only worklet carts use it, so non-worklet carts are
+  untouched — no SW, no reload) carrying the self-heal + `coi-serviceworker.js` (copied to
+  the cart dir) + the chooser. The plain `web_shell.html` is unchanged.
   **SW lifecycle lesson (from the spike):** the worker is what *provides* isolation, so it
   must **stay registered** — never auto-unregister on load (that permanently un-isolates →
   no worklet). Happy path = register once → one take-control reload → isolated on every

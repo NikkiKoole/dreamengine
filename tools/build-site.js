@@ -58,9 +58,7 @@ function buildCart(name, { force = false, worklet = false } = {}) {
   const srcC = path.join(CARTS_DIR, `${name}.c`)
   if (!fs.existsSync(srcC)) { console.error(`✗ ${name}: no ${srcC}`); return false }
 
-  // worklet build → a SEPARATE dir so it never clobbers the published (ScriptProcessor)
-  // build; the HTML loader picks between the two (Stage 3). See design/audio-threading.md.
-  const outDir  = path.join(SITE_DIR, worklet ? name + '-worklet' : name)
+  const outDir  = path.join(SITE_DIR, name)
   const outHtml = path.join(outDir, 'index.html')
   const cfgFile = srcC.replace(/\.c$/, '.cart.js')
   const inputs  = [srcC, cfgFile,
@@ -87,7 +85,7 @@ function buildCart(name, { force = false, worklet = false } = {}) {
   const mapBytes = cfg.map ? mk.buildMap(cfg.map.layout || cfg.map, cfg.map.tiles, MW, MH) : new Uint8Array(0)
   fs.writeFileSync(path.join(work, 'map_data.h'), cHeader('MAP_DATA', Buffer.from(mapBytes)))
 
-  const args = [
+  const baseArgs = [
     srcC, path.join(RUNTIME, 'studio.c'),
     '-I', RUNTIME, '-I', work, '-I', path.join(RAYLIB_WEB, 'include'),
     '-DPLATFORM_WEB',
@@ -99,30 +97,44 @@ function buildCart(name, { force = false, worklet = false } = {}) {
     '-s', 'USE_GLFW=3',
     '-s', 'TOTAL_MEMORY=67108864',
     '-s', 'EXPORTED_RUNTIME_METHODS=ccall,HEAPF32',
-    '--shell-file', path.join(RUNTIME, 'web_shell.html'),
-    '-o', outHtml,
   ]
-  if (worklet) {
-    // the AudioWorklet backend: a real audio thread (shared memory). Only runs in a
-    // cross-origin-isolated context. See design/audio-threading.md (Stage 2/5).
-    args.splice(args.length - 2, 0,
-      '-DDE_AUDIO_WORKLET', '-sAUDIO_WORKLET=1', '-sWASM_WORKERS=1',
-      '--js-library', path.join(RUNTIME, 'audio-worklet-stub.js'))
+  const workletFlags = [
+    '-DDE_AUDIO_WORKLET', '-sAUDIO_WORKLET=1', '-sWASM_WORKERS=1',
+    '--js-library', path.join(RUNTIME, 'audio-worklet-stub.js'),
+  ]
+  // opt-in via cfg.worklet (.cart.js) or forced via --worklet: ship BOTH backends + a
+  // hand-written loader (web_shell_worklet.html) that picks the AudioWorklet build when the
+  // page is cross-origin isolated, else the ScriptProcessor fallback (the plain build).
+  // See design/audio-threading.md Stage 3/4.
+  const wantWorklet = worklet || !!cfg.worklet
+
+  const runEmcc = (extra) => {
+    try { execFileSync('emcc', [...baseArgs, ...extra], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 180000 }); return true }
+    catch (e) { console.log('FAILED'); console.error(String(e.stderr || e.message).trim()); return false }
   }
 
-  process.stdout.write(`⚙ ${name}: emcc… `)
+  process.stdout.write(`⚙ ${name}${wantWorklet ? ' (worklet+plain)' : ''}: emcc… `)
   const t0 = Date.now()
-  try {
-    execFileSync('emcc', args, { stdio: ['ignore', 'ignore', 'pipe'], timeout: 180000 })
-  } catch (e) {
-    console.log('FAILED')
-    console.error(String(e.stderr || e.message).trim())
-    return false
+  let buildOk
+  if (wantWorklet) {
+    buildOk = runEmcc(['-o', path.join(outDir, 'plain.js')])                       // ScriptProcessor fallback
+           && runEmcc([...workletFlags, '-o', path.join(outDir, 'worklet.js')])     // AudioWorklet (shared memory)
+    if (buildOk) {
+      fs.copyFileSync(path.join(RUNTIME, 'web_shell_worklet.html'), outHtml)        // loader + coi + self-heal
+      fs.copyFileSync(path.join(RUNTIME, 'coi-serviceworker.js'), path.join(outDir, 'coi-serviceworker.js'))
+      // drop stale single-build outputs (the loader uses plain.js/worklet.js, not index.js)
+      for (const f of ['index.js', 'index.wasm'])
+        { const p = path.join(outDir, f); if (fs.existsSync(p)) fs.unlinkSync(p) }
+    }
+  } else {
+    buildOk = runEmcc(['--shell-file', path.join(RUNTIME, 'web_shell.html'), '-o', outHtml])
   }
+  if (!buildOk) return false
 
   finishCart(name)
 
-  const kb = Math.round(fs.statSync(path.join(outDir, 'index.wasm')).size / 1024)
+  const wasmName = wantWorklet ? 'worklet.wasm' : 'index.wasm'
+  const kb = Math.round(fs.statSync(path.join(outDir, wasmName)).size / 1024)
   console.log(`ok (${((Date.now() - t0) / 1000).toFixed(1)}s, wasm ${kb} KB)`)
   return true
 }
