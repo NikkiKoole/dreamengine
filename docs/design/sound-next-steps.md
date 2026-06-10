@@ -85,16 +85,17 @@ chains, master = bus 0. Start with one master reverb. The effects that live here
 2. **Chorus / unison width** — the lush detuned-width of a Juno / stereo Rhodes / string
    *section*. Partly fakeable by layering (see "section blend" below); a real chorus packages it.
 3. **Formant filter** — 4-bandpass-peak vowel filter (navkit-spec'd, reuses a state-variable
-   filter). Run **any** instrument through it → choir / vocal-organ / talkbox color, *without*
-   the full `INSTR_VOICE` synth — the **cheap bridge to the #1 vocal gap**. Today faked with a
-   single `FILTER_BAND` peak (mouthharp). Per-voice filter-mode *or* bus insert — see the
-   placement note below. (Also makes the ring-mod "talkbox" use largely redundant.)
-
-**New synth primitive (engine, not a bus):**
-
-4. **Ring modulation / audio-rate AM** — metallic/bell/clang timbres FM and sub-audio LFOs
-   can't reach. Niche, and **overlaps `INSTR_FM`'s clang** — so lower priority than it looks;
-   its talkbox half is better served by the formant filter above.
+   filter). Run **any** instrument through it → choir / vocal-organ / **talkbox** (vowel) color.
+   A *complement* to the maturing `INSTR_VOICE` synth, not a substitute: cheap per-instrument
+   vowel color for non-voice timbres. Today faked with a single `FILTER_BAND` peak (mouthharp).
+   Per-voice filter-mode *or* bus insert — see the placement note below.
+4. **Ring modulation / AM** — *an effect, not an engine* (settled). It's a signal × signal
+   **operation**, so like the formant filter it's "write once, place as insert or bus." The
+   *synth-timbre* version (two internal oscillators → metallic/bell) is **redundant with
+   `INSTR_FM`'s clang** — skip the engine. The unique use is ring-modding a **real signal**:
+   the **robot / Dalek** vocal (the famous ~30 Hz ring-mod), now reachable as `INSTR_VOICE`
+   (the `vox` carts) nears completion. (Distinct from the formant filter's vowel/talkbox color —
+   different FX.) Build it as a bus/insert; no new engine.
 
 > **Per-voice vs bus — already settled in principle (decision 0015 + § 8.10).** Several of
 > these (formant, chorus, wah, drive) can live *either* as a per-voice insert *or* on a shared
@@ -123,8 +124,10 @@ The cheapest realism upgrades on the whole list — no engine, no decision, just
   extract candidate. Whether to make a shared `drum_*()` helper (or some other system) is a
   design call, not a mechanical one. → [`instrument-presets.md`](../guides/instrument-presets.md) (drum families).
 - **Lock the `INSTR_VOICE` public macros.** VOICE is the most-wanted unused engine (~12 stations)
-  but stays unbuilt-into partly because it's experimental. Locking its 3-macro mapping unlocks
-  the single most-absent timbre on the dial. → [`instrument-engines.md`](instrument-engines.md).
+  but stays unbuilt-into because it's experimental — **though the `vox` carts are nearing
+  completion (2026-06-10)**, so this is closing. Locking its 3-macro mapping unlocks the
+  single most-absent timbre on the dial (choir/vocals) — and, ring-modded, the robot/Dalek
+  voice (see #4 above). → [`instrument-engines.md`](instrument-engines.md).
 
 *(Brass was the third decision here; resolved — `INSTR_BRASS` shipped *and* the `brass` cart
 shipped (2026-06-10). With it, every modeled instrument family now has an engine.)*
