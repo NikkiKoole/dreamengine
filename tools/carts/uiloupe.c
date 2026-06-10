@@ -1,14 +1,15 @@
 // uiloupe.c — the ui.h loupe, on a real ui.h widget panel.
 //
-// Proves the loupe is FREE for any ui.h cart: a deliberately cramped synth
-// panel (tiny 6px knobs + thin faders + a small step row), and the ONLY loupe
-// code is `ui_loupe(1)`. Drag the corner ⊕ handle and a 3x lens appears above
-// your finger, magnifying whatever widgets it's over; a second finger edits the
-// fat versions inside. Grab a knob in the lens and drag out — it keeps turning,
-// no jump (the re-anchor lives in ui.h now). Tap empty space to dismiss.
+// Proves the loupe is FREE for any ui.h cart: a deliberately cramped synth panel
+// (tiny 6px knobs + thin faders + a 16-step button row) and the ONLY loupe code
+// is `ui_loupe(1)`. Drag the corner ⊕ handle and a 3x lens appears above your
+// finger, magnifying whatever it's over; a second finger edits the fat versions
+// inside. Grab a knob in the lens and drag out — it keeps turning, no jump (the
+// re-anchor lives in ui.h). Tap empty space to dismiss.
 //
-// Companion to the standalone `loupe` POC (which hand-rolls everything). This is
-// the integrated version. See docs/design/loupe-notes.md.
+// The lens shows the WHOLE scene (checkerboard, labels, the orange step fills —
+// everything, not just the widgets) because ui.h's loupe magnifies a COPY of the
+// canvas with the engine's zoom_rect primitive. See docs/design/loupe-notes.md.
 
 #define UI_KNOB_R 6        // deliberately tiny — the fat-finger problem
 #define UI_SLIDER_H 6
@@ -23,14 +24,14 @@ static float knob[NKNOB]   = { 0.5f, 0.3f, 0.7f, 0.4f, 0.6f, 0.5f };
 static float fader[NFADER] = { 0.8f, 0.5f, 0.6f, 0.3f };
 static int   step[NSTEP];
 
-static const char *knobName[NKNOB]   = { "CUT", "RES", "ENV", "DEC", "TUN", "VOL" };
+static const char *knobName[NKNOB] = { "CUT", "RES", "ENV", "DEC", "TUN", "VOL" };
 
 void update(void) {
     static int started = 0;
-    if (!started) {                      // seed a live-looking state + park the lens
+    if (!started) {                      // seed a live-looking state + park the lens for the thumbnail
         started = 1;
         for (int s = 0; s < NSTEP; s += 4) step[s] = 1;
-        ui_loupe_at(60, 58);             // over the first couple of knobs, for the thumbnail
+        ui_loupe_at(58, 58);
     }
 }
 
@@ -39,18 +40,20 @@ void draw(void) {
     ui_begin();
     ui_loupe(1);                         // <-- the entire loupe integration
 
+    // faint checkerboard so the magnification reads as live even over gaps
+    for (int y = 28; y < SCREEN_H; y += 6)
+        for (int x = 0; x < SCREEN_W; x += 6)
+            if (((x / 6) ^ (y / 6)) & 1) rectfill(x, y, 6, 6, CLR_DARK_PURPLE);
+
     print("UI.H LOUPE \x1b cramped synth panel", 6, 6, CLR_WHITE);
     print("drag the corner box; 2nd finger edits", 6, 16, CLR_MEDIUM_GREY);
 
-    // row of tiny knobs
     for (int k = 0; k < NKNOB; k++)
         ui_knob(&knob[k], 36 + k * 44, 58, knobName[k]);
 
-    // a cluster of thin faders
     for (int f = 0; f < NFADER; f++)
         ui_slider(&fader[f], 36, 96 + f * 12, 90, 0);
 
-    // a 16-step row of small buttons (tapp-free: these are ui_button toggles)
     for (int s = 0; s < NSTEP; s++) {
         int bx = 150 + s * 10, by = 96;
         if (ui_button(bx, by, 8, 8, 0)) step[s] = !step[s];
@@ -62,5 +65,5 @@ void draw(void) {
     watch("k1", "%.3f", knob[1]);
 #endif
 
-    ui_end();
+    ui_end();                            // draws the lens (a magnified copy of the canvas) + handle
 }

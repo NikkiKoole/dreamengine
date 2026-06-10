@@ -124,6 +124,7 @@ static void cart_reload_if_changed(void) {
 static Texture2D       spritesheet;
 static Image           spritesheet_img = {0};
 static RenderTexture2D canvas;
+static RenderTexture2D canvas_snap;   // scratch copy for zoom_rect (avoids sampling the live target)
 static Font            game_font;
 static Font            font_small = {0};
 static Font            font_tiny  = {0};
@@ -1411,6 +1412,8 @@ int main(int argc, char **argv) {
     // low-res canvas — all drawing goes here, then scaled up
     canvas = LoadRenderTexture(SCREEN_W, SCREEN_H);
     SetTextureFilter(canvas.texture, TEXTURE_FILTER_POINT);
+    canvas_snap = LoadRenderTexture(SCREEN_W, SCREEN_H);
+    SetTextureFilter(canvas_snap.texture, TEXTURE_FILTER_POINT);
 
     {
         Image fontImage = LoadImageFromMemory(".png", DOS_8X8_FONT, DOS_8X8_FONT_LEN);
@@ -2239,6 +2242,36 @@ void camera_ex(int x, int y, float zoom, float angle) {
     cam.zoom     = zoom;
     cam.rotation = angle;
     cam_reapply();
+}
+
+// copy the (sw x sh) canvas region at (sx,sy) into the (dw x dh) rect at (dx,dy),
+// scaled (nearest-neighbor, so a zoom shows crisp doubled pixels). Samples the
+// frame drawn SO FAR — call it after the content you want to magnify. Used by
+// ui.h's loupe; also good for picture-in-picture, minimaps, magnifier toys.
+// Snapshots the canvas to a scratch texture first, so reading and writing the
+// same target never collide.
+void zoom_rect(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh) {
+    if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
+    // Snapshot the frame-so-far into canvas_snap (so we never sample the live
+    // target). We're called mid-draw inside BeginTextureMode + BeginMode2D —
+    // unwind both, copy, restore.
+    bool wascam = cam_active;
+    if (wascam) EndMode2D();
+    EndTextureMode();
+    BeginTextureMode(canvas_snap);                     // -H flips canvas upright into snap
+    DrawTexturePro(canvas.texture,
+                   (Rectangle){ 0, 0, SCREEN_W, -SCREEN_H },
+                   (Rectangle){ 0, 0, SCREEN_W, SCREEN_H },
+                   (Vector2){ 0, 0 }, 0.0f, WHITE);
+    EndTextureMode();
+    BeginTextureMode(canvas);                          // resume live canvas (screen-space blit)
+    // snap.texture is bottom-up; consistent with the engine's full {0,0,W,-H}
+    // blit, logical rows [sy,sy+sh] read from texture y = H-sy-sh with -sh flip.
+    DrawTexturePro(canvas_snap.texture,
+                   (Rectangle){ (float)sx, (float)(SCREEN_H - sy - sh), (float)sw, (float)-sh },
+                   (Rectangle){ (float)dx, (float)dy, (float)dw, (float)dh },
+                   (Vector2){ 0, 0 }, 0.0f, WHITE);
+    if (wascam) BeginMode2D(cam);
 }
 
 void clip(int x, int y, int w, int h) {

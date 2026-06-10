@@ -207,6 +207,7 @@ void camera(int x, int y);                              // plain camera: shifts 
 void camera_ex(int x, int y, float zoom, float angle);  // camera with zoom (1=normal, 2=2x in) and angle (degrees), pivoting on screen center. for a screen-space HUD after zooming, call camera(0,0)
 void follow(int tx, int ty, int world_w, int world_h); // center camera on (tx,ty), clamped so world edges don't show
 void clip(int x, int y, int w, int h);                  // scissor rect. clip(0,0,0,0) disables
+void zoom_rect(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh); // copy the canvas region (sx,sy,sw,sh) scaled into (dx,dy,dw,dh) — nearest-neighbor, so zoom shows crisp pixels. samples the frame drawn so far (call it after that content). magnifier loupe, picture-in-picture, minimap
 void pal(int c0, int c1);                               // remap: everything drawn as c0 now draws as c1 — primitives AND sprites (hit-flash, team/clothes recolor, fades). persists until pal_reset()
 void pal_reset(void);                                   // undo all pal() swaps — back to the normal palette
 void fade(float amount);                                // darken the whole screen toward black for ONE frame: 0 = normal, 1 = black. clears automatically — call it every frame you want it (e.g. inside a game-over overlay)

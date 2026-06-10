@@ -140,9 +140,6 @@ typedef struct {        // a widget drawn this frame
     int x, y, w, h;     // visual rect
     int hx, hy, hw, hh; // inflated hit rect
     int focusable;      // takes part in focus traversal
-    int kind;           // loupe redraw: 0 slider, 1 knob, 2 button
-    const char *label;  // loupe redraw: the widget's label (may be 0)
-    int hot, pressed;   // loupe redraw: visual state captured this frame
 } UiWid;
 
 typedef struct {        // a contact that owns a widget
@@ -257,16 +254,7 @@ static int ui_reg(void *wid, int x, int y, int w, int h, int focusable) {
     if (h + 2 * pady < UI_MIN_TARGET) pady = (UI_MIN_TARGET - h + 1) / 2;
     u->hx = x - padx; u->hy = y - pady; u->hw = w + 2 * padx; u->hh = h + 2 * pady;
     u->focusable = focusable;
-    u->kind = 0; u->label = 0; u->hot = 0; u->pressed = 0;
     return focusable ? ui_foc_n++ : -1;
-}
-
-// record loupe-redraw metadata onto the widget just registered by ui_reg
-static void ui_tag(void *wid, int kind, const char *label, int hot, int pressed) {
-    if (ui_wid_n > 0 && ui_wids[ui_wid_n - 1].wid == wid) {
-        UiWid *u = &ui_wids[ui_wid_n - 1];
-        u->kind = kind; u->label = label; u->hot = hot; u->pressed = pressed;
-    }
 }
 
 static int ui_hover(int x, int y, int w, int h) {
@@ -312,49 +300,20 @@ static void ui_loupe_step(void) {
     }
 }
 
-// map a board-space rect into lens-panel space
-static void ui_loupe_rect(int bx, int by, int bw, int bh, int *ox, int *oy, int *ow, int *oh) {
-    float cx = ui_loupe_px + UI_LOUPE_W / 2.0f, cy = ui_loupe_py + UI_LOUPE_H / 2.0f;
-    *ox = (int)(cx + (bx - ui_loupe_sx) * UI_LOUPE_ZOOM);
-    *oy = (int)(cy + (by - ui_loupe_sy) * UI_LOUPE_ZOOM);
-    *ow = (int)(bw * UI_LOUPE_ZOOM);
-    *oh = (int)(bh * UI_LOUPE_ZOOM);
-}
-
-// draw the lens (magnified widgets) + the corner handle. Called LAST in ui_end so
-// it overlays the cart. Redraws the widgets registered this frame, scaled — pure
-// ui.h widgets only (a cart's own background/labels won't appear in the lens).
+// draw the lens + the corner handle. Called LAST in ui_end so it overlays the
+// cart. The lens content is just a magnified COPY of the canvas region around the
+// sample point (zoom_rect) — so it shows EVERYTHING the cart drew (widgets,
+// labels, background, cart art), crisp-pixel-doubled, for free.
 static void ui_loupe_render(void) {
     if (!ui_loupe_on) return;
     if (ui_loupe_show) {
-        rectfill(ui_loupe_px + 3, ui_loupe_py + 3, UI_LOUPE_W, UI_LOUPE_H, CLR_BLACK); // shadow
-        clip(ui_loupe_px, ui_loupe_py, UI_LOUPE_W, UI_LOUPE_H);
-        rectfill(ui_loupe_px, ui_loupe_py, UI_LOUPE_W, UI_LOUPE_H, UI_COL_BG);
-        for (int w = 0; w < ui_wid_n; w++) {
-            UiWid *u = &ui_wids[w];
-            int x, y, ww, hh;
-            ui_loupe_rect(u->x, u->y, u->w, u->h, &x, &y, &ww, &hh);
-            if (u->kind == 1) {                              // knob
-                int kcx = x + ww / 2, kcy = y + hh / 2, kr = ww / 2;
-                float v = *(float *)u->wid;
-                circfill(kcx, kcy, kr, UI_COL_BG);
-                circ(kcx, kcy, kr, u->hot ? UI_COL_TEXT_HOT : UI_COL_FRAME);
-                float a = 225.0f - v * 270.0f;
-                line(kcx, kcy, kcx + (int)(cos_deg(a) * (kr - 2)),
-                     kcy - (int)(sin_deg(a) * (kr - 2)), u->hot ? UI_COL_FILL_HOT : UI_COL_TEXT);
-            } else if (u->kind == 2) {                       // button
-                rectfill(x, y, ww, hh, u->pressed ? UI_COL_FILL_HOT : UI_COL_BG);
-                rect(x, y, ww, hh, u->hot ? UI_COL_TEXT_HOT : UI_COL_FRAME);
-                if (u->label) print(u->label, x + (ww - text_width(u->label)) / 2,
-                                    y + (hh - 6) / 2, u->pressed ? UI_COL_TEXT_HOT : UI_COL_TEXT);
-            } else {                                         // slider
-                float v = *(float *)u->wid;
-                rectfill(x, y, ww, hh, UI_COL_BG);
-                rectfill(x, y, (int)(v * ww), hh, u->hot ? UI_COL_FILL_HOT : UI_COL_FILL);
-                rect(x, y, ww, hh, UI_COL_FRAME);
-            }
-        }
-        clip(0, 0, 0, 0);
+        int sw = (int)(UI_LOUPE_W / UI_LOUPE_ZOOM + 0.5f);   // sampled region size
+        int sh = (int)(UI_LOUPE_H / UI_LOUPE_ZOOM + 0.5f);
+        int sx = (int)(ui_loupe_sx - sw / 2.0f), sy = (int)(ui_loupe_sy - sh / 2.0f);
+        // zoom_rect FIRST: it snapshots the frame-so-far, so drawing any lens
+        // chrome before it would pollute the magnified copy (a black shadow under
+        // the panel showed up in the lens when the panel overlapped the sample).
+        zoom_rect(sx, sy, sw, sh, ui_loupe_px, ui_loupe_py, UI_LOUPE_W, UI_LOUPE_H);
         rect(ui_loupe_px, ui_loupe_py, UI_LOUPE_W, UI_LOUPE_H, UI_COL_TEXT_HOT);
         rect(ui_loupe_px - 1, ui_loupe_py - 1, UI_LOUPE_W + 2, UI_LOUPE_H + 2, UI_COL_FRAME);
     }
@@ -548,7 +507,6 @@ static int ui_slider(float *v, int x, int y, int w, const char *label) {
     if (focused && ui_adj != 0) *v = clamp(*v + ui_adj, 0, 1);
 
     int hot = c != 0 || ui_hover(x, y, w, h);
-    ui_tag(v, 0, label, hot, 0);
     rectfill(x, y + 1, w, h - 3, UI_COL_BG);
     rectfill(x, y + 1, (int)(*v * w), h - 3, hot ? UI_COL_FILL_HOT : UI_COL_FILL);
     if (label) print(label, x + 3, y + 2, hot ? UI_COL_TEXT_HOT : UI_COL_TEXT);
@@ -576,7 +534,6 @@ static int ui_knob(float *v, int x, int y, const char *label) {
         *v = clamp(*v + mouse_wheel() * UI_WHEEL_STEP, 0, 1);
     if (focused && ui_adj != 0) *v = clamp(*v + ui_adj, 0, 1);
 
-    ui_tag(v, 1, label, hot, 0);
     circfill(x, y, r, UI_COL_BG);
     circ(x, y, r, hot ? UI_COL_TEXT_HOT : UI_COL_FRAME);
     float a = 225.0f - *v * 270.0f;            // min 7 o'clock → max 5 o'clock
@@ -610,7 +567,6 @@ static int ui_button(int x, int y, int w, int h, const char *label) {
     if (focused && ui_activate) { activated = 1; pressed = 1; }
 
     int hot = c != 0 || ui_hover(x, y, w, h);
-    ui_tag(wid, 2, label, hot, pressed);
     rectfill(x, y, w, h, pressed ? UI_COL_FILL_HOT : UI_COL_BG);
     rect(x, y, w, h, hot ? UI_COL_TEXT_HOT : UI_COL_FRAME);
     if (label) print(label, x + (w - text_width(label)) / 2 + (pressed ? 1 : 0),

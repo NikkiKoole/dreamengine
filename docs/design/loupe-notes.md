@@ -1,10 +1,24 @@
 # loupe — a magnifier for tiny touch targets (design notes)
 
-Status: **scoping** (2026-06-10). POC shipped (`tools/carts/loupe.c`, the "Loupe"
-tech-demo cart); the `ui.h` work below is not built yet. **Decision: the loupe is
-a `ui.h`-only feature** — a coordinate remap inside `ui.h`, no engine change. The
-"engine input-warp" idea was scoped and **rejected** after looking at the carts
-(see §1 and §9); don't re-litigate it without re-reading §1.
+Status: **BUILT** (2026-06-10). Two carts: the standalone POC (`tools/carts/loupe.c`,
+"Loupe") and the `ui.h`-integrated demo (`tools/carts/uiloupe.c`, "ui.h loupe").
+
+**Shape as built:**
+- **Input** is a coordinate remap inside `ui.h` (the four `ui_begin` contact
+  read-sites) — so a press/drag/release inside the lens lands on the real tiny
+  widget. `ui.h`-only; the "engine *input*-warp" idea (warping the shared touch
+  pool so `tapp`/surfaces get it too) was scoped and **rejected** (§1, §9).
+- **Rendering** is `zoom_rect()` — a small *engine* primitive (an OUTPUT
+  transform, distinct from the rejected input warp) that copies a canvas region
+  scaled into a rect. The lens is just a magnified copy of the canvas around the
+  sample point, so it shows EVERYTHING the cart drew (widgets, labels, background,
+  cart art), nearest-neighbor → crisp doubled pixels. Reusable beyond the loupe
+  (picture-in-picture, minimaps). A cart opts the whole loupe in with `ui_loupe(1)`.
+
+Earlier render designs that were tried and dropped: redrawing only the `ui.h`
+widgets (didn't show cart-drawn content — the orange step fills, background); and
+a `camera_ex` + render-only "redraw the whole scene" callback (worked, but more
+machinery in `ui.h` + the cart). `zoom_rect` is simpler than both and universal.
 
 ## 0. The problem
 
@@ -96,12 +110,18 @@ the render transform: a raw canvas point `(rx,ry)` inside the panel maps to
 POC's `board_of()`). In `ui.h` this is applied at the handful of sites where it
 reads a raw contact coordinate (§3).
 
-**(B) Magnified rendering** — cart-side, but `ui.h` can largely own it for
-`ui.h`-only carts: it knows every widget drawn this frame (`ui_wids[]`), so it can
-re-draw those widgets scaled into the panel. A mixed cart (own background + a few
-`ui.h` widgets) gets the widgets magnified on a neutral panel; cart-drawn
-decoration outside the widgets won't appear in the lens. Acceptable for v1 — the
-loupe's customers are *widget panels* (§1).
+**(B) Magnified rendering** — `zoom_rect()` (engine, `runtime/studio.c`). The lens
+is a scaled COPY of the canvas region around the sample point — so it shows
+EVERYTHING the cart drew, no widget-list bookkeeping, no cart cooperation. The
+primitive snapshots the canvas to a scratch render-texture (avoiding a
+read-while-bound feedback loop), then blits the region with `TEXTURE_FILTER_POINT`
+→ crisp doubled pixels. **Call order matters:** `ui_loupe_render` calls `zoom_rect`
+*first* (snapshots clean cart content) and draws the panel frame/handle *after* —
+drawing any lens chrome before the snapshot would let it pollute the magnified copy
+(a drop-shadow rect did exactly that: black lens when the panel overlapped the
+sampled region). The render-texture Y-flip means the sub-region source rect is
+`{sx, SCREEN_H-sy-sh, sw, -sh}`, matching the engine's own full-canvas `{0,0,W,-H}`
+blit.
 
 ## 3. The `ui.h` change (where the remap lives)
 
@@ -114,17 +134,19 @@ after which **every existing widget works unchanged**: deferred press resolution
 lands on the right tiny widget, absolute sliders read the mapped x, relative knobs
 read the mapped y, button release-hit tests in mapped space.
 
-Cart API (provisional): the cart drives the lens each frame —
+Cart API (as built):
 
 ```c
-ui_loupe(panelX, panelY, panelW, panelH, sampleX, sampleY, zoom); // active lens
-ui_loupe_off();                                                   // parked/hidden
-int ui_loupe_has(int contact_id);   // is this contact inside the lens right now?
+static void ui_loupe(int on);          // opt the whole loupe in (handle + lens), like ui_focus
+static void ui_loupe_at(int sx, int sy); // summon/park programmatically (custom affordance / seed a screenshot)
+static int  ui_loupe_has(int id);      // is contact id over the lens panel? (re-anchor helper)
 ```
 
-`ui.h` draws the lens chrome + the magnified widget pass in `ui_end()` (after all
-widgets are registered). The handle + summon/park/dismiss gesture can live in
-`ui.h` too (it owns contact tracking) or stay cart-side; **open** (§5).
+`ui.h` owns it all: the corner ⊕ handle + summon/follow/park/dismiss gesture
+(reads RAW touch, runs at the top of `ui_begin`, consumes the handle finger), the
+input remap above, the knob re-anchor (§4), and the lens render in `ui_end()` via
+`zoom_rect`. A cart needs only `ui_loupe(1)`. Engine primitive used:
+`void zoom_rect(int sx,int sy,int sw,int sh, int dx,int dy,int dw,int dh)`.
 
 ## 4. Subtleties the POC already solved — `ui.h` inherits them
 
@@ -142,16 +164,18 @@ widgets are registered). The handle + summon/park/dismiss gesture can live in
   mouse is id `-2` (`MOUSE_TOUCH_ID`). The POC's first bug was a `posFinger >= 0`
   guard silently disabling drag-tracking for the mouse.
 
-## 5. Open questions
+## 5. Resolved / open questions
 
-1. **Handle ownership** — `ui.h`-owned corner handle (zero cart code) vs.
-   cart-drawn handle calling `ui_loupe(...)`. Leaning `ui.h`-owned with a
-   tunable corner.
-2. **Mixed-cart rendering** (§2B) — is "widgets-only, neutral panel bg" enough, or
-   do some target carts need their own background in the lens? Decide against the
-   real §6 customer.
-3. **Summon affordance** — corner handle (POC, most discoverable) vs. held-tap.
-   Revisit on device.
+1. **Handle ownership** — RESOLVED: `ui.h`-owned corner handle (zero cart code),
+   `UI_LOUPE_HANDLE` tunable.
+2. **Mixed-cart rendering** — RESOLVED by `zoom_rect`: the lens copies the canvas,
+   so it shows the cart's full content (background, labels, art) automatically —
+   the "widgets-only neutral panel" worry is moot.
+3. **Summon affordance** — corner handle shipped; held-tap/two-finger still open,
+   revisit on device.
+4. **`zoom_rect` perf** (open) — the snapshot is a full-canvas GPU copy per loupe
+   frame. Fine at 320×200; profile on the larger panels (sh101 460×300) before
+   leaning on it in a hot path.
 
 ## 6. Second customers (the §5-of-ui-widgets-notes ship rule)
 
@@ -162,16 +186,18 @@ the API is wrong (the §5.2 rule).
 
 ## 7. Phasing
 
-1. **`ui.h` input remap** — `ui_loupe`/`_off`/`_has` + `ui_loupe_map` at the four
-   read-sites. Verify with the input harness: a scripted drag inside a scripted
-   lens lands on the mapped widget (`--trace` assert, like ui.h's §7).
-2. **Lens chrome + magnified widget pass** in `ui_end`; handle + gesture.
-3. **Knob re-anchor** on `ui_loupe_has` toggle.
-4. **Second customer** retrofit (§6) + device pass. Re-point the POC cart's
-   hand-rolled lens at the `ui.h` version (or keep the POC standalone as the
-   teaching demo — decide then).
-5. **Docs** — `cart-authoring.md` library-header table row, `mobile-web-notes.md`
-   cross-link, STATUS open-item.
+1. **`zoom_rect` engine primitive** — DONE (`studio.c/.h`, `studioDocs.js`,
+   `shell.js`, tcc symbols).
+2. **`ui.h` loupe** — DONE: input remap at the four read-sites, `ui.h`-owned
+   handle + gesture, knob re-anchor on `ui_loupe_has` toggle, lens render via
+   `zoom_rect`. Verified by the input harness (scripted handle-drag onto a knob →
+   magnified-knob drag moved the value 0.500→0.683; cross-boundary re-anchor moved
+   smoothly, no jump). `uikit`/`sfxgen` recompile unchanged.
+3. **`uiloupe` demo** — DONE (cramped synth panel, one line `ui_loupe(1)`).
+4. **Still open**: retrofit a *real* cart (sfxgen / sh101 fader panel — §6) +
+   device pass; the standalone `loupe` POC stays as the teaching demo.
+5. **Docs** (this note done) — still: `cart-authoring.md` library-header note,
+   `mobile-web-notes.md` cross-link, STATUS entry.
 
 ## 8. Tunables
 
@@ -191,3 +217,13 @@ the API is wrong (the §5.2 rule).
   three densest carts today don't.
 - **`loupe.h` opt-in `loupe_map(&x,&y)`** (cart-land, every consumer wires it by
   hand) — not transparent, and made moot once the reach shrank to `ui.h` only.
+
+  Note the distinction that survived: the rejected `touch_lens` was an *input*
+  transform (warps where touches land). The `zoom_rect` we DID add is an *output*
+  transform (copies pixels) — it touches the engine too, but it's a general
+  rendering primitive like `camera_ex`, not a widget, and it's reusable
+  (picture-in-picture, minimaps). Adding it does not reopen the input-warp.
+- **Render the lens by redrawing widgets / a `scene()` callback** (no engine
+  change) — built and working, but it either missed cart-drawn content
+  (widgets-only) or needed per-cart `scene()` plumbing + a render-only mode. The
+  `zoom_rect` copy is simpler and shows everything; these were dropped for it.
