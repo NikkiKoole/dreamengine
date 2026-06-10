@@ -231,8 +231,8 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   `drift`/`tb303`/`afrobeat` verified **straight** on-device, with the ScriptProcessor
   fallback when not isolated. **Editor parity:** the editor's "Build for web" now also
   dual-builds when settings → "audio (web)" → AudioWorklet is on (`main.cjs` + a
-  `worklet` setting), default off. *Untested in Electron from the build agent — smoke-test
-  the button before relying.* **Remaining:** the editor's `studio:publish` handler still
+  `worklet` setting), default off. **Verified in-editor (2026-06-10): straight.**
+  **Remaining:** the editor's `studio:publish` handler still
   builds plain (its own emcc, separate from `build-site`) — give it the same dual-build
   (gate on the cart's `kind`), or route its compile through `build-site.js`. Low impact
   (publish-cart.sh/`build-site` is the primary, correct path; editor-publish is opt-in).
