@@ -191,6 +191,7 @@ upgrade to existing stations:
 |---|---|---|
 | chorus ✅ **SHIPPED** | **juno** cart (Roland Juno-6 — OFF/I/II chorus switch) ✅ built | jingle haze, yacht stereo Rhodes, **air's Solina ensemble** (master-wide now; per-part waits for aux routing) |
 | reverb ✅ **SHIPPED** | **cathedral** cart (a chord blooms into an endless hall) ✅ built | `ambient` tails, the orchestra hall, glassharmonica, dub's spring-crash, **air's whole drenched mix** — now wirable via `instrument_reverb` |
+| flanger ✅ **SHIPPED** | **mistress** cart (EHX Electric Mistress — guitar + the JET button) ✅ built | the pure-effect showcase (0015's "one true gap," closed); thin station-rescuer (some krautrock/psych/80s texture) |
 | leslie (rotary) | a **Hammond B3 + Leslie** organ (slow/fast footswitch) | roadhouse, yacht |
 | wah / auto-wah | a **funk clavinet / wah-guitar** (the pedal quack) | citypop funk guitar, the clav |
 | formant filter | a **vocoder / talkbox** (carrier shaped through vowels) | the vocal gap for non-voice timbres, **air's Kelly-vocoder lead (faked on raw INSTR_VOICE today)** |

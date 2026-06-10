@@ -116,3 +116,17 @@ convention — it's **refusing to admit new primitives**.
   buffer was always sanctioned, only its *timing* moved (chorus-first, not tape-first). The
   detune-as-cheap-chorus note still stands as the zero-cost stand-in. Build: [instrument-engines
   §8.10](../design/instrument-engines.md) build-state; showcase: the `juno` cart.
+
+- **2026-06-10 — the "one true gap" (flanger) is closed, exactly as predicted.** The Deliberate-
+  refusals list called flanger "the one true gap: needs a modulated short delay; if the master
+  wow/flutter buffer ever lands for tape, flanger falls out of it free." Chorus landed that
+  modulated-delay technique (above), so flanger shipped as its **second use** —
+  `flanger(rate, depth, feedback, mix)`, a MASTER INSERT, no new primitive. One refinement to the
+  earlier wording: chorus and flanger don't share one *physical buffer* (different sizes, both can
+  run at once); they share the modulated-delay **technique** — the Hermite read was generalized
+  (`moddel_hermite(buf, len, pos)`) so each effect reads its own buffer through one helper ("write
+  the technique once, instantiate per effect," like the SVF serving filter/formant/wah). The
+  decision is *vindicated*, not bent: flanger was always a use of the rostered mod-delay primitive,
+  and it cost zero new roster entries. **Tape** is the queued third use (slow wow/flutter LFO +
+  saturation). Build: [instrument-engines §8.10](../design/instrument-engines.md); showcase: the
+  `mistress` cart (EHX Electric Mistress).

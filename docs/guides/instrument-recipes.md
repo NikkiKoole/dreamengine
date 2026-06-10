@@ -64,6 +64,7 @@ macros. Gate is dynamic: `600ms + (1−morph)² · 14000ms`.
 | guitar/uke | guitar.c | h0.60 t0.40 m0.42 · gate~6.8s | Warm small-bodied ukulele, moderate resonance, shorter decay. |
 | guitar/pizz | guitar.c | h0.20 t0.60 m0.85 · gate~0.97s | Tight muted pizzicato, minimal body, heavy mute, quick stop. |
 | guitar/oud | guitar.c | h0.50 t0.20 m0.55 · gate~4.4s | Dark resonant Middle-Eastern oud, warm timbre, short decay. |
+| guitar/mistress | mistress.c | h0.55 t0.70 · A2 R600 · **through `flanger()`** | Bright steel-string strummed into the master flanger — the source isn't the point, the swept comb is. mistress.c exists to show `flanger()`; the guitar is a clean broadband source for it. |
 
 > The body-resonance macro (`harmonics`: open/harp→banjo) is what `INSTR_GUITAR` adds over
 > `INSTR_PLUCK`. No longer an untapped shelf: `afrobeat` (interlocking rhythm guitars), `air`
@@ -559,6 +560,7 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 - **tb303.c** → saw/303 · square/303 (note: PRESET[] entries are sequencer patterns, not patches)
 - **juno.c** → saw/juno (the chorus showcase — the patch is a plain saw+sub poly synth; the `chorus()` master effect IS the Juno)
 - **cathedral.c** → organ/cathedral (the reverb showcase — a clean organ that blooms into a hall; `reverb()` is the instrument)
+- **mistress.c** → guitar/mistress (the flanger showcase — a strummed steel string through `flanger()`; the swept comb is the instrument)
 - **solina.c** → saw/solina-tab (the chorus companion to juno — a divide-down string machine: 6 stacked-saw footage tabs, the ensemble `chorus()` IS the Solina)
 - **stylophone.c** → pulse/square · drawn/square · /sine · /sawtooth · /organ
 - **loopstation.c** → sine/kick · noise/snare · noise/hat · saw/bass · pulse/lead · sine/theremin · tri/click
