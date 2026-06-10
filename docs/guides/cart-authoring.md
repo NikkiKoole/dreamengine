@@ -3,6 +3,13 @@
 Scripts in `tools/` for creating and updating `.cart.png` files without the editor UI.
 Designed to be used by Claude in-session via the Bash tool.
 
+> **Deciding *what* to build?** [`design/cart-library-direction.md`](../design/cart-library-direction.md)
+> is the "what to build next" memo — the missing teachable games and the on-brand toys, plus
+> § 2b's scored shortlist of new instruments (ranked by how much *new sound* each adds). For a
+> sound/instrument cart specifically, [`instrument-carts.md`](instrument-carts.md) is the shelf
+> (find the closest cousin to copy) and [`instrument-recipes.md`](instrument-recipes.md) is the
+> palette (every grabbable preset, by engine).
+
 > **#1 cart gotcha — sticky render state.** Global render state comes in two kinds:
 > - **The engine clears these for you each frame** — `clip` (scissor off at frame end),
 >   `shake` (decays on its own), and `fade` (zeroed each frame — immediate-mode, see

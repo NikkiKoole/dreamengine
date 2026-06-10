@@ -25,11 +25,14 @@ the "what is it / what's it like" altitude so it doesn't drift.
 > line rider, flyover, lil blob, lounge larry, pixel zoo) are not instruments and live
 > outside this index.
 
-Related design docs (forward-looking, not catalogs): the sound API hub is
-[`design/audio-notes.md`](../design/audio-notes.md); the engine-port program is
-[`design/instrument-engines.md`](../design/instrument-engines.md); per-station timbre
-swaps are [`design/radio-instrument-options.md`](../design/radio-instrument-options.md);
-unbuilt stations are [`design/future-stations.md`](../design/future-stations.md); the
+Related design docs (forward-looking, not catalogs): **what to build next** — and which new
+instrument adds the most *new sound* — is
+[`design/cart-library-direction.md`](../design/cart-library-direction.md) § 2b (the scored
+shortlist); the sound API hub is [`design/audio-notes.md`](../design/audio-notes.md); the
+engine-port program is [`design/instrument-engines.md`](../design/instrument-engines.md);
+per-station timbre swaps are
+[`design/radio-instrument-options.md`](../design/radio-instrument-options.md); unbuilt
+stations are [`design/future-stations.md`](../design/future-stations.md); the
 generative-soundtrack how-to is [`game-music.md`](game-music.md).
 
 ---
@@ -182,6 +185,10 @@ overlay to swap a chair's instrument mid-song. Candidate swaps:
 
 ## Adding a new instrument cart — checklist
 
+0. **Need an idea, or want the highest-impact one?**
+   [`design/cart-library-direction.md`](../design/cart-library-direction.md) § 2b is the
+   scored shortlist of buildable instruments, ranked by *new sound* (hand-drum / bellows /
+   violin top it — engines that are showcase-only today). Skip if you already know what you're building.
 1. **Decide the shape** from the building-blocks table above and open the named
    reference cart. Copy its skeleton.
 2. **Don't hand-roll plumbing that already exists** — `radio.h` for stations, `ui.h`
