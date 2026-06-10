@@ -22,12 +22,13 @@ a string-machine chorus, onto warm tape.* That layer is missing.
 > build-list is in [`sound-next-steps.md`](sound-next-steps.md) § "Each effect → its showcase
 > cart" (AIR is now a demand witness there). Sibling: [`afrobeat-effects-wants.md`](afrobeat-effects-wants.md).
 >
-> **UPDATE 2026-06-10 — reverb + chorus SHIPPED.** The first two §8.10 effects landed:
-> `reverb(size,damping)` (a real room, not the echo-delay stand-in — AIR's top vote, met) and
-> `chorus(rate,depth,mix)` (the real BBD modulated-delay chorus, not the detuned-SAW stand-in).
-> Caveat for AIR's Solina: chorus is **master-wide** in v1, so `air.c` can't yet chorus *only* the
-> string pad without washing the whole mix — that per-part routing waits for the deferred aux bus.
-> Until then the detune-pair stand-in stays. Remaining open: a true vocoder, tape sat.
+> **UPDATE 2026-06-10/11 — reverb + chorus SHIPPED, and chorus is now PER-INSTRUMENT.**
+> `reverb(size,damping)` (a real room — AIR's top vote, met) and `chorus(rate,depth,mix)` (the real
+> BBD modulated-delay, not the detuned-SAW stand-in). And as of 2026-06-11 the per-instrument step
+> shipped: **`instrument_chorus(I_PAD, …)` choruses the Solina pad alone** while drums/bass stay
+> dry — the earlier "master-wide, waits for the aux bus" caveat is gone. `air.c` can drop the
+> `instrument_tune` detune-pair hack and route the pad through a real ensemble chorus. Flanger is
+> also per-instrument (`instrument_flanger`). Remaining open: a true vocoder, tape sat.
 
 ---
 

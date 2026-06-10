@@ -38,12 +38,18 @@ the effects-layer plan. **Genre: design exploration.**
 > its own short buffer + the *shared* Hermite read (`moddel_hermite`), `flanger(rate, depth,
 > feedback, mix)` — a short swept delay with feedback (the jet/metallic comb), navkit port, mono,
 > a MASTER INSERT after chorus. Showcase: **mistress** (EHX Electric Mistress). All dormant-until-
-> called (byte-identical for old carts). Per-slot AUX routing (`instrument_bus`) stays the deferred
-> next increment; the send-vs-insert reasoning + the placement sanity-check per effect are in
-> [`sound-next-steps.md`](sound-next-steps.md). **Next:** **tape** as the third use of the mod-delay
-> technique (slow wow/flutter LFO + saturation); the §8.10.1 PARKED per-voice stand-ins migrate onto
-> real phase-coherent buses (the **great auto-wah** = bandpass on the summed mix + follower,
-> **epiano tremolo**, the **envelope
+> called (byte-identical for old carts).
+> **Per-instrument inserts SHIPPED 2026-06-11** — the AUX-routing step is done: the master FX
+> section is now an **8-bus pool** (bus 0 = master + 7 aux, each with its own chorus+flanger state).
+> `instrument_chorus(slot,…)`/`instrument_flanger(slot,…)` put the effect on ONE instrument (auto-
+> grab a private bus) — "flange the guitar, not the rhythm" — matching `instrument_echo`/
+> `instrument_reverb`. Sends (echo/reverb) deliberately stay one shared tank (NOT per-bus: 8 rooms /
+> 2.7 MB, and breaks the per-slot send API); only inserts go per-bus. The send-vs-insert reasoning +
+> the placement sanity-check per effect are in [`sound-next-steps.md`](sound-next-steps.md).
+> **Next:** **tape** as the third use of the mod-delay technique (slow wow/flutter LFO + saturation);
+> explicit named buses to route *several* instruments through one shared insert (the remaining
+> generalization); the §8.10.1 PARKED per-voice stand-ins migrate onto real phase-coherent buses
+> (the **great auto-wah** = bandpass on the summed mix + follower, **epiano tremolo**, the **envelope
 > follower**); leslie per the build-list.
 > **Authoritative roster = [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md)**
 > (effects are recipes; ~12 primitives, forever); this doc's §8.10 is the routing sketch 0015
@@ -1486,6 +1492,18 @@ buffer flag, navkit source, and macro mapping get filled in here.
 > `processFlanger` port, mono, a MASTER INSERT after chorus, master-wide (no `instrument_flanger`).
 > Showcase: **mistress** (EHX Electric Mistress). **Tape** is the third use of the same technique
 > (slow wow/flutter LFO + saturation) — still queued.
+>
+> **Per-instrument inserts SHIPPED 2026-06-11** — the AUX-routing step (the §8.10 "next increment").
+> The master FX section became an **8-bus pool** (`SOUND_FX_BUSES` = bus 0 master + 7 aux), each bus
+> owning its own chorus+flanger state. `instrument_chorus`/`instrument_flanger(slot,…)` auto-assign
+> a slot a private bus (`instr_bank.fx_bus` + a free-bus cursor; chorus+flanger on one slot chain;
+> pool-exhausted → dry, never mis-routed). The mix loop routes voices into `busL/busR[v->bus]`; aux
+> buses run their inserts and return to master; the master section is unchanged after the sum, so
+> all-bus-0 carts are bit-identical (verified soundcheck + juno). **Sends (echo/reverb) stayed one
+> shared tank** — per-bus reverb/echo was explicitly rejected (8 rooms, 2.7 MB, breaks the per-slot
+> send API); only inserts go per-bus. Showcase: **mistress** (flanged lead + dry bass); customer:
+> **air.c** (chorus on the Solina pad). Remaining: explicit named buses to *group* several
+> instruments through one insert.
 
 > The effects wishlist + the routing model. Still **deferred** to §8.5 phase 4 (after the first
 > engines ship) — begin small. The Leslie (§8.3/§8.8) is the first instance and sets the pattern.

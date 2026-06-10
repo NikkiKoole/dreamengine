@@ -83,9 +83,10 @@ So this is *build* work on a settled architecture, not a fresh design problem.
 **Effects bus — § 8.10, STARTED (reverb SHIPPED 2026-06-10).** We had exactly one bus (the shared
 `echo()` + per-slot `instrument_echo` sends); the first bite added **reverb as a second SEND bus**
 the same way, and formalized the per-sample **master FX section** (send-returns → insert-chain →
-soft-clip) so it's send/insert-aware. It deliberately did *not* build `bus[NBUS]` + per-slot aux
-routing — that stays the next increment (early effects all want master placement). The effects
-that live here:
+soft-clip) so it's send/insert-aware. The first bite deliberately deferred per-slot aux routing —
+**now shipped (2026-06-11): an 8-bus pool + `instrument_chorus`/`instrument_flanger(slot,…)`** put
+inserts on one instrument. (Sends stayed one shared tank — per-bus reverb/echo was rejected: 8
+rooms / 2.7 MB.) The effects that live here:
 
 1. **Reverb** — ✅ **SHIPPED 2026-06-10.** `reverb(size, damping)` + `instrument_reverb`/
    `note_reverb`, a SEND bus mirroring echo; navkit Schroeder core (4 comb + 2 allpass + pre-delay),
@@ -96,14 +97,15 @@ that live here:
 2. **Chorus / unison width** — ✅ **SHIPPED 2026-06-10** as `chorus(rate, depth, mix)`: the real
    BBD modulated-delay (navkit port, antiphase stereo width), the lush Juno/Solina swirl — NOT the
    detune fake. It landed as a **master INSERT on the shared mod-delay buffer** (the 0015 path: not
-   a third send bus; flanger + tape will reuse the same buffer), so it's master-wide in v1.
+   a third send bus; flanger + tape reuse the same technique). Per-instrument since 2026-06-11
+   (`instrument_chorus(slot,…)`); `chorus()` is the master/whole-mix variant.
    Showcase: the **juno** cart (the OFF/I/II switch is the whole point).
-   - **▶ RETROFIT — `air.c`'s Solina pad (still pending: needs per-part).** AIR's `I_PAD`
+   - **▶ RETROFIT — `air.c`'s Solina pad (NOW UNBLOCKED 2026-06-11).** AIR's `I_PAD`
      (`saw/solina-ensemble`) fakes the ARP/Eminent String Ensemble with a static **detune-pair**
      (`instrument_tune +0.07`) + a volume LFO — body, but no swirl. A Solina/Juno pad *is literally
-     a BBD ensemble chorus* on a saw stack, so route `I_PAD` through `chorus()` and drop the
-     tune-pair hack — **once per-part routing exists.** Chorus is master-wide today, so applying it
-     would wash air's *whole* mix, not just the pad; the retrofit waits for the deferred aux bus.
+     a BBD ensemble chorus* on a saw stack, so **`instrument_chorus(I_PAD, …)`** now choruses the
+     pad alone (drums/bass stay dry) — drop the tune-pair hack. Per-instrument inserts shipped, so
+     the master-wide caveat is gone.
      Pairs with [`air-effects-wants.md`](air-effects-wants.md).
 3. **Formant filter** — 4-bandpass-peak vowel filter (navkit-spec'd, reuses a state-variable
    filter). Run **any** instrument through it → choir / vocal-organ / **talkbox** (vowel) color.
@@ -189,7 +191,7 @@ upgrade to existing stations:
 
 | effect | showcase cart | also rescues |
 |---|---|---|
-| chorus ✅ **SHIPPED** | **juno** cart (Roland Juno-6 — OFF/I/II chorus switch) ✅ built | jingle haze, yacht stereo Rhodes, **air's Solina ensemble** (master-wide now; per-part waits for aux routing) |
+| chorus ✅ **SHIPPED** (+ per-instrument) | **juno** cart (Roland Juno-6 — OFF/I/II chorus switch) ✅ built | jingle haze, yacht stereo Rhodes, **air's Solina ensemble** (`instrument_chorus(I_PAD,…)` — per-part since 2026-06-11) |
 | reverb ✅ **SHIPPED** | **cathedral** cart (a chord blooms into an endless hall) ✅ built | `ambient` tails, the orchestra hall, glassharmonica, dub's spring-crash, **air's whole drenched mix** — now wirable via `instrument_reverb` |
 | flanger ✅ **SHIPPED** | **mistress** cart (EHX Electric Mistress — guitar + the JET button) ✅ built | the pure-effect showcase (0015's "one true gap," closed); thin station-rescuer (some krautrock/psych/80s texture) |
 | leslie (rotary) | a **Hammond B3 + Leslie** organ (slow/fast footswitch) | roadhouse, yacht |

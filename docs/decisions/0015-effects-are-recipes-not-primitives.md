@@ -130,3 +130,15 @@ convention — it's **refusing to admit new primitives**.
   and it cost zero new roster entries. **Tape** is the queued third use (slow wow/flutter LFO +
   saturation). Build: [instrument-engines §8.10](../design/instrument-engines.md); showcase: the
   `mistress` cart (EHX Electric Mistress).
+
+- **2026-06-11 — the AUX-routing step landed; the send/insert split is now physical.** Per-instrument
+  inserts shipped (`instrument_chorus`/`instrument_flanger(slot,…)`, an 8-bus pool). This makes the
+  send-vs-insert distinction the roster always implied **concrete**: **inserts (chorus/flanger) get
+  per-bus state** (each routed instrument its own comb buffer — that's what "the signal passes
+  *through* it" requires), while **sends (echo/reverb) stay ONE shared tank** with per-slot send
+  coefficients. Per-bus reverb/echo was explicitly **rejected**, not deferred: it would mean N
+  separate rooms/echoes (musically wrong — one room is the point — and the echo line ×8 ≈ 2.7 MB) and
+  would break the per-slot `instrument_echo`/`instrument_reverb` a dozen carts use. So the two-bus
+  *send* cap still holds (echo + reverb, one tank each); the bus *pool* is an insert-routing
+  mechanism, a different axis. No new primitives — routing, not roster. Build:
+  [instrument-engines §8.10](../design/instrument-engines.md).
