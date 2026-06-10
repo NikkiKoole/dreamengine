@@ -595,6 +595,60 @@ static void flanger_process(int b, float *mixL, float *mixR) {
     *mixR = *mixR * (1.0f - flg_mix[b]) + wet * flg_mix[b];
 }
 
+// ── tape — the THIRD use of the modulated-delay technique (wow / flutter / saturation) ──
+// 0015 reserved a master "wow/flutter buffer" for tape; here it is. A per-bus INSERT, STEREO (it's
+// a master glue/character effect — must not mono-collapse a panned mix): warm saturation + a slow
+// WOW + fast FLUTTER pitch warble (a modulated-delay read; ONE shared transport LFO so both
+// channels' pitch drifts together) + a baked HF rolloff (tape loses highs, darker as you saturate).
+// Plain-sine LFOs → fully deterministic (--det safe); navkit's noise-LFO + hiss skipped. The third
+// instance of the mod-delay technique after chorus + flanger (read via the shared moddel_hermite).
+#define TAPE_BUF_LEN     1024
+#define TAPE_BASE_DELAY  320.0f     // ~7ms playback-head offset; > the max mod swing (read stays behind write)
+#define TAPE_WOW_RATE    0.5f       // Hz — slow drift
+#define TAPE_WOW_DEPTH   200.0f     // samples (±4.5ms)
+#define TAPE_FLUT_RATE   6.0f       // Hz — fast warble
+#define TAPE_FLUT_DEPTH  40.0f      // samples (±0.9ms)
+static float tape_bufL[SOUND_FX_BUSES][TAPE_BUF_LEN];
+static float tape_bufR[SOUND_FX_BUSES][TAPE_BUF_LEN];
+static int   tape_widx[SOUND_FX_BUSES];
+static float tape_wph [SOUND_FX_BUSES];    // wow LFO phase
+static float tape_fph [SOUND_FX_BUSES];    // flutter LFO phase
+static float tape_lpL [SOUND_FX_BUSES];    // HF-rolloff one-pole state (L)
+static float tape_lpR [SOUND_FX_BUSES];    // … (R)
+static float tape_wow [SOUND_FX_BUSES];
+static float tape_flut[SOUND_FX_BUSES];
+static float tape_sat [SOUND_FX_BUSES];
+static bool  tape_used[SOUND_FX_BUSES];
+
+static void tape_process(int b, float *mixL, float *mixR) {
+    float sat = tape_sat[b];
+    float L = *mixL, R = *mixR;
+    if (sat > 0.0f) {                               // warm saturation (normalized: sat 0 = unity)
+        float g = 1.0f + sat * 2.0f, ng = tanhf(g);
+        L = tanhf(L * g) / ng;
+        R = tanhf(R * g) / ng;
+    }
+    int widx = tape_widx[b];
+    tape_bufL[b][widx] = L;                          // write the (saturated) signal to tape
+    tape_bufR[b][widx] = R;
+    tape_widx[b] = (widx + 1) % TAPE_BUF_LEN;
+    if (tape_wow[b] > 0.0f || tape_flut[b] > 0.0f) { // wow + flutter pitch warble (one shared transport)
+        tape_wph[b] += TAPE_WOW_RATE  / (float)SOUND_SAMPLE_RATE; if (tape_wph[b] >= 1.0f) tape_wph[b] -= 1.0f;
+        tape_fph[b] += TAPE_FLUT_RATE / (float)SOUND_SAMPLE_RATE; if (tape_fph[b] >= 1.0f) tape_fph[b] -= 1.0f;
+        float mod = sinf(tape_wph[b] * 6.2831853f) * tape_wow[b]  * TAPE_WOW_DEPTH
+                  + sinf(tape_fph[b] * 6.2831853f) * tape_flut[b] * TAPE_FLUT_DEPTH;
+        float rp = (float)widx - TAPE_BASE_DELAY + mod;
+        while (rp < 0.0f) rp += TAPE_BUF_LEN;
+        while (rp >= TAPE_BUF_LEN) rp -= TAPE_BUF_LEN;
+        L = moddel_hermite(tape_bufL[b], TAPE_BUF_LEN, rp);   // shared transport → same read pos L/R
+        R = moddel_hermite(tape_bufR[b], TAPE_BUF_LEN, rp);
+    }
+    float k = 1.0f - 0.45f * sat;                   // HF rolloff: k=1 (transparent) → 0.55 (warm) as sat rises
+    tape_lpL[b] += k * (L - tape_lpL[b]); L = tape_lpL[b];
+    tape_lpR[b] += k * (R - tape_lpR[b]); R = tape_lpR[b];
+    *mixL = L; *mixR = R;
+}
+
 // configure a bus's chorus / flanger params (clamped) + mark it live. bus 0 = master.
 static void fx_set_chorus(int b, float rate, float depth, float mix) {
     if (rate < 0.1f)  rate  = 0.1f;  if (rate > 5.0f)  rate  = 5.0f;
@@ -610,6 +664,13 @@ static void fx_set_flanger(int b, float rate, float depth, float fb, float mix) 
     if (mix < 0.0f)   mix   = 0.0f;  if (mix > 1.0f)   mix   = 1.0f;
     flg_rate[b] = rate; flg_depth[b] = depth; flg_fb[b] = fb; flg_mix[b] = mix;
     flg_used[b] = true;
+}
+static void fx_set_tape(int b, float wow, float flut, float sat) {
+    if (wow < 0.0f)  wow  = 0.0f; if (wow > 1.0f)  wow  = 1.0f;
+    if (flut < 0.0f) flut = 0.0f; if (flut > 1.0f) flut = 1.0f;
+    if (sat < 0.0f)  sat  = 0.0f; if (sat > 1.0f)  sat  = 1.0f;
+    tape_wow[b] = wow; tape_flut[b] = flut; tape_sat[b] = sat;
+    tape_used[b] = true;
 }
 
 // envelope-follower smoothing coefficient from a time in ms (one-pole; 0 ms = instant)
@@ -676,6 +737,8 @@ typedef enum {
     SR_FLANGER      = 44,   // a=rate*1000, b=depth*1000, c=feedback*1000 (signed), e0=mix*1000 — THE master flanger
     SR_INSTR_CHORUS = 45,   // a=slot, b=rate*1000, c=depth*1000, e0=mix*1000 — chorus on one instrument (auto-bus)
     SR_INSTR_FLANGER= 46,   // a=slot, b=rate*1000, c=depth*1000, e0=fb*1000 (signed), e1=mix*1000 — flanger on one instrument (auto-bus)
+    SR_TAPE         = 47,   // a=wow*1000, b=flutter*1000, c=sat*1000 — THE master tape (bus 0)
+    SR_INSTR_TAPE   = 48,   // a=slot, b=wow*1000, c=flutter*1000, e0=sat*1000 — tape on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3102,6 +3165,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_flanger(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f);
+    } else if (r.kind == SR_TAPE) {         // master tape (bus 0): a=wow, b=flutter, c=sat (×1000)
+        fx_set_tape(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
+    } else if (r.kind == SR_INSTR_TAPE) {   // per-instrument: a=slot, b=wow, c=flutter, e0=sat (×1000)
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_tape(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
     } else if (r.kind == SR_INSTR_PAN) {    // a=slot, b=pan*1000 (signed)
         int slot = r.a;
         if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
@@ -3346,6 +3415,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         for (int b = 1; b < SOUND_FX_BUSES; b++) {
             if (cho_used[b]) chorus_process(b, &busL[b], &busR[b]);
             if (flg_used[b]) flanger_process(b, &busL[b], &busR[b]);
+            if (tape_used[b]) tape_process(b, &busL[b], &busR[b]);
             busL[0] += busL[b]; busR[0] += busR[b];
         }
 
@@ -3406,6 +3476,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         // land here later, before the soft-clip.)
         if (cho_used[0]) chorus_process(0, &mixL, &mixR);   // BBD chorus, antiphase stereo width, in place
         if (flg_used[0]) flanger_process(0, &mixL, &mixR);  // short swept delay + feedback, mono, in place
+        if (tape_used[0]) tape_process(0, &mixL, &mixR);    // wow/flutter/saturation, stereo, in place
 
         // master soft-clip: linear below the ±0.8 knee (quiet mixes stay bit-identical),
         // tanh-shaped above, asymptote at ±1.0 — a hot sum folds over smoothly instead of
@@ -3881,6 +3952,17 @@ void instrument_flanger(int slot, float rate, float depth, float feedback, float
     sound_push_ctrl(SR_INSTR_FLANGER, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(feedback * 1000.0f), (int)(mix * 1000.0f), 0);
 }
 
+// ── tape: THE master tape (wow/flutter/saturation) — third use of the modulated-delay technique ──
+
+void tape(float wow, float flutter, float saturation) {
+    sound_push_ctrl(SR_TAPE, (int)(wow * 1000.0f), (int)(flutter * 1000.0f), (int)(saturation * 1000.0f), 0, 0, 0);
+}
+
+void instrument_tape(int slot, float wow, float flutter, float saturation) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_TAPE, slot, (int)(wow * 1000.0f), (int)(flutter * 1000.0f), (int)(saturation * 1000.0f), 0, 0);
+}
+
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {
     if (handle <= 0) return;
     if (which < 0 || which >= SOUND_ENVS) return;
@@ -4053,9 +4135,11 @@ static void sound_init(void) {
     reverb_damp = 0.5f;
     reverb_used = false;
 
-    // per-bus chorus + flanger inserts (bus 0 master + aux): clean slate (libtcc hot-reload + --det)
+    // per-bus chorus + flanger + tape inserts (bus 0 master + aux): clean slate (libtcc hot-reload + --det)
     memset(cho_buf, 0, sizeof(cho_buf));
     memset(flg_buf, 0, sizeof(flg_buf));
+    memset(tape_bufL, 0, sizeof(tape_bufL));
+    memset(tape_bufR, 0, sizeof(tape_bufR));
     fx_next_bus = 1;
     fx_bus_overflow = 0;
     for (int b = 0; b < SOUND_FX_BUSES; b++) {
@@ -4063,6 +4147,8 @@ static void sound_init(void) {
         cho_rate[b] = 1.5f; cho_depth[b] = 0.4f; cho_mix[b] = 0.5f; cho_used[b] = false;
         flg_widx[b] = 0; flg_phase[b] = 0.0f;
         flg_rate[b] = 0.3f; flg_depth[b] = 0.7f; flg_fb[b] = 0.7f; flg_mix[b] = 0.5f; flg_used[b] = false;
+        tape_widx[b] = 0; tape_wph[b] = 0.0f; tape_fph[b] = 0.0f; tape_lpL[b] = 0.0f; tape_lpR[b] = 0.0f;
+        tape_wow[b] = 0.3f; tape_flut[b] = 0.2f; tape_sat[b] = 0.4f; tape_used[b] = false;
     }
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence

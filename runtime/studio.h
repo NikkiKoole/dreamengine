@@ -383,6 +383,11 @@ void flanger(float rate, float depth, float feedback, float mix);  // rate 0.05.
 void instrument_chorus(int slot, float rate, float depth, float mix);            // chorus on just this slot
 void instrument_flanger(int slot, float rate, float depth, float feedback, float mix);  // flanger on just this slot
 
+// tape — vintage analog warmth over the whole mix: wow (slow pitch drift) + flutter (fast warble)
+// + saturation (warm soft-clip + HF rolloff). Master, or per-instrument (lo-fi just the drums).
+void tape(float wow, float flutter, float saturation);                  // wow/flutter/sat 0..1 (0,0,0 = off). defaults 0.3/0.2/0.4
+void instrument_tape(int slot, float wow, float flutter, float saturation);  // tape on just this slot
+
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti
 #define SCALE_MINOR      1   // natural minor
