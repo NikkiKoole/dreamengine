@@ -5,6 +5,35 @@ The rich-instrument program: porting navkit's self-contained oscillator engines
 `INSTR_*` ids with the fixed three-macro surface (harmonics / timbre / morph), plus
 the effects-layer plan. **Genre: design exploration.**
 
+> ## ⏱ STATE — read this first (2026-06-10)
+>
+> Orient cheaply: current state + the next bite, so you don't have to read 1,400 lines to
+> know where the program stands. (Below this header, much of §8/§8.8 is the *historical*
+> port plan — useful for rationale, stale on status. The studio.h `INSTR_*` block is the
+> source of truth for what's shipped; the per-engine §8.8.x "step-1 design" labels are
+> historical and mostly mean SHIPPED now.)
+>
+> **Engines: the roster is COMPLETE — all 12 shipped + 1 experimental.** PLUCK · MALLET ·
+> FM · ORGAN · EPIANO · PD · MEMBRANE · REED · PIPE · GUITAR · PIANO · BOWED, each behind an
+> `INSTR_*` id with the fixed 3-macro surface (harmonics/timbre/morph). **VOICE** (formant,
+> `INSTR_VOICE`) is EXPERIMENTAL — its public macro mapping isn't locked (driven raw via
+> `voice_param()` in the voxlab prototype). What's left on engines is **tweaking/tuning**,
+> not new engines. To add/tune one: its §8.8.x section + the shipping playbook §8.8.2.
+>
+> **Stereo (the effects-layer prerequisite): DONE.** Shipped 2026-06-09 (linear pan law,
+> `instrument_pan`/`note_pan`/`LFO_PAN`); constant-power added as a gated opt-in `pan_law()`
+> 2026-06-10. Full record: [`stereo.md`](stereo.md). The §8.10 gate is now open.
+>
+> **▶ NEXT BITE — the effects-bus layer (§8.10), not started.** Begin small: **one master
+> reverb + formalize the bus concept** — generalize today's hardcoded mono echo into
+> `bus[NBUS]` + a small fixed FX chain, master = bus 0 (§8.10 routing model). Then the
+> §8.10.1 PARKED per-voice stand-ins migrate onto real phase-coherent buses: the **great
+> auto-wah** (bandpass on the summed mix + follower), **epiano tremolo**, and the
+> **envelope follower**. **Authoritative roster = [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md)**
+> (effects are recipes; ~12 primitives, forever); this doc's §8.10 is the routing sketch 0015
+> disciplined — where they differ, 0015 wins. To work on effects, read **0015 + §8.10 +
+> §8.10.1** and skip the rest.
+
 > **Provenance + numbering.** Split out of [`audio-notes.md`](audio-notes.md) on
 > 2026-06-07 — it was **§8** there (40% of the file). **Section numbers are kept
 > verbatim (§8.1–§8.10)** so every existing reference — "audio-notes §8.9" in STATUS,
@@ -17,6 +46,10 @@ the effects-layer plan. **Genre: design exploration.**
 
 ## 8. Borrowing rich instruments from navkit
 
+> **⚠️ HISTORICAL (2026-06-03) — superseded by the STATE header at the top of this file.**
+> This is the *original* port plan, kept for rationale; the whole engine roster has since
+> shipped. Read it for "why we sequenced it this way," not for current status.
+>
 > **Status: QUEUED — next sound feature, not started (as of 2026-06-03).** The plan below is
 > agreed; the trigger just hasn't been pulled. **First bite when we do:** port **Karplus-Strong
 > pluck** as `INSTR_PLUCK` — ~20 lines, sounds unmistakably like a real plucked string the moment
