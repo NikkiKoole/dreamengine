@@ -84,19 +84,32 @@ queue the wasm heap must be a `SharedArrayBuffer` → which the browser gates be
 disappears** — threads share the process address space for free. So COOP/COEP /
 service-worker is a web deployment detail, not part of the architecture.
 
-## The backend pick: runtime-detected, one wasm
+## The backend pick + auto-fallback
 
-Decided: **detect at runtime, don't fork the build.** At `sound_init` on web:
+Goal: a cart **uses the worklet when it can and falls back to ScriptProcessor when it
+can't**, so it plays everywhere — isolated or not, old browser, embed.
 
-```
-if (crossOriginIsolated)  → AudioWorklet backend   (real audio thread, tight)
-else                      → ScriptProcessorNode    (main thread, the current ceiling)
-```
+**Correction (2026-06-10):** an earlier draft said "one wasm, runtime pick." That's wrong
+for the shared-memory path: a worklet wasm emits `WebAssembly.Memory({shared:true})`, which
+**cannot instantiate without cross-origin isolation** — exactly why `nocoi.html` aborts in
+the spike. So you can't branch backends *inside* one module; the fallback is structural.
+Two honest ways:
 
-One wasm ships both backends; only the *timing ceiling* differs by context. Benefits:
-every cart Just Works everywhere (isolated or not, old browser, embed), and we never
-maintain two artifacts per cart. Native always uses its real audio thread — no toggle
-there. (A `?debug=1` line could surface which backend is live.)
+- **Path A — two builds + a loader (pragmatic; Stage 0 de-risked).** Build each cart twice:
+  the worklet/shared-memory wasm AND the plain ScriptProcessor wasm (the latter is exactly
+  what ships today). A small loader picks at load: `crossOriginIsolated ? worklet : plain`.
+  Auto-fallback ✓. Cost ≈ 2× build time + storage per cart, but the fallback half is the
+  current build (additive, not new). Needs coi-serviceworker for the worklet half.
+- **Path B — synth-in-the-worklet, no shared memory (elegant; bigger).** Run the synth +
+  clock inside the worklet with its own memory; main thread posts note events via
+  `postMessage` (latency-tolerant — notes are scheduled ahead). No shared memory → no
+  isolation, no coi-serviceworker, no two builds — works everywhere from one build, and
+  maps cleanly onto the native audio-thread model. Cost: a real restructure of where the
+  synth runs.
+
+Native is unaffected either way — always a real audio thread, no toggle. `?debug=1` can
+surface which backend is live. **A-vs-B is a real decision; make it before Stage 2.**
+Stage 1 (atomics) is identical groundwork for both.
 
 ## Cross-platform payoff & the not-free parts
 
