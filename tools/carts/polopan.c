@@ -180,7 +180,7 @@ static void new_song(double pos, unsigned seed) {
     bpm(tempo);
     songBase = (long)pos + 8;
     gvInit   = false;  pvInit = false;
-    melPitch = 79;     bassLast = 43;
+    melPitch = (sng.arch == A_NANGA) ? 67 : 79;     bassLast = 43;   // NANGA's flute sits an octave lower (in-tune/natural register)
     kitLag   = rnd_between(2, 8);             // performance jitter (engine rnd)
     songCount++;
 }
@@ -320,12 +320,18 @@ static void lead_voices(Ch c) { rad_lead_to(root_pc(c), QV[c.q], gv, 3, 60, 84, 
 // MELODIC ACCOMMODATION — over a borrowed chord, only its tones; else the key
 static int pick_mel(Ch c) {
     int bestM = melPitch, bestScore = -999;
+    // topline register: C5–F6 for the SINE/VOICE leads, but NANGA's PIPE flute drops an
+    // octave to C4–F5 — the natural, less-shrill flute range, squarely in PIPE's in-tune zone
+    // (the 2026-06-11 engine fix; audio-notes §18). olo/ohi are the octaves the window spans.
+    int tlo = (sng.arch == A_NANGA) ? 60 : 72;
+    int thi = (sng.arch == A_NANGA) ? 77 : 89;
+    int olo = tlo / 12, ohi = thi / 12;
     if (c.brw) {
         for (int t = 0; t < 4; t++) {
             int pc = (root_pc(c) + QT[c.q][t]) % 12;
-            for (int oct = 6; oct <= 7; oct++) {
+            for (int oct = olo; oct <= ohi; oct++) {
                 int m = oct * 12 + pc;
-                if (m < 72 || m > 89) continue;
+                if (m < tlo || m > thi) continue;
                 int score = 10 - rad_iabs(m - melPitch) + rnd(4);
                 if (m == melPitch) score -= 3;
                 if (score > bestScore) { bestScore = score; bestM = m; }
@@ -334,9 +340,9 @@ static int pick_mel(Ch c) {
     } else {
         for (int d = 0; d < 7; d++) {
             int pc = (sng.keyPc + MAJSC[d]) % 12;
-            for (int oct = 6; oct <= 7; oct++) {
+            for (int oct = olo; oct <= ohi; oct++) {
                 int m = oct * 12 + pc;
-                if (m < 72 || m > 89) continue;
+                if (m < tlo || m > thi) continue;
                 int score = 10 - rad_iabs(m - melPitch) + rnd(4);
                 int rel = (pc - root_pc(c) + 12) % 12;
                 if (rel == 0 || rel == 3 || rel == 4 || rel == 7) score += 3;
