@@ -562,6 +562,7 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 - **cathedral.c** → organ/cathedral (the reverb showcase — a clean organ that blooms into a hall; `reverb()` is the instrument)
 - **mistress.c** → guitar/mistress (the flanger showcase — a strummed steel string through `flanger()`; the swept comb is the instrument)
 - **tapeloop.c** → saw/tapeloop (the tape showcase — a soft saw pad through a long echo loop + `tape()`; the wow/flutter/saturation degradation is the instrument)
+- **clavinet.c** → epiano/clav-wah (the auto-wah showcase — a percussive INSTR_EPIANO clav (h0.85 t0.75 m0.55) through `instrument_wah()`; the envelope-following quack is the instrument)
 - **solina.c** → saw/solina-tab (the chorus companion to juno — a divide-down string machine: 6 stacked-saw footage tabs, the ensemble `chorus()` IS the Solina)
 - **stylophone.c** → pulse/square · drawn/square · /sine · /sawtooth · /organ
 - **loopstation.c** → sine/kick · noise/snare · noise/hat · saw/bass · pulse/lead · sine/theremin · tri/click
