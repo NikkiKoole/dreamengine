@@ -194,11 +194,15 @@ typedef struct {
     // formants with a continuous vowel morph. EXPERIMENTAL: the raw params live FLAT in vox_p[]
     // (poked by voice_param() — the voxlab fat prototype) instead of riding the 3 macro knobs,
     // so we can audition which three deserve to become harmonics/timbre/morph. vowels-only for now.
-    float  vox_p[10];                // raw param TARGETS 0..1 (voice_param idx, must hold VOX_NPARAM): vowel/size/breath/openQ/tilt/vibDepth/vibRate/nasality/openness/frontness
-    float  vox_s[10];                // slewed copies (per-sample one-pole → no zipper on slider moves)
+    float  vox_p[20];                // raw param TARGETS 0..1 (voice_param idx, must hold VOX_NPARAM): vowel/size/breath/openQ/tilt/vibDepth/vibRate/nasality/openness/frontness + EXPERIMENTAL 10 buzz·11 jitter·12 shimmer·13 creak·14 nasalAF·15 reduce·16 measBW
+    float  vox_s[20];                // slewed copies (per-sample one-pole → no zipper on slider moves)
     float  vox_glot_ph;              // glottal pulse phase
     float  vox_tilt_lp;              // spectral-tilt 1-pole state
     float  vox_vib_ph;               // vibrato LFO phase
+    float  vox_jit_mul;              // per-period pitch-jitter multiplier (1.0 = none); redrawn each glottal cycle
+    float  vox_shim_mul;             // per-period amplitude-shimmer multiplier (1.0 = none)
+    int    vox_creak_skip;           // diplophonia/creak: attenuate this glottal period (vocal fry)
+    float  vox_naf_low, vox_naf_band; // anti-formant nasality notch SVF state (navkit WAVE_VOICE model)
     float  vox_f_low[4], vox_f_band[4]; // 4 formant SVF states (low, band) — high recomputed per sample
     int    vox_cons;                 // consonant ONSET id (VC_*), -1 = none; set by voice_consonant()
     float  vox_cons_t;               // seconds since the consonant onset began (counts up to its duration)
@@ -267,6 +271,23 @@ typedef struct {
     float  eng_p[2];                    // copied from the instrument at note-on (0 weight · 1 attack)
     float  eng_subph, eng_env;          // sub-osc phase + envelope follower
     int    eng_click;                   // onset-click samples remaining
+    // brass state (INSTR_BRASS): STK BrassInstrument (Cook/Scavone) — a bore delay (REUSES ks_buf,
+    // distinct wave id, never shares a voice with the reed/pipe/bowed/Karplus paths) closed by an
+    // inverting bell reflection, driven by a LIP VALVE modeled as a 2-pole resonant biquad (the
+    // mass-spring lip; its resonance tracks just ABOVE the played pitch → lip-slur / harmonic lock).
+    // The defining timbre is pressure-driven BRASSINESS: high blow + high timbre steepens the
+    // circulating wave (a shockwave) → the overtones explode (quiet=round, loud=blatty). Held/
+    // self-oscillating like reed; the amp ADSR gates it. STEP-0 + macros: §8.8.10.
+    int    br_len;                      // bore delay length (half-wavelength one-way); 0 = no note-on init
+    int    br_idx;                      // bore write index into ks_buf
+    float  br_initfreq;                 // freq at note-on (bore sized for it; pitch tracking glides off it)
+    float  br_lip_y1, br_lip_y2;        // lip biquad output history (the normalized resonant bandpass)
+    float  br_lip_x1, br_lip_x2;        // lip biquad input history (b2 = -b0 bandpass needs x[n-2])
+    float  br_lp;                       // bell-radiation 1-pole LP state
+    float  br_dc_prev, br_dc_state;     // output DC blocker (steady blow → large DC)
+    float  br_vib_ph, br_drift_ph, br_drift, br_noise_lp;  // humanized lip-vibrato + breath turbulence/drift
+    int    br_attack;                   // speak-transient samples remaining (the "tah" onset)
+    bool   br_on;                       // note-on init guard (engine id hit without a note-on → silent)
 } Voice;
 
 static Voice         voices[SOUND_VOICES];
@@ -1459,6 +1480,123 @@ static inline float sound_bowed_sample(Voice *v, float pitch_mul) {
     return dc * 3.0f;
 }
 
+// ── INSTR_BRASS: lip-reed brass (STK BrassInstrument, Cook/Scavone) ─────────────
+// BRASS note-on: size the bore (half-wavelength one-way, like reed — the inverting bell reflection
+// gives the return trip) and seed it with tiny noise for a fast oscillation startup. REUSES ks_buf
+// as the bore (distinct wave id 29 — never collides with reed/pipe/bowed/Karplus on a voice). Clear
+// the lip biquad + bell LP + DC block; arm a short breathy "tah" speak transient. Self-oscillates
+// from here; the amp ADSR gates it like organ/reed/pipe/bowed.
+static void sound_brass_start(Voice *v) {
+    float f = v->freq; if (f < 20.0f) f = 20.0f;
+    int len = (int)((float)SOUND_SAMPLE_RATE / f / 2.0f);   // half-wavelength one-way bore (reed model)
+    if (len > SOUND_KS_MAX - 1) len = SOUND_KS_MAX - 1;     // bottoms out ~43Hz, below brass range
+    if (len < 4) len = 4;
+    for (int i = 0; i < len; i++) {                         // seed with tiny noise (faster than silence)
+        v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+        v->ks_buf[i] = (((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f) * 0.01f;
+    }
+    v->br_len = len; v->br_idx = 0; v->br_initfreq = f;
+    v->br_lip_y1 = v->br_lip_y2 = v->br_lip_x1 = v->br_lip_x2 = 0.0f;   // lip biquad state
+    v->br_lp = v->br_dc_prev = v->br_dc_state = 0.0f;
+    v->br_vib_ph = v->br_drift_ph = v->br_drift = v->br_noise_lp = 0.0f;
+    v->br_attack = (int)(0.018f * (float)SOUND_SAMPLE_RATE);   // ~18ms breath/"tah" speak onset
+    v->br_on = true;
+}
+
+// One BRASS sample: a bore delay (REUSES ks_buf) closed by an inverting bell reflection; the
+// returning pressure drives a LIP VALVE modeled as a 2-pole resonant biquad (the mass-spring lip —
+// its resonance sits just ABOVE the played pitch, the mechanism behind lip-slurs and harmonic lock).
+// Mouth pressure minus the bore's reflected pressure crosses a one-sided flow nonlinearity at the
+// lip (a lip can only open outward); the result re-excites the bore. The DEFINING timbre is
+// pressure-driven BRASSINESS: at high blow + high timbre the circulating wave steepens (a shockwave),
+// exploding the overtones — quiet=round/mellow, loud=blatty. Macros (§8.8.10, the only three knobs):
+// harmonics = INSTRUMENT/BORE (bright/tight trumpet → cornet → flugel → trombone → horn → dark tuba;
+// drives the lip-resonance ratio + Q + bell LP, NEVER the delay length so it can't detune), timbre =
+// BRASSINESS (the shockwave overtone explosion), morph = BREATH/LIP LEAN-IN (soft steady → growling
+// breath + deeper vibrato — mirrors reed). Pitch: bore read length tracks freq*pitch_mul (§8.8.1), so
+// vibrato / pitch-env / note_pitch / note_glide / the trombone slide all bend it live.
+static inline float sound_brass_sample(Voice *v, float pitch_mul) {
+    if (!v->br_on || v->br_len <= 0) return 0.0f;          // engine id without a note-on init
+    const float TWO_PI = 6.2831853f;
+    const float SR = (float)SOUND_SAMPLE_RATE;
+    // macros → physical params (all pinned inside the self-oscillation window)
+    float dark   = v->harm;                                // 0 bright trumpet → 1 dark tuba
+    float bright = v->timb;                                // brassiness amount
+    float blow   = 0.42f + v->mor * 0.20f;                 // breath pressure [0.42,0.62] (the oscillation window)
+    float vibd   = 0.08f + v->mor * 0.35f;                 // lean-in vibrato deepens with breath
+    float lpCoeff = 0.85f - dark * 0.35f;                  // bell radiation: bright trumpet (light LP) → dark tuba (heavy)
+    // the BRASS FORMANT (the lip+bell resonance — the "brass vowel"): sweeps UP with brassiness,
+    // and sits lower for the big dark horns. This formant rising with dynamics IS the brassy blaaat.
+    float fmtHz  = 600.0f + (1.0f - dark) * 850.0f + bright * 1300.0f;   // ~600..2750 Hz
+    // HUMANIZED lip vibrato — wandering rate/depth, lives mostly in PITCH (reed/pipe/bowed pattern)
+    v->br_drift_ph += 0.7f / SR; if (v->br_drift_ph >= 1.0f) v->br_drift_ph -= 1.0f;
+    float wob = sinf(v->br_drift_ph * TWO_PI);             // slow wander, shared by rate + depth
+    v->br_vib_ph += (5.4f + 0.9f * wob) / SR; if (v->br_vib_ph >= 1.0f) v->br_vib_ph -= 1.0f;
+    float vib = sinf(v->br_vib_ph * TWO_PI) * vibd * (0.8f + 0.2f * wob);
+    // breath turbulence — the "air" cue (reed pattern); resonate filtered noise through the bore + drift
+    v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+    float wn = ((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f;
+    v->br_noise_lp += 0.5f * (wn - v->br_noise_lp);
+    v->br_drift += 0.0007f * (wn - v->br_drift);
+    float air = 0.05f + v->mor * 0.08f;
+    if (v->br_attack > 0) {                                // the speak transient: a breath burst at onset
+        air += 0.35f * (float)v->br_attack / (0.018f * SR);
+        v->br_attack--;
+    }
+    // mouth pressure: steady blow + a little vibrato + a slow drift + the resonated breath noise
+    float Pm = blow + vib * 0.030f + v->br_drift * blow * 0.04f + blow * air * v->br_noise_lp;
+    // bore delay: fractional read length tracks live pitch + pitch vibrato + cart glide/LFO (§8.8.1)
+    float curf = v->freq * pitch_mul * (1.0f + vib * 0.010f); if (curf < 20.0f) curf = 20.0f;
+    float effLen = (float)v->br_len * v->br_initfreq / curf;
+    if (effLen < 2.0f) effLen = 2.0f;
+    if (effLen > (float)v->br_len) effLen = (float)v->br_len;
+    float readPos = (float)v->br_idx - effLen;
+    while (readPos < 0.0f) readPos += (float)v->br_len;
+    int i0 = (int)readPos; if (i0 >= v->br_len) i0 -= v->br_len;
+    int i1 = (i0 + 1 < v->br_len) ? i0 + 1 : 0;
+    float fr = readPos - floorf(readPos);
+    float boreReturn = v->ks_buf[i0] + fr * (v->ks_buf[i1] - v->ks_buf[i0]);
+    // ── LIP VALVE (self-oscillating core, the McIntyre/Schumacher pressure-controlled valve that
+    // REED uses — it reliably self-oscillates, so brass borrows it). A bell-radiation LP smooths
+    // the returning wave, the open bell inverts it, and the lip reflection is PRESSURE-DEPENDENT
+    // (offset + slope·pressure-difference) — that pressure dependence is the negative resistance
+    // that sustains oscillation. Brass differs from reed in the TIMBRE stages below, not here.
+    v->br_lp += lpCoeff * (boreReturn - v->br_lp);         // bell radiation LP on the returning wave
+    float endRefl = -0.96f - dark * 0.03f;                 // open-bell inversion (low loss → loop gain > 1, it sounds)
+    float pdiff   = endRefl * v->br_lp - Pm;               // pressure across the lips
+    float lipRefl = 0.50f - 0.70f * pdiff;                 // pressure-dependent lip reflection — the negative
+    if (lipRefl < -1.0f) lipRefl = -1.0f; else if (lipRefl > 1.0f) lipRefl = 1.0f;   // resistance that self-oscillates
+    float boreInput = Pm + pdiff * lipRefl;
+    // ── BRASSINESS: pressure-driven wave steepening (the signature shockwave) ──
+    // more drive → sharper tanh knee → richer spectrum; drive scales with timbre AND blow pressure
+    // (the real physics: the same horn blown harder gets blattier). 1/drive normalizes loudness so
+    // every timbre position is the same level (§8.8.1) and bounds the output (no clip/DC runaway).
+    float drive = 1.0f + bright * (2.0f + blow * 4.0f);
+    boreInput = tanhf(boreInput * drive) / drive;          // steepen, then loudness-normalize
+    v->ks_buf[v->br_idx] = boreInput;
+    v->br_idx++; if (v->br_idx >= v->br_len) v->br_idx = 0;
+    // DC block — steady blow pressure carries a large DC (reed pattern, identical coeff)
+    float out = boreReturn;
+    float dc  = out - v->br_dc_prev + 0.995f * v->br_dc_state;
+    v->br_dc_prev = out; v->br_dc_state = dc;
+    // ── BRASS FORMANT: a resonant bandpass (the lip+bell resonance) at fmtHz, reusing the lip-biquad
+    // state. Zeros at ±1, peak gain ≈1 (b0 = 0.5−0.5·r², b2 = −b0). Mixing its resonant band back in
+    // gives the brass "vowel"; because fmtHz rises with brassiness, the tone OPENS UP (blaaat) as the
+    // player pushes TIMBRE — the brass formant sweep no other engine has.
+    float wf = TWO_PI * fmtHz / SR; if (wf > 2.6f) wf = 2.6f;     // Nyquist guard
+    float rf = 0.972f;
+    float a2f = rf * rf;
+    float a1f = -2.0f * rf * cosf(wf);
+    float b0f = 0.5f - 0.5f * a2f;
+    float fmt = b0f * (dc - v->br_lip_x2) - a1f * v->br_lip_y1 - a2f * v->br_lip_y2;
+    v->br_lip_x2 = v->br_lip_x1; v->br_lip_x1 = dc;
+    v->br_lip_y2 = v->br_lip_y1; v->br_lip_y1 = fmt;
+    float shaped = dc + fmt * (1.2f + bright * 2.2f);            // emphasize the brass band, more when brassy
+    // makeup gain: dark/tuba voicings radiate quieter (heavy bell LP) — lift them so loudness is even
+    // across the harmonics axis (§8.8.1: "knobs must not read as volume")
+    return shaped * (3.2f + dark * 2.0f);
+}
+
 // ── INSTR_VOICE: formant voice (navkit VoicForm port; vowels-only for the voxlab prototype) ──
 // A glottal source (Rosenberg polynomial pulse + aspiration breath) through four parallel SVF
 // formant filters whose centre frequencies trace a continuous vowel path. The raw params
@@ -1466,23 +1604,51 @@ static inline float sound_bowed_sample(Voice *v, float pitch_mul) {
 // to become the public harmonics/timbre/morph macros. navkit crib: processVoicFormOscillator /
 // vfPhonemeTable (navkit/soundsystem/engines/synth_oscillators.h). The formant SVF here is the
 // same Chamberlin topology as navkit's processFormantFilter and dreamengine's own filter().
-#define VOX_NPARAM 10   // 0 vowel·1 size·2 breath·3 openq·4 tilt·5 vibDepth·6 vibRate + EXPERIMENTAL 7 nasality·8 openness(F1)·9 frontness(F2)
-_Static_assert(VOX_NPARAM <= 10, "grow Voice.vox_p[]/vox_s[] (sized [10]) before raising VOX_NPARAM");
-// vowel path U→O→A→E→I (close-back → open → close-front): F1..F4 (Hz) + relative amps.
-// Trimmed from navkit's vfPhonemeTable vowel rows; bandwidths are derived from the centre freq.
-static const float vox_vowel_f[5][4] = {
-    { 300.0f,  870.0f, 2240.0f, 3400.0f},   // U  "oo" (boot)
-    { 570.0f,  840.0f, 2410.0f, 3400.0f},   // O  "oh" (go)
-    { 730.0f, 1090.0f, 2440.0f, 3400.0f},   // A  "ah" (father)
-    { 530.0f, 1840.0f, 2480.0f, 3400.0f},   // E  "eh" (bed)
-    { 270.0f, 2290.0f, 3010.0f, 3400.0f},   // I  "ee" (see)
+#define VOX_NPARAM 19   // 0 vowel·1 size·2 breath·3 openq·4 tilt·5 vibDepth·6 vibRate · 7 nasality·8 openness(F1)·9 frontness(F2) + EXPERIMENTAL 10 buzz·11 jitter·12 shimmer·13 creak·14 nasalAF·15 reduce·16 measBW·17 vow2(diphthong target 0..9)·18 glide(0=primary→1=at vow2)
+_Static_assert(VOX_NPARAM <= 20, "grow Voice.vox_p[]/vox_s[] (sized [20]) before raising VOX_NPARAM");
+// vowel table — navkit's full 10 vfPhonemeTable vowel rows (Klatt 1980 / Peterson-Barney 1952):
+// F1..F4 (Hz) + relative amps + measured bandwidths. Rows 0..4 are the U→O→A→E→I path the idx-0
+// `vowel` macro morphs along (close-back → open → close-front, UNCHANGED — vox/voxlab/say feel as
+// before); rows 5..9 (AE AH AW UH ER) are the extra vowels, reachable as the diphthong/glide
+// TARGET (vow2 idx 17 selects 0..9). Completing the table was the navkit copy-paste the audit flagged.
+#define VOX_NVOWEL 10
+static const float vox_vowel_f[VOX_NVOWEL][4] = {
+    { 300.0f,  870.0f, 2240.0f, 3400.0f},   // 0 U  "oo" (boot)   ── path ──
+    { 570.0f,  840.0f, 2410.0f, 3400.0f},   // 1 O  "oh" (go)
+    { 730.0f, 1090.0f, 2440.0f, 3400.0f},   // 2 A  "ah" (father)
+    { 530.0f, 1840.0f, 2480.0f, 3400.0f},   // 3 E  "eh" (bed)
+    { 270.0f, 2290.0f, 3010.0f, 3400.0f},   // 4 I  "ee" (see)
+    { 660.0f, 1720.0f, 2410.0f, 3400.0f},   // 5 AE "ae" (cat)    ── glide targets ──
+    { 520.0f, 1190.0f, 2390.0f, 3400.0f},   // 6 AH "uh" (cup)
+    { 570.0f,  840.0f, 2410.0f, 3400.0f},   // 7 AW "aw" (law)
+    { 440.0f, 1020.0f, 2240.0f, 3400.0f},   // 8 UH "u"  (book)
+    { 490.0f, 1350.0f, 1690.0f, 3400.0f},   // 9 ER "er" (bird, rhotic)
 };
-static const float vox_vowel_a[5][4] = {
-    {1.0f, 0.30f, 0.15f, 0.08f},
-    {1.0f, 0.40f, 0.20f, 0.10f},
-    {1.0f, 0.50f, 0.30f, 0.10f},
-    {1.0f, 0.70f, 0.30f, 0.10f},
-    {1.0f, 0.50f, 0.20f, 0.10f},
+static const float vox_vowel_a[VOX_NVOWEL][4] = {
+    {1.0f, 0.30f, 0.15f, 0.08f},  // U
+    {1.0f, 0.40f, 0.20f, 0.10f},  // O
+    {1.0f, 0.50f, 0.30f, 0.10f},  // A
+    {1.0f, 0.70f, 0.30f, 0.10f},  // E
+    {1.0f, 0.50f, 0.20f, 0.10f},  // I
+    {1.0f, 0.60f, 0.30f, 0.10f},  // AE
+    {1.0f, 0.45f, 0.25f, 0.10f},  // AH
+    {1.0f, 0.40f, 0.20f, 0.10f},  // AW
+    {1.0f, 0.40f, 0.20f, 0.08f},  // UH
+    {1.0f, 0.50f, 0.40f, 0.10f},  // ER
+};
+// measured bandwidths (Hz) — navkit's BW rows. Used when measBW (idx 16) is up, to A/B against
+// the derived bw = 60 + fc*0.08 approximation — a free vowel-authenticity audition.
+static const float vox_vowel_bw[VOX_NVOWEL][4] = {
+    { 65.0f,  90.0f, 130.0f, 170.0f},   // U
+    { 80.0f, 100.0f, 140.0f, 180.0f},   // O
+    { 90.0f, 110.0f, 140.0f, 180.0f},   // A
+    { 70.0f, 100.0f, 130.0f, 170.0f},   // E
+    { 60.0f,  90.0f, 120.0f, 170.0f},   // I
+    { 80.0f, 110.0f, 140.0f, 180.0f},   // AE
+    { 75.0f, 100.0f, 130.0f, 170.0f},   // AH
+    { 80.0f, 100.0f, 140.0f, 180.0f},   // AW
+    { 70.0f,  95.0f, 130.0f, 170.0f},   // UH
+    { 75.0f, 100.0f, 120.0f, 170.0f},   // ER
 };
 
 // consonant ONSET table (articulation): a note can BEGIN with a brief consonant that morphs
@@ -1492,8 +1658,13 @@ static const float vox_vowel_a[5][4] = {
 // onset duration (s), and a plosive flag (a sharp noise pop in the first ~12 ms). Set per note
 // with voice_consonant(handle, id); idx -1 = none (a clean vowel attack). NOT a continuous axis
 // — consonants are timed events, so they fire at note-on, not a held slider.
-enum { VC_B, VC_D, VC_G, VC_M, VC_N, VC_L, VC_S, VC_SH, VC_COUNT };
-static const char *vox_cons_name[VC_COUNT] = { "b", "d", "g", "m", "n", "l", "s", "sh" };
+// ids 0..7 are FROZEN (vox/say/voxlab reference them by number); 8..21 are the rest of navkit's
+// vfPhonemeTable consonant rows, appended so the set is complete (the audit's "fuller consonants").
+enum { VC_B, VC_D, VC_G, VC_M, VC_N, VC_L, VC_S, VC_SH,
+       VC_NG, VC_R, VC_W, VC_Y, VC_DH, VC_F, VC_V, VC_Z, VC_ZH, VC_TH, VC_P, VC_T, VC_K, VC_CH,
+       VC_COUNT };
+static const char *vox_cons_name[VC_COUNT] = { "b", "d", "g", "m", "n", "l", "s", "sh",
+    "ng", "r", "w", "y", "dh", "f", "v", "z", "zh", "th", "p", "t", "k", "ch" };
 static const float vox_cons_f[VC_COUNT][4] = {
     { 300.0f, 1100.0f, 2500.0f, 3400.0f},   // b — labial plosive
     { 300.0f, 1700.0f, 2500.0f, 3400.0f},   // d — alveolar plosive
@@ -1503,6 +1674,20 @@ static const float vox_cons_f[VC_COUNT][4] = {
     { 350.0f, 1050.0f, 2400.0f, 3400.0f},   // l — lateral liquid
     { 300.0f, 1700.0f, 5000.0f, 7000.0f},   // s — alveolar fricative (high hiss)
     { 300.0f, 1700.0f, 3800.0f, 6000.0f},   // sh — postalveolar fricative
+    { 200.0f, 1700.0f, 2700.0f, 3400.0f},   // ng — velar nasal
+    { 420.0f, 1300.0f, 1600.0f, 3400.0f},   // r — rhotic approximant
+    { 300.0f,  610.0f, 2200.0f, 3400.0f},   // w — labiovelar glide
+    { 260.0f, 2070.0f, 3020.0f, 3400.0f},   // y — palatal glide
+    { 300.0f, 1700.0f, 2500.0f, 3400.0f},   // dh — voiced dental fricative (this/that)
+    { 300.0f, 1700.0f, 3500.0f, 5500.0f},   // f — labiodental fricative (unvoiced)
+    { 300.0f, 1700.0f, 3500.0f, 5500.0f},   // v — labiodental fricative (voiced)
+    { 300.0f, 1700.0f, 5000.0f, 7000.0f},   // z — alveolar fricative (voiced)
+    { 300.0f, 1700.0f, 3800.0f, 6000.0f},   // zh — postalveolar fricative (voiced, "measure")
+    { 300.0f, 1700.0f, 4500.0f, 6500.0f},   // th — dental fricative (unvoiced, "thin")
+    { 300.0f, 1100.0f, 2500.0f, 3400.0f},   // p — labial plosive (unvoiced)
+    { 300.0f, 1700.0f, 3500.0f, 5500.0f},   // t — alveolar plosive (unvoiced)
+    { 300.0f, 1700.0f, 3000.0f, 4500.0f},   // k — velar plosive (unvoiced)
+    { 300.0f, 1700.0f, 3800.0f, 6000.0f},   // ch — affricate (unvoiced)
 };
 static const float vox_cons_a[VC_COUNT][4] = {
     {0.30f, 0.20f, 0.10f, 0.05f}, // b
@@ -1513,18 +1698,40 @@ static const float vox_cons_a[VC_COUNT][4] = {
     {0.60f, 0.30f, 0.20f, 0.10f}, // l
     {0.05f, 0.05f, 0.30f, 0.40f}, // s
     {0.05f, 0.05f, 0.35f, 0.30f}, // sh
+    {0.25f, 0.15f, 0.10f, 0.05f}, // ng
+    {0.50f, 0.30f, 0.30f, 0.10f}, // r
+    {0.50f, 0.20f, 0.10f, 0.05f}, // w
+    {0.50f, 0.30f, 0.15f, 0.05f}, // y
+    {0.40f, 0.20f, 0.15f, 0.05f}, // dh
+    {0.10f, 0.10f, 0.20f, 0.15f}, // f
+    {0.20f, 0.15f, 0.20f, 0.10f}, // v
+    {0.15f, 0.10f, 0.25f, 0.30f}, // z
+    {0.15f, 0.10f, 0.30f, 0.20f}, // zh
+    {0.08f, 0.08f, 0.15f, 0.10f}, // th
+    {0.10f, 0.10f, 0.05f, 0.02f}, // p
+    {0.10f, 0.10f, 0.15f, 0.10f}, // t
+    {0.10f, 0.15f, 0.15f, 0.08f}, // k
+    {0.10f, 0.10f, 0.25f, 0.20f}, // ch
 };
-static const float vox_cons_noise[VC_COUNT] = { 0.30f, 0.40f, 0.35f, 0.0f, 0.0f, 0.0f, 0.90f, 0.85f };
-static const int   vox_cons_voiced[VC_COUNT] = { 1, 1, 1, 1, 1, 1, 0, 0 };
-static const float vox_cons_dur[VC_COUNT]    = { 0.055f, 0.055f, 0.055f, 0.090f, 0.090f, 0.070f, 0.110f, 0.110f };
-static const int   vox_cons_plos[VC_COUNT]   = { 1, 1, 1, 0, 0, 0, 0, 0 };
+static const float vox_cons_noise[VC_COUNT] = { 0.30f, 0.40f, 0.35f, 0.0f, 0.0f, 0.0f, 0.90f, 0.85f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.15f, 0.50f, 0.35f, 0.60f, 0.50f, 0.40f, 0.60f, 0.70f, 0.60f, 0.80f };
+static const int   vox_cons_voiced[VC_COUNT] = { 1, 1, 1, 1, 1, 1, 0, 0,
+    1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0 };
+static const float vox_cons_dur[VC_COUNT]    = { 0.055f, 0.055f, 0.055f, 0.090f, 0.090f, 0.070f, 0.110f, 0.110f,
+    0.090f, 0.070f, 0.070f, 0.070f, 0.090f, 0.110f, 0.100f, 0.110f, 0.110f, 0.110f, 0.055f, 0.055f, 0.055f, 0.090f };
+static const int   vox_cons_plos[VC_COUNT]   = { 1, 1, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1 };
 
 // note-on: seed a neutral "ah" so a bare note(60, INSTR_VOICE, …) speaks; voice_param overrides live
 static void sound_voice_start(Voice *v) {
     const float def[VOX_NPARAM] = { 0.5f, 0.33f, 0.10f, 0.5f, 0.30f, 0.15f, 0.5f,
-                                    0.0f, 0.5f, 0.5f };   // nasality off · openness/frontness neutral (×1.0)
+                                    0.0f, 0.5f, 0.5f,                              // nasality off · open/front neutral (×1.0)
+                                    1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,      // buzz=full glottal · jitter/shimmer/creak/nasalAF/reduce/measBW off
+                                    0.0f, 0.0f };                                  // vow2 target=U · glide off (no diphthong)
     for (int i = 0; i < VOX_NPARAM; i++) v->vox_p[i] = v->vox_s[i] = def[i];
     v->vox_glot_ph = v->vox_tilt_lp = v->vox_vib_ph = 0.0f;
+    v->vox_jit_mul = v->vox_shim_mul = 1.0f; v->vox_creak_skip = 0;
+    v->vox_naf_low = v->vox_naf_band = 0.0f;
     for (int i = 0; i < 4; i++) { v->vox_f_low[i] = 0.0f; v->vox_f_band[i] = 0.0f; }
     v->vox_cons = -1; v->vox_cons_t = 0.0f;
     v->vox_coda = -1; v->vox_coda_t = 0.0f;
@@ -1551,6 +1758,15 @@ static inline float sound_voice_sample(Voice *v, float pitch_mul) {
     float tilt   = v->vox_s[4];                  // spectral tilt 0..1
     float vibd   = v->vox_s[5];                  // vibrato depth 0..1
     float vibr   = 3.0f + v->vox_s[6] * 5.0f;    // vibrato rate 3..8 Hz
+    // EXPERIMENTAL roughness/character levers (10..16; auditioning in voxab — none wired to API):
+    float buzz   = v->vox_s[10];                 // source: 1 = full glottal pulse (buzzy) → 0 = smooth sine
+    float jitter = v->vox_s[11];                 // per-period pitch noise → roughness
+    float shimmer= v->vox_s[12];                 // per-period amplitude noise
+    float creak  = v->vox_s[13];                 // diplophonia: dropped/weak cycles → vocal fry
+    float nasalAf= v->vox_s[14];                 // anti-formant nasality (350Hz notch; navkit WAVE_VOICE)
+    float reduce = v->vox_s[15];                 // vowel reduction toward schwa (unstressed collapse)
+    float bwmode = v->vox_s[16];                 // 0 = derived bandwidths → 1 = navkit measured BW table
+    float glide  = v->vox_s[18];                 // diphthong: 0 = primary vowel → 1 = fully at vow2
 
     // vibrato → pitch (±~1 semitone at full depth)
     v->vox_vib_ph += vibr / SR; if (v->vox_vib_ph >= 1.0f) v->vox_vib_ph -= 1.0f;
@@ -1558,11 +1774,35 @@ static inline float sound_voice_sample(Voice *v, float pitch_mul) {
     float freq = v->freq * pitch_mul * powf(2.0f, vib);
     if (freq < 20.0f) freq = 20.0f;
 
-    // vowel target formants (centre freq + amp, morphed along the path)
-    float vfreq[4], vamp[4];
+    // vowel target formants (centre freq + amp + measured bandwidth, morphed along the path)
+    float vfreq[4], vamp[4], vbw[4];
     for (int i = 0; i < 4; i++) {
-        vfreq[i] = vox_vowel_f[vi][i] * (1.0f - vf) + vox_vowel_f[vi+1][i] * vf;
-        vamp[i]  = vox_vowel_a[vi][i] * (1.0f - vf) + vox_vowel_a[vi+1][i] * vf;
+        vfreq[i] = vox_vowel_f[vi][i]  * (1.0f - vf) + vox_vowel_f[vi+1][i]  * vf;
+        vamp[i]  = vox_vowel_a[vi][i]  * (1.0f - vf) + vox_vowel_a[vi+1][i]  * vf;
+        vbw[i]   = vox_vowel_bw[vi][i] * (1.0f - vf) + vox_vowel_bw[vi+1][i] * vf;
+    }
+    // EXPERIMENTAL diphthong (17/18): glide the primary vowel toward a second vowel from the FULL
+    // 10-row table (vow2 selects 0..9). glide=1 sits fully on vow2 — so the extra vowels (AE AH AW
+    // UH ER) are reachable as steady vowels too, not just as a within-note glide ("ai", "ou").
+    if (glide > 0.001f) {
+        float v2 = v->vox_s[17] * (float)(VOX_NVOWEL - 1);
+        int v2i = (int)v2; if (v2i > VOX_NVOWEL - 2) v2i = VOX_NVOWEL - 2; if (v2i < 0) v2i = 0;
+        float v2f = v2 - (float)v2i; if (v2f < 0.0f) v2f = 0.0f; if (v2f > 1.0f) v2f = 1.0f;
+        for (int i = 0; i < 4; i++) {
+            float f2 = vox_vowel_f[v2i][i]  * (1.0f - v2f) + vox_vowel_f[v2i+1][i]  * v2f;
+            float a2 = vox_vowel_a[v2i][i]  * (1.0f - v2f) + vox_vowel_a[v2i+1][i]  * v2f;
+            float b2 = vox_vowel_bw[v2i][i] * (1.0f - v2f) + vox_vowel_bw[v2i+1][i] * v2f;
+            vfreq[i] = vfreq[i] * (1.0f - glide) + f2 * glide;
+            vamp[i]  = vamp[i]  * (1.0f - glide) + a2 * glide;
+            vbw[i]   = vbw[i]   * (1.0f - glide) + b2 * glide;
+        }
+    }
+    // EXPERIMENTAL vowel reduction (15): collapse the vowel toward schwa (neutral central vowel) —
+    // the unstressed-syllable lever the `say` probe wanted. 0 = full vowel, 1 = near-schwa.
+    if (reduce > 0.001f) {
+        const float sf[4] = { 490.0f, 1350.0f, 2400.0f, 3400.0f };   // schwa-ish (between UH and ER)
+        float rb = reduce * 0.85f;
+        for (int i = 0; i < 4; i++) vfreq[i] = vfreq[i] * (1.0f - rb) + sf[i] * rb;
     }
     // EXPERIMENTAL vowel modifiers (auditioning in voxlab; idx 7/8/9 — none wired to the API):
     //   nasality (7) — morph the vowel toward a nasal formant config (low F1, damped) → honk/hum.
@@ -1615,13 +1855,29 @@ static inline float sound_voice_sample(Voice *v, float pitch_mul) {
         v->vox_coda_t += 1.0f / SR;                      // (held at the consonant once p hits 1)
     }
 
-    // glottal source: Rosenberg polynomial pulse (open-phase rise, closing fall, closed gap)
-    v->vox_glot_ph += freq / SR; if (v->vox_glot_ph >= 1.0f) v->vox_glot_ph -= 1.0f;
-    float t = v->vox_glot_ph, src;
+    // glottal source: Rosenberg polynomial pulse (open-phase rise, closing fall, closed gap).
+    // EXPERIMENTAL roughness: jitter perturbs the period pitch, creak attenuates the odd cycle
+    // (diplophonia/fry), shimmer (applied at output) wobbles amplitude — all redrawn ONCE per
+    // glottal period (on wrap) so they read as biological irregularity, not per-sample buzz.
+    v->vox_glot_ph += freq * v->vox_jit_mul / SR;
+    if (v->vox_glot_ph >= 1.0f) {
+        v->vox_glot_ph -= 1.0f;
+        v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+        float r1 = ((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f;     // [-1,1]
+        v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+        float r2 = ((v->noise_state >> 16) & 0xff) / 255.0f;            // [0,1]
+        v->vox_jit_mul    = 1.0f + r1 * jitter * 0.055f;                // ±5.5% pitch at full
+        v->vox_shim_mul   = 1.0f - r2 * shimmer * 0.6f;                 // amplitude dips
+        v->vox_creak_skip = (creak > 0.01f && r2 < creak * 0.55f);      // weak/dropped cycle
+    }
+    float t = v->vox_glot_ph, gp;
     float te = oq + 0.1f; if (te > 0.95f) te = 0.95f;
-    if (t < oq)      { float tn = t / oq;             src = 3.0f*tn*tn - 2.0f*tn*tn*tn; }
-    else if (t < te) { float tn = (t - oq)/(te - oq); src = 0.5f*(1.0f + cosf(tn * PI_F)); }
-    else             { src = 0.0f; }
+    if (t < oq)      { float tn = t / oq;             gp = 3.0f*tn*tn - 2.0f*tn*tn*tn; }
+    else if (t < te) { float tn = (t - oq)/(te - oq); gp = 0.5f*(1.0f + cosf(tn * PI_F)); }
+    else             { gp = 0.0f; }
+    if (v->vox_creak_skip) gp *= 0.12f;              // creak: this cycle nearly drops out
+    // buzziness (10): blend the rich glottal pulse toward a smooth sine (navkit WAVE_VOICE knob)
+    float src = sinf(v->vox_glot_ph * TWO_PI) * (1.0f - buzz) + gp * buzz;
     src *= gl_gain;                                  // consonant voicing gate
     // spectral tilt: 0 = bright (source bypass) → 1 = dark (heavy 1-pole LP). MONOTONIC —
     // the coefficient must DROP as tilt rises (lower cutoff = more darkening), then crossfade
@@ -1641,7 +1897,8 @@ static inline float sound_voice_sample(Voice *v, float pitch_mul) {
         float fc_hz = vfreq[i] * shift;
         if (fc_hz > SR * 0.45f) fc_hz = SR * 0.45f;
         float amp = vamp[i];
-        float bw  = 60.0f + fc_hz * 0.08f;               // bandwidth grows with centre freq
+        // bandwidth: derived (grows with centre) ↔ navkit's measured per-vowel BW (measBW idx 16)
+        float bw  = (60.0f + fc_hz * 0.08f) * (1.0f - bwmode) + vbw[i] * bwmode;
         float f = 2.0f * sinf(PI_F * fc_hz / SR);
         if (f > 0.99f) f = 0.99f; else if (f < 0.001f) f = 0.001f;
         float q = fc_hz / (bw + 1.0f);
@@ -1651,7 +1908,20 @@ static inline float sound_voice_sample(Voice *v, float pitch_mul) {
         v->vox_f_band[i] += f * high;
         out += v->vox_f_band[i] * amp;
     }
-    return out * 0.8f;
+    // EXPERIMENTAL anti-formant nasality (14): a ~350Hz notch + blend (navkit WAVE_VOICE's
+    // physically-truer nasality, distinct from the formant-config morph on idx 7) — auditioning
+    // which model earns the nasality axis.
+    if (nasalAf > 0.001f) {
+        float nfc = 350.0f * shift;
+        float f = 2.0f * sinf(PI_F * nfc / SR); if (f > 0.99f) f = 0.99f; else if (f < 0.001f) f = 0.001f;
+        float q = nfc / 101.0f; if (q < 0.5f) q = 0.5f; else if (q > 10.0f) q = 10.0f;
+        v->vox_naf_low += f * v->vox_naf_band;
+        float high = out - v->vox_naf_low - v->vox_naf_band / q;
+        v->vox_naf_band += f * high;
+        float notched = v->vox_naf_low + high;       // notch = low + high (the band removed)
+        out = out * (1.0f - nasalAf) + notched * nasalAf;
+    }
+    return out * 0.8f * v->vox_shim_mul;              // shimmer: per-period amplitude wobble
 }
 
 // One engine sample — the dispatch (engine ids >= INSTR_ENGINE_BASE). The default body is
@@ -2024,6 +2294,7 @@ static inline float sound_engine_sample(Voice *v, float pitch_mul) {
     if (v->wave == INSTR_GUITAR) return sound_guitar_sample(v, pitch_mul);
     if (v->wave == INSTR_PIANO)  return sound_piano_sample(v, pitch_mul);
     if (v->wave == INSTR_BOWED)  return sound_bowed_sample(v, pitch_mul);
+    if (v->wave == INSTR_BRASS)  return sound_brass_sample(v, pitch_mul);
     int alloc = v->ks_len;
     if (alloc < 4) return 0.0f;   // engine id without a note-on init (e.g. an sfx step) — stay silent
     float f = v->freq * pitch_mul;
@@ -2209,6 +2480,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->gt_on  = false;
     v->pn_on  = false;
     v->bw_on  = false;
+    v->br_on  = false;
     v->fm_mph = v->fm_fb = v->fm_tph = 0.0f;   // FM needs no excitation, just deterministic phases
     if      (v->wave == INSTR_PLUCK)  sound_pluck_start(v);    // excite the string
     else if (v->wave == INSTR_MALLET) sound_mallet_start(v);   // strike the bar
@@ -2221,6 +2493,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     else if (v->wave == INSTR_GUITAR) sound_guitar_start(v);   // excite the string + voice the body
     else if (v->wave == INSTR_PIANO)  sound_piano_start(v);    // hammer-strike + arm dispersion + soundboard
     else if (v->wave == INSTR_BOWED)  sound_bowed_start(v);    // size + split the string at the bow, seed it
+    else if (v->wave == INSTR_BRASS)  sound_brass_start(v);    // size + seed the bore, clear the lip biquad
     v->step_samples     = 0;
     v->step_len_samples = gate_samples;
     v->rel_start        = sound_adsr_gated(gate_samples, v->a_samp, v->d_samp, v->sustain);

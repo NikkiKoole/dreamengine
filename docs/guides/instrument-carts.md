@@ -55,7 +55,9 @@ is, then open the **reference cart** named here and copy its skeleton.
 **Which engine for which timbre?** (the `INSTR_*` modeled engines, wave ids 16+):
 `PLUCK` = plucked string (Karplus-Strong) · `MALLET` = struck bar/metal · `ORGAN` =
 drawbar sines · `EPIANO` = Rhodes/Wurli/Clav · `FM` = 2-op DX bell/bass · `PD` = Casio
-CZ phase-distortion · `MEMBRANE` = struck drumhead · `USER0..3` = your own drawn
+CZ phase-distortion · `MEMBRANE` = struck drumhead · `REED`/`PIPE` = blown reed/flute ·
+`GUITAR`/`PIANO`/`BOWED` = bodied string / struck stiff string / bowed string · `BRASS` =
+lip-reed brass (trumpet→tuba, the slide horn) · `USER0..3` = your own drawn
 single-cycle wave (`wave_set`). The raw chiptune waves (`SINE`/`SAW`/`SQUARE`/`TRI`/`NOISE`)
 are still there for everything else. Full engine catalog + what's unbuilt:
 [`design/instrument-engines.md`](../design/instrument-engines.md) §8.9.
@@ -120,6 +122,7 @@ cleanest examples of "here's what this engine sounds like."
 | **guitar** (`guitar`) | `INSTR_GUITAR` | The bodied pluck — PLUCK's string + a resonant body (4 formant biquads). Eight strings, three macros (body/brightness/mute), eight hardware presets incl. pizzicato. Built on `pluck`. |
 | **piano** (`piano`) | `INSTR_PIANO` | The struck stiff string (StifKarp) — KS string + a dispersion allpass chain (the metallic shimmer) + a baked grand-piano soundboard. A one-octave keyboard, three macros (stiffness/hammer/pedal), six presets (grand→celesta). Single-string v1. |
 | **bowed** (`bowed`) | `INSTR_BOWED` (arco + pizz) | The bowed string (Smith/McIntyre stick-slip waveguide) — self-oscillating/held, played by RUBBING: drag a string and the energy ACCUMULATES (rub more → builds & digs in), stop and it rests; a quick TAP plays PIZZICATO — the **same** waveguide flagged `eng_tune(slot,0,1)`, seeded with a pluck and the friction bypassed, so the identical string+body rings down (arco/pizz differ only in excitation). Three macros (position/pressure/speed), six presets (violin→tremolo). The interaction-driven showcase, not just a keyboard. |
+| **brass** (`brass`) | `INSTR_BRASS` | The lip-reed family (trumpet→tuba), the LAST engine-blocked instrument. A bore + a self-oscillating pressure valve (reed's core) under a dynamics-swept brass formant — push *brassiness* and the tone opens up blatty. Marquee: **drag the trombone SLIDE** for a live glissando (`note_pitch`). Six hardware presets, mono+slide by default. |
 | **mallet** (`mallet`) | `INSTR_MALLET` | Struck bar simulation. |
 | **organ** (`organ`) | `INSTR_ORGAN` | Nine drawbar sines per key. |
 | **epiano** (`epiano`) | `INSTR_EPIANO` | Rhodes / Wurlitzer / Clavinet in one. |

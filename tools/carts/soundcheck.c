@@ -97,6 +97,10 @@ void init(void) {
     instrument_harmonics(23, 0.5f);              // mid bow position
     instrument_timbre(23, 0.3f);                 // light pressure — clean Helmholtz, inside the wedge
     instrument_morph(23, 0.7f);                  // a good bow speed
+    instrument(22, INSTR_BRASS, 1, 0, 7, 400);   // slot 22 = the lip-reed brass engine (self-oscillating, held)
+    instrument_harmonics(22, 0.45f);             // trumpet-ish bore (bright end)
+    instrument_timbre(22, 0.55f);                // a bit of brassiness
+    instrument_morph(22, 0.5f);                  // moderate breath
     bpm(120);
 }
 
@@ -139,6 +143,7 @@ void update(void) {
         held = note_on(52, 9, 5);
         note_glide(held, 80);
         note_on(57, 23, 5);   // exercise the bowed engine's held/self-oscillating request path (slot 23)
+        note_on(53, 22, 5);   // exercise the brass engine's held/self-oscillating request path (slot 22)
     } else if (s == 21 && held >= 0) {
         label = "live: pitch/cutoff/res/duty/lfo/env/macros";
         note_pitch(held, 59);

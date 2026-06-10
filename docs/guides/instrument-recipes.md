@@ -247,6 +247,25 @@ Schelleng bowing wedge (position/pressure/speed).
 > (`saw/violins-arco`/`saw/violins-pizz`) fakes both arco and pizz on SAW. bowed.c models
 > the real thing, including the arco↔pizz technique split (mirrors tango's pair).
 
+## INSTR_BRASS — lip-reed waveguide (self-oscillating)
+
+All from **brass.c** (showcase), held voice `A1 D0 S4 R1200`; macros are
+harmonics = instrument/bore (trumpet→tuba), timbre = brassiness (round→blatty), morph =
+breath/lip lean-in. The `oct` column is the cart's register shift, not part of the patch.
+
+| name | source cart | recipe | character |
+|---|---|---|---|
+| brass/trumpet | brass.c | h0.15 t0.60 m0.42 (oct +1) | Tight bright bore, plenty of brassiness — the blatty lead horn. |
+| brass/cornet | brass.c | h0.30 t0.44 m0.40 (oct +1) | A touch darker and rounder than the trumpet. |
+| brass/flugelhorn | brass.c | h0.46 t0.28 m0.45 | Mellow conical bore, low brassiness — the dark warm one. |
+| brass/trombone | brass.c | h0.56 t0.52 m0.46 | Mid bore — the slide horn (drag the slide for a glissando). |
+| brass/french-horn | brass.c | h0.70 t0.34 m0.50 | Dark, round, a little breath — the orchestral horn. |
+| brass/tuba | brass.c | h0.92 t0.46 m0.48 (oct −1) | Wide dark bore, an octave down — the bass brass. |
+
+> **Cross-ref:** the only "brass" on the dial today is faked — italo's `INSTR_FM` brass stabs
+> and citypop's saw-brass anticipation hits. `INSTR_BRASS` models the real lip-reed rip; an
+> A/B retrofit of italo's stabs is a tracked follow-up (instrument-engines.md §8.8.10).
+
 ## INSTR_PIANO — StifKarp struck stiff string (inharmonic shimmer)
 
 All from **piano.c** (showcase), same base `A1 D0 S7 R2000`; macros are

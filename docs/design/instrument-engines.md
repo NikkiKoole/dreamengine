@@ -398,6 +398,15 @@ independently shippable:
      whole window. The metric inverts vs. the sustained engines — for a pluck, high crest = real
      attack + ring-out (good); only for a *held* voice (bowed/reed/pipe) does it mean a lurching
      envelope (bad). So the bowed crest-12.6 alarm does **not** apply here.
+   Finally the wind family's last member: **`INSTR_BRASS` (29) — SHIPPED 2026-06-10**, the last
+   engine-blocked instrument in the whole library. STEP-0 found the catalog's literal lip
+   mass-spring **doesn't self-oscillate** (loop gain < 1 — it decays after the attack); the working
+   build is **reed's pressure-valve oscillator** (retuned for loop gain > 1) wearing a brass skin: a
+   **dynamics-swept brass-formant bandpass** (the formant rising with brassiness *is* the blatty
+   "blaaat") + the pressure-driven `tanh` steepening. harmonics = instrument/bore (trumpet→tuba),
+   timbre = brassiness, morph = breath. Bore reuses `ks_buf`; soundcheck slot 22, tripwire PASS,
+   full 4-place wiring. Showcase: the **brass** cart, marquee = the trombone SLIDE (drag → live
+   `note_pitch` glissando). Mute deferred (only three macros). Design + STEP-0: §8.8.10.
 10. **Formant filter** + the **effects layer** (§8.10 — buses vs. master; reverb / delay /
     tape / leslie / wah, starting with one master reverb + the formalized bus concept).
     **Additive stays deferred** — `INSTR_SINE` + FM + MALLET cover its near corners today —
@@ -1252,6 +1261,46 @@ Harpsichord · Dulcimer · Clavichord.
 > to fight PLUCK's morph = pick-position for the slot; mute won on giving pizzicato directly, revisit
 > if the body axis already implies enough decay variation.
 
+### 8.8.10 Engine #11: BRASS — the lip-reed waveguide, design + STEP-0 (2026-06-10)
+
+The last engine-blocked instrument (§2b of `cart-library-direction.md` — every other modeled
+timbre had shipped). **SHIPPED 2026-06-10 as `INSTR_BRASS` (29).** One id covers the brass
+family: trumpet / cornet / flugelhorn / trombone / french horn / tuba.
+
+**Macros (on paper first, §8.8.1):** harmonics = **instrument/bore** (bright tight trumpet → dark
+wide tuba — drives the bell radiation LP and the brass-formant centre, never the delay length so
+it can't detune); timbre = **brassiness** (the pressure-driven wave-steepening shockwave — round
+& mellow → loud & blatty); morph = **breath/lip lean-in** (soft steady → growling breath + deeper
+vibrato, the reed surface reused).
+
+**STEP-0 finding — the lip biquad doesn't self-oscillate on its own; the reed valve does.** The
+catalog (§8.9) prescribed a "2nd-order lip mass-spring." The first build modeled the lip as a
+literal resonant biquad in the loop (STK BrassInstrument's normalized bandpass + squared valve);
+both attempts **decayed to silence after the attack** — measured loop gain ≈ 0.92 < 1 at the
+fundamental (the normalized bandpass's broadband gain `(1−r)` ≈ 0.001 makes the lip displacement
+vanish, and the squared-valve injection couldn't make up for it). The fix that *reliably*
+self-oscillates: **reuse REED's proven pressure-controlled valve core** (the negative-resistance
+`lipRefl = offset + slope·pdiff` reflection), retuned for loop gain > 1 (`endRefl ≈ −0.96`,
+`slope = −0.70`) — the `tanh` brassiness shaper bounds the amplitude even at `drive = 1`. The
+brass *identity* then comes from the TIMBRE stages layered on that oscillator, not from a literal
+lip mass-spring:
+- a **brass-formant resonant bandpass** (the lip+bell resonance, reusing the lip-biquad state) on
+  the output, whose centre **sweeps UP with brassiness** — that rising formant *is* the blatty
+  "blaaat", the one thing no other engine does;
+- the **pressure-driven steepening** `tanh(x·drive)/drive`, `drive` scaling on timbre AND blow
+  pressure (blow harder → blattier, the real physics) with the `1/drive` loudness-normalize.
+
+So the lesson mirrors §8.8.1's wah detour and the membrane "harmonics also sets the ratios"
+deviation: **the navkit/STK structure was a hypothesis; the rendered reference (here: the loudness
+trace showing decay) settled it** — a working brass is reed's oscillator + a dynamics-swept
+formant, not a from-scratch lip model. Verified headless: self-oscillates and HOLDS, RMS ≈ −21
+dBFS (matches reed's −23), crest ~7 dB (steady tone), DC ≈ 0, **0 clipped** at the loud extreme
+(tuba bore + brassiness 1.0, peak −12.9 dBFS). Showcase: the **brass** cart, whose marquee is the
+trombone **SLIDE** (drag it → continuous `note_pitch` glissando — pitch tracking per §8.8.1 made
+it free). Six acceptance presets (trumpet/cornet/flugelhorn/trombone/french horn/tuba). Open tail
+(STEP 6, the owner's): preset taste-tuning by ear; a **mute** axis (harmon/cup → a second
+bandpass) is deferred — there are only three macros and bore/brassiness/breath earned them.
+
 ### 8.9 Candidate engine catalog (running wishlist)
 
 The set we'd *like*, beyond the first-bite engines (§8.5). Adding one is mostly: port the
@@ -1269,7 +1318,7 @@ the table's only job is to say what those three mean for each. Grow it freely.
 | **Bowed string** (violin/cello) | `processBowedOscillator` (Smith/McIntyre waveguide) | nut+bridge lines, **sum = one period → likely packs into the one `ks_buf`** (split at the bow point; verify at port) | bow position (sul tasto ↔ ponticello) | bow pressure (smooth ↔ scratchy stick-slip) | bow velocity / swell | sustained strings that *speak* — attack scratch, swells. Wants held notes (§6); macros-as-CV is its natural surface |
 | **Reed** (clarinet ↔ sax) | `processReedOscillator` (pressure-driven reed valve) | one `boreBuf[1024]` — **fits today's `ks_buf` as-is** | **bore conicity** (clarinet hollow-odd ↔ sax full) — literally navkit's `bore`, the dominant axis | **reed edge** — stiffness+aperture compound (stiffness *alone* is too weak — STEP-0) | **breath expression CV** *inside* the viable window (the model chokes, doesn't overblow — STEP-0) | the *blown* family's workhorse + the first **self-oscillating held** voice; klezmer to smoky jazz on one knob. **Design + STEP-0: §8.8.7** (2026-06-08) |
 | **Pipe / flute** (STK jet-drive) | `processPipeOscillator` | **one bore line fits `ks_buf` as-is** (only `lowerBuf` is read; `upperBuf` vestigial) + tiny `jetBuf[64]` | **overblow** (fundamental ↔ octave flageolet) — jet gain | **breath air** (pure ↔ airy, reuses reed turbulence) | **embouchure** (feedback + jet length) | airy flutes, pan pipes, organ-flue color; breathy attacks for free. **SHIPPED 2026-06-09** as `INSTR_PIPE` (25) — design + STEP-0: §8.8.8 |
-| **Brass** (lip-valve waveguide) | `processBrassOscillator` (2nd-order lip mass-spring + bore) | one `boreBuf[1024]` — **fits `ks_buf` as-is** | bore conicity (trumpet ↔ horn) | blow pressure (soft ↔ brassy blare — the rip/blare *is* the model) | mute (open ↔ harmon) | a real lip model, not an approximation. *(Was the prepared answer if FM brass failed its §8.8.3 stress test — FM passed, so this is no longer queued; port it when a station wants the genuine rip/blare)* |
+| **Brass** (lip-valve waveguide) | reed's pressure-valve core + a dynamics-swept brass formant (STEP-0 found the literal lip mass-spring doesn't self-oscillate — §8.8.10) | one bore line — **fits `ks_buf` as-is** | instrument/bore (trumpet ↔ tuba) | **brassiness** (round ↔ loud/blatty shockwave — blow harder, get blattier) | breath/lip lean-in | **SHIPPED 2026-06-10** as `INSTR_BRASS` (29) — the last engine-blocked instrument; showcase = the **brass** cart (trombone slide). Mute deferred. Design + STEP-0: §8.8.10 |
 | **PD / phase distortion** (Casio CZ) | `processPDOscillator` — **2 floats, 8 wavetypes incl. 3 resonant** | free (cheapest in the catalog) | wavetype (snapped detents, like FM's ratio table) | static distortion amount (filter-like brightness / reso-peak position, zero filter) | **DCW-envelope depth** — an attack→settle sweep of distortion (the CZ "wowww"; navkit omits this, we build it from the second EG) | CZ basses, synth-brass, the famous resonant sweeps; deeply chiptune-adjacent — strong identity fit, near-zero cost. **Full design: §8.8.6** (2026-06-08) |
 | **Membrane** (tabla/conga/bongo/djembe/tom) | `processMembraneOscillator` (`:1754`, `MembraneSettings` `synth.h:437` — 6 modal sines at circular-membrane Bessel ratios) | free (~100 B — mallet-family cost) | head character (tabla ↔ djembe mode spread / tension) | **strike position** (center thump ↔ edge ring — the model reweights modes physically; conga open/slap/mute in one knob) | **pitch-bend depth/decay** (the tabla bayan *glissando* — baked into the model) | hand percussion the analog 808/909 recipes can't reach — bend + strike-pos are exactly what sine+pitch-env approximations lack. World-music radio fuel (promoted from the census NO list 2026-06-05). **SHIPPED 2026-06-08** as `INSTR_MEMBRANE` (22) — see §8.5 step 8 for the macro mapping + the one deviation from the port (harmonics also crossfades the *ratios*, tuned↔Bessel) |
 

@@ -90,7 +90,7 @@ pattern at the bottom.
 > | ★★☆☆☆ | music box | `TRI` + run-down | the novelty is the run-down *mechanic* (pitch/tempo sag), not the timbre |
 > | ★★☆☆☆ | standing bass (pizz-only) | `PLUCK` low + noise slap | mostly a *better* version of the already-faked upright (see the arco entry instead) |
 > | ★☆☆☆☆ | barrel/crank organ | `USER0` drawbars | re-treads roadhouse's combo-organ / stylophone's drawn organ; the crank wobble is the only-new bit |
-> | ★★★★☆ | slide trombone / brass | `BRASS` ✅ *just shipped* | first *played* lip-reed brass — the slide gesture wants the live glide; horn fakes (addis/dub/citypop/yacht) can move onto it. Cart in progress (Nikki) |
+> | ★★★★☆ | slide trombone / brass | `BRASS` ✅ *shipped* | first *played* lip-reed brass — the slide gesture rides the live glide; horn fakes (addis/dub/citypop/yacht) can move onto it. **Shipped 2026-06-10** as the `brass` cart (trombone slide). |
 >
 > **New-sound ≠ build priority.** The barrel organ scores lowest here yet remains the top
 > *buildable* pick below (tinydaws gateway, great gesture). If the goal is "cover the most new
@@ -171,7 +171,7 @@ The interaction notes still stand:
   need **formant** (+ AM/ring for the Dalek).
 - **Violin / cello** — ✅ bowed shipped (bowed.c showcase; arco + pizzicato). Drag speed = bow pressure, another
   gesture-to-physics 1:1.
-- **Slide trombone** — ✅ `INSTR_BRASS` shipped (2026-06-10, lip-reed waveguide that slides/glisses live); the brass instrument cart is in progress. The slide gesture finally has its engine.
+- **Slide trombone** — ✅ `INSTR_BRASS` shipped (2026-06-10, lip-reed waveguide that slides/glisses live); the `brass` showcase cart shipped alongside, marquee = the draggable trombone slide. The slide gesture finally has its engine.
 
 The pattern worth noticing: the blocked ones are all *continuous-gesture*
 instruments — exactly why instrument-engines §8.9 says the wind/bowed group "pairs with held notes
