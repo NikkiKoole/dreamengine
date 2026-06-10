@@ -81,14 +81,19 @@ bus side is **already designed and queued**: it's the **▶ NEXT BITE** in
 shipped), disciplined by [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md).
 So this is *build* work on a settled architecture, not a fresh design problem.
 
-**Effects bus — § 8.10, designed, not built.** We already have exactly one bus (the shared
-`echo()` + per-slot `instrument_echo` sends); § 8.10 generalizes it to `bus[NBUS]` + per-bus FX
-chains, master = bus 0. Start with one master reverb. The effects that live here:
+**Effects bus — § 8.10, STARTED (reverb SHIPPED 2026-06-10).** We had exactly one bus (the shared
+`echo()` + per-slot `instrument_echo` sends); the first bite added **reverb as a second SEND bus**
+the same way, and formalized the per-sample **master FX section** (send-returns → insert-chain →
+soft-clip) so it's send/insert-aware. It deliberately did *not* build `bus[NBUS]` + per-slot aux
+routing — that stays the next increment (early effects all want master placement). The effects
+that live here:
 
-1. **Reverb** — the biggest. Orchestra hall, `ambient`'s 8–20 s tails, the MT-32's reverb, GM
-   atmosphere/halo pads. The epiano's *temporary* TREM/WAH
+1. **Reverb** — ✅ **SHIPPED 2026-06-10.** `reverb(size, damping)` + `instrument_reverb`/
+   `note_reverb`, a SEND bus mirroring echo; navkit Schroeder core (4 comb + 2 allpass + pre-delay),
+   mono v1, dormant-until-called (byte-identical for old carts). Showcase: the **cathedral** cart.
+   The epiano's *temporary* TREM/WAH
    ([`../guides/instrument-recipes.md`](../guides/instrument-recipes.md)) are § 8.10.1 "PARKED
-   per-voice stand-ins" explicitly slated to **migrate onto a real bus** here.
+   per-voice stand-ins" still slated to **migrate onto a real bus** here.
 2. **Chorus / unison width** — the lush detuned-width of a Juno / stereo Rhodes / string
    *section*. Partly fakeable by layering (see "section blend" below); a real chorus packages it.
    **Its showcase cart is the Juno** (see New instruments) — build them together.
@@ -123,8 +128,9 @@ one, the groove pumping, the whole performance) **or take a second input signal*
 If it's genuinely self-contained per-note → per-voice. Run this before committing to *any* build.
 
 **✅ Safe — no placement judgment to get wrong:**
-- **Reverb** — bus-only, unambiguous (one shared tail; a chord must bloom into *one* space). This
-  is why it's the safe first build.
+- **Reverb** — ✅ **SHIPPED 2026-06-10** as a master SEND bus (`reverb`/`instrument_reverb`/
+  `note_reverb`). Bus-only, unambiguous (one shared tail; a chord must bloom into *one* space) —
+  which is exactly why it was the safe first build, and it landed with no placement surprises.
 - **Tape (wow/flutter/sat)** — master insert; whole-mix glue + one shared modulated-delay buffer
   (the same buffer flanger/true-chorus fall out of free).
 - **Ring-mod** — single-input (carrier × an *internal* sine), "either," low risk. Just don't
@@ -173,7 +179,7 @@ upgrade to existing stations:
 | effect | showcase cart | also rescues |
 |---|---|---|
 | chorus | **Juno** (poly synth — see above) | jingle haze, yacht stereo Rhodes, **air's Solina string-machine ensemble** |
-| reverb | a **"cathedral" infinite-space pad** (a chord blooms into an endless hall) — or a spring-reverb tank | `ambient` tails, the orchestra hall, glassharmonica, dub's spring-crash, **air's whole drenched mix** |
+| reverb ✅ **SHIPPED** | **cathedral** cart (a chord blooms into an endless hall) ✅ built | `ambient` tails, the orchestra hall, glassharmonica, dub's spring-crash, **air's whole drenched mix** — now wirable via `instrument_reverb` |
 | leslie (rotary) | a **Hammond B3 + Leslie** organ (slow/fast footswitch) | roadhouse, yacht |
 | wah / auto-wah | a **funk clavinet / wah-guitar** (the pedal quack) | citypop funk guitar, the clav |
 | formant filter | a **vocoder / talkbox** (carrier shaped through vowels) | the vocal gap for non-voice timbres, **air's Kelly-vocoder lead (faked on raw INSTR_VOICE today)** |

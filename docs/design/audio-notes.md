@@ -1164,7 +1164,7 @@ Only one of the four is genuinely a bus.
 | layer | what goes there | why there | API shape |
 |---|---|---|---|
 | **voice insert** | drive (tanh), bitcrush | stateless per-sample math, cheap per-voice; *musically per-part* (drive the bass, not the pad) | the §10 four-axes container grows: `instrument_drive(slot, x)` + live `note_drive(handle, x)`, slewed — exactly the filter/duty/macro pattern |
-| **shared bus + per-slot send** | echo/delay (reverb later) | a delay line is KBs and wants musical coherence (one tempo'd echo per song) — this is why hardware mixers have sends | `echo(time_ms, feedback, tone)` configures the one bus; `instrument_echo(slot, send)` / `note_echo(handle, x)` set how much each part feeds it |
+| **shared bus + per-slot send** | echo/delay · **reverb ✓ (2026-06-10)** | a delay/room line is KBs and wants musical coherence (one tempo'd echo / one room per song) — this is why hardware mixers have sends | `echo(time_ms, feedback, tone)` / `reverb(size, damping)` configure the buses; `instrument_echo`/`instrument_reverb`(slot, send) + the `note_*` twins set how much each part feeds each. Both returns + the soft-clip insert now live in the explicit **master FX section** (§8.10) |
 | **oscillator param** | detune (cents) | not an effect at all — belongs beside duty/glide in `Voice` | `instrument_detune(slot, cents)` + `note_detune`; unison = two notes a few cents apart, suddenly meaningful |
 | **master stage** | soft-clip replacing the hard clip; maybe master drive/crush later | one place, whole-mix glue; also the §15 16-voice headroom answer | internal first (tanh at the sum); a `master_*` API only if carts ask |
 

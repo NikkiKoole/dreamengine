@@ -21,6 +21,11 @@ through an amp, onto tape, with the rhythm guitar through a wah pedal.* That lay
 > [`sound-next-steps.md`](sound-next-steps.md) § "Each effect → its showcase cart". The
 > shipped-station gap ledger is [`radio-genre-fidelity.md`](radio-genre-fidelity.md); this is
 > its forward-looking sibling for a station being built.
+>
+> **UPDATE 2026-06-10 — reverb SHIPPED.** The first §8.10 effect landed: `reverb(size,damping)`
+> + `instrument_reverb`/`note_reverb`. Afrobeat's "band-in-a-room glue (reverb)" want is met —
+> `afrobeat.c` can send the whole band into one shared room. The other votes below (wah, tape,
+> chorus, leslie, drive, and the not-yet-rostered compression) are still open.
 
 ---
 

@@ -24,12 +24,21 @@ the effects-layer plan. **Genre: design exploration.**
 > `instrument_pan`/`note_pan`/`LFO_PAN`); constant-power added as a gated opt-in `pan_law()`
 > 2026-06-10. Full record: [`stereo.md`](stereo.md). The §8.10 gate is now open.
 >
-> **▶ NEXT BITE — the effects-bus layer (§8.10), not started.** Begin small: **one master
-> reverb + formalize the bus concept** — generalize today's hardcoded mono echo into
-> `bus[NBUS]` + a small fixed FX chain, master = bus 0 (§8.10 routing model). Then the
-> §8.10.1 PARKED per-voice stand-ins migrate onto real phase-coherent buses: the **great
-> auto-wah** (bandpass on the summed mix + follower), **epiano tremolo**, and the
-> **envelope follower**. **Authoritative roster = [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md)**
+> **▶ Effects-bus layer (§8.10): STARTED. Reverb SHIPPED 2026-06-10** — the first effect.
+> Rather than `bus[NBUS]` + per-slot aux routing up front, the first bite **formalized the
+> per-sample MASTER FX SECTION** (in `sound_callback`): an explicit, ordered, send/insert-aware
+> block — SEND RETURNS (echo, reverb — each a shared processor with per-slot sends) then the
+> INSERT CHAIN ending in the soft-clip limiter, with a documented (not built) side-chain seam.
+> **Reverb is a SEND bus modelled exactly like the echo bus** — `reverb(size, damping)` +
+> `instrument_reverb`/`note_reverb`, a line-for-line port of navkit's Schroeder core (4 comb + 2
+> allpass + pre-delay), mono v1, dormant-until-called (byte-identical for old carts). Showcase:
+> the **cathedral** cart. Per-slot AUX routing (`instrument_bus`) stays the deferred next
+> increment; the reasoning (sends are the minority, inserts the majority — build the section to
+> take both) + the placement sanity-check per effect are in
+> [`sound-next-steps.md`](sound-next-steps.md). **Next:** the §8.10.1 PARKED per-voice stand-ins
+> migrate onto real phase-coherent buses (the **great auto-wah** = bandpass on the summed mix +
+> follower, **epiano tremolo**, the **envelope follower**), and chorus/tape/leslie per the
+> build-list. **Authoritative roster = [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md)**
 > (effects are recipes; ~12 primitives, forever); this doc's §8.10 is the routing sketch 0015
 > disciplined — where they differ, 0015 wins. To work on effects, read **0015 + §8.10 +
 > §8.10.1** and skip the rest.
@@ -1439,12 +1448,15 @@ buffer flag, navkit source, and macro mapping get filled in here.
 >   the master tape wow/flutter buffer ever ships. (The "BBD falls out of Leslie work" line below
 >   is the pre-0015 reasoning; treat it as superseded.)
 >
-> **Build state (2026-06-07):** of the two shared buses, **`echo` is SHIPPED** (`runtime/sound.h`,
-> the lone existing bus); **`reverb` is the second and last** admitted bus, and §8.10's "begin
-> small" first bite (master reverb + formalizing the bus concept). Next *sound* feature per
-> [STATUS §5](../STATUS.md) is **`INSTR_ORGAN` (dry, buffer-free)** — the effects layer opens
-> *after* it. Stereo (§9) is the real prerequisite for this whole layer — **specced in
-[`stereo.md`](stereo.md)** (API + linear pan law + the bite checklist + build order).
+> **Build state (2026-06-10):** both shared buses are now SHIPPED — **`echo`** (2026-06-05) and
+> **`reverb`** (2026-06-10, the §8.10 "begin small" first bite), the two-and-last admitted buses.
+> Reverb landed as a SEND bus mirroring echo (`reverb(size,damping)` + `instrument_reverb`/
+> `note_reverb`, navkit Schroeder port, mono v1) and the per-sample master section was formalized
+> into the ordered send/insert-aware **MASTER FX SECTION** (see the banner at the top of this doc).
+> The bite deliberately did NOT build `bus[NBUS]` + per-slot aux routing — that's the deferred
+> next increment; v1 is master-only. Stereo (§9) was the real prerequisite and shipped
+> 2026-06-09 — **specced in [`stereo.md`](stereo.md)**. Per-effect placement calls + the
+> send-vs-insert reasoning: [`sound-next-steps.md`](../design/sound-next-steps.md).
 
 > The effects wishlist + the routing model. Still **deferred** to §8.5 phase 4 (after the first
 > engines ship) — begin small. The Leslie (§8.3/§8.8) is the first instance and sets the pattern.

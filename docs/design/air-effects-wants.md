@@ -21,6 +21,11 @@ a string-machine chorus, onto warm tape.* That layer is missing.
 > by [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md); the sequenced
 > build-list is in [`sound-next-steps.md`](sound-next-steps.md) § "Each effect → its showcase
 > cart" (AIR is now a demand witness there). Sibling: [`afrobeat-effects-wants.md`](afrobeat-effects-wants.md).
+>
+> **UPDATE 2026-06-10 — reverb SHIPPED.** The first §8.10 effect landed: `reverb(size,damping)`
+> + `instrument_reverb`/`note_reverb` (a real room, not the echo-delay stand-in). AIR's top vote
+> is met — `air.c` can drop the echo-bus reverb fake and send its whole mix into a real hall. The
+> remaining wants below (chorus, vocoder, tape) are still open.
 
 ---
 
