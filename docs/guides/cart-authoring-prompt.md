@@ -50,13 +50,40 @@ working idioms. By genre:
 |---|---|
 | Sprites + recolor + tile world | `crowd.c` (+`.cart.js`), `platform.c` (+`.cart.js`), `zelda.c` |
 | Tile maps, camera, levels | `10-world.c`, `pacman.c`, `bomberman.c`, `sokoban.c` |
-| Sound / synth / rhythm | **first read [`docs/guides/instrument-carts.md`](instrument-carts.md)** — the shelf indexes every sound cart by the block it copies (`radio.h`/held-notes/`ui.h`/`INSTR_*`) and names the closest relative to start from; then read it: `omnichord.c`, `drummachine.c`, `moog.c`, `20-instruments.c`, `21-lfo.c`, `22-filter.c` |
+| Sound / synth / rhythm | **first read [`docs/guides/instrument-carts.md`](instrument-carts.md)** — the shelf indexes every sound cart by the block it copies (`radio.h`/held-notes/`ui.h`/`INSTR_*`) and names the closest relative to start from; then read it: `omnichord.c`, `drummachine.c`, `moog.c`, `20-instruments.c`, `21-lfo.c`, `22-filter.c`. **Copy the cousin's *chassis*, but design the *voices* intent-first — see the brief just below.** |
 | Juice & game feel | `juice.c`, `effects.c`, `particles.c` |
 | Geometry / pseudo-3D | `textured3d.c` (+`.cart.js`), `solid3d.c`, `mode7.c`, `raycaster.c`, `elite.c` |
 | Dither / fill patterns | `patterns.c`, `holes.c` |
 | Many entities (pools) | `robotron.c`, `vampire.c`, `boids.c` |
 
 studio.h is canonical for *what* exists; the exemplars show *how* it's idiomatically used.
+
+### Designing a sound cart's voices — intent-first, then shop (don't inherit the cousin's band)
+
+Two tracks that pull opposite ways — keep them separate:
+
+- **Chassis & brains → copy the closest cousin.** `radio.h` (PRNG / step clock / voice-leading
+  / chrome), `solo.h`/`improv.h`, the seed contract — shared infrastructure you must NOT
+  hand-roll. Start a station from its nearest genre cousin's wiring.
+- **Voices → imagine them first, *then* check what we have.** Do **not** default to the
+  cousin's instrument lineup — that inertia is how the library homogenized (the same synth kit
+  in 6 stations, every piano faked on TRI, near-clone basses). Instead:
+  1. **Imagine the band from the music.** What does this genre actually want — "a real
+     bandoneón, a brushed kit, a bowed string section, a grand piano"? Write the ideal lineup
+     *before* you open a cousin.
+  2. **Shop the palette** — [`instrument-recipes.md`](instrument-recipes.md): is there a
+     grabbable recipe for each imagined voice? Take it.
+  3. **Check the demand side** — [`instrument-presets.md`](instrument-presets.md): has another
+     station already voiced it? Reuse it *on purpose* (add your cart to its **used by** line),
+     not by accident.
+  4. **Build the gap.** Whatever the genre wants that the palette lacks is your new recipe —
+     and usually the most valuable thing the cart adds.
+
+Why intent-first: it stops accidental copy-paste sameness, and it surfaces **upgrade gaps** —
+imagine "a grand piano," go looking, and you find `INSTR_PIANO` instead of faking it on TRI.
+The richest new sound lives in the engines no station uses yet (`GUITAR`/`PIPE`/`BOWED`/
+`PIANO`/`VOICE` — see the palette's untapped shelves). On ship, update both recipe docs
+(the CLAUDE.md / instrument-carts rule).
 
 ## The runtime model
 - You implement `void init(void)` (once, optional), `void update(void)` (per frame,

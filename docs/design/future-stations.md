@@ -17,6 +17,28 @@ candidates and build-order reasoning, not a how-to).
 > [`radio-instrument-options.md`](radio-instrument-options.md) (retrofitting shipped
 > stations).
 
+## Which candidate adds the newest *demand*? (2026-06-10)
+
+A fourth build-order lens, cross-referenced against the now-complete instrument palette
+([`../guides/instrument-recipes.md`](../guides/instrument-recipes.md)): **newest demand = the
+station forces sounds nothing on the dial makes yet** — chiefly the **untapped engine shelves**
+(`PIANO`/`PIPE`/`BOWED`/`VOICE`/`GUITAR`, which have *no* radio consumer) and/or a new brain.
+This is the station-side mirror of the instrument new-sound score in
+[`cart-library-direction.md`](cart-library-direction.md) § 2b.
+
+| new demand | candidate | what it forces that nothing uses |
+|---|---|---|
+| ★★★★★ | **Eno "Music for Airports"** | real `INSTR_PIANO` **and** `INSTR_VOICE` choir (the sung vowels) — two untapped shelves at once + a prime-length-loops generative-form brain |
+| ★★★★☆ | **Plantasia (Mort Garson)** | a Mellotron → the whole wind/bowed/voice shelf (`PIPE` flutes, `BOWED` strings, `VOICE` choir) |
+| ★★★★☆ | **Steve Reich minimalism** | real `INSTR_PIANO` + a **phase brain** (two voices drifting out of step — a new TIME mechanism) |
+| ★★★☆☆ | **Afrobeat** | `INSTR_GUITAR` interlocking ostinatos + `INSTR_REED` horn section + a `euclid()` groove brain |
+| ★★☆☆☆ | **J-fusion / Lofi-hiphop / Boards of Canada** | mostly covered engine territory (FM/EPIANO/saws); the *new* is brains (mistuning, swing), not timbre |
+
+So the newest demand rhymes with the instrument finding: the candidates that need the
+**untapped engines** top the list. Pair this with the **intent-first voice brief** in
+[`../guides/cart-authoring-prompt.md`](../guides/cart-authoring-prompt.md) — imagine the band,
+then shop the palette — and a high-demand station naturally *creates* the new recipes it needs.
+
 ## Future stations — the parking lot
 
 Candidates ranked by **engine fit** (= the genre's essence maps onto machinery we

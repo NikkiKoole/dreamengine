@@ -96,6 +96,13 @@ pattern at the bottom.
 > sonic ground," build the **hand-drum, bellows, and violin** first — each makes a powerful,
 > currently-showcase-only engine *playable*, the biggest untapped sound in the library (cf.
 > the palette's "GUITAR/PIPE/BOWED/PIANO/VOICE have no consumers yet").
+>
+> **Also in the running — the Raymond Scott "pre-Roland wing"** (currently parked in
+> [`../STATUS.md`](../STATUS.md), classic-machine list): the **Circle Machine** (~1959) — a
+> *circular* step sequencer (rotating photocell sweeps a ring of brightness knobs) — scores
+> low on *new sound* (it reuses existing oscillators) but high on **new interaction**, a
+> genuinely fresh UI unlike any music cart here; the **Clavivox** (keyboard theremin) is a
+> small `note_glide` instrument. Listed here so they're not lost in STATUS.
 
 **Buildable today** (current engines), ranked by fun × feature-showcase value:
 
