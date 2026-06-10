@@ -65,6 +65,36 @@ From the gap ledger's aggregate:
 3. **Drum-led elastic tempo that lands on a structural beat** — extend `tango`'s live-`bpm()`
    TEMPO-AS-A-VOICE to gamelan (kendang→gong) and the Doors jam.
 
+## Engine & effects gaps (core audio-engine work)
+
+Surfaced by the **completeness audit** (Sound Blaster FM · General MIDI · the Roland MT-32 ·
+the real orchestra, 2026-06-10) — these need *engine* work, not wiring, and the four lenses
+all converged on the same short list:
+
+1. **A reverb bus** — the most-wanted missing effect. The orchestra's hall, `ambient`'s 8–20 s
+   tails, the MT-32's built-in reverb, GM's atmosphere/halo pads all need it. The epiano's
+   *temporary* TREM/WAH ([`../guides/instrument-recipes.md`](../guides/instrument-recipes.md))
+   are meant to fold into this effects bus. The single biggest effects gap.
+2. **Chorus / unison width** — the lush detuned-width that defines a Juno, a stereo Rhodes, a
+   string *section*. Partly fakeable by layering (see "section blend" below), but a real
+   chorus/ensemble primitive packages it.
+3. **Ring modulation / audio-rate AM** — a small synthesis primitive we lack (FM's fixed
+   carrier:mod ratio and sub-audio LFOs don't reach it): metallic/bell/clang timbres + the
+   **Dalek / talkbox** vocal FX the gap ledger flagged for `INSTR_VOICE`. Niche, but the only
+   *new* primitive the MT-32 audit surfaced.
+
+## Free recipe wins (no engine work — layering techniques, pieces already exist)
+
+The cheapest realism upgrades on the whole list — no engine, no decision, just technique:
+
+- **Attack-transient layering** — glue a short percussive onset (noise tick / click / pluck)
+  onto a sustaining engine voice. The attack is what *sells* a faked instrument (it's LA
+  synthesis's whole trick; we already do it in the 909 kick / cr78 snare). Pairs with the
+  upgrade-wirings above — the cheapest way to make a thin voice convincing.
+- **Section / unison blend** — layer N slightly-detuned voices (the gamelan `ombak` trick) so
+  one solo `BOWED`/`PIPE`/`REED` reads as a *section* — the gap between one violinist and the
+  strings. The only cost is voice budget.
+
 ## Decisions to make (deliberate — don't auto-do)
 
 - **Extract the synth kit?** Six stations hand-rebuild the same kick/snare/hat — the strongest
