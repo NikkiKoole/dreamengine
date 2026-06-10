@@ -377,6 +377,12 @@ void chorus(float rate, float depth, float mix);  // rate 0.1..5 Hz (wobble spee
 // whoosh / metallic comb sweep. Needs a rich source (chords, noise) to hear. Master-wide.
 void flanger(float rate, float depth, float feedback, float mix);  // rate 0.05..5 Hz, depth 0..1, feedback -0.95..0.95 (more = jet/metallic; <0 = through-zero), mix 0..1 (0 = off). defaults 0.3/0.7/0.7/0.5
 
+// per-instrument chorus/flanger — put the effect on ONE instrument (flange the guitar, not the
+// rhythm), unlike the master chorus()/flanger() which hit the whole mix. Same args + a slot. Up to
+// 7 instruments can have their own at once. (echo/reverb are already per-instrument: see above.)
+void instrument_chorus(int slot, float rate, float depth, float mix);            // chorus on just this slot
+void instrument_flanger(int slot, float rate, float depth, float feedback, float mix);  // flanger on just this slot
+
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti
 #define SCALE_MINOR      1   // natural minor
