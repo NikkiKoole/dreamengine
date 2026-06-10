@@ -13,7 +13,7 @@ lines of `instrument_*` calls — and so shared recipes become visible on one pa
 
 > **Status: growing.** Charted so far: **italo**, **house**, **citypop**, **motorik**,
 > **cocktail**, **lowend**, **bossa**, **dub**, **jangle**, **jingle**, **addis**, **yacht**,
-> **roadhouse**, **satie** (see
+> **roadhouse**, **satie**, **gamelan** (see
 > [`radio-voices.md`](radio-voices.md) for why we started with italo). Grow one station
 > at a time. When a new station reuses a recipe already named here, add it to that
 > preset's **used by** line rather than minting a duplicate.
@@ -200,6 +200,21 @@ The kebero / low drum on the one — the struck-drumhead engine tuned low, near-
 - note: addis is the first charted station to use `INSTR_MEMBRANE` — real modelled drums
   instead of the synth kit. `kebero`/`conga`/`bongo` are one engine at three tunings (three
   different drums → three names, per the naming rule).
+
+### membrane/kendang
+A paired hand-drum (kendang) on `INSTR_MEMBRANE` — an interlocking high/low pair, one
+drummer:
+
+| drum | recipe |
+|---|---|
+| lanang, high (`I_KENL`) | MEMBRANE A1 D0 S7 R120 · h0.70 t0.60 m0.12 |
+| wadon, low (`I_KENW`)   | MEMBRANE A1 D0 S7 R220 · h0.45 t0.28 m0.18 |
+
+- tier: unique
+- origin: gamelan
+- used by: gamelan (`I_KENL` · `I_KENW`)
+- kin: addis's MEMBRANE drums (`membrane/kebero`/`conga`/`bongo`) — same engine, gamelan
+  hand-drum tuning.
 
 ### membrane/conga
 `INSTR_MEMBRANE` · A1 D0 S7 R200 · h0.55 t0.35 m0.15
@@ -575,6 +590,10 @@ softness." satie's *only* instrument — solo piano, two hands at different regi
 - kin: the **fake-piano-on-TRI** cluster — cocktail's `tri/felt-grand` + `sine/closed-lid-piano`
   do the same thing (no charted station uses the modeled `INSTR_PIANO`; they all fake it). satie's
   is the most sustained, voiced for held gymnopédies.
+- ⬆ **upgrade candidate:** satie *predates* the `INSTR_PIANO` engine — the TRI fake is a fossil,
+  not a choice. The modeled piano exists now; switching is a judgment call (TRI may sit better in
+  this bare mix), but "fakes X, engine now models X" is exactly the kind of gap this catalog
+  exists to make visible.
 
 ### tri/felt-grand
 `INSTR_TRI` · A2 D600 S2 R240 · cut-env →700 (0/70)
@@ -719,6 +738,40 @@ is subtly different. An alt voicing drops to h0.06 t0.50 m0.28 (woodier, drier, 
 - used by: addis (`I_VIBE`, lead + improv.h solo)
 - kin: `mallet/vibes` — same `INSTR_MALLET` vibraphone, but addis voices its own rather than
   copying mallet.c's preset. The one vibe cart that *didn't* lift the shared recipe.
+
+### mallet/bronze
+`INSTR_MALLET` · A1 D0 S7 R1100 · h0.55 t0.40 m0.30 (ring, **no motor**) · `instrument_tune()` per degree
+A bank of tuned bronze metallophones — **one MALLET slot per scale degree** (`I_BRONZE`+0..6),
+each `instrument_tune()`'d to the sléndro/pélog scale. Higher harmonics than a vibe (toward
+bell/metal), no motor tremolo. Seeded per-degree timbre jitter. The core gamelan voice.
+- tier: unique
+- origin: gamelan
+- used by: gamelan (`I_BRONZE`+0..6 bank)
+- note: **first station to use `instrument_tune()` for a microtonal scale bank** (non-12-TET).
+- kin: the MALLET family (`mallet/vibes`, `mallet/addis-vibes`) — same engine, voiced as
+  struck bronze rather than a motor vibraphone.
+
+### mallet/gong
+`INSTR_MALLET` · A1 D0 S7 R3500 · h0.95 (deep inharmonic bell) t0.20 m0.30 · echo 0.18
+The kettle-gong (gong ageng) — a deep inharmonic bell, ~3.5 s ring, soft round strike, a
+little pavilion air. Struck as a **detuned pair** (`I_GONG` + `I_GONG2`, ~7¢ apart) so the two
+beat against each other: **ombak**, the gamelan shimmer.
+- tier: unique
+- origin: gamelan
+- used by: gamelan (`I_GONG` + `I_GONG2` ombak twin)
+- note: the **ombak** detuned-pair technique (`instrument_tune` + a few cents → beating) is
+  gamelan's own — the first use of deliberate detune-for-beating in the catalog.
+- kin: the MALLET family.
+
+### reed/suling
+`INSTR_REED` · A40 D0 S6 R220 · h0.30 (hollow pipe) t0.35 m0.45 (breath swell) · LP 2400/1 · `note_pitch` float
+The suling bamboo flute — the **first charted use of `INSTR_REED`** (the blown-reed
+waveguide). Played with continuous `note_pitch()` (truly gliding, not gridded to the bronze
+bank), breath swell + a little vibrato on the macros.
+- tier: unique
+- origin: gamelan
+- used by: gamelan (`I_SUL`)
+- note: first station on the `INSTR_REED` engine.
 
 ### pd/synth-horn
 `INSTR_PD` · A14–26 D0 S6 R~200 · h0.56–0.94 t0.55–0.70 m0.40–0.50 · LP 2600–3200

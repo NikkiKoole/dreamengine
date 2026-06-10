@@ -401,13 +401,36 @@ shaped for held gymnopédies. A minimalist island.
 
 ---
 
+## gamelan — Indonesian gamelan (Java / Bali)
+
+Solo layer: **none**.
+
+The biggest new sonic world — and the first station on **microtonal tuning**. Tuned bronze,
+kettle-gongs, hand drums, and a bamboo flute; nothing borrowed.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_BRONZE`+0..6 | tuned bronze bank (per scale degree) | `mallet/bronze` | MALLET |
+| `I_GONG`/`I_GONG2` | great gong (ombak detuned pair) | `mallet/gong` | MALLET |
+| `I_KENL`/`I_KENW` | kendang hand-drum pair | `membrane/kendang` | MEMBRANE |
+| `I_SUL` | suling bamboo flute | `reed/suling` | REED |
+
+**Borrowing at a glance:** none — a microtonal island, all kin (MALLET bronze ↔ the vibes;
+MEMBRANE kendang ↔ addis's drums). But it introduces **three firsts**: `instrument_tune()`
+microtonal scale banks (sléndro/pélog), the **ombak** detune-for-beating shimmer, and the
+first `INSTR_REED` voice. The most idiomatic station yet — reuse is purely engine-level
+family resemblance, nothing copied.
+
+---
+
 ## Stations not yet charted
 
-carlos · exotica · gamelan ·
+carlos · exotica ·
 tango · ymo
 
 (20 stations total; all on `runtime/radio.h`. Charted: italo · house · citypop · motorik ·
-cocktail · lowend · bossa · dub · jangle · jingle · addis · yacht · roadhouse · satie (14).
-The real/acoustic stations build their own voices. Notable: no charted station uses the
-modeled `INSTR_PIANO` — they all fake pianos on TRI/SINE. Remaining: tango · gamelan ·
-carlos · exotica · ymo.)
+cocktail · lowend · bossa · dub · jangle · jingle · addis · yacht · roadhouse · satie ·
+gamelan (15). The real/acoustic stations build their own voices. Notable: no charted station
+uses the modeled `INSTR_PIANO` (all fake pianos on TRI/SINE — satie is an upgrade candidate);
+gamelan brought microtonal `instrument_tune()`, ombak, and the first `INSTR_REED`. Remaining:
+tango · carlos · exotica · ymo.)
