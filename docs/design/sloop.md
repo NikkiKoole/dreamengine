@@ -1501,3 +1501,25 @@ the 2-axle core — so zero risk to the tuned drift; this is pure plumbing under
 wheel's load; yaw = Σ force×lever), A/B'd against the saved `drift2`/`kick`/`powerover`/`turn`
 traces until it matches-or-beats the feel. Then Phase 3 (per-wheel drive/brake, retire the bolt-ons),
 flip the default, delete the old core.
+
+### Per-wheel model — Phase 2: the per-wheel force loop (2026-06-10)
+
+The lateral force resolution now has a **per-wheel path**, built **behind a runtime toggle (`M`)** so
+the tuned 2-axle core stays intact and both run in one binary for A/B.
+
+- ✓ **The loop:** each gripping wheel resists the lateral slip *at its position* (`vl + ω·x_i`),
+  capped by a friction circle **sized by its own spring load** (`SLIP_MAX · load_i/avg`) — so
+  longitudinal + lateral transfer *and* static cargo all bias grip per wheel. Handbrake cuts the
+  rear wheels (`x<0`); a driven wheel eats its own grip under power. `vl -= Σacc`, `angVel -= Σacc·x_i`
+  (the yaw couple, same form as before). **Tipping is emergent** — a lifted wheel has load→0 → cap→0 →
+  no grip (no `tipMul` in this path). `wt_long`/`wt_xfer`/`solve_wheel_loads` hoisted ahead of the
+  branch so both paths share them.
+- ✓ **A/B verified** (`M`-on vs off, same scripts): **normal turn identical** (19/72 °/s both; 86 vs
+  78 at the limit — a touch more grip); **the drift matches the tuned core to ~1–2°** across build /
+  hold (~39°) / trail-out, carrying *slightly more speed* (less scrub); power-over likewise. Matches-
+  or-beats — the migration's bar. Default stays the **old core** (`use_wheel_model=0`) pending a feel
+  pass on desktop; `M` flips to the per-wheel model live (green "WHEEL-MODEL" tag).
+
+**Next — Phase 3 (after the feel pass):** per-wheel drive/brake (power-oversteer + traction loss fully
+emergent), retire the now-redundant bolt-ons (`POWER_EAT`, the tipping `tipMul`/hull check, maybe the
+`SELF_ALIGN` aid), flip the default, delete the old 2-axle branch.

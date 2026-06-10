@@ -279,8 +279,10 @@ static float stabL, stabR;        // lateral reach of the hull from the COM (lef
 static float wheelPX[MAXWP], wheelPY[MAXWP];   // contact positions, COM-local px
 static int   wheelPR[MAXWP], wheelPC[MAXWP];   // their grid row/col
 static int   wheelPD[MAXWP];                   // 1 = a drive wheel
+static float wheelG[MAXWP];                    // lateral grip coefficient (wheel 1.0, caster 0.12)
 static float wheelLoad[MAXWP];                 // solved vertical load (mass units; Σ ≈ M)
 static int   nWheelP;
+static int   use_wheel_model = 0;              // §8 phase 2: per-wheel force loop (toggle M); 0 = old 2-axle core
 
 // ── tuning ───────────────────────────────────────────────────────────────────
 // ENGINE_POWER is the GAS baseline (the everyday engine); the other kinds scale off it
@@ -655,6 +657,7 @@ static void recompute_body(void) {
             if (k->roll > 0) {                 // a support point (wheel / caster / drive)
                 nWheels++;
                 wheelPR[nSup] = r; wheelPC[nSup] = c; wheelPD[nSup] = (k->drive > 0);  // for the load solve + BUILD draw
+                wheelG[nSup] = k->grip;          // lateral grip coef (per-wheel force loop, §8)
                 supX[nSup] = cx; supY[nSup] = cy; nSup++;
                 allWheelSumX += cx;
                 if (cx < wMinX) wMinX = cx; if (cx > wMaxX) wMaxX = cx;
@@ -940,6 +943,7 @@ static void handle_input(void) {
     // ---- DRIVE input: keyboard OR the on-screen cockpit (touch + mouse) ----
     if (keyp('R')) reset_vehicle();
     if (keyp('P')) is_paused = !is_paused;
+    if (keyp('M')) use_wheel_model = !use_wheel_model;   // §8: A/B the per-wheel force model vs the 2-axle core
     if (keyp('I') || ctl_hit(BTN_X, IGN_Y, BTN_W, BTN_H)) do_ignition();   // IGN button
     if (keyp('G') || ctl_hit(BTN_X, TRN_Y, BTN_W, BTN_H)) do_trans();      // TRANS button
     if (ctl_hit(BTN_X, BLD_Y, BTN_W, BTN_H)) mode = MODE_BUILD;            // BUILD button
@@ -1164,24 +1168,54 @@ static void update_drive(float dt_) {
     // friction-circle cap (next step). Handbrake + tipping still scale both axles here.
     float tipMul = 1.0f - STAB_GRIP_LOSS * tip_amt;  // tipping unloads the tires → they let go
     slide_amt = 0;
-    if (twoAxle) {
+    // weight transfer: the realized longitudinal accel this frame (thrust+drag+brake are already
+    // in vf above) pitches load front↔rear, low-passed to settle like suspension. Computed HERE
+    // (before the grip model) because BOTH the per-wheel spring solve and the old axle caps use it.
+    float aLong = (vf - vf0) / dt_;
+    wt_long = lerp(wt_long, aLong, WT_LAG);
+    wt_xfer = clamp(wt_long * WT_LONG_K, -WT_MAX, WT_MAX);   // + = rear loads, - = front loads
+    solve_wheel_loads(wt_long, aLat);                // §8: per-wheel vertical loads for THIS frame
+    if (use_wheel_model && nWheelP >= 3) {
+        // ── §8 PHASE 2: per-wheel lateral force resolution ───────────────────────
+        // Each wheel resists the lateral slip AT ITS POSITION, capped by a friction circle sized
+        // by ITS OWN load (from the spring solve — so longitudinal + lateral transfer AND static
+        // cargo all bias grip per wheel). A lifted wheel (load→0) makes ~no grip = tipping, emergent
+        // (no tipMul here). Handbrake cuts the rear wheels; a driven wheel eats its own grip under
+        // power. Sum forces → lateral accel; sum force×lever → the yaw couple.
+        float wRad = angVel * DEG2RAD;
+        float avgLoad = M / nWheelP;
+        float sumLat = 0, sumYaw = 0, satF = 0, satR = 0;
+        for (int i = 0; i < nWheelP; i++) {
+            float g = wheelG[i];
+            if (g <= 0) continue;
+            float vlat = vl + wRad * wheelPX[i];               // lateral slip velocity at this wheel
+            float loadScale = wheelLoad[i] / avgLoad;          // >1 loaded, ~0 lifted
+            float cap = SLIP_MAX * loadScale;
+            if (wheelPX[i] < 0 && in_hand) cap *= DRIFT_GRIP_MULT;                 // handbrake = the rear wheels
+            if (wheelPD[i] && throttle > 0) cap *= (1.0f - POWER_EAT * throttle);  // a driven wheel eats its grip
+            float cl = clamp(vlat, -cap, cap);
+            float acc = cl * (g * GROUND_GRIP / M) * LAT_GRIP;  // peak force ∝ cap ∝ load
+            sumLat += acc;
+            sumYaw += acc * wheelPX[i];
+            float sat = af(vlat) - cap;
+            if (sat > 0) { if (wheelPX[i] >= 0) { if (sat > satF) satF = sat; }
+                           else                { if (sat > satR) satR = sat; } }
+        }
+        vl     -= sumLat * dt_;
+        angVel -= sumYaw * (M / I) * GRIP_YAW_K / DEG2RAD * dt_;
+        slide_rear = (satR >= satF);
+        float sat = (satR > satF) ? satR : satF;
+        slide_amt = clamp(sat / (SLIP_MAX + 1.0f), 0, 1);
+    } else if (twoAxle) {
         float wRad = angVel * DEG2RAD;
         float vlF = vl + wRad * aF;                  // lateral slip velocity at the front axle
         float vlR = vl + wRad * aR;                  // ... and the rear
-        // weight transfer: the realized longitudinal accel this frame (thrust+drag+brake are
-        // already in vf above) pitches load front↔rear, low-passed to settle like suspension.
-        // Braking → load forward (front grips, rear lightens); throttle → load rearward.
-        float aLong = (vf - vf0) / dt_;
-        wt_long = lerp(wt_long, aLong, WT_LAG);
-        wt_xfer = clamp(wt_long * WT_LONG_K, -WT_MAX, WT_MAX);   // + = rear loads, - = front loads
         float frontLoad = clamp(1.0f - wt_xfer, WT_FLOOR, WT_CEIL);
         float rearLoad  = clamp(1.0f + wt_xfer, WT_FLOOR, WT_CEIL);
         // friction circle: each axle holds slip only up to its limit (SLIP_MAX), then LETS GO.
         // The DRIVEN axle's limit shrinks with the power it lays down (the drive force eats its
         // sideways budget): rear-drive → rear breaks loose under power = oversteer; front-drive →
         // front washes out under power = understeer. The handbrake cuts the REAR only (tail out).
-        // Each axle's cap is scaled by its live LOAD — an unloaded tyre lets go at a lower slip,
-        // a loaded one holds more (and makes more force, since the saturated force = cap·grip).
         float capF = SLIP_MAX * tipMul * frontLoad * (1.0f - POWER_EAT * (1.0f - rearDriveFrac) * throttle);
         float capR = SLIP_MAX * tipMul * rearLoad  * (in_hand ? DRIFT_GRIP_MULT : 1.0f)
                                        * (1.0f - POWER_EAT * rearDriveFrac * throttle);
@@ -1203,10 +1237,6 @@ static void update_drive(float dt_) {
     }
     if (scraping)                                    // a dragging belly also anchors sideways
         vl -= vl * clamp((SCRAPE_LAT * nDrag) / M, 0, 1.0f / dt_) * dt_;
-
-    // ── per-wheel spring loads (§8, PHASE 1: solved + traced, not yet driving forces) ──
-    // live load distribution from this frame's longitudinal (wt_long) + lateral (aLat) accel.
-    solve_wheel_loads(wt_long, aLat);
 
     // --- rolling friction: a CONSTANT decel (rolling/bearing resistance) that drag ∝ v
     //     can't provide — it's what actually brings a coasting rig to a full STOP and
@@ -1424,6 +1454,7 @@ void update(void) {
         watch("loadF", "%.1f", lF);    watch("loadR", "%.1f", lR);
         watch("loadRt", "%.1f", lRight); watch("loadLf", "%.1f", lLeft);
     }
+    watch("wmodel", "%d", use_wheel_model);
 #endif
 }
 
@@ -1651,6 +1682,7 @@ static void hud(void) {
     // --- top of screen: rig identity (dim) + the zone's limit (a road sign) ----
     print(DES_NAME[cur_des], 4, 4, CLR_DARK_GREY);
     print(ENG[eng_kind].name, 4, 12, ENG[eng_kind].col);   // the rig's engine kind (§1a)
+    if (use_wheel_model) print("WHEEL-MODEL \x07M", 4, 20, CLR_LIME_GREEN);   // §8 per-wheel core active
     print_centered(ZONE_NAME[cur_zone], SCREEN_W / 2, 4, CLR_YELLOW);
     if (nDrag > 0) {                         // scrape heat — shown only while it bites
         print("SCRAPE", SCREEN_W - 52, 4, hot_col());
