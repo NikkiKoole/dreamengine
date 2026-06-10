@@ -652,6 +652,32 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     cart drawing thin lines in a zoomable/pannable world will shimmer at non-integer zoom.
     Probably belongs with the rasterization work — [`design/rasterization-consistency.md`](design/rasterization-consistency.md).
 
+30. **Docs/context hygiene — shrink what every agent loads** *(new 2026-06-10, surfaced
+    while the per-agent context cost started "being felt in more agents")*. The docs are
+    tight and high-value; the problem is *load shape*, not volume. Diagnosis + the one move
+    already taken:
+    - ✅ **DONE — CLAUDE.md is now a router, not a reference.** The 197-line "Game feel"
+      essay (~31% of the file) was always-loaded into *every* agent every session despite
+      being task-specific. Extracted to [`guides/game-feel.md`](guides/game-feel.md), left a
+      ~10-line pointer. CLAUDE.md 628 → 443 lines. **Next candidate:** the live-inspection
+      recipe in CLAUDE.md's "Debugging carts" section largely duplicates
+      [`guides/debug-harness.md`](guides/debug-harness.md) — could become a pointer too.
+    - **Add a `stereo.md`-style "STATE + next bite" header to the big design docs.**
+      `instrument-engines.md` (1,455 lines) and `audio-notes.md` (1,238) force a large read
+      to orient; a 20–30 line top block (current state, ✅ shipped, next concrete step) lets
+      an agent orient cheaply — the pattern that let stereo.md convey the whole stereo+effects
+      gate in one small read. Split past ~1,500 lines, keeping stable §-anchors (lint-docs
+      already guards refs).
+    - **Consolidate layered corrections.** Understanding the effects decision today means
+      reading [decision 0015](decisions/0015-effects-are-recipes-not-primitives.md) + its
+      appended Correction + `instrument-engines.md` §8.10 + its "0015 supersedes this" banner
+      — 4 reads for 1 truth. Fold corrections into the primary text; push superseded rationale
+      to a clearly-marked tail (git keeps the history). Append-only is honest but taxes every
+      future reader.
+    - **Keep favoring queryable state over prose** — `cart-status.js` / `lint-docs.js` /
+      `lint-carts.js` let an agent *ask* "what's stale / do refs resolve" instead of reading
+      everything. That's the right direction; more of it beats more prose.
+
 ---
 
 ## Decided-against / deferred ✗
