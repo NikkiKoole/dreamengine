@@ -5,6 +5,15 @@
 > on native. This note traces the cause through the code and ranks the fixes.
 > The latency half of the web-audio question lives in
 > [`product-notes.md`](product-notes.md); **this note owns timing jitter/drift**.
+>
+> **STATUS (2026-06-10): investigation closed; decision pending.** Cause fully
+> characterized and confirmed in the *shipped* artifact (web audio runs on the main
+> thread via `ScriptProcessorNode` — see §3). Shipped: the `frame_dt` clamp + a 512
+> web buffer — the **main-thread ceiling** ("tight with a small residual," reproducible
+> on desktop *and* mobile). The only path to native-straight is the **AudioWorklet**,
+> now **proven reachable on GitHub Pages** via `coi-serviceworker` (the spike played on
+> an iPhone — see "feasibility spike"). Open decision: **greenlight the worklet
+> migration** vs **park** at the ceiling.
 
 ## Symptom
 
@@ -16,6 +25,14 @@
   the sample-accurate `schedule_hit` reference that *cannot* jitter from scheduling —
   is audibly wobbly. That rules scheduling out as the sole cause and indicts the
   **audio output clock itself** (see suspect #3, now confirmed).
+- **Web on desktop (2026-06-10, same `drift` build):** TRUTH is *also* slightly
+  not-straight — confirming the residual is **structural, not a mobile-load artifact**.
+  Console on the live page: **59 fps** (rendering isn't stealing main-thread time),
+  **`sampleRate` 44100** (no hidden resample — that variable is eliminated),
+  `baseLatency` ≈ 5.8 ms, `outputLatency` 0. So on a *healthy* desktop (60 fps, no
+  resample, low latency) TRUTH still isn't dead-straight → the main-thread
+  `ScriptProcessor` ceiling, full stop. (Desktop browser is also the **fast test loop**
+  — same backend as mobile, no deploy+phone round-trip needed.)
 
 ## How timing works today
 
@@ -94,11 +111,16 @@ the threshold.
 ### 3. CONFIRMED (web, worst on mobile): the audio output clock runs on the main thread
 
 **This is the one that wobbles TRUTH**, and it's the deeper problem. The web build
-ships **no AudioWorklet and no worker threads** — verified: neither `build-site.js`
-nor the editor's `main.cjs` passes `-sAUDIO_WORKLET`/`-sWASM_WORKERS`, and there is no
-worklet/ScriptProcessor code anywhere in the tree. With those flags absent, emscripten
-+ raylib's miniaudio fall back to a **`ScriptProcessorNode`, whose `onaudioprocess`
-runs on the main thread.**
+ships **no AudioWorklet and no worker threads** — neither `build-site.js` nor the
+editor's `main.cjs` passes `-sAUDIO_WORKLET`/`-sWASM_WORKERS`. With those flags absent,
+emscripten + raylib's miniaudio fall back to a **`ScriptProcessorNode`, whose
+`onaudioprocess` runs on the main thread.**
+
+**Confirmed in the shipped artifact (2026-06-10):** grepping the deployed
+`site/drift/index.js` finds `createScriptProcessor`: **1**, `onaudioprocess`: **2**,
+`audioWorklet`/`AudioWorkletNode`: **0** — the live code literally mixes audio in
+`device.scriptNode = device.webaudio.createScriptProcessor(bufferSize, …)` on the main
+thread, in our 512-sample blocks. Not an inference; the running cart proves it.
 
 So `sound_callback` (`sound.h:3279`) — which both *generates* the samples and *counts
 down* `schedule_hit`'s `delay_samples` — is interleaved with rendering and GC on the
@@ -199,8 +221,32 @@ A throwaway minimal worklet (a sine via `emscripten/webaudio.h`, in
    own memory, main thread sends only note events via `postMessage` (latency-tolerant
    since notes are scheduled ahead). Avoids SAB, but it's a major audio-engine split.
 
-Recommended next step: deploy `spike.html` to confirm on-device that (a) it fails on
-plain Pages and (b) `coi-serviceworker` fixes it — *before* committing to the migration.
+**On-device result (2026-06-10): ✅ the worklet path is reachable on GitHub Pages.**
+A deployable spike was published to `site/coi-spike/` (`index.html` with
+`coi-serviceworker`, `nocoi.html` baseline). On an iPhone the coi page registered the
+service worker, self-reloaded once, flipped `crossOriginIsolated` → true, the
+shared-memory wasm instantiated, and the **AudioWorklet sine played** — confirming
+`coi-serviceworker` provides the isolation on Pages and the worklet runs there.
+
+Caveats observed:
+- **SW state is fragile across navigation/caching.** After bouncing between the coi and
+  no-coi pages (same SW scope) the coi page came back in a mixed state
+  (`crossOriginIsolated:false` yet the SAB wasm still ran). It's a service-worker
+  lifecycle/cache wrinkle, not a worklet failure — a real integration must own SW scope,
+  caching, and the one-time reload UX deliberately. (Added a RESET button + a
+  `SharedArrayBuffer`-available readout to the spike to get a clean slate.)
+- **Occasional tiny dropout in the bare sine.** A *click/dropout* (audio thread missing a
+  render quantum under OS/thermal pressure), distinct from drift/swing. The spike has zero
+  robustness tuning and a pure tone exposes any glitch maximally; musical content masks it.
+  Worklet ≫ main-thread for steadiness, but mobile audio is never *guaranteed* glitch-free.
+
+Bonus finding — **the RATCHET proves `schedule_hit`'s micro-timing survives the web
+backend.** A rapid even burst *batch-scheduled in one frame* (24 hits in `drift`) sounds
+**perfectly even on web**, native-tight: all hits share one buffer-drain origin, so the
+single origin-snap shifts the whole burst while the *internal* spacing stays
+sample-accurate. It's purely **cross-note placement** (separate notes, each scheduled on a
+different frame → different origin-snap) that smears — which is exactly suspect #3's
+buffer-origin mechanism, heard from the other side.
 
 ## Verification plan
 
@@ -210,13 +256,26 @@ plain Pages and (b) `coi-serviceworker` fixes it — *before* committing to the 
   per-voice error scope, plus a **GLITCH** button that stalls a frame on demand. Solo
   TRUTH = metronome; add the others to hear the wobble/drift; tap GLITCH to see the
   clamp hold the groove through a hitch.
-- **A/B the clamp**: publish `drift` (or any frame-triggered music cart), play on a
-  phone, provoke hitches (scroll / background a tab / busy device / the GLITCH button),
-  compare before/after the clamp. The clamp should remove the hitch-driven slips;
-  residual wobble = suspect #2.
-- **Quantify on-device**: an on-device audio capture (no native harness path exists
-  for web) against a click track would separate jitter (variance) from any slow creep
-  (suspect #3).
+  `drift` also has a **RATCHET** button (key `R`) — a batch-scheduled even burst that
+  stays tight on web (see the spike's bonus finding) — and a **GLITCH** button.
+- **Desktop browser is the fast loop** — it uses the *same* `ScriptProcessor`/main-thread
+  backend as mobile, so it reproduces the timing character without a deploy+phone
+  round-trip. Build → open in the browser → judge by ear. Use the `?debug=1` overlay for
+  fps + console mirror.
+- **Inspect the backend from the console** — paste this *before* the first click, then
+  start audio, to read the real context:
+  ```js
+  (function(){ const O=window.AudioContext||window.webkitAudioContext;
+    function W(...a){const c=new O(...a);window.__actx=c;
+      console.log('sampleRate',c.sampleRate,'baseLatency',c.baseLatency,'state',c.state);return c;}
+    W.prototype=O.prototype; window.AudioContext=window.webkitAudioContext=W; })();
+  ```
+  Measured on the live `drift` page: 59 fps, `sampleRate` 44100 (no resample),
+  `baseLatency` ≈ 5.8 ms — a healthy context that *still* isn't dead-straight (the ceiling).
+- **A/B the clamp**: provoke hitches (scroll / background a tab / GLITCH); the clamp should
+  remove the hitch-driven slips, residual wobble = the structural buffer-origin snap (§3).
+- **Quantify exact ms**: would need an output recording + onset-interval analysis (web has
+  no native `--wav` path). Not done — the structural diagnosis didn't need it.
 
 ## Further reading — AudioWorklet & web-audio timing (for the fix #7 work)
 
