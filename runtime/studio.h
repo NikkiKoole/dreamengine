@@ -388,6 +388,11 @@ void instrument_flanger(int slot, float rate, float depth, float feedback, float
 void tape(float wow, float flutter, float saturation);                  // wow/flutter/sat 0..1 (0,0,0 = off). defaults 0.3/0.2/0.4
 void instrument_tape(int slot, float wow, float flutter, float saturation);  // tape on just this slot
 
+// auto-wah — a resonant bandpass that OPENS with how hard you play (an envelope follower on the
+// summed signal): the funky talking-clavinet quack. Best on ONE rich/percussive instrument.
+void wah(float sensitivity, float resonance, float mix);                // sensitivity 0..1 (how much dynamics open it), resonance 0..1 (the quack), mix 0..1 (0 = off). defaults 0.5/0.5/0.7
+void instrument_wah(int slot, float sensitivity, float resonance, float mix);  // auto-wah on just this slot
+
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti
 #define SCALE_MINOR      1   // natural minor

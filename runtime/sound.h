@@ -3533,6 +3533,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         // INSERT CHAIN — MASTER (bus 0) inserts, on the whole mix (chorus()/flanger() configure
         // these). Per-instrument inserts already ran on their aux buses above. (tape/comp/bitcrush
         // land here later, before the soft-clip.)
+        if (wah_used[0]) wah_process(0, &mixL, &mixR);      // auto-wah (envelope bandpass), filter first
         if (cho_used[0]) chorus_process(0, &mixL, &mixR);   // BBD chorus, antiphase stereo width, in place
         if (flg_used[0]) flanger_process(0, &mixL, &mixR);  // short swept delay + feedback, mono, in place
         if (tape_used[0]) tape_process(0, &mixL, &mixR);    // wow/flutter/saturation, stereo, in place
@@ -4022,6 +4023,17 @@ void instrument_tape(int slot, float wow, float flutter, float saturation) {
     sound_push_ctrl(SR_INSTR_TAPE, slot, (int)(wow * 1000.0f), (int)(flutter * 1000.0f), (int)(saturation * 1000.0f), 0, 0);
 }
 
+// ── auto-wah: THE master auto-wah (envelope-following resonant bandpass — the funk quack) ──
+
+void wah(float sensitivity, float resonance, float mix) {
+    sound_push_ctrl(SR_WAH, (int)(sensitivity * 1000.0f), (int)(resonance * 1000.0f), (int)(mix * 1000.0f), 0, 0, 0);
+}
+
+void instrument_wah(int slot, float sensitivity, float resonance, float mix) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_WAH, slot, (int)(sensitivity * 1000.0f), (int)(resonance * 1000.0f), (int)(mix * 1000.0f), 0, 0);
+}
+
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {
     if (handle <= 0) return;
     if (which < 0 || which >= SOUND_ENVS) return;
@@ -4208,6 +4220,8 @@ static void sound_init(void) {
         flg_rate[b] = 0.3f; flg_depth[b] = 0.7f; flg_fb[b] = 0.7f; flg_mix[b] = 0.5f; flg_used[b] = false;
         tape_widx[b] = 0; tape_wph[b] = 0.0f; tape_fph[b] = 0.0f; tape_lpL[b] = 0.0f; tape_lpR[b] = 0.0f;
         tape_wow[b] = 0.3f; tape_flut[b] = 0.2f; tape_sat[b] = 0.4f; tape_used[b] = false;
+        wah_env[b] = 0.0f; wah_ic1[b] = 0.0f; wah_ic2[b] = 0.0f;
+        wah_sens[b] = 0.3f + 0.5f * 4.7f; wah_res[b] = 0.5f; wah_mix[b] = 0.7f; wah_used[b] = false;
     }
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence
