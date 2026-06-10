@@ -100,16 +100,45 @@ Two honest ways:
   what ships today). A small loader picks at load: `crossOriginIsolated ? worklet : plain`.
   Auto-fallback ✓. Cost ≈ 2× build time + storage per cart, but the fallback half is the
   current build (additive, not new). Needs coi-serviceworker for the worklet half.
-- **Path B — synth-in-the-worklet, no shared memory (elegant; bigger).** Run the synth +
-  clock inside the worklet with its own memory; main thread posts note events via
-  `postMessage` (latency-tolerant — notes are scheduled ahead). No shared memory → no
-  isolation, no coi-serviceworker, no two builds — works everywhere from one build, and
-  maps cleanly onto the native audio-thread model. Cost: a real restructure of where the
-  synth runs.
+- **Path B — synth-in-the-worklet, no shared memory (bigger).** Run the synth + clock
+  inside the worklet with its own memory; main thread posts note events via `postMessage`
+  (latency-tolerant — notes are scheduled ahead). No shared memory → no isolation, no
+  coi-serviceworker, no two builds — works everywhere from one build. **Correction
+  (don't re-believe the earlier draft):** this does **NOT** map better to native —
+  A's shared-memory ring *is* native's transport (miniaudio's audio thread draining
+  `req_queue`); B's `postMessage` is a **web-only** transport native would never use.
+  B's only real edge is web *deployment* simplicity, not portability. Cost: a real
+  restructure of where the synth runs.
 
 Native is unaffected either way — always a real audio thread, no toggle. `?debug=1` can
-surface which backend is live. **A-vs-B is a real decision; make it before Stage 2.**
-Stage 1 (atomics) is identical groundwork for both.
+surface which backend is live.
+
+## Decision (2026-06-10) + the parked Path-B / plugin thread
+
+**Web now → Path A.** It's the better *and* cheaper call: the fallback is the build we
+already ship, it mirrors native's transport, it reuses emscripten's worklet helper, and
+Stage 0 already de-risked it. Path B's one advantage (no isolation/coi-serviceworker) is
+**mitigated** — the self-heal made coi reliable and the free fallback covers any context
+where isolation fails. So we don't take on B's big rebuild to dodge a problem we've tamed.
+
+**Parked for future research: Path B + the "synth-extraction" refactor.** There's a
+third, more fundamental thing under B: **lift `sound.h` out of the engine into a
+host-agnostic "push events / render samples" module** (decoupled from raylib's audio
+device and the game binary). That refactor — *not* web Path B specifically — is what an
+**AUv3 / plugin** would need (native iOS/macOS; the host gives you the audio thread). So:
+- **AUv3 needs the extraction** (native, *not* web).
+- **Path B needs the extraction** (web, separate-memory worklet).
+- **Path A does NOT** — `sound.h` stays welded in, just runs on the worklet thread.
+
+They're *correlated through the extraction*, not the same thing: do the extraction for
+any reason (cleanliness, a plugin) and Path B gets cheap as a byproduct, and vice-versa.
+Absent a real plugin/native-instrument push, neither is justified now. Gated on the
+product direction in [`product-notes.md`](product-notes.md) (the AUv3/Link parked items).
+**When we revisit, start from this section + `audio-timing.md` — the findings, the spike
+(`site/coi-spike/`), and the COOP/COEP + thread-sleep + shared-memory facts are all here.**
+
+Stage 1 (atomics) hardens the shared queue native uses *today* and Path A needs — worth
+doing regardless of the eventual A/B call.
 
 ## Cross-platform payoff & the not-free parts
 

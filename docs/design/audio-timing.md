@@ -12,8 +12,11 @@
 > web buffer — the **main-thread ceiling** ("tight with a small residual," reproducible
 > on desktop *and* mobile). The only path to native-straight is the **AudioWorklet**,
 > now **proven reachable on GitHub Pages** via `coi-serviceworker` (the spike played on
-> an iPhone — see "feasibility spike"). Open decision: **greenlight the worklet
-> migration** vs **park** at the ceiling.
+> an iPhone — see "feasibility spike"). **Decision (2026-06-10): greenlit via Path A**
+> (worklet when isolated; the current ScriptProcessor build is the free auto-fallback).
+> Path B (postMessage worklet) + the synth-extraction/plugin angle are parked for future
+> research — the threading model, the A/B call, and the build plan live in
+> [`audio-threading.md`](audio-threading.md). Next step: Stage 1 (atomics-harden the queue).
 
 ## Symptom
 
