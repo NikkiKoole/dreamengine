@@ -493,6 +493,16 @@ static int           delayed_count = 0;
 // sound_tick() screams about it via printh so it shows in the editor log / bake output.
 static atomic_int sound_dropped = 0;   // incremented from BOTH threads → atomic RMW
 
+#if defined(PLATFORM_WEB) && defined(DE_AUDIO_WORKLET)
+// Master gain for the worklet mixer. raylib's SetMasterVolume only affects the
+// ScriptProcessor device we bypass, so the pause overlay routes its mute through this
+// instead (set on the main thread, read on the audio thread). See audio-threading.md §4.
+static _Atomic float sound_master_gain = 1.0f;
+static void sound_set_master_gain(float g) {
+    atomic_store_explicit(&sound_master_gain, g, memory_order_relaxed);
+}
+#endif
+
 // musical clock (main-thread state, ticked once per frame from studio.c)
 static int   sound_bpm     = 120;
 static float beat_accum    = 0.0f;
@@ -2824,6 +2834,9 @@ static void sound_fire_req(SoundReq r) {
 
 static void sound_callback(void *buffer_data, unsigned int frames) {
     float *out = (float*)buffer_data;
+#ifdef DE_AUDIO_WORKLET
+    const float master_gain = atomic_load_explicit(&sound_master_gain, memory_order_relaxed);  // pause-mute (worklet)
+#endif
 
     // 1) drain queued requests: fire immediate, hold delayed
     for (;;) {
@@ -3079,8 +3092,13 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             float g = clamped / pk;
             mixL *= g; mixR *= g;
         }
+#ifdef DE_AUDIO_WORKLET
+        out[2 * i]     = mixL * master_gain;           // worklet: pause-mute via the mixer
+        out[2 * i + 1] = mixR * master_gain;
+#else
         out[2 * i]     = mixL;
         out[2 * i + 1] = mixR;
+#endif
         if (wavcap_state == 1) {                       // WAV capture tap (wav_request) — MONO downmix
             wavcap_buf[wavcap_pos++] = (mixL + mixR) * 0.5f;   // (L+R)/2 == the old mono mix when centered
             if (wavcap_pos >= wavcap_total) wavcap_state = 2;

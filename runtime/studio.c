@@ -178,10 +178,10 @@ static bool            web_started      = false;  // true after the user clicks 
 
 // The AudioWorklet backend (DE_AUDIO_WORKLET) runs its own AudioContext and never touches
 // raylib's audio (raudio.c needs pthreads, which the WASM_WORKERS build doesn't link). So
-// in that build, raylib-audio calls compile out. Pause-mute via SetMasterVolume is a TODO
-// for the worklet path (route mute through the mixer) — see design/audio-threading.md.
+// in that build, raylib-audio calls compile out — and master volume (the pause-mute) is
+// routed through the worklet mixer's own gain instead. See design/audio-threading.md §4.
 #ifdef DE_AUDIO_WORKLET
-#define de_master_volume(v) ((void)0)
+#define de_master_volume(v) sound_set_master_gain(v)
 #else
 #define de_master_volume(v) SetMasterVolume(v)
 #endif

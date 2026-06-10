@@ -195,9 +195,11 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   worklet build**: guard `InitAudioDevice` (`#ifndef DE_AUDIO_WORKLET`) and route
   `SetMasterVolume` through a `de_master_volume()` macro that no-ops in the worklet build,
   so `raudio.c` is never linked. Builds + links clean on *both* targets; native tripwire
-  passes. **TODO:** pause-mute (was `SetMasterVolume`) is a no-op in the worklet build —
-  route it through the mixer later. A `build-site.js --worklet` flag builds the variant
-  into `site/<name>-worklet/` (+ the `runtime/audio-worklet-stub.js` thread-sleep stub).
+  passes. **Pause-mute ✅ (2026-06-10):** raylib's `SetMasterVolume` only touches the
+  ScriptProcessor device we bypass, so the worklet build routes the pause-mute through a
+  `_Atomic` master gain the mixer applies (`de_master_volume()` → `sound_set_master_gain()`)
+  — pause now silences worklet carts. A `build-site.js --worklet` flag builds the variant
+  (+ the `runtime/audio-worklet-stub.js` thread-sleep stub).
   **RUNTIME VERIFIED ✅ (2026-06-10):** on `site/drift-worklet/` (isolated via
   coi-serviceworker) **TRUTH is dead-straight**, vs the audibly wobbly ScriptProcessor
   `site/drift/`. End-to-end proof: dedicated audio thread (128-sample/~2.7ms quantum)
