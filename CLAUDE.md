@@ -294,13 +294,17 @@ Source-of-truth files live in `tools/carts/`; the build tool sits beside that fo
 > held-notes / `ui.h` / `INSTR_*`), so you start from the closest existing cart. Add a
 > row there when you ship.
 >
-> **If it's a radio station, also update the two station-instrument docs when you ship**
-> (this is a rule, not a nicety — they only stay useful if kept current):
-> [`docs/guides/radio-voices.md`](docs/guides/radio-voices.md) — add the station's voice
-> chart (slot → role → preset); and [`docs/guides/instrument-presets.md`](docs/guides/instrument-presets.md)
-> — name any new patch recipes, and for a recipe you reused, add your cart to that preset's
-> **used by** line (don't mint a duplicate). Together they answer "what plays what, and where
-> are we reusing the same recipe?" — keep the answer true.
+> **Shipping a sound cart? Keep the recipe docs current — a rule, not a nicety** (they only
+> stay useful if maintained):
+> - **A radio station** → add its voice chart to [`docs/guides/radio-voices.md`](docs/guides/radio-voices.md)
+>   (slot → role → preset), and in [`docs/guides/instrument-presets.md`](docs/guides/instrument-presets.md)
+>   name any new patch recipes / add your cart to a reused preset's **used by** line (don't
+>   mint a duplicate). Together they answer "what plays what, and where are we reusing a recipe?"
+> - **Any other instrument/machine/whimsical cart that makes music** (a synth, a drum machine,
+>   a plaything with grabbable presets) → name its recipes, by engine, in
+>   [`docs/guides/instrument-recipes.md`](docs/guides/instrument-recipes.md) (the supply-side
+>   palette). If it's a one-off toy with no fixed/reusable patch, note it under that doc's
+>   "By cart" index as live/sequenced rather than skipping it.
 
 1. Write the C source → `tools/carts/<name>.c`
 2. *(Optional)* Add sprites/map → `tools/<name>.cart.js`. Exports `{ sprites, map, charMap, mapW, mapH }`:
