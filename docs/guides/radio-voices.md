@@ -244,12 +244,37 @@ borrow after `mallet/vibes`/`organ/combo-drone`.
 
 ---
 
+## jangle — Mixolydian slacker pop (Mac DeMarco / One Wayne G)
+
+Solo layer: **`solo.h`** (a scale-locked whistle over the vamp).
+
+A near-textbook **clone**: its whole kit is the shared synth kit, its bass is the SINE pile,
+its lead a PWM-square whistle. Only the **chorused jangle guitar** — a constant 5.5 Hz pitch
+warble — is its own, and even that uses bossa's fake↔real guitar toggle.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_GTR`   | chorused jangle guitar | `tri/jangle-guitar` *(default)* · `pluck/jangle-guitar` *(opt-in)* | TRI / PLUCK |
+| `I_BASS`  | round simple bass | `sine/round-bass` (kin: SINE-bass pile) | SINE |
+| `I_LEAD`  | thin slidey whistle | `square/whistle` (kin: PWM-square family) | SQUARE |
+| `I_KICK`  | CR-78-ish thud | `drum/synth-kick` ⟳ (×4 others) | SINE |
+| `I_SNARE` | boxy little snare | `drum/noise-snare` ⟳ (citypop · motorik · lowend) | NOISE |
+| `I_HAT`   | tight hat | `drum/noise-hat` ⟳ (×4 others) | NOISE |
+| `I_SOLO`  | jam whistle (solo.h) | `square/whistle` (solo stop) | SQUARE |
+
+**Borrowing at a glance:** the most-borrowing station so far — kick & hat are now **5-station**
+families, snare 4. Its bass and whistle are kin to the SINE-bass and PWM-square piles. The
+chorused guitar (warble = the identity) is jangle's one original, built on the same fake↔real
+toggle bossa uses. If anything is a clone of the dance-station template, it's jangle.
+
+---
+
 ## Stations not yet charted
 
 addis · carlos · exotica · gamelan ·
-jangle · jingle · roadhouse · satie · tango · ymo · yacht
+jingle · roadhouse · satie · tango · ymo · yacht
 
 (20 stations total; all on `runtime/radio.h`. Charted: italo · house · citypop · motorik ·
-cocktail · lowend · bossa · dub. The rest of the `solo.h` group — jangle/jingle — is next
-up; the `improv.h` soloists roadhouse/addis and the acoustic stations (satie/tango/gamelan/
-carlos) will likely add new families rather than reuse these.)
+cocktail · lowend · bossa · dub · jangle (9). Last of the `solo.h` group is jingle; then the
+`improv.h` soloists roadhouse/addis and the acoustic stations (satie/tango/gamelan/carlos),
+which will likely add new families rather than reuse these.)

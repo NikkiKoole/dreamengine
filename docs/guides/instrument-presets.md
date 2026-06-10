@@ -12,7 +12,7 @@ This file gives each recipe a **clear name** so the per-station voice charts
 lines of `instrument_*` calls — and so shared recipes become visible on one page.
 
 > **Status: growing.** Charted so far: **italo**, **house**, **citypop**, **motorik**,
-> **cocktail**, **lowend**, **bossa**, **dub** (see
+> **cocktail**, **lowend**, **bossa**, **dub**, **jangle** (see
 > [`radio-voices.md`](radio-voices.md) for why we started with italo). Grow one station
 > at a time. When a new station reuses a recipe already named here, add it to that
 > preset's **used by** line rather than minting a duplicate.
@@ -117,9 +117,10 @@ The "dewww" — a downward pitch-swept sine, the electronic Simmons tom of '80s 
 > `drum/french-house-kick`, SQUARE metal hats) — byte-identical, **shared**. citypop,
 > motorik, lowend **and dub** instead each hand-build a *generic synth kit* (sine kick +
 > band-passed-noise snare + HP-noise hat) — same recipes, re-tuned per cart, so they're
-> **variant** families below. At **four stations and counting**, this kit is the single
-> most-rebuilt thing in the radio family — the strongest case for a shared helper (the bass,
-> below, is the runner-up).
+> **variant** families below. At **five stations** (citypop · motorik · lowend · dub ·
+> jangle), this kit is by far the most-rebuilt thing in the radio family — past the point
+> where a shared `drum_*()` helper would pay for itself. The strongest extract candidate;
+> the bass (below) is the runner-up.
 
 ### drum/synth-kick
 A short downward-pitch-swept sine — the generic four-on-the-floor synth thump (distinct
@@ -131,10 +132,11 @@ from house's long bridged-T boom).
 | motorik (`I_KICK`) | SINE A0 D100 S0 R40 · pitch-env →12 (0/50) — the motorik thud |
 | lowend (`I_KICK`)  | SINE A0 D95 S0 R35 · pitch-env →16 (0/50) — the boom-bap "boom" |
 | dub (`I_KICK`)     | SINE A0 D110 S0 R45 · pitch-env →12 (0/55) — soft, deep one-drop |
+| jangle (`I_KICK`)  | SINE A1 D90 S0 R40 · pitch-env →14 (0/45) — CR-78-ish thud |
 
-- tier: **variant** (4 stations)
+- tier: **variant** (5 stations)
 - origin: undetermined (all hand-rolled; confirm against earlier stations)
-- used by: citypop (`I_KICK`) · motorik (`I_KICK`) · lowend (`I_KICK`) · dub (`I_KICK`)
+- used by: citypop (`I_KICK`) · motorik (`I_KICK`) · lowend (`I_KICK`) · dub (`I_KICK`) · jangle (`I_KICK`)
 
 ### drum/noise-snare
 A band-passed noise burst — the synth backbeat.
@@ -144,10 +146,11 @@ A band-passed noise burst — the synth backbeat.
 | citypop (`I_SNARE`) | NOISE A0 D75 S0 R50 · BP 2400/5 · pitch-env →10 (0/30) — bright crack |
 | motorik (`I_SNR`)   | NOISE A0 D70 S0 R45 · BP 1800/5 — darker, understated |
 | lowend (`I_SNARE`)  | NOISE A0 D85 S0 R40 · BP 1700/7 · pitch-env →14 (0/25) — the "bap," tight & low |
+| jangle (`I_SNARE`)  | NOISE A0 D70 S0 R30 · BP 1100/7 — a boxy little snare |
 
-- tier: **variant** (3 stations)
+- tier: **variant** (4 stations; dub uses a cross-stick instead of a snare)
 - origin: undetermined
-- used by: citypop (`I_SNARE`) · motorik (`I_SNR`) · lowend (`I_SNARE`)
+- used by: citypop (`I_SNARE`) · motorik (`I_SNR`) · lowend (`I_SNARE`) · jangle (`I_SNARE`)
 
 ### drum/noise-hat
 A high-passed noise tick.
@@ -158,10 +161,11 @@ A high-passed noise tick.
 | motorik (`I_HAT`) | NOISE A0 D12 S0 R26 · HP 8200/2 — a tight straight-8th tick |
 | lowend (`I_HAT`)  | NOISE A0 D18 S0 R14 · HP 7500/3 — closed, lo-fi, sits back |
 | dub (`I_HAT`)     | NOISE A0 D14 **S2** R60 · HP 7500/2 — sustain>0, washes (like citypop) |
+| jangle (`I_HAT`)  | NOISE A0 D24 S0 R16 · HP 6500/3 — tight tick |
 
-- tier: **variant** (4 stations; the S2 "wash" cut — citypop, dub — vs the tight ticks — motorik, lowend)
+- tier: **variant** (5 stations; the S2 "wash" cut — citypop, dub — vs the tight ticks — motorik, lowend, jangle)
 - origin: undetermined
-- used by: citypop (`I_HAT`) · motorik (`I_HAT`) · lowend (`I_HAT`) · dub (`I_HAT`)
+- used by: citypop (`I_HAT`) · motorik (`I_HAT`) · lowend (`I_HAT`) · dub (`I_HAT`) · jangle (`I_HAT`)
 
 ### noise/vinyl-dust
 `INSTR_NOISE` · A0 D10 S0 R8 · HP 4000/2
@@ -230,7 +234,7 @@ becomes a short **tap**. cocktail's drums on stick nights.
 > **The bass is the second-most-rebuilt voice** (runner-up to the synth kit). Almost every
 > station hand-rolls its own — and they cluster by engine: a **TRI pile** (`tri/disco-bass`,
 > `tri/upright-bass`, `tri/fingered-bass`) and a **SINE pile** (`sine/gut-bass`,
-> `sine/boom-bap-bass`, `sine/riddim-bass`), each a fingered/round bass differing mainly by
+> `sine/boom-bap-bass`, `sine/riddim-bass`, `sine/round-bass`), each a fingered/round bass differing mainly by
 > the pitch-env "thumb/snap." Kept separate for now (each has a real feel), but this is the
 > pile most likely to earn a `merge-on-proof` cut next. Watching it.
 
@@ -278,6 +282,15 @@ saturation (warmth, not fuzz). Front and centre, Ron-Carter-style.
   upright on SINE. **Kept separate** (decided): lowend's is saturated/deeper (boom-bap sub),
   cocktail's a clean dark gut upright. If a cluster of near-identical uprights piles up
   later, collapse it *then* — on evidence, not on suspicion.
+
+### sine/round-bass
+`INSTR_SINE` · A2 D250 S4 R90 · LP 600/1
+"Round and simple" — jangle's bass, no pitch-env at all, just a warm even SINE under the
+vamp.
+- tier: unique
+- origin: jangle
+- used by: jangle (`I_BASS`)
+- kin: the SINE-bass pile — the plainest member (the others add a pitch-env thumb/snap).
 
 ### sine/riddim-bass
 `INSTR_SINE` · A3 D260 S5 R130 · LP 420·feel/1 · pitch-env →3 (0/30)
@@ -394,6 +407,25 @@ A warm archtop jazz guitar, neck pickup — the "Herb Ellis night" of cocktail's
 - origin: cocktail
 - used by: cocktail (`I_PSOLO`, Herb-Ellis nights)
 
+### tri/jangle-guitar
+`INSTR_TRI` · A1 D350 S2 R180 · LP 2400/2 · pitch-LFO 5.5 Hz/0.12 (chorus) · vol-LFO 4.7 Hz/0.08
+jangle's identity voice — the *fake* (shipped default): a TRI whose **constant chorus
+warble** (the 5.5 Hz pitch LFO, plus a soft tremolo under it) *is* the sound.
+- tier: unique
+- origin: jangle
+- used by: jangle (`I_GTR`, default)
+- pair: opts into `pluck/jangle-guitar` via a code flag — the same fake↔real guitar toggle
+  bossa uses (`tri/nylon-fake` / `pluck/nylon-guitar`). A recurring authoring move.
+
+### pluck/jangle-guitar
+`INSTR_PLUCK` · A1 D0 S7 R180 · LP 2600/2 · h0.5 t0.75 m0.2 · pitch-LFO 5.5 Hz/0.12 · vol-LFO 4.7 Hz/0.08
+The *real* jangle string — Karplus-Strong, ~1.2 s ring, bright pick near the bridge (it *is*
+jangle), with the same chorus warble laid over the KS read tap.
+- tier: unique
+- origin: jangle
+- used by: jangle (`I_GTR`, opt-in)
+- pair: alternative to `tri/jangle-guitar`.
+
 ### tri/nylon-fake
 `INSTR_TRI` · A1 D180 S1 R120 · LP 2200/3 · cut-env →1400 (0/90, attack sparkle)
 bossa's nylon guitar comp — the *fake* (shipped default): a TRI with a cutoff sparkle on the
@@ -470,6 +502,17 @@ the slot can opt into `mallet/vibes` instead).
 - tier: unique
 - origin: lowend
 - used by: lowend (`I_LEAD`, default)
+
+### square/whistle
+`INSTR_SQUARE` · A18 D150 S5 R160 · duty 0.22 · LP 1900/2
+A thin, slidey whistle lead — held legato (one voice, `note_pitch`/`note_glide` between
+notes), the narrow 0.22 duty making it reedy and small. jangle's lazy topline. Its **solo
+stop** (`I_SOLO`) opens it up: duty 0.24, a singing 5.3 Hz pitch-LFO wobble, LP 3200/2.
+- tier: unique
+- origin: jangle
+- used by: jangle (`I_LEAD` comp · `I_SOLO` solo stop)
+- kin: the PWM-square family (`square/da-funk-lead`, `square/glossy-lead`, `square/melodica`,
+  `square/siren`) — same SQUARE + duty skeleton, thinnest member.
 
 ### square/melodica
 `INSTR_SQUARE` · A12 D160 S5 R180 · duty 0.38 · pitch-LFO 5.0 Hz/0.18 · echo send 0.25
