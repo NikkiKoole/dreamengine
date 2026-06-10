@@ -1535,10 +1535,15 @@ static inline float sound_brass_sample(Voice *v, float pitch_mul) {
     float bright = v->timb;                                // brassiness amount
     float blow   = 0.42f + v->mor * 0.20f;                 // breath pressure [0.42,0.62] (the oscillation window)
     float vibd   = 0.08f + v->mor * 0.35f;                 // lean-in vibrato deepens with breath
-    float lpCoeff = 0.85f - dark * 0.35f;                  // bell radiation: bright trumpet (light LP) → dark tuba (heavy)
-    // the BRASS FORMANT (the lip+bell resonance — the "brass vowel"): sweeps UP with brassiness,
-    // and sits lower for the big dark horns. This formant rising with dynamics IS the brassy blaaat.
-    float fmtHz  = 600.0f + (1.0f - dark) * 850.0f + bright * 1300.0f;   // ~600..2750 Hz
+    float lpCoeff = 0.85f - dark * 0.35f;                  // bell radiation: bright trumpet (light LP) → dark tuba (heavy).
+                                                           // FIXED per instrument — opening it with brassiness flipped the
+                                                           // high register an octave down (subharmonic pop), so brightness
+                                                           // is generated on the OUTPUT instead, where it can't destabilize.
+    // the BRASS FORMANT (the lip+bell resonance, the fixed ~1–1.6kHz peak the ear reads as "horn").
+    // Held STABLE per instrument — a formant that SWEEPS with the macro reads as a synth filter sweep
+    // (a big part of the "synthy" tell); the brass bloom comes from harmonic GENERATION below, not a
+    // moving resonance. Lower for the big dark horns.
+    float fmtHz  = 900.0f + (1.0f - dark) * 700.0f;   // ~900 (tuba) .. 1600 (trumpet) Hz, fixed
     // HUMANIZED lip vibrato — wandering rate/depth, lives mostly in PITCH (reed/pipe/bowed pattern)
     v->br_drift_ph += 0.7f / SR; if (v->br_drift_ph >= 1.0f) v->br_drift_ph -= 1.0f;
     float wob = sinf(v->br_drift_ph * TWO_PI);             // slow wander, shared by rate + depth
@@ -1578,22 +1583,19 @@ static inline float sound_brass_sample(Voice *v, float pitch_mul) {
     float lipRefl = 0.50f - 0.70f * pdiff;                 // pressure-dependent lip reflection — the negative
     if (lipRefl < -1.0f) lipRefl = -1.0f; else if (lipRefl > 1.0f) lipRefl = 1.0f;   // resistance that self-oscillates
     float boreInput = Pm + pdiff * lipRefl;
-    // ── BRASSINESS: pressure-driven wave steepening (the signature shockwave) ──
-    // more drive → sharper tanh knee → richer spectrum; drive scales with timbre AND blow pressure
-    // (the real physics: the same horn blown harder gets blattier). 1/drive normalizes loudness so
-    // every timbre position is the same level (§8.8.1) and bounds the output (no clip/DC runaway).
-    float drive = 1.0f + bright * (2.0f + blow * 4.0f);
-    boreInput = tanhf(boreInput * drive) / drive;          // steepen, then loudness-normalize
+    // amplitude limiter for the oscillation — a FIXED knee (timbre-INDEPENDENT) so the loop stays
+    // stable and its amplitude is consistent at every macro position. All the brass timbre now
+    // happens on the OUTPUT (below), where it can be aggressive without risking the oscillation.
+    boreInput = tanhf(boreInput * 2.6f) / 2.6f;
     v->ks_buf[v->br_idx] = boreInput;
     v->br_idx++; if (v->br_idx >= v->br_len) v->br_idx = 0;
     // DC block — steady blow pressure carries a large DC (reed pattern, identical coeff)
     float out = boreReturn;
     float dc  = out - v->br_dc_prev + 0.995f * v->br_dc_state;
     v->br_dc_prev = out; v->br_dc_state = dc;
-    // ── BRASS FORMANT: a resonant bandpass (the lip+bell resonance) at fmtHz, reusing the lip-biquad
-    // state. Zeros at ±1, peak gain ≈1 (b0 = 0.5−0.5·r², b2 = −b0). Mixing its resonant band back in
-    // gives the brass "vowel"; because fmtHz rises with brassiness, the tone OPENS UP (blaaat) as the
-    // player pushes TIMBRE — the brass formant sweep no other engine has.
+    // ── BRASS FORMANT: a resonant bandpass at the fixed fmtHz (the lip+bell resonance), reusing the
+    // lip-biquad state. Zeros at ±1, peak gain ≈1 (b0 = 0.5−0.5·r², b2 = −b0). Emphasized strongly —
+    // the prominent ~1.2kHz peak is a big part of what the ear hears as "a horn."
     float wf = TWO_PI * fmtHz / SR; if (wf > 2.6f) wf = 2.6f;     // Nyquist guard
     float rf = 0.972f;
     float a2f = rf * rf;
@@ -1602,10 +1604,17 @@ static inline float sound_brass_sample(Voice *v, float pitch_mul) {
     float fmt = b0f * (dc - v->br_lip_x2) - a1f * v->br_lip_y1 - a2f * v->br_lip_y2;
     v->br_lip_x2 = v->br_lip_x1; v->br_lip_x1 = dc;
     v->br_lip_y2 = v->br_lip_y1; v->br_lip_y1 = fmt;
-    float shaped = dc + fmt * (1.2f + bright * 2.2f);            // emphasize the brass band, more when brassy
-    // makeup gain: dark/tuba voicings radiate quieter (heavy bell LP) — lift them so loudness is even
-    // across the harmonics axis (§8.8.1: "knobs must not read as volume")
-    return shaped * (3.2f + dark * 2.0f);
+    // ── BRASSINESS: the bloom comes mostly from EMPHASIZING the brass formant (a peaky ~1.2kHz
+    // resonance), which raises the spectral centroid and gives the "honk" while keeping the wave
+    // PEAKY (high crest, like a real horn) — unlike a saturating waveshaper, which flattens the wave
+    // into a hollow buzz (itself a synthy tell). The formant amount grows with brassiness, so pushing
+    // TIMBRE blares harder. A GENTLE waveshaper on top adds a little buzz + lets level rise with breath.
+    float voiced   = dc + fmt * (1.3f + bright * 2.6f);      // formant emphasis blooms with brassiness
+    float driveOut = 1.0f + bright * (2.2f + blow * 4.0f);   // shaping grows w/ brassiness + breath (keeps crest > squaring)
+    float blaat    = tanhf(voiced * driveOut);
+    float comp     = 1.0f / (0.72f + 0.28f * driveOut);      // PARTIAL gain comp (not the old level-killing /drive)
+    // makeup: keep loudness roughly even across the BORE axis (trumpet↔tuba) — §8.8.1 for harmonics
+    return blaat * comp * (2.7f + dark * 0.7f);
 }
 
 // ── INSTR_VOICE: formant voice (navkit VoicForm port; vowels-only for the voxlab prototype) ──
