@@ -21,8 +21,9 @@
 //   JET       fire a 2s noise swell through a deep slow flange — the jet whoosh
 //   PADS      strum E / A / D / G (or press 1..4)   SPACE  AUTO progression
 
-#define GTR 8
-#define NZ  9
+#define GTR  8   // the lead guitar — FLANGED (its own bus)
+#define NZ   9   // the JET noise swell — flanged (its own bus)
+#define BASS 10  // a bass under the chords — stays DRY (proves the flanger is per-instrument)
 
 static float k_rate = 0.10f;   // → 0.05..5 Hz
 static float k_dep  = 0.75f;
@@ -42,24 +43,31 @@ static const char *CNAME[4] = { "E", "A", "D", "G" };
 static float rate_hz(void) { return 0.05f + k_rate * 4.95f; }
 static float fb_v(void)    { return k_fb * 0.95f; }
 
-static void apply_flanger(void) { flanger(rate_hz(), k_dep, fb_v(), on ? k_mix : 0.0f); }
+// the flanger is on the LEAD GUITAR's own bus (instrument_flanger) — not the master — so the bass
+// below stays bone dry. That's the whole point: flange the guitar, not the rhythm.
+static void apply_flanger(void) { instrument_flanger(GTR, rate_hz(), k_dep, fb_v(), on ? k_mix : 0.0f); }
 
-static void strum_chord(int i) { strum(ROOT[i], CHORD_MAJ, GTR, 6, 18); }
+static void strum_chord(int i) {
+    strum(ROOT[i], CHORD_MAJ, GTR, 6, 18);   // the lead chord → flanged
+    hit(ROOT[i] - 12, BASS, 5, 700);         // a root bass note → DRY (no flanger on this slot)
+}
 
 static void fire_jet(void) {
-    // a deep slow flange + a 2s noise swell = the classic jet overhead
-    flanger(0.12f, 0.97f, 0.9f, 0.6f);
-    on = true;
+    // a deep slow flange on the noise's OWN bus + a 2s swell = the classic jet overhead
+    instrument_flanger(NZ, 0.12f, 0.97f, 0.9f, 0.6f);
     hit(48, NZ, 6, 2000);
     jet = 130;
 }
 
 void init(void) {
     bpm(52);
-    instrument(GTR, INSTR_GUITAR, 2, 0, 7, 600);   // steel-ish string
+    instrument(GTR, INSTR_GUITAR, 2, 0, 7, 600);   // steel-ish string (the flanged lead)
     instrument_harmonics(GTR, 0.55f);              // resonant body
     instrument_timbre(GTR, 0.70f);                 // bright steel
     instrument(NZ, INSTR_NOISE, 400, 0, 7, 600);   // the JET source (slow swell)
+    instrument(BASS, INSTR_GUITAR, 2, 0, 7, 700);  // the DRY bass — never flanged
+    instrument_harmonics(BASS, 0.30f);             // darker, woodier body
+    instrument_timbre(BASS, 0.30f);
     apply_flanger();
 }
 
@@ -103,13 +111,14 @@ void draw(void) {
             "so strum the guitar through it.",
             "",
             "FLANGER  footswitch on/off        [F]",
-            "RATE DEPTH FEEDBACK MIX  the flange",
+            "only the LEAD guitar flanges - the",
+            "bass under it stays DRY (per-instr).",
             "FEEDBACK high = the screaming jet comb",
             "JET   a noise swell = jet overhead [J]",
             "1..4  strum E/A/D/G   SPACE  AUTO",
         };
-        for (int i = 0; i < 10; i++)
-            print(HL[i], 36, 46 + i * 12, i < 4 ? CLR_LIGHT_PEACH : CLR_WHITE);
+        for (int i = 0; i < 11; i++)
+            print(HL[i], 36, 44 + i * 11, i < 4 ? CLR_LIGHT_PEACH : CLR_WHITE);
         ui_begin();
         if (ui_button(130, 162, 60, 14, "CLOSE")) show_help = false;
         ui_end();
