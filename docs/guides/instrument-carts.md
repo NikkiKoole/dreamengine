@@ -125,6 +125,13 @@ Endless generative stations built on `radio.h`. You don't play notes; you tune t
 station and (where present) jam over it. The biggest family on the shelf — copy the
 closest genre cousin, never start a station from scratch.
 
+> **Which instruments does each station use, and what's shared?** Two companion docs map
+> every station's voices: [`radio-voices.md`](radio-voices.md) — a voice chart per station
+> (slot → role → named preset) + a findings summary; and
+> [`instrument-presets.md`](instrument-presets.md) — the named-patch catalog those charts
+> reference, showing where the same sound recipe is reused across stations. **Ship a new
+> station → update both** (see the checklist below).
+
 | Cart | Homage / genre | Extras |
 |---|---|---|
 | **bossa radio** (`bossa`) | bossa nova | `solo.h` jam strip |
@@ -181,3 +188,8 @@ overlay to swap a chair's instrument mid-song. Candidate swaps:
    `index.json` with `kind:["instrument"]` (+ `"toy"` for stations) → `lint-carts.js`):
    [`cart-authoring.md`](cart-authoring.md).
 6. **Add a row to the right table in this doc** so the shelf stays complete.
+7. **If it's a radio station, update the two station-instrument docs** (a rule — they only
+   stay useful if kept current): add the station's voice chart to
+   [`radio-voices.md`](radio-voices.md), and in [`instrument-presets.md`](instrument-presets.md)
+   name any new patch recipes — or, for a recipe you reused, add your cart to that preset's
+   **used by** line instead of minting a duplicate. Run `node tools/lint-docs.js` after.

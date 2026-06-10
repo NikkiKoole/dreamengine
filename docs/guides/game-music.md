@@ -16,6 +16,11 @@ seed/PRNG contract, and the session-history UI copied verbatim**; the clock, the
 chord brain, and every instrument changed completely. The reusable core is real but
 small (~80 lines) — extract it when a third cart confirms the boundary.
 
+> **Picking a station's instruments?** [`instrument-presets.md`](instrument-presets.md) +
+> [`radio-voices.md`](radio-voices.md) catalog every existing station's voices and show which
+> sound recipes are already shared across stations — start from the closest cousin's chart
+> rather than from scratch. (And update both when you ship a new station.)
+
 The engine already has everything you need: `instrument()` + filters/LFOs/envelopes
 for timbre, `schedule_hit()` for sample-accurate timing, `bpm()/beat()/beat_pos()`
 for the clock, and `chord()/degree()/euclid()/chance()` as music-theory helpers.

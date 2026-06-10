@@ -293,6 +293,14 @@ Source-of-truth files live in `tools/carts/`; the build tool sits beside that fo
 > — it indexes the whole shelf by the building block each cart copies (`radio.h` /
 > held-notes / `ui.h` / `INSTR_*`), so you start from the closest existing cart. Add a
 > row there when you ship.
+>
+> **If it's a radio station, also update the two station-instrument docs when you ship**
+> (this is a rule, not a nicety — they only stay useful if kept current):
+> [`docs/guides/radio-voices.md`](docs/guides/radio-voices.md) — add the station's voice
+> chart (slot → role → preset); and [`docs/guides/instrument-presets.md`](docs/guides/instrument-presets.md)
+> — name any new patch recipes, and for a recipe you reused, add your cart to that preset's
+> **used by** line (don't mint a duplicate). Together they answer "what plays what, and where
+> are we reusing the same recipe?" — keep the answer true.
 
 1. Write the C source → `tools/carts/<name>.c`
 2. *(Optional)* Add sprites/map → `tools/<name>.cart.js`. Exports `{ sprites, map, charMap, mapW, mapH }`:

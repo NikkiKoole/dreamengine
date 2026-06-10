@@ -67,6 +67,8 @@ docs/
 │   ├── cart-specs-index.md       batch-1 spec index + assembly recipe + parallel-build workflow
 │   ├── cart-specs/               per-game cart specs (individual game files, not shown in sidebar)
 │   ├── instrument-carts.md       the sound-toy shelf: every synth/machine/station/showcase cart, grouped by the building block it copies (radio.h / held-notes / ui.h / INSTR_*) — browse one to play, or find the closest relative when building a new one
+│   ├── instrument-presets.md     the named-patch catalog: every radio station's voice recipes given clear names, with sharing tiers (shared/variant/cousin/kin) so copy-propagation across stations is visible; paired with radio-voices.md
+│   ├── radio-voices.md           per-station voice charts (slot → role → preset name) + the findings summary (reuse clusters by idiom, the synth-kit/bass extract candidates, the 5 showcase-cart preset lineages, upgrade candidates); the reading view over instrument-presets.md
 │   ├── sharing.md                ways to publish finished carts
 │   ├── debug-harness.md          deterministic record/replay/script + trace + live on-demand inspect + WAV capture/analysis (tools/play.js, tools/wav-analyze.js)
 │   ├── profiler.md               one-click CPU profiler (⏱ profile button): hot functions + call paths, frame budget, draw-call counts
