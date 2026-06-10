@@ -463,6 +463,7 @@ typedef enum {
     SR_VOICE_PARAM  = 32,   // EXPERIMENTAL INSTR_VOICE raw-param poke (voxlab): a=idx, b=val*1000
     SR_VOICE_CONS   = 33,   // EXPERIMENTAL INSTR_VOICE consonant onset (voxlab): a=consonant id (VC_*), -1 = none
     SR_VOICE_CODA   = 34,   // EXPERIMENTAL INSTR_VOICE consonant coda (voxlab): a=consonant id (VC_*), -1 = none
+    SR_VOICE_NASAL  = 35,   // INSTR_VOICE nasal color (public voice_nasal): a=amount*1000 → vox_p[7]
     SR_INSTR_PAN    = 35,   // a=slot, b=pan*1000 (signed) — per-instrument stereo position (stereo.md)
     SR_NOTE_PAN     = 36,   // a=pan*1000 (signed, live/slewed), e0/e1=handle — live pan on a held note
     SR_ENG_TUNE     = 37,   // EXPERIMENTAL guitar/piano tuning poke: a=slot, b=idx (0 weight·1 attack), c=val*1000
@@ -1742,9 +1743,23 @@ static const float vox_cons_dur[VC_COUNT]    = { 0.055f, 0.055f, 0.055f, 0.090f,
 static const int   vox_cons_plos[VC_COUNT]   = { 1, 1, 1, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1 };
 
+// PUBLIC API mapping — the 3 macros → the voice's raw params (the locked lean API):
+//   harmonics = VOWEL · timbre = SIZE · morph = EFFORT (one clean knob → breath + open-q + tilt).
+// Written from the macro TARGETS whenever they change (note-on + note_harmonics/timbre/morph), so a
+// macro-driven cart needs no voice_param(). The probe carts instead poke vox_p directly via
+// voice_param() and leave the macros at default, so the two surfaces don't fight.
+static void vox_apply_macros(Voice *v) {
+    float e = v->mor_target;                            // EFFORT 0..1
+    v->vox_p[0] = v->harm_target;                       // VOWEL  ← harmonics
+    v->vox_p[1] = v->timb_target;                       // SIZE   ← timbre
+    v->vox_p[2] = 0.22f - 0.22f * e;                    // breath  0.22 → 0    (light; the clean curve)
+    v->vox_p[3] = 0.85f - 0.65f * e;                    // open-q  0.85 → 0.20
+    v->vox_p[4] = 0.70f - 0.65f * e;                    // tilt    0.70 → 0.05
+}
+
 // note-on: seed a neutral "ah" so a bare note(60, INSTR_VOICE, …) speaks; voice_param overrides live
 static void sound_voice_start(Voice *v) {
-    const float def[VOX_NPARAM] = { 0.5f, 0.33f, 0.10f, 0.5f, 0.30f, 0.15f, 0.5f,
+    const float def[VOX_NPARAM] = { 0.5f, 0.33f, 0.10f, 0.5f, 0.30f, 0.0f, 0.5f,
                                     0.0f, 0.5f, 0.5f,                              // nasality off · open/front neutral (×1.0)
                                     1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,      // buzz=full glottal · jitter/shimmer/creak/nasalAF/reduce/measBW off
                                     0.0f, 0.0f };                                  // vow2 target=U · glide off (no diphthong)
@@ -2482,6 +2497,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->harm = v->harm_target = ins->harmonics;
     v->timb = v->timb_target = ins->timbre;
     v->mor  = v->mor_target  = ins->morph;
+    if (v->wave == INSTR_VOICE) vox_apply_macros(v);   // seed VOWEL/SIZE/EFFORT from the macros
     v->drv  = v->drv_target  = ins->drive;
     v->eng_p[0] = ins->eng_p[0];
     v->eng_p[1] = ins->eng_p[1];
@@ -2615,6 +2631,9 @@ static void sound_fire_req(SoundReq r) {
     } else if (r.kind == SR_VOICE_CODA) {     // EXPERIMENTAL INSTR_VOICE consonant coda (voxlab)
         Voice *v = sound_held_voice(r.e0, r.e1);
         if (v) { v->vox_coda = (r.a >= 0 && r.a < VC_COUNT) ? r.a : -1; v->vox_coda_t = 0.0f; }
+    } else if (r.kind == SR_VOICE_NASAL) {    // INSTR_VOICE nasal color (public voice_nasal)
+        Voice *v = sound_held_voice(r.e0, r.e1);
+        if (v) { float x = r.a / 1000.0f; if (x < 0.0f) x = 0.0f; else if (x > 1.0f) x = 1.0f; v->vox_p[7] = x; }
     } else if (r.kind == SR_NOTE_DUTY) {
         Voice *v = sound_held_voice(r.e0, r.e1);
         if (v) { float d = r.a / 1000.0f; v->duty_target = d < 0.01f ? 0.01f : d > 0.99f ? 0.99f : d; }
@@ -2718,6 +2737,7 @@ static void sound_fire_req(SoundReq r) {
             if      (r.a == 0) v->harm_target = x;
             else if (r.a == 1) v->timb_target = x;
             else if (r.a == 2) v->mor_target  = x;
+            if (v->wave == INSTR_VOICE) vox_apply_macros(v);   // live VOWEL/SIZE/EFFORT
         }
     } else if (r.kind == SR_INSTR_CHOKE) {  // a=slot_a, b=slot_b
         if (r.a >= 0 && r.a < SOUND_INSTR_SLOTS && r.b >= 0 && r.b < SOUND_INSTR_SLOTS)
@@ -3406,24 +3426,33 @@ void note_harmonics(int handle, float x)     { sound_macro_note(handle, 0, x); }
 void note_timbre(int handle, float x)        { sound_macro_note(handle, 1, x); }
 void note_morph(int handle, float x)         { sound_macro_note(handle, 2, x); }
 
-// EXPERIMENTAL — poke a raw INSTR_VOICE param by index on a held note (the voxlab fat prototype).
-// idx 0..6: vowel / size / breath / open-quotient / tilt / vibrato-depth / vibrato-rate. value 0..1.
+// INSTR_VOICE nasal color (the public 4th axis): 0 = open vowel → 1 = hummed/nasal (the honk, the
+// chant). Set live on a held note, alongside the 3 macros (harmonics=vowel/timbre=size/morph=effort).
+void voice_nasal(int handle, float amount) {
+    if (handle <= 0) return;
+    if (amount < 0.0f) amount = 0.0f; else if (amount > 1.0f) amount = 1.0f;
+    sound_push_ctrl(SR_VOICE_NASAL, (int)(amount * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
+}
+
+// LOW-LEVEL / EXPERIMENTAL — poke a raw INSTR_VOICE param by index on a held note. The public
+// surface is the 3 macros + voice_nasal(); this raw poke is the probe carts' fat control surface
+// (voxlab/voxab/voxpad/say). idx 0..18 (see VOX_NPARAM), value 0..1. Not advertised in the docs.
 void voice_param(int handle, int idx, float value) {
     if (handle <= 0 || idx < 0 || idx >= VOX_NPARAM) return;
     sound_push_ctrl(SR_VOICE_PARAM, idx, (int)(value * 1000.0f), 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
-// EXPERIMENTAL — begin a held INSTR_VOICE note with a consonant articulation that morphs into
-// the vowel ("bah", "mah", "sss-ah"). Call right after note_on; id is a VC_* index (0..7:
-// b d g m n l s sh), -1 = none. Fires from note start — it's a timed onset, not a held param.
+// Begin a held INSTR_VOICE note with a consonant articulation that morphs into the vowel
+// ("bah", "mah", "sss-ah"). Call right after note_on; id 0..21 (b d g m n l s sh ng r w y dh f v
+// z zh th p t k ch), -1 = none. A timed onset, not a held param. Pair with voice_coda for VC/CVC.
 void voice_consonant(int handle, int id) {
     if (handle <= 0) return;
     sound_push_ctrl(SR_VOICE_CONS, id, 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
-// EXPERIMENTAL — close a held INSTR_VOICE note ON a consonant: the vowel morphs into it ("ahh-m",
-// "oo-d"). Call right BEFORE note_off; id is a VC_* index (0..7), -1 = none. The mirror of
-// voice_consonant — a coda instead of an onset; use voiced ids (b d g m n l) so it stays sung.
+// Close a held INSTR_VOICE note ON a consonant: the vowel morphs into it ("ahh-m", "oo-d"). Call
+// right BEFORE note_off; id 0..21, -1 = none. The mirror of voice_consonant — a coda not an onset;
+// use voiced ids (b d g m n l ng r w y) so it stays sung.
 void voice_coda(int handle, int id) {
     if (handle <= 0) return;
     sound_push_ctrl(SR_VOICE_CODA, id, 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);

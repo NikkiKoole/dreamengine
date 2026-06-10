@@ -55,10 +55,10 @@ static const int CODA_CONS[] = { 3, 4, 5, 3, 4, 5, 0, 1, 2 };   // m n l (weight
 #define JAM_NCONS  ((int)(sizeof(JAM_CONS)  / sizeof(JAM_CONS[0])))
 #define CODA_NCONS ((int)(sizeof(CODA_CONS) / sizeof(CODA_CONS[0])))
 
-static void push_effort(int v, float e) {
-    voice_param(v, VP_BREATH, lerp(0.55f, 0.00f, e));
-    voice_param(v, VP_OPENQ,  lerp(0.95f, 0.05f, e));
-    voice_param(v, VP_TILT,   lerp(0.80f, 0.00f, e));
+static void push_effort(int v, float e) {   // the locked EFFORT curve (matches vox_apply_macros)
+    voice_param(v, VP_BREATH, lerp(0.22f, 0.00f, e));   // light breath — not the old whispery 0.55
+    voice_param(v, VP_OPENQ,  lerp(0.85f, 0.20f, e));
+    voice_param(v, VP_TILT,   lerp(0.70f, 0.05f, e));
 }
 
 static void apply_vibrato(int v) {

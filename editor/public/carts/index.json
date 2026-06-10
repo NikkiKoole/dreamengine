@@ -421,6 +421,33 @@
     ]
   },
   {
+    "title": "voxab",
+    "description": "The A/B COMPARATOR for the formant VOICE engine (INSTR_VOICE). Where voxlab explores the space, this cart decides BY EAR whether a subtle lever earns its place — the listening voxlab can't do. Holds TWO full param states A and B; TAB snaps the LIVE sustained tone between them INSTANTLY, so the difference lives in the flip, not in slider-hunting. SOLO-SWEEP (W) auto-ramps the SELECTED param 0→1→0 with everything else frozen, so you hear ONLY that param. An optional auto-RETRIG (G) re-articulates the held tone so you also hear attacks. The preset A/B PAIRS load a base differing in ONE lever for a direct flip-test: BW (derived vs navkit measured bandwidths) · NASAL (formant-config morph vs anti-formant notch — the two nasality models) · BUZZ (full glottal pulse vs smooth sine) · CREAK (clean vs vocal fry) · REDUCE (full vowel vs schwa). These exercise the EXPERIMENTAL navkit completeness-audit levers (voice_param indices 10-16: buzz/jitter/shimmer/creak/anti-formant nasality/schwa-reduce/measured-BW). Click a param row or use [ ] to select; drag the bottom slider to edit it in the live slot; C copies live→other. SPACE play · TAB flip A/B · Z/X pitch.",
+    "file": "voxab.cart.png",
+    "kind": [
+      "instrument",
+      "probe"
+    ]
+  },
+  {
+    "title": "voxpad",
+    "description": "The PHONEME KEYBOARD for the formant VOICE engine (INSTR_VOICE) — where voxab A/B's the continuous levers, this cart is for HEARING the full articulation set: every vowel and every consonant, including the navkit table-completion phonemes the other voice carts never trigger. Click a VOWEL (all 10 table vowels — ae ah aw uh er are the new ones, reached via the experimental diphthong path vow2+glide). Click a CONSONANT to articulate it: a consonant is a timed event (voice_consonant onset / voice_coda), not a held knob, so a click says 'C + the current vowel' — 'fah', 'shoo', 'chee', 'ngah'. The 14 underlined consonants (ng r w y dh f v z zh th p t k ch) are the ones appended to complete navkit's table. HOLD a drone (SPACE) and consonant clicks re-articulate MID-NOTE (connected, like the say probe); with no drone each click is a one-shot syllable that rings out. V toggles CV (consonant opens the note) vs VC (it closes the note). SIZE and EFFORT sliders push it to giant/child tract and breathy→pressed. LOOP (L) auto-repeats the current syllable — say it, pause, re-say it, over and over (it 'sings' the phoneme), and you can change the vowel/consonant mid-loop. Still drives the engine through the experimental voice_param()/voice_consonant()/voice_coda() path. Click vowel + consonant to say it · SPACE drone · L loop · V mode · Z/X pitch · drag SIZE/EFFORT.",
+    "file": "voxpad.cart.png",
+    "kind": [
+      "instrument",
+      "probe"
+    ]
+  },
+  {
+    "title": "vox4",
+    "description": "The PROPOSED voice API (INSTR_VOICE), made playable — the set the by-ear audition landed on: VOWEL (what's said, U→O→A→E→I) · SIZE (who says it — vocal-tract length / formant shift, giant→child) · EFFORT (how it's said — ONE clean soft/dark/relaxed → bright/pressed knob, led by tilt + glottal press with only light breath, NOT the old breathy-noise bundle) · NASAL (open → hummed/nasal — the one color the other three can't reach: the honk, the chant). The 4th-axis hunt was decided by ear: roughness and buzz didn't earn it (they overlap the vowel/brightness territory), but nasality did — it reaches the hummed/Tibetan-monk-chant character nothing else gets. Vibrato stays the universal note_lfo modulator (V); consonant articulation is the separate voice_consonant()/voice_coda() events (see voxpad). For the monk drone: low pitch + NASAL up + EFFORT soft + vowel oh/oo. Drag the 4 sliders · SPACE drone · Z/X pitch · V vibrato.",
+    "file": "vox4.cart.png",
+    "kind": [
+      "instrument",
+      "probe"
+    ]
+  },
+  {
     "title": "mouth harp",
     "description": "A jaw harp (Jew's harp / mondharp) — the instrument where the PITCH NEVER CHANGES and you play with your MOUTH instead. A buzzy fixed-pitch saw drone (every harmonic) runs through a TIGHT resonant BANDPASS (FILTER_BAND, resonance 14), and sweeping note_cutoff is your mouth cavity: the resonant peak hunts across the drone's overtones and picks out which one 'speaks' — the vocal boi-oi-oing / wah-yeoww talking quality, and THAT is the melody. The corner of the engine no other cart centres on: where otamatone moves pitch over a plain lowpass, here pitch is frozen and the high-Q formant sweep is the whole tune. Move the mouse up/down to play (a harmonic comb on the right glows on the overtone you're voicing). TAB switches two flavours: PLUCK (folk) — each twang decays, HOLD to auto-pluck locked to the tempo for the iconic boing-boing-a-boing, UP/DOWN sets the subdivision; DRONE (dan-moi) — one continuous buzz you shape forever, hold SPACE for a breath swell. SPACE or click = pluck, LEFT/RIGHT pick the harp's key, M autoplay.",
     "file": "mouthharp.cart.png",
@@ -2268,6 +2295,15 @@
     "file": "soundcheck.cart.png",
     "kind": [
       "tech-demo"
+    ]
+  },
+  {
+    "title": "drift",
+    "description": "Three drummers, one pattern, ranked by clock — a timing diagnostic you can hear. The same 16th-note pulse plays three ways at once: TRUTH (center) uses schedule_hit() to book each note a few steps ahead with a sample-accurate delay, so the audio thread lands it exactly on the grid; TRIG (left) fires hit() the instant the beat index changes in update(), so it wobbles by a frame; FCNT (right) fires every N frames assuming 60fps, so it can't keep time and slides. When the clocks agree the three collapse into one tight centered hit; as timing slips they flam apart and spread across the stereo field, and a scrolling scope per voice plots each hit's error in ms. Tap GLITCH to stall a frame (a GC pause / scroll on the web) — TRUTH holds, the frame clocks stumble. Especially revealing on a phone. TAP the buttons (mute each voice / tempo / glitch); keys 1 2 3 mute, LEFT/RIGHT tempo, SPACE glitch. Companion to docs/design/audio-timing.md.",
+    "file": "drift.cart.png",
+    "kind": [
+      "tech-demo",
+      "instrument"
     ]
   },
   {
