@@ -114,6 +114,54 @@ chains, master = bus 0. Start with one master reverb. The effects that live here
 > of thumb from it: default the "either" effects to a **bus** unless there's a reason not to.
 > Nothing new to design — read **0015 + § 8.10 + § 8.10.1** and build.
 
+#### Placement sanity-check — the call on each effect, before building (2026-06-10)
+
+The principle above is settled; this is it *applied per effect*, because the wah detour proved
+the principle isn't self-executing — the trap is the effect that **looks** per-voice but isn't.
+**The wah-test:** does the effect need to act on a *summed/coherent* signal (a chord moving as
+one, the groove pumping, the whole performance) **or take a second input signal**? If yes → bus.
+If it's genuinely self-contained per-note → per-voice. Run this before committing to *any* build.
+
+**✅ Safe — no placement judgment to get wrong:**
+- **Reverb** — bus-only, unambiguous (one shared tail; a chord must bloom into *one* space). This
+  is why it's the safe first build.
+- **Tape (wow/flutter/sat)** — master insert; whole-mix glue + one shared modulated-delay buffer
+  (the same buffer flanger/true-chorus fall out of free).
+- **Ring-mod** — single-input (carrier × an *internal* sine), "either," low risk. Just don't
+  confuse it with the vocoder.
+
+**⚠️ Real traps — same shape as wah; decide before building:**
+- **Chorus splits into two effects.** *Unison detune* (a few cents apart) = per-voice, **shipped**
+  as `instrument_tune`. *BBD/string-machine chorus* (the Solina/Juno swirl) = a modulated short
+  delay on the **summed** signal → **bus**. Trap: ship the detune fake, call "chorus" done, then
+  find the Solina/Juno lushness needs the bus version (0015 even defers the real one to the
+  flanger pile — it lands free off the tape buffer). The build-list's "chorus → Juno" row means
+  the **bus** chorus.
+- **Vocoder ≠ formant filter (conflation trap).** *Formant filter* (4 vowel bandpass peaks on one
+  instrument) is a **filter** → per-voice-capable (the SVF's 4th use) or bus insert; single input.
+  *Vocoder* is carrier × modulator — a synth/chord shaped by a **separate** voice → **two inputs**,
+  so **bus with a side-chain**, never a plain per-voice insert. AIR's "Kelly vocoder lead" want is
+  the *vocoder*, not the formant filter.
+- **Compression / sidechain (if rostered) — wah-shaped.** A per-voice compressor misses everything
+  afrobeat asked for: the band "pumping glue" + sidechain pump need the **summed/bus** signal, and
+  sidechain needs a **side-chain trigger input** → **bus**, same plumbing as the vocoder.
+
+**🟡 Soft traps — per-voice is defensible, but a coherence gotcha:**
+- **Bitcrush** — cheap/stateless like drive, so per-voice is *legal*, but crushing each voice then
+  summing ≠ crushing the sum: the authentic SP-1200/sampler grit is the **summed crush**
+  (inter-voice intermodulation). Per-part crush is a valid tool; the lo-fi-box *showcase* wants it
+  on bus/master.
+- **Leslie** — 0015's per-voice-recipe ruling is right for block chords, but carries the **same
+  phase-drift caveat as the PARKED epiano tremolo** (§ 8.10.1): per-voice LFOs reset phase at
+  note-on, so a *rolled/staggered* organ figure swirls out of phase where one real rotating cabinet
+  stays locked. A truly-locked Leslie wants the bus's shared phase-coherent LFO.
+
+**The throughline + the one thing to design up front.** Every trap has the same tell: a **second
+input**, or a need for the **summed signal to move as one**. Vocoder and sidechain-comp both need a
+**side-chain input** — bus plumbing we don't have yet. Design that side-chain path **once**, during
+the `bus[NBUS]` refactor (even though reverb won't use it), so it isn't bolted on twice. That's
+where the next wah is hiding.
+
 ### Each effect → its showcase cart (the build-list)
 
 The project's flywheel: **an effect/engine ships → a flagship cart proves it** (echo bus →
@@ -124,13 +172,13 @@ upgrade to existing stations:
 
 | effect | showcase cart | also rescues |
 |---|---|---|
-| chorus | **Juno** (poly synth — see above) | jingle haze, yacht stereo Rhodes |
-| reverb | a **"cathedral" infinite-space pad** (a chord blooms into an endless hall) — or a spring-reverb tank | `ambient` tails, the orchestra hall, glassharmonica, dub's spring-crash |
+| chorus | **Juno** (poly synth — see above) | jingle haze, yacht stereo Rhodes, **air's Solina string-machine ensemble** |
+| reverb | a **"cathedral" infinite-space pad** (a chord blooms into an endless hall) — or a spring-reverb tank | `ambient` tails, the orchestra hall, glassharmonica, dub's spring-crash, **air's whole drenched mix** |
 | leslie (rotary) | a **Hammond B3 + Leslie** organ (slow/fast footswitch) | roadhouse, yacht |
 | wah / auto-wah | a **funk clavinet / wah-guitar** (the pedal quack) | citypop funk guitar, the clav |
-| formant filter | a **vocoder / talkbox** (carrier shaped through vowels) | the vocal gap for non-voice timbres |
+| formant filter | a **vocoder / talkbox** (carrier shaped through vowels) | the vocal gap for non-voice timbres, **air's Kelly-vocoder lead (faked on raw INSTR_VOICE today)** |
 | ring-mod | a **ring-modulator robot-voice toy** (Dalek the VOX) + metallic bells | the Dalek/robot vocal |
-| tape (wow/flutter/sat) | a **Frippertronics tape-loop** looper (Eno/Fripp endless tape) | motorik's Conny-Plank echo, jangle/jingle tape-wow |
+| tape (wow/flutter/sat) | a **Frippertronics tape-loop** looper (Eno/Fripp endless tape) | motorik's Conny-Plank echo, jangle/jingle tape-wow, **air's vintage analog warmth** |
 | bitcrush / decimate *(if rostered)* | a **lo-fi SP-1200 / 8-bit degrader** boombox | lowend's 12-bit grit |
 
 Two properties make this the right sequencing: the cart is the effect's **acceptance test**
@@ -145,6 +193,15 @@ Two properties make this the right sequencing: the cart is the effect's **accept
 > [`afrobeat-effects-wants.md`](afrobeat-effects-wants.md); `afrobeat.c` is a ready
 > acceptance test once the bus ships. **Possible new roster entry: compression / sidechain**
 > (dbx/1176 showcase) — not currently listed above; revisit if a second station votes for it.
+>
+> **Demand witness — AIR.** The Moon Safari station (artist station, five song archetypes)
+> votes hardest for **reverb** — AIR's entire sound is *drenched*, and `air.c` fakes it with
+> the echo bus (a delay, not a room) — and **chorus**, the Solina/ARP string-machine ensemble
+> faked today on a detuned-SAW pair + LFO. Also wants **tape sat** (vintage analog warmth) and
+> a true **vocoder/formant filter** (the Kelly-Watch-the-Stars robotic lead is currently a raw
+> `INSTR_VOICE` vowel, not a vocoder carrying the song's harmony). Itemized:
+> [`air-effects-wants.md`](air-effects-wants.md). One engine *intonation* caveat surfaced
+> while building it, not an effects-bus issue — see that doc's "Engine note" on `INSTR_PIPE`.
 
 ## Free recipe wins (no engine work — layering techniques, pieces already exist)
 
