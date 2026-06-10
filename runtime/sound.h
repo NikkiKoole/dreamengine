@@ -3534,6 +3534,68 @@ bool every(int n) {
     return beat_just_advanced && (beat_now % n) == 0;
 }
 
+// ───────── web AudioWorklet backend (Stage 2 — design/audio-threading.md) ─────────
+// Compiled only into the worklet build (-DDE_AUDIO_WORKLET, which also implies
+// -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 + shared memory). That build only ever runs in a
+// cross-origin-isolated context (shared memory won't instantiate otherwise), so when this
+// is defined we are ALWAYS isolated and always use the worklet. The plain (no-flag) build
+// keeps the ScriptProcessor path below as the runtime fallback (picked by the HTML loader).
+#if defined(PLATFORM_WEB) && defined(DE_AUDIO_WORKLET)
+#include <emscripten/webaudio.h>
+
+static uint8_t              sound_aw_stack[8192];   // the audio worklet thread's stack
+static EMSCRIPTEN_WEBAUDIO_T sound_aw_ctx = 0;
+
+// AUDIO THREAD: bridge emscripten's PLANAR 128-frame quantum to our INTERLEAVED mixer.
+// sound_callback is reused verbatim — it drains req_queue (now atomic) and writes
+// out[2i]=L, out[2i+1]=R; we split that into the worklet's planar L/R channels.
+static bool sound_aw_process(int ni, const AudioSampleFrame *in, int no, AudioSampleFrame *out,
+                             int np, const AudioParamFrame *params, void *u) {
+    if (no < 1 || out[0].numberOfChannels < 1) return true;
+    static float itl[256];                 // 128 frames × 2ch interleaved scratch
+    sound_callback(itl, 128);              // our existing mixer, untouched
+    float *L = &out[0].data[0];
+    if (out[0].numberOfChannels >= 2) {
+        float *R = &out[0].data[128];
+        for (int i = 0; i < 128; i++) { L[i] = itl[2*i]; R[i] = itl[2*i+1]; }
+    } else {
+        for (int i = 0; i < 128; i++) L[i] = 0.5f * (itl[2*i] + itl[2*i+1]);
+    }
+    return true;                           // keep the processor alive
+}
+
+static void sound_aw_proc_created(EMSCRIPTEN_WEBAUDIO_T ctx, bool ok, void *u) {
+    if (!ok) return;
+    int counts[1] = { 2 };                 // stereo out
+    EmscriptenAudioWorkletNodeCreateOptions o = {
+        .numberOfInputs = 0, .numberOfOutputs = 1, .outputChannelCounts = counts
+    };
+    EMSCRIPTEN_AUDIO_WORKLET_NODE_T node =
+        emscripten_create_wasm_audio_worklet_node(ctx, "destudio", &o, &sound_aw_process, 0);
+    emscripten_audio_node_connect(node, ctx, 0, 0);
+}
+
+static void sound_aw_thread_ready(EMSCRIPTEN_WEBAUDIO_T ctx, bool ok, void *u) {
+    if (!ok) return;
+    WebAudioWorkletProcessorCreateOptions opts = { .name = "destudio" };
+    emscripten_create_wasm_audio_worklet_processor_async(ctx, &opts, sound_aw_proc_created, 0);
+}
+
+// kicks off the async chain: create context → start audio thread → create processor →
+// create node → connect. Audio flows once the node connects (a few ms later); the
+// req_queue buffers any pushes in the meantime.
+static void sound_worklet_init(void) {
+    sound_aw_ctx = emscripten_create_audio_context(0);
+    emscripten_start_wasm_audio_worklet_thread_async(
+        sound_aw_ctx, sound_aw_stack, sizeof sound_aw_stack, sound_aw_thread_ready, 0);
+}
+
+// the context starts suspended; resume it from a user gesture (studio.c's click gate).
+static void sound_worklet_resume(void) {
+    if (sound_aw_ctx) emscripten_resume_audio_context_sync(sound_aw_ctx);
+}
+#endif
+
 // ───────── lifecycle (called by studio.c) ─────────
 
 static void sound_init(void) {
@@ -3610,6 +3672,9 @@ static void sound_init(void) {
         // but risks underrun on dense carts). Residual drift at 256 was the main-thread
         // jitter only an AudioWorklet removes — the real fix. Native keeps 1024.
         // See design/audio-timing.md §3.
+#if defined(PLATFORM_WEB) && defined(DE_AUDIO_WORKLET)
+        sound_worklet_init();   // real audio thread (bypasses raylib's ScriptProcessor) — audio-threading.md Stage 2
+#else
 #ifdef PLATFORM_WEB
         SetAudioStreamBufferSizeDefault(512);
 #else
@@ -3618,11 +3683,14 @@ static void sound_init(void) {
         sound_stream = LoadAudioStream(SOUND_SAMPLE_RATE, 32, 2);   // stereo (centered until pan API; stereo.md)
         SetAudioStreamCallback(sound_stream, sound_callback);
         PlayAudioStream(sound_stream);
+#endif
     }
 }
 
 static void sound_shutdown(void) {
-    if (!sound_synth_mode) UnloadAudioStream(sound_stream);
+#if !defined(DE_AUDIO_WORKLET)
+    if (!sound_synth_mode) UnloadAudioStream(sound_stream);   // worklet build has no raylib stream
+#endif
 }
 
 #endif // SOUND_H

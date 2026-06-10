@@ -183,10 +183,22 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
   writers). Compiles on clang (native) **and** emcc (web); soundcheck tripwire passes (no
   dropped requests). Platform-independent — hardens native *today*, ready for the worklet.
   (No tcc concern: `sound.h` is clang-compiled into the host even in the libtcc backend.)
-- **Stage 2 — custom web worklet backend.** When isolated, instead of raylib's
-  `ScriptProcessor` AudioStream, create an emscripten AudioWorklet whose `process()` calls
-  our mixer (the existing `sound_callback` body) into the output buffer, draining the same
-  `req_queue` from shared memory. Bypasses raylib audio on web (we own every sample).
+- **Stage 2 — custom web worklet backend ✅ code (2026-06-10).** Built it: a
+  `#if defined(PLATFORM_WEB) && defined(DE_AUDIO_WORKLET)` block in `sound.h` creates an
+  emscripten AudioWorklet whose `process()` calls the existing `sound_callback` into a
+  128-frame interleaved scratch and de-interleaves into the planar L/R quantum (the mixer
+  is reused verbatim, draining the now-atomic `req_queue`). `sound_init` branches to
+  `sound_worklet_init()`; `studio.c` resumes the context on the click gesture.
+  **Key gotcha found + fixed:** linking the full engine pulled in raylib's `raudio.c`,
+  which needs **pthreads** the lean `WASM_WORKERS` build doesn't provide
+  (`undefined symbol: pthread_mutex_lock`). Fix = **fully bypass raylib audio in the
+  worklet build**: guard `InitAudioDevice` (`#ifndef DE_AUDIO_WORKLET`) and route
+  `SetMasterVolume` through a `de_master_volume()` macro that no-ops in the worklet build,
+  so `raudio.c` is never linked. Builds + links clean on *both* targets; native tripwire
+  passes. **TODO:** pause-mute (was `SetMasterVolume`) is a no-op in the worklet build —
+  route it through the mixer later. A `build-site.js --worklet` flag builds the variant
+  into `site/<name>-worklet/` (+ the `runtime/audio-worklet-stub.js` thread-sleep stub).
+  *Still to verify: the runtime listen test (TRUTH straight on an isolated worklet page).*
 - **Stage 3 — runtime backend pick** at `sound_init` (the `crossOriginIsolated` branch
   above); both backends compiled into one wasm; ScriptProcessor stays the fallback.
 - **Stage 4 — coi-serviceworker in the real shell** (`web_shell.html`): the isolation +

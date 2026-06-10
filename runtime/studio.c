@@ -176,6 +176,16 @@ static int             frame_count      = 0;
 static bool            web_started      = false;  // true after the user clicks to start
 #endif
 
+// The AudioWorklet backend (DE_AUDIO_WORKLET) runs its own AudioContext and never touches
+// raylib's audio (raudio.c needs pthreads, which the WASM_WORKERS build doesn't link). So
+// in that build, raylib-audio calls compile out. Pause-mute via SetMasterVolume is a TODO
+// for the worklet path (route mute through the mixer) — see design/audio-threading.md.
+#ifdef DE_AUDIO_WORKLET
+#define de_master_volume(v) ((void)0)
+#else
+#define de_master_volume(v) SetMasterVolume(v)
+#endif
+
 // pause key — default P; overridden by -DPAUSE_KEY=<raylib keycode> from the editor's settings → controls
 #ifndef PAUSE_KEY
 #define PAUSE_KEY KEY_P
@@ -1034,8 +1044,13 @@ static void loop_step(void) {
                     || IsKeyPressed(KEY_ENTER)
                     || IsKeyPressed(KEY_SPACE);
         if (clicked) {
-            InitAudioDevice();
+#ifndef DE_AUDIO_WORKLET
+            InitAudioDevice();        // raylib audio (ScriptProcessor); the worklet build uses its own context
+#endif
             sound_init();
+#ifdef DE_AUDIO_WORKLET
+            sound_worklet_resume();   // resume the worklet's AudioContext within the click gesture
+#endif
             init();
             web_started = true;
         }
@@ -1092,18 +1107,18 @@ static void loop_step(void) {
         pause_active = !pause_active;
         pause_sel = 0;
         pause_opened_now = pause_active;   // don't let the menu eat the same press
-        SetMasterVolume(pause_active ? 0.0f : 1.0f);
+        de_master_volume(pause_active ? 0.0f : 1.0f);
     }
     if (pause_active && !pause_opened_now) {
         if (inp_pressed(KEY_ESCAPE)) {
             pause_active = false;
-            SetMasterVolume(1.0f);
+            de_master_volume(1.0f);
         } else if (inp_pressed(KEY_UP))   { pause_sel = (pause_sel + 1) % 2; }
         else if (inp_pressed(KEY_DOWN))   { pause_sel = (pause_sel + 1) % 2; }
         else if (inp_pressed(KEY_ENTER) || inp_pressed(KEY_Z)) {
             if (pause_sel == 0) {           // Continue
                 pause_active = false;
-                SetMasterVolume(1.0f);
+                de_master_volume(1.0f);
             } else {                        // Restart
                 if (restart_argv) execv(restart_argv[0], restart_argv);
             }

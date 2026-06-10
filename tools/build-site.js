@@ -54,11 +54,13 @@ function esc(s) {
 }
 
 // ── build one cart to site/<name>/ ────────────────────────────
-function buildCart(name, { force = false } = {}) {
+function buildCart(name, { force = false, worklet = false } = {}) {
   const srcC = path.join(CARTS_DIR, `${name}.c`)
   if (!fs.existsSync(srcC)) { console.error(`✗ ${name}: no ${srcC}`); return false }
 
-  const outDir  = path.join(SITE_DIR, name)
+  // worklet build → a SEPARATE dir so it never clobbers the published (ScriptProcessor)
+  // build; the HTML loader picks between the two (Stage 3). See design/audio-threading.md.
+  const outDir  = path.join(SITE_DIR, worklet ? name + '-worklet' : name)
   const outHtml = path.join(outDir, 'index.html')
   const cfgFile = srcC.replace(/\.c$/, '.cart.js')
   const inputs  = [srcC, cfgFile,
@@ -100,6 +102,13 @@ function buildCart(name, { force = false } = {}) {
     '--shell-file', path.join(RUNTIME, 'web_shell.html'),
     '-o', outHtml,
   ]
+  if (worklet) {
+    // the AudioWorklet backend: a real audio thread (shared memory). Only runs in a
+    // cross-origin-isolated context. See design/audio-threading.md (Stage 2/5).
+    args.splice(args.length - 2, 0,
+      '-DDE_AUDIO_WORKLET', '-sAUDIO_WORKLET=1', '-sWASM_WORKERS=1',
+      '--js-library', path.join(RUNTIME, 'audio-worklet-stub.js'))
+  }
 
   process.stdout.write(`⚙ ${name}: emcc… `)
   const t0 = Date.now()
@@ -401,8 +410,9 @@ ${cards}
 }
 
 // ── main ──────────────────────────────────────────────────────
-const argv  = process.argv.slice(2)
-const force = argv.includes('--force')
+const argv    = process.argv.slice(2)
+const force   = argv.includes('--force')
+const worklet = argv.includes('--worklet')   // AudioWorklet backend build → site/<name>-worklet/
 const names = argv.filter(a => !a.startsWith('--'))
 
 if (!argv.includes('--gallery') && names.length === 0) {
@@ -416,7 +426,7 @@ let ok = true
 if (argv.includes('--finish')) {
   for (const name of names) ok = finishCart(name) && ok
 } else {
-  for (const name of names) ok = buildCart(name, { force }) && ok
+  for (const name of names) ok = buildCart(name, { force, worklet }) && ok
 }
 buildGallery()
 process.exit(ok ? 0 : 1)
