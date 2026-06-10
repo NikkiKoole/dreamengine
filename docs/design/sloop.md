@@ -3,7 +3,8 @@
 **Status: building — rungs 1–1.95 (drive/drift/course/rigs/handling) + 2 (BUILD editor) + 2.5 (scrape) + 2.55 (tipping) + 2.6 (drivetrain FWD/RWD) + 2.7 (gears/transmission) + 2.7-engines (per-kind powerband
 + power-to-weight + extreme 45–300 km/h range) + handling-depth (per-axle grip + friction-circle
 spin-out + rear-only handbrake) + long vehicles (9-long grid, SEMI/SCHOOLBUS)
-+ neutral & reverse-in-auto done.** Cart:
++ neutral & reverse-in-auto + phone cockpit rework + drift dynamics (weight transfer
++ self-aligning torque + ramped steering — feel-tuning ongoing) done.** Cart:
 `tools/carts/sloop.c`, registered in `index.json`, lint clean. Captures a design
 conversation (2026-06-09).
 A new entry in the "legendary series" alongside `coaster` and `orbit`
@@ -507,6 +508,9 @@ off-centre torque. sloop already goes beyond it on those (our `I` and `eng_torqu
 | **Wheel area / ground pressure** | traction = f(wheel area ÷ mass) per terrain; heavy-on-few-wheels bogs in sand | 3 (biomes) | ⬜ |
 | **Per-axle grip (two-axle model)** | lateral grip split front/rear of the COM, applied as a force at each axle → a yaw couple. Front lets go = understeer (push), rear = oversteer (tail out); rear-only handbrake; FWD washes / RWD spins under power. Replaces the body-level scalar bleed (single-track exempt) | handling-depth | ✅ |
 | **Grip limit → spin-out ("uit de bocht vliegen")** | the friction circle: each axle holds slip only up to `SLIP_MAX`, then LETS GO (force saturates → it slides). Corner too hard/fast → the loaded axle breaks away → plough wide or spin. The driven axle's limit also shrinks with the power it lays down (power-on over/understeer). Sibling of 2.55 tipping (grip loss from load leaving the hull) — this is from exceeding the limit at speed | handling-depth | ✅ |
+| **Dynamic weight transfer (longitudinal)** | the realized longitudinal accel shifts load front↔rear (low-passed like suspension), scaling each axle's grip cap: braking loads the front (turn-in, lift-off rotation), throttle loads the rear (squat, traction, the power-drift bite). The *dynamic* half of weight (static distribution → COM/I already exists) | drifts | ✅ |
+| **Self-aligning torque (caster / trail)** | the front tyres rotate the rig toward its travel direction when sliding — the car counter-steers itself. Catches a slide into a held angle instead of a spin, and assists digital counter-steer. ∝ `sin(slip)`, capped (past ~55° it's spinning, let it). The thing that makes a drift HOLD | drifts | ✅ |
+| **Ramped (analog) steering** | binary keys (−1/0/+1) wind a smoothed `steer_pos` toward full lock while held and ease back on release; a quick opposite tap trims the lock off a notch → fine counter-steer from digital/touch input. Without it a realistic drift is unholdable on a phone | drifts | ✅ |
 | **Aquaplaning / terrain grip** | `GROUND_GRIP` drops toward ~0 on water/ice/wet → the rig floats, steering does nothing; cross a puddle mid-corner → instant slide. Rides on the existing `GROUND_GRIP` hook (=1.0 road today), set per-biome | 3 (biomes) | ⬜ |
 | **Dynamic stability / tipping** | cornering load shifts the COM toward the turn's outside; leaving the support polygon (hull of the wheels) tips the rig → transient scrape + lateral grip collapse. A 3-wheeler tips toward its gap but not the other way (asymmetric); single-track (bike) exempt. The 2-D stand-in for roll | 2.55 | ✅ |
 | **Drivetrain location (FWD/RWD)** | power lays down through the *drive wheels*; drive point ahead of the COM (in travel) pulls → stable/understeer, behind pushes → loose/spin. Reversing flips it → a rear-wheel bike drives better backwards. Explicit `drive` part | 2.6 | ✅ |
@@ -1312,3 +1316,81 @@ build it now. Written up as **§7** above + a lever-catalogue row: the two-phase
 honest trailer model (rear-axle tracking, forward-stable/reverse-folds, friction-circle jackknife
 under braking, the cab-shove reaction), and where it lands (after breakage, reusing the per-axle
 grip + detach machinery). Not built — design seed only.
+
+### Cockpit rework from a phone playtest (2026-06-10)
+
+Three fixes from playing on a phone, all in the dashboard layout + the gear selector (drive
+core untouched):
+
+- ✓ **Pedals and wheel split to OPPOSITE edges.** They were jammed together in the left
+  third (wheel at the far-left corner, gas pedal right beside it at x62), so both thumbs
+  fought over one side. Now the **pedals sit at the far-LEFT edge** (left thumb) and the
+  **steering wheel at the far-RIGHT edge** (right thumb) — max spacing on a phone. The gauges
+  (speed, tach), the mode buttons (IGN/TRANS/BUILD) and the gear selector fill the middle,
+  where no thumb rests while driving. Layout `#define`s rewritten; every control re-placed.
+- ✓ **Every gear is individually tappable.** The old gate only let you tap "upper half = up /
+  lower half = down" (sequential), so reverse in MANUAL was a fiddly step-down-to-N-then-R.
+  Now each slot of the H-gate is its own tap target — **tap R directly to reverse**, or grab
+  any forward gear / N outright (`mgate_rect()` defines the slots, shared by hit-test + draw;
+  a new `gear_req` carries the tapped gear into `update_drive`, where reverse is still
+  validated against `REV_ENGAGE_SPD`). Keys E/Q still shift sequentially for the keyboard.
+- ✓ **AUTO/1-GEAR shows a clean D / N / R selector** instead of the 5-speed H-gate (the box
+  manages the forward gears itself, so the numbered slots were just noise). Tapping DRIVE /
+  NEUTRAL / REVERSE sets the gear directly; the engaged one lights. This also **added a real
+  NEUTRAL to AUTO** (coast + free-rev), which it didn't expose before. MANUAL keeps the full
+  tappable H-gate. `agate_rect()` lays out the three buttons.
+- ✓ **Verified headless** (scripted mouse clicks + `--trace`): AUTO tap-REVERSE from a stop →
+  gear -1, backs up, then tap-DRIVE → gear 1 and auto-shifts up; MANUAL tap gear "3" → jumps
+  straight to 3rd, tap "R" at a stop (engine running) → reverses to -42 px/s. Screenshot dumps
+  confirm both the AUTO D/N/R selector and the MANUAL H-gate (1·3·5 / 2·4·R, R orange when
+  slow) render with the new edge-split layout. (Note: tapping straight into a tall gear from a
+  standstill lugs and stalls — the existing "wrong gear bites", now reachable in one tap.)
+
+### Drifts: weight transfer + self-aligning torque + ramped steering (2026-06-10) — *tuning ongoing*
+
+Goal from a playtest: **long, controllable, realistic drifts.** A harness probe showed the
+baseline couldn't sustain one — a handbrake flick peaked at ~39° slip then the grip snapped
+back and the rig spun out inside ~1 second. Three coupled additions fixed the *mechanism*;
+final feel is a play-test tuning loop (the constants are all `#define`d and commented).
+
+The diagnosis split into three gaps, each with a fix:
+
+- ✓ **Weight transfer (the requested "weight business").** Static weight *distribution* (part
+  masses → COM/I/balance/per-axle grip) already drives the cart; this adds the *dynamic* half.
+  The realized longitudinal accel each frame (thrust+drag+brake, already in `vf`) is low-passed
+  (`WT_LAG`, models suspension settle) into a load shift that scales each axle's friction-circle
+  cap: **braking loads the front** (turn-in, lift-off rotation), **throttle loads the rear**
+  (squat, the power-drift bite). `WT_LONG_K / WT_MAX / WT_FLOOR / WT_CEIL`. Correct + emergent;
+  at steady speed it's ~0 (no accel = no transfer), as it should be.
+- ✓ **The binary-steering blocker → ramped steering.** `in_steer` is only −1/0/+1 (the keys AND
+  the on-screen wheel), so there's no analog counter-steer — a knife-edge sim drift is unholdable
+  on a phone *regardless* of the physics. Fix: the physics now steers off a smoothed `steer_pos`
+  that **winds toward full lock while held and eases back when released** (`STEER_RATE` /
+  `STEER_RETURN`) — a quick opposite tap backs the lock off a notch, giving fine counter-steer
+  from digital input. The cockpit wheel mirrors `steer_pos`.
+- ✓ **Self-aligning torque (caster / pneumatic trail) — what HOLDS the slide.** Real front tyres
+  rotate the car toward its *travel* direction when sliding (the car counter-steers itself).
+  Added as a yaw toward the velocity vector ∝ `sin(slip) = vl/speed` (no `atan2` — studio.h has
+  no math.h), capped at `SELF_ALIGN_SIN` (~55°; past that it's spinning, let it). `SELF_ALIGN_K`
+  is biased LOW so a drift can develop and be held — just enough to catch a spin and assist the
+  digital counter-steer.
+- ✓ **Killed the RWD spin-runaway.** The drivetrain push term (`STAB_YAW_K`, what makes RWD loose)
+  is *anti-damping*; through a full slide it amplified yaw (~588°/s²) far faster than the self-align
+  could arrest it (~100°/s²) → every drift wound into a spin. Now it **fades as the slide saturates**
+  (`DRIFT_PUSH_FADE`): RWD still kicks out, but past the limit the slide is the boss, not the
+  push. This is the change that turned "spins out" into "holds."
+- ✓ **`POWER_EAT` 0.55 → 0.72** so throttle keeps the rear loose enough to *sustain* the angle
+  (balanced against the self-align pulling it straight — their balance sets the held drift angle).
+- ✓ **Verified headless** (`--trace`): a kick-then-counter sequence now builds a slide, **holds
+  ~37–40° while you steer + throttle with the speed staying up (~80 px/s), and decays cleanly to
+  straight when centred — no spin-out, no speed crash** (was: 39° → spin → 8 px/s in <1 s). Normal
+  driving unhurt: the default buggy still corners to ~86°/s with a natural ~13° slip, not twitchy.
+
+**Open (the play-test loop — needs hands on a phone, can't be tuned open-loop):** the *feel* of
+the window — how easily it breaks loose, how wide the holdable angle, how much throttle trims it,
+how forgiving the recovery. Lives in `SELF_ALIGN_K` (catch strength), `POWER_EAT` (how loose under
+power), `DRIFT_PUSH_FADE` (RWD looseness through the slide), `STEER_RATE`/`STEER_RETURN` (counter-
+steer responsiveness), and `WT_LONG_K` (how much brake/throttle shifts grip). All `#define`d at the
+top of `sloop.c` with tuning notes. Lateral (left↔right) weight transfer is still the *tipping*
+approximation — a true 4-contact model is the bigger future step if the outside-wheel-digs-in
+detail is wanted.

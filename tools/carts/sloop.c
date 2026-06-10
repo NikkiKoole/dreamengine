@@ -342,6 +342,13 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 #define BOILER_FALL   0.12f       // ... and bled/s when the engine's off (slower than it builds)
 #define LAT_GRIP      32.0f       // lateral velocity killed per second (tire grip)
 #define STEER_RESP    680.0f      // steering authority (deg/s^2) at speed
+// ── steering ramp: digital keys → an analog steer ANGLE (the counter-steer fix) ──
+// The input is binary (full-left / centre / full-right), which can't trim a drift. So the
+// physics steers off a smoothed `steer_pos` that RAMPS toward the held direction and eases
+// back when released: hold = winds to full lock, a quick opposite tap = backs it off a notch
+// (fine counter-steer from digital input). The on-screen wheel mirrors steer_pos.
+#define STEER_RATE    3.4f        // how fast steer_pos winds toward full lock while you hold (per s)
+#define STEER_RETURN  5.0f        // how fast it self-centres when you release (per s)
 #define ANG_DAMP      5.0f        // angular self-centering (1/s) for SINGLE-TRACK / fallback rigs
                                   // (no per-axle couple to lean on, so they keep the original value)
 #define ANG_DAMP_AXLE 2.6f        // self-centering for TWO-AXLE rigs: lower, because the per-axle
@@ -368,7 +375,35 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 // drive force it's laying down (POWER_EAT), so flooring a rear-drive rig mid-corner breaks
 // the back loose — power-on oversteer, emergent from the same circle.
 #define SLIP_MAX      36.0f       // lateral slip velocity (px/s) a tyre holds before it lets go
-#define POWER_EAT     0.55f       // fraction of the rear's grip budget eaten at full power (rear-drive)
+#define POWER_EAT     0.72f       // fraction of the rear's grip budget eaten at full power (rear-drive).
+                                  // higher → throttle keeps the rear loose → a power-drift SUSTAINS
+                                  // (balanced against SELF_ALIGN_K, which pulls it straight)
+// ── weight transfer (dynamic load shift — the engine of a controllable drift) ──
+// Static weight DISTRIBUTION (where the part masses sit → COM/I/balance/frontGrip/rearGrip)
+// already decides the rig's character. This is the DYNAMIC half: the load on each axle
+// shifts in real time as longitudinal forces act on that mass. BRAKING (decel) pitches load
+// onto the FRONT axle (nose dives → fronts grip harder, rear goes light → lift-off / trail-
+// braking rotates the car); THROTTLE (accel) loads the REAR (squat → rear hooks up). The
+// shift scales each axle's friction-circle cap, so an unloaded tyre lets go sooner and a
+// loaded one holds longer + makes more force. This is what makes a drift CONTROLLABLE:
+// ease the throttle → rear unloads → tail steps out; feed it back → rear loads → it settles.
+#define WT_LONG_K     0.0011f     // px/s^2 of longitudinal accel → load-shift fraction
+#define WT_MAX        0.5f        // cap on the shift (±50% — a tyre never fully unloads in normal driving)
+#define WT_FLOOR      0.35f       // min load multiplier on an axle (it always keeps SOME grip)
+#define WT_CEIL       1.65f       // max load multiplier on the loaded axle
+#define WT_LAG        0.18f       // load-shift low-pass (per frame) — models suspension settle time
+// ── self-aligning torque (caster / pneumatic trail — what HOLDS a drift) ──────
+// Real front tyres, when the car slides, make a torque that rotates the rig toward the
+// direction it's actually TRAVELLING — the car counter-steers itself. That's why a drifter
+// can hold opposite lock without superhuman reflexes, and it's what arrests a slide into a
+// stable angle instead of a spin. We add it as a yaw toward the velocity vector, ∝ the slip
+// angle (atan2(vl,vf)) and speed. Gentle at small slip (normal driving barely feels it),
+// strong in a big slide → the rear breaks loose, this catches it, and THROTTLE (via
+// POWER_EAT) trims the held angle: the controllable, sustainable, realistic drift.
+#define SELF_ALIGN_K  0.18f       // strength of the self-steer toward the travel direction. LOW enough
+                                  // that a drift can develop and be HELD; just enough to catch a spin
+                                  // and give the player automatic counter-steer help (digital input)
+#define SELF_ALIGN_SIN 0.82f      // max slip it corrects, as sin(angle) (~55°); past that it's spinning, let it
 // ── ground-scrape: a cell hanging past the wheel span drags on the floor ──────
 #define SCRAPE_DRAG   9.0f        // extra drag force per dragging cell (top speed ↓)
 #define SCRAPE_LAT    7.0f        // extra lateral resistance per dragging cell (anchors sideways)
@@ -383,6 +418,8 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
 // ── drivetrain: where power hits the ground sets push/pull directional stability ──
 #define STAB_YAW_K    0.42f       // how hard drive-point fore/aft of the COM (de)stabilizes yaw
 #define DRIVE_OFF_MAX 12.0f       // clamp the drive-point offset (px) so push can't spin instantly
+#define DRIFT_PUSH_FADE 0.85f     // fade the RWD push anti-damping as the slide saturates (0..1 of it
+                                  // removed at full slide) so a drift HOLDS instead of winding to a spin
 
 // ── skid marks (laid in world space while the tires scrub) ───────────────────
 #define MAXSKID 512
@@ -399,6 +436,8 @@ static float heat;                // 0..1, rises while cells scrape under load, 
 static float tip_amt;             // 0..1, how hard the rig is tipping this frame (HUD)
 static float slide_amt;           // 0..1, how far past the friction limit a tyre is (spin-out feedback)
 static int   slide_rear;          // 1 = the REAR let go (oversteer/spin), 0 = front (understeer/push)
+static float wt_long;             // low-passed longitudinal accel (px/s^2) driving weight transfer
+static float wt_xfer;             // load-shift fraction this frame (+ = rear under accel, - = front under braking)
 // ── transmission state (§1b) ─────────────────────────────────────────────────
 static int   trans_mode = TR_AUTO;  // SINGLE / AUTO / MANUAL — player setting, persists
 static int   gear = 1;            // -1 = REVERSE, 0 = NEUTRAL (manual only), 1..NGEAR = forward
@@ -418,6 +457,7 @@ static float lead_x, lead_y;      // low-passed camera lead (smooth, no curb jit
 static float t_skid_snd, t_scrape_snd;
 static int   is_paused;
 static float wheel_ang;           // eased steering-wheel angle (deg) for the cockpit dial
+static float steer_pos;           // ramped steer angle (-1..+1) — analog feel from digital keys
 
 // ── modes: BUILD (paused grid editor) ↔ DRIVE (the rig loose in the world) ───
 enum { MODE_DRIVE, MODE_BUILD };
@@ -629,6 +669,9 @@ static void reset_vehicle(void) {
     recompute_body();
     sx = 0; sy = 0; vx = vy = 0; ang = 0; angVel = 0;
     heat = 0; tip_amt = 0; gear = 1; rpm = 0;   // trans_mode + eng_kind persist (player settings)
+    wt_long = 0; wt_xfer = 0;                   // weight transfer starts settled
+    steer_pos = 0;                              // wheel centred
+
     engine_on = 1; stalled = 0; restart_grace = 0;   // fresh rig starts cranked
     boiler = 0;                                  // steam starts cold → you feel it spool up
     wheel_ang = 0;
@@ -687,6 +730,8 @@ static void rot(float lx, float ly, float *wx, float *wy) {
 
 // ── input ─────────────────────────────────────────────────────────────────────
 static int in_gas, in_brk, in_steer, in_hand, in_up, in_down;
+static int gear_req = -99;            // a gear tapped directly in the gate this frame (-99 = none);
+                                      // consumed (and the change validated) in update_drive
 
 // ── cockpit dashboard: touch / mouse / keyboard controls + round gauges ───────
 // The layout is shared between handle_input (hit-testing) and hud (drawing), so
@@ -694,36 +739,63 @@ static int in_gas, in_brk, in_steer, in_hand, in_up, in_down;
 // fires on a tap, a mouse press, OR the key — all three at once. Hold controls
 // (steer/gas/brake/drift) use a level test; discrete ones (shift/ignition/trans/
 // build) an edge test. Built on tap()/tapp()+mouse rather than ui.h capture:
-// the zones don't overlap, so two fingers (hold gas + tap shift) just work.
+// the zones don't overlap, so two fingers (hold gas + tap a gear) just work.
+//
+// LAYOUT (phone-first): the pedals sit at the far-LEFT edge (left thumb) and the
+// steering wheel at the far-RIGHT edge (right thumb) — OPPOSITE edges, so steer and
+// gas never crowd one thumb. The gauges (speed, tach), the mode buttons (IGN/TRANS/
+// BUILD) and the gear selector fill the middle, where no thumb rests while driving.
 #define DASH_Y   148                  // top of the dashboard band (… SCREEN_H)
-#define WHEEL_CX 31                   // steering wheel centre + radius
-#define WHEEL_CY 174
-#define WHEEL_R  20
-#define WHL_X    4                    // wheel hit-area: left half steers left, right half right
-#define WHL_Y    150
-#define WHL_W    54
-#define WHL_H    48
-#define PED_X    62                   // pedals (held), stacked: gas / brake / drift
-#define PED_W    30
+// LEFT EDGE — pedals (held, left thumb): gas / brake / drift
+#define PED_X    2
+#define PED_W    42
 #define PED_H    16
 #define GAS_Y    150
 #define BRK_Y    167
 #define DRF_Y    184
-#define SPD_X    94                   // speed LED readout (display)
+// CENTRE — gauges (display) + the mode buttons
+#define SPD_X    50                   // speed LED readout
 #define SPD_Y    152
-#define DIAL_CX  170                  // round RPM tach (display)
+#define DIAL_CX  128                  // round RPM tach
 #define DIAL_CY  174
-#define DIAL_R   22
-#define STK_X    198                  // stickshift gate: upper half = up (E), lower = down (Q)
-#define STK_Y    150
-#define STK_W    42
-#define STK_H    48
-#define BTN_X    244                  // right button column (edge): ignition / trans / build
-#define BTN_W    54
+#define DIAL_R   21
+#define BTN_X    154                  // mode buttons: ignition / trans / build
+#define BTN_W    52
 #define BTN_H    15
 #define IGN_Y    150
 #define TRN_Y    167
 #define BLD_Y    184
+// GEAR SELECTOR — between the gauges and the wheel (right thumb reaches it). MANUAL =
+// a full H-gate, every slot individually tappable; AUTO/1-GEAR = a D / N / R selector.
+#define GEAR_X   210
+#define GEAR_Y   150
+#define GEAR_W   52
+#define GEAR_H   48
+// RIGHT EDGE — steering wheel (held, right thumb). Far from the pedals = max spacing.
+#define WHEEL_CX 291                  // wheel centre + radius
+#define WHEEL_CY 174
+#define WHEEL_R  22
+#define WHL_X    264                  // wheel hit-area: left half steers left, right half right
+#define WHL_Y    150
+#define WHL_W    54
+#define WHL_H    48
+
+// gear-selector slot rects — shared by handle_input (hit-test) and hud (draw) so the
+// tappable zones and the drawn slots always agree. MANUAL: a real H-gate — 1·3·5 across
+// the top, 2·4·R across the bottom, N in the centre channel; every slot is its own tap
+// target (tap R directly to reverse). AUTO/1-GEAR: three stacked D / N / R buttons.
+static void mgate_rect(int g, int *x, int *y, int *w, int *h) {
+    int cw = GEAR_W / 3;                          // column width (~17)
+    if (g == 0) { *x = GEAR_X + cw; *y = GEAR_Y + 18; *w = cw; *h = 12; return; }  // N — centre channel
+    int col = (g == -1) ? 2 : (g - 1) / 2;        // R shares col 2 with 5; 1/2→0, 3/4→1, 5→2
+    int top = (g == -1) ? 0 : ((g - 1) % 2 == 0); // R = bottom row; 1/3/5 top, 2/4 bottom
+    *x = GEAR_X + col * cw; *w = cw;
+    if (top) { *y = GEAR_Y;      *h = 18; }
+    else     { *y = GEAR_Y + 30; *h = 18; }
+}
+static void agate_rect(int i, int *x, int *y, int *w, int *h) {   // i: 0=DRIVE 1=NEUTRAL 2=REVERSE
+    *x = GEAR_X; *y = GEAR_Y + i * 16; *w = GEAR_W; *h = 15;
+}
 
 static int pt_in(int x, int y, int w, int h) {        // mouse pointer inside rect?
     int mx = mouse_x(), my = mouse_y();
@@ -809,8 +881,24 @@ static void handle_input(void) {
     in_brk   = key('X') || key(KEY_DOWN) || btn(0, BTN_B) || btn(0, BTN_DOWN) || ctl_held(PED_X, BRK_Y, PED_W, PED_H);
     in_hand  = key(KEY_SPACE) || ctl_held(PED_X, DRF_Y, PED_W, PED_H);
     in_steer = steer_r - steer_l;
-    in_up    = keyp('E') || ctl_hit(STK_X, STK_Y, STK_W, STK_H / 2);                 // upper half of the gate
-    in_down  = keyp('Q') || ctl_hit(STK_X, STK_Y + STK_H / 2, STK_W, STK_H / 2);     // lower half
+    in_up    = keyp('E');             // keyboard up/down still step the gears sequentially
+    in_down  = keyp('Q');
+    // direct gear selection — tap any slot in the gate (mode-aware). Recorded here,
+    // applied (and reverse validated against speed) in update_drive.
+    gear_req = -99;
+    if (trans_mode == TR_MANUAL) {
+        static const int MG[7] = { 1, 2, 3, 4, 5, 0, -1 };
+        for (int i = 0; i < 7; i++) {
+            int gx, gy, gw, gh; mgate_rect(MG[i], &gx, &gy, &gw, &gh);
+            if (ctl_hit(gx, gy, gw, gh)) gear_req = MG[i];
+        }
+    } else {                          // AUTO / 1-GEAR: D / N / R
+        static const int AG[3] = { 1, 0, -1 };
+        for (int i = 0; i < 3; i++) {
+            int gx, gy, gw, gh; agate_rect(i, &gx, &gy, &gw, &gh);
+            if (ctl_hit(gx, gy, gw, gh)) gear_req = AG[i];
+        }
+    }
 }
 
 static void lay_skid(float x, float y) {
@@ -842,6 +930,8 @@ static void update_drive(float dt_) {
     // decompose velocity into forward + lateral
     float vf = vx * fwx + vy * fwy;
     float vl = vx * ltx + vy * lty;
+    float vf0 = vf;                                 // start-of-frame forward speed → longitudinal accel
+                                                    // (vf - vf0)/dt after thrust+brake, for weight transfer
 
     // --- ground scrape: cells hanging past the wheel span drag on the floor -----
     // Same force model as the wheels, applied to the cells with NO support under
@@ -891,19 +981,35 @@ static void update_drive(float dt_) {
     //   AUTO/1  : the box manages forward gears; up/down just pick DRIVE vs REVERSE (one tap from a
     //             stop drops it into R — so you CAN reverse in automatic). No exposed neutral.
     //   Engaging reverse needs a near-stop (REV_ENGAGE_SPD) and zeroes vf for a clean swap.
-    if (in_up) {                                     // E / gate-up
+    // direct gear selection — a slot tapped in the gate (recorded in handle_input). MANUAL
+    // grabs any forward gear / N / R outright; AUTO/1 picks D (=1, the box manages it) / N / R.
+    // Reverse only engages near a stop (REV_ENGAGE_SPD); everything else is unconditional.
+    if (gear_req != -99) {
+        if (trans_mode == TR_MANUAL) {
+            if (gear_req >= 1 && gear_req <= NGEAR) { if (gear < 0) vf = 0; gear = gear_req; shift_snd = 1; }
+            else if (gear_req == 0)  { gear = 0; shift_snd = 1; }
+            else if (gear_req == -1 && af(vf) < REV_ENGAGE_SPD) { gear = -1; vf = 0; shift_snd = 1; }
+        } else {                                     // AUTO / 1-GEAR: DRIVE / NEUTRAL / REVERSE
+            if (gear_req == 1)       { if (gear < 1) vf = 0; gear = 1; shift_snd = 1; }   // D
+            else if (gear_req == 0)  { gear = 0; shift_snd = 1; }                          // N
+            else if (gear_req == -1 && af(vf) < REV_ENGAGE_SPD) { gear = -1; vf = 0; shift_snd = 1; }
+        }
+        gear_req = -99;
+    }
+    if (in_up) {                                     // E / keyboard up
         if (trans_mode == TR_MANUAL) {
             if (gear < NGEAR) { if (gear < 0) vf = 0; gear++; shift_snd = 1; }   // R→N→1→…→5
-        } else if (gear < 1) {                       // AUTO/1: R → DRIVE
-            gear = 1; vf = 0; shift_snd = 1;
+        } else if (gear < 1) {                       // AUTO/1: R → N → D
+            gear++; if (gear == 1) vf = 0; shift_snd = 1;
         }
     }
-    if (in_down) {                                   // Q / gate-down
+    if (in_down) {                                   // Q / keyboard down
         if (trans_mode == TR_MANUAL) {
             if (gear > 0) { gear--; shift_snd = 1; }                              // 5→…→1→N
             else if (gear == 0 && af(vf) < REV_ENGAGE_SPD) { gear = -1; vf = 0; shift_snd = 1; }  // N→R
-        } else if (gear >= 1 && af(vf) < REV_ENGAGE_SPD) {                        // AUTO/1: DRIVE → R
-            gear = -1; vf = 0; shift_snd = 1;
+        } else {                                     // AUTO/1: D → N → R
+            if (gear >= 1) { gear = 0; shift_snd = 1; }
+            else if (gear == 0 && af(vf) < REV_ENGAGE_SPD) { gear = -1; vf = 0; shift_snd = 1; }
         }
     }
     if (trans_mode == TR_SINGLE && gear > 1) gear = 1;          // single keeps one forward gear
@@ -993,12 +1099,22 @@ static void update_drive(float dt_) {
         float wRad = angVel * DEG2RAD;
         float vlF = vl + wRad * aF;                  // lateral slip velocity at the front axle
         float vlR = vl + wRad * aR;                  // ... and the rear
+        // weight transfer: the realized longitudinal accel this frame (thrust+drag+brake are
+        // already in vf above) pitches load front↔rear, low-passed to settle like suspension.
+        // Braking → load forward (front grips, rear lightens); throttle → load rearward.
+        float aLong = (vf - vf0) / dt_;
+        wt_long = lerp(wt_long, aLong, WT_LAG);
+        wt_xfer = clamp(wt_long * WT_LONG_K, -WT_MAX, WT_MAX);   // + = rear loads, - = front loads
+        float frontLoad = clamp(1.0f - wt_xfer, WT_FLOOR, WT_CEIL);
+        float rearLoad  = clamp(1.0f + wt_xfer, WT_FLOOR, WT_CEIL);
         // friction circle: each axle holds slip only up to its limit (SLIP_MAX), then LETS GO.
         // The DRIVEN axle's limit shrinks with the power it lays down (the drive force eats its
         // sideways budget): rear-drive → rear breaks loose under power = oversteer; front-drive →
         // front washes out under power = understeer. The handbrake cuts the REAR only (tail out).
-        float capF = SLIP_MAX * tipMul * (1.0f - POWER_EAT * (1.0f - rearDriveFrac) * throttle);
-        float capR = SLIP_MAX * tipMul * (in_hand ? DRIFT_GRIP_MULT : 1.0f)
+        // Each axle's cap is scaled by its live LOAD — an unloaded tyre lets go at a lower slip,
+        // a loaded one holds more (and makes more force, since the saturated force = cap·grip).
+        float capF = SLIP_MAX * tipMul * frontLoad * (1.0f - POWER_EAT * (1.0f - rearDriveFrac) * throttle);
+        float capR = SLIP_MAX * tipMul * rearLoad  * (in_hand ? DRIFT_GRIP_MULT : 1.0f)
                                        * (1.0f - POWER_EAT * rearDriveFrac * throttle);
         float clF = clamp(vlF, -capF, capF);         // slip the tyre actually converts to grip
         float clR = clamp(vlR, -capR, capR);
@@ -1061,6 +1177,13 @@ static void update_drive(float dt_) {
     for (int i = 0; i < MAXSKID; i++) if (skid[i].life > 0) skid[i].life--;
 
     // --- steering: torque about the COM, scaled by how fast you're going -------
+    // ramp the binary key (-1/0/+1) into an analog steer angle: wind toward the held
+    // direction at STEER_RATE, ease back to centre at STEER_RETURN when released. A quick
+    // opposite tap backs the lock off a notch — the fine counter-steer a drift needs.
+    float starg = (float)in_steer;
+    float srate = (in_steer != 0 ? STEER_RATE : STEER_RETURN) * dt_;
+    if (steer_pos < starg) { steer_pos += srate; if (steer_pos > starg) steer_pos = starg; }
+    else if (steer_pos > starg) { steer_pos -= srate; if (steer_pos < starg) steer_pos = starg; }
     float speed_factor = clamp(af(vf) / 50.0f, 0, 1);
     float dir = vf >= 0 ? 1.0f : -1.0f;
     float gyro = I / M;                              // radius of gyration squared
@@ -1068,11 +1191,20 @@ static void update_drive(float dt_) {
     // weight balance: nose-heavy (balance>0) pushes wide (understeer), tail-heavy
     // (balance<0) turns in eagerly (oversteer). Uses the COM we already derive.
     float steer_bal = 1.0f - BALANCE_K * balance;
-    float ang_acc = in_steer * STEER_RESP * speed_factor * dir * turnEase * steer_bal;
+    float ang_acc = steer_pos * STEER_RESP * speed_factor * dir * turnEase * steer_bal;
     ang_acc += ENG_YAW_K * (eng_torque / I);         // off-centre engine pulls
     if (scraping) ang_acc += SCRAPE_YAW * (scrape_torque / I) * dir;  // off-centre scrape drags
     angVel += ang_acc * dt_;
     angVel -= angVel * (twoAxle ? ANG_DAMP_AXLE : ANG_DAMP) * dt_;   // axle rigs lean on the couple too
+    // self-aligning torque (caster/trail): rotate the heading toward the travel direction,
+    // ∝ slip angle + speed. Gentle when tracking straight; in a big slide it catches the
+    // spin and settles the rig into a held drift angle (which throttle then trims). Only
+    // forward (vf>0) — reversing has no meaningful caster self-steer.
+    if (vf > VSTALL_MIN) {
+        float sp2 = fsqrt(vf * vf + vl * vl);
+        float slipFrac = clamp(vl / sp2, -SELF_ALIGN_SIN, SELF_ALIGN_SIN);   // sin(slip angle), bounded
+        angVel += SELF_ALIGN_K * slipFrac * STEER_RESP * speed_factor * dt_; // rotate heading toward travel
+    }
     // directional stability: the drive point ahead of the COM (in the travel frame)
     // PULLS the rig → extra self-centering (stable, understeer); behind it PUSHES →
     // anti-damping (the heavy end wants to swing round → oversteer / spin). Reversing
@@ -1080,12 +1212,16 @@ static void update_drive(float dt_) {
     // "bike" genuinely drives better in reverse (wheel leads, the bare stub trails).
     float driveOff = clamp(driveX - comX, -DRIVE_OFF_MAX, DRIVE_OFF_MAX);  // >0 = ahead of COM
     float lead = driveOff * dir;                     // travel frame: >0 pull (lead), <0 push (trail)
-    angVel -= STAB_YAW_K * lead * angVel * clamp(spd0 / 45.0f, 0, 1) * dt_;
+    // fade the push anti-damping as the slide saturates: it makes RWD loose enough to KICK
+    // out, but if it kept amplifying yaw through a full slide it'd wind every drift into a
+    // spin faster than the self-align can catch. Past the limit, the slide is the boss.
+    angVel -= STAB_YAW_K * lead * angVel * clamp(spd0 / 45.0f, 0, 1)
+              * (1.0f - DRIFT_PUSH_FADE * slide_amt) * dt_;
     ang += angVel * dt_;
     if (ang < 0) ang += 360; else if (ang >= 360) ang -= 360;
 
-    // steering-wheel visual: ease toward the steer input (±~26° lock)
-    wheel_ang = lerp(wheel_ang, (float)in_steer * 26.0f, 0.22f);
+    // steering-wheel visual: mirror the ramped steer position (±~26° lock)
+    wheel_ang = lerp(wheel_ang, steer_pos * 26.0f, 0.3f);
 
     // --- sound -----------------------------------------------------------------
     // The engine itself is ONE sustained voice driven live (see engine_sound() in
@@ -1203,6 +1339,8 @@ void update(void) {
     watch("2axle", "%d", twoAxle);
     watch("slide", "%.2f", slide_amt);
     watch("slidR", "%d", slide_rear);
+    watch("wt", "%.2f", wt_xfer);
+    watch("steer", "%.2f", steer_pos);
 #endif
 }
 
@@ -1417,11 +1555,12 @@ static void draw_vehicle(void) {
 }
 
 // ── HUD: a touch/mouse/keyboard COCKPIT ───────────────────────────────────────
-// The bottom band is a driveable dashboard: a steering wheel (press its left/right
-// half), gas/brake/drift pedals, a digital speed readout, a round RPM tach with a
-// needle, a stickshift H-gate (tap upper=up E / lower=down Q) showing the current
-// gear, and ignition/trans/build buttons. Every control reads keyboard, touch AND
-// mouse (see the helpers + handle_input). Play area + road-sign limit sit above.
+// The bottom band is a driveable dashboard, split for two thumbs: gas/brake/drift
+// pedals at the far-LEFT edge, the steering wheel (press its left/right half) at the
+// far-RIGHT edge, and in the middle a digital speed readout, a round RPM tach, the
+// gear selector (MANUAL = a tappable H-gate; AUTO/1 = a D/N/R selector) and the
+// ignition/trans/build buttons. Every control reads keyboard, touch AND mouse (see
+// the helpers + handle_input). Play area + road-sign limit sit above.
 static void hud(void) {
     char buf[48];
     float spd = fsqrt(vx * vx + vy * vy);
@@ -1493,42 +1632,54 @@ static void hud(void) {
     circfill(DIAL_CX, DIAL_CY, 2, CLR_LIGHT_GREY);
     font(FONT_SMALL); print_centered("RPM", DIAL_CX, DIAL_CY + DIAL_R - 10, CLR_MEDIUM_GREY); font(FONT_NORMAL);
 
-    // STICKSHIFT GATE — a real H-pattern knob (1·3·5 top / 2·4·R bottom). Tap the upper
-    // half to up-shift, lower half to down-shift (keys E / Q). The ball rides the engaged
-    // gear; R glows when you're slow enough to drop into it from a stop.
-    int su = ctl_held(STK_X, STK_Y, STK_W, STK_H / 2);
-    int sd = ctl_held(STK_X, STK_Y + STK_H / 2, STK_W, STK_H / 2);
-    rectfill(STK_X, STK_Y, STK_W, STK_H, CLR_BLACK);
-    rect(STK_X, STK_Y, STK_W, STK_H, CLR_DARK_GREY);
-    int colx[3]  = { STK_X + 9, STK_X + 21, STK_X + 33 };
-    int gtopy = STK_Y + 13, gboty = STK_Y + STK_H - 14, gmidy = (gtopy + gboty) / 2;
-    for (int c = 0; c < 3; c++) line(colx[c], gtopy, colx[c], gboty, CLR_LIGHT_GREY);  // chrome H
-    line(colx[0], gmidy, colx[2], gmidy, CLR_LIGHT_GREY);                              // ... + channel
-    // ball position: forward 1-5 in their slots, NEUTRAL in the centre channel, REVERSE the R slot
-    int ballx, bally;
-    if (gear == 0)      { ballx = colx[1]; bally = gmidy; }                 // N — stick in the channel
-    else if (gear < 0)  { ballx = colx[2]; bally = gboty; }                 // R — bottom-right slot
-    else { int col = (gear - 1) / 2; ballx = colx[col]; bally = ((gear - 1) % 2 == 0) ? gtopy : gboty; }
-    int can_rev = (gear == 0 && spd < REV_ENGAGE_SPD);             // in N + slow = ready to drop into R
-    static const char *TOPN[3] = { "1", "3", "5" };
-    static const char *BOTN[3] = { "2", "4", "R" };
-    for (int c = 0; c < 3; c++) {
-        int topg = c * 2 + 1;                                     // col → 1 / 3 / 5
-        int botg = (c < 2) ? c * 2 + 2 : -1;                      // col → 2 / 4 / R(-1)
-        int ton = (gear == topg), bon = (gear == botg);
-        int bcol = (c == 2 && can_rev) ? CLR_ORANGE : (sd ? CLR_LIGHT_GREY : CLR_MEDIUM_GREY);
-        print_centered(TOPN[c], colx[c], STK_Y + 2,         ton ? CLR_WHITE : (su ? CLR_LIGHT_GREY : CLR_MEDIUM_GREY));
-        print_centered(BOTN[c], colx[c], STK_Y + STK_H - 9, bon ? CLR_WHITE : bcol);
+    // GEAR SELECTOR — mode-aware. Every slot is its own tap target (tap R to reverse).
+    //   MANUAL : a real H-gate, 1·3·5 top / 2·4·R bottom, N in the centre channel — tap
+    //            any gear to grab it directly; the engaged slot is filled white.
+    //   AUTO/1 : a simple D / N / R selector (the box manages the forward gears itself).
+    // R lights orange when you're slow enough to drop into it. Keys E / Q still shift too.
+    int gear_slow = (spd < REV_ENGAGE_SPD);
+    rectfill(GEAR_X, GEAR_Y, GEAR_W, GEAR_H, CLR_BLACK);
+    rect(GEAR_X, GEAR_Y, GEAR_W, GEAR_H, CLR_DARK_GREY);
+    if (trans_mode == TR_MANUAL) {
+        // chrome H behind the slots: three verticals joined by the centre channel
+        int colx[3] = { GEAR_X + GEAR_W / 6, GEAR_X + GEAR_W / 2, GEAR_X + 5 * GEAR_W / 6 };
+        int gtopy = GEAR_Y + 9, gboty = GEAR_Y + GEAR_H - 9, gmidy = GEAR_Y + GEAR_H / 2;
+        for (int c = 0; c < 3; c++) line(colx[c], gtopy, colx[c], gboty, CLR_DARK_GREY);
+        line(colx[0], gmidy, colx[2], gmidy, CLR_DARK_GREY);
+        static const int   MG[7] = { 1, 2, 3, 4, 5, 0, -1 };
+        static const char *ML[7] = { "1", "2", "3", "4", "5", "N", "R" };
+        int ballx = colx[1], bally = gmidy;             // ball rides the engaged gear
+        for (int i = 0; i < 7; i++) {
+            int gx, gy, gw, gh; mgate_rect(MG[i], &gx, &gy, &gw, &gh);
+            int on = (gear == MG[i]);
+            int held = ctl_held(gx, gy, gw, gh);
+            if (on) { rectfill(gx + 1, gy + 1, gw - 2, gh - 2, CLR_DARKER_GREY);
+                      ballx = gx + gw / 2; bally = gy + gh / 2; }
+            int col = on   ? CLR_WHITE
+                    : (MG[i] == -1) ? (gear_slow ? CLR_ORANGE : CLR_DARK_GREY)   // R ready when slow
+                    : held ? CLR_WHITE : CLR_MEDIUM_GREY;
+            print_centered(ML[i], gx + gw / 2, gy + gh / 2 - 3, col);
+        }
+        circfill(ballx, bally, 2, engine_on ? CLR_WHITE : CLR_DARK_GREY);
+        font(FONT_TINY); print("E/Q", GEAR_X + 2, GEAR_Y - 7, CLR_DARK_GREY); font(FONT_NORMAL);
+    } else {
+        static const char *AL[3]  = { "DRIVE", "NEUTRAL", "REVERSE" };
+        static const int   AGv[3] = { 1, 0, -1 };
+        font(FONT_SMALL);
+        for (int i = 0; i < 3; i++) {
+            int gx, gy, gw, gh; agate_rect(i, &gx, &gy, &gw, &gh);
+            int on  = (AGv[i] == 1) ? (gear >= 1) : (gear == AGv[i]);
+            int rdy = (AGv[i] == -1 && gear_slow);
+            int actcol = (AGv[i] == -1) ? CLR_RED : (AGv[i] == 0) ? CLR_MEDIUM_GREY : CLR_GREEN;
+            rectfill(gx, gy, gw, gh, on ? actcol : CLR_DARKER_GREY);
+            rect(gx, gy, gw, gh, CLR_DARK_GREY);
+            print_centered(AL[i], gx + gw / 2, gy + gh / 2 - 2,
+                           on ? CLR_BLACK : rdy ? CLR_ORANGE : CLR_LIGHT_GREY);
+        }
+        font(FONT_NORMAL);
     }
-    print_centered("N", colx[1], gmidy - 3, gear == 0 ? CLR_WHITE : CLR_DARK_GREY);   // neutral, in the channel
-    circfill(ballx, bally, 3, engine_on ? CLR_WHITE : CLR_DARK_GREY);   // shift ball rides the engaged gear
-    circ(ballx, bally, 3, CLR_LIGHT_GREY);
-    font(FONT_TINY);                                              // tiny key hints (keep it photo-clean)
-    print("E", STK_X + 2, STK_Y + 2,          su ? CLR_WHITE : CLR_DARK_GREY);
-    print("Q", STK_X + 2, STK_Y + STK_H - 7,  sd ? CLR_WHITE : CLR_DARK_GREY);
-    font(FONT_NORMAL);
 
-    // RIGHT BUTTONS — ignition (lit when running) / transmission / build
+    // MODE BUTTONS — ignition (lit when running) / transmission / build
     dash_btn(BTN_X, IGN_Y, BTN_W, BTN_H, engine_on ? "IGN ON" : "IGN OFF", "I", engine_on, CLR_GREEN);
     dash_btn(BTN_X, TRN_Y, BTN_W, BTN_H, trans_label(), "G", 0, CLR_DARKER_GREY);
     dash_btn(BTN_X, BLD_Y, BTN_W, BTN_H, "BUILD", "TAB", 0, CLR_DARKER_GREY);
