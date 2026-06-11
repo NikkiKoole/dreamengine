@@ -1936,6 +1936,13 @@ void rectfill(int x, int y, int w, int h, int color) {
     DrawRectangle(x, y, w, h, palette[color % PALETTE_SIZE]);
 }
 
+// raw 24-bit filled block: 0xRRGGBB straight to the canvas, no palette. one call
+// per shader cell beats a pset_rgb pixel-loop (chunky CPU shaders, true-colour bars).
+void rectfill_rgb(int x, int y, int w, int h, int hex) {
+    PROF("rectfill");
+    DrawRectangle(x, y, w, h, (Color){ (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 });
+}
+
 void bar(int x, int y, int w, int h, float pct, int fill, int bg) {
     PROF("bar");
     if (pct < 0.0f) pct = 0.0f;
@@ -2204,6 +2211,13 @@ void bezier(int x0, int y0, int cx, int cy, int x1, int y1, int color) {
 void pset(int x, int y, int color) {
     PROF("pset");
     DrawPixel(x, y, palette[color % PALETTE_SIZE]);
+}
+
+// raw 24-bit pixel: 0xRRGGBB straight to the canvas, bypassing the palette. the
+// canvas is RGBA, so this is the same cost as pset — it's how a CPU shader paints.
+void pset_rgb(int x, int y, int hex) {
+    PROF("pset");
+    DrawPixel(x, y, (Color){ (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 });
 }
 
 int pget(int x, int y) {

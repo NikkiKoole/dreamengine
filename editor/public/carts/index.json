@@ -2883,5 +2883,33 @@
       "instrument"
     ],
     "homage": "Hohner Clavinet D6 + auto-wah"
+  },
+  {
+    "title": "deeper",
+    "description": "An atmospheric descent that showcases the reverb + echo buses as SPACE, not as an effect knob. A procedurally-built vertical world of rooms and corridors that only ever goes down - wide halls, tight chambers, and the narrow shafts you drop through between them. You hop around (small hops: you descend, you don't climb) and your footsteps make little noises - and those noises REFLECT the room you're in: a boxed-in corridor gives a dry slappy tick, a great hall gives a long lush tail, and the reverb glides open as you walk from one into the other. The acoustic is driven live from room_openness(), a measure of the air around you, shown on a HUD meter (corridor/chamber/hall). Distance-lit stone walls and a lantern-glow follow you down; a slow drip rings out in the open halls to let the tail sing. Glowing motes scattered off the straight drop chime a reverberant mallet when grabbed, and the bottom of every section is a grand treasure hall - a hoard plus a SUPER TREASURE crystal that rings a drenched arpeggio - before the floor gives way into a fresh, deeper section. Move: arrows/WASD. Hop: Z or Up.",
+    "file": "deeper.cart.png",
+    "kind": [
+      "toy",
+      "tech-demo"
+    ],
+    "genre": "platformer"
+  },
+  {
+    "title": "wow & flutter",
+    "description": "The tape() effect made physical: a soft-body jelly blob in a scene that is playing back on a worn tape, where the SAME wow/flutter/saturation values drive the picture AND the sound in lockstep - no screen shader, the wobble IS the verlet simulation. The tape WEARS DOWN as it plays (degradation creeps up on its own) so the longer it runs the woozier it gets: WOW (slow) sways the whole scene and drags the loop transport; FLUTTER (fast) shivers the jelly rim and stutters the timing; SATURATION blooms the palette warm, fattens the blobs, and drives the mix harder through the real tape() master insert. A Frippertronics-style pad+bell loop smears through the echo bus while the blobs throb on the beat; the character bumps are foley. Grain, scanlines and dropout bands thicken with the wear. Hit SPACE to REWIND & CLEAN - snap it fresh and watch/hear the decay begin again. Move the blob: arrows/WASD. Bounce: Z or Up. SPACE: rewind.",
+    "file": "wowflutter.cart.png",
+    "kind": [
+      "toy",
+      "tech-demo"
+    ]
+  },
+  {
+    "title": "shadelab",
+    "description": "A CPU fragment shader, the dreamengine way: there is no GPU shader hook, so every pixel is just a little C function returning a 0xRRGGBB colour through the new pset_rgb() - full 24-bit colour, bypassing the 32-colour palette, painted per pixel on the CPU. Flip through seven worked shaders - uv coords (red=x, green=y), hue sweep, distance field, plasma, value-noise clouds, warped checker, interference - and each is a few readable lines that ARE the lesson. UP/DOWN changes the pixel size so you can watch the fragments turn chunky (and trade detail for speed); LEFT/RIGHT or keys 1..7 switch shader; SPACE freezes time. Runs ~5ms/frame at 320x200. The companion to the pset_rgb engine primitive.",
+    "file": "shadelab.cart.png",
+    "kind": [
+      "tech-demo",
+      "toy"
+    ]
   }
 ]
