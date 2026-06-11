@@ -867,6 +867,38 @@ direction (`design/tinydaws.md`) should let people interact — perform on top, 
 edit underneath. A recorded/looped strip is plausibly tinydaws' first *lane* (the
 lead — the one you'd rather perform than program).
 
+### Making physical room — the chrome rework + the bottom-third takeover
+
+The four play modes (and the parked chord pair) all want **vertical room**: Y now
+means something (mallet has none, but chord-trigger's Y = block↔roll, strum's Y =
+spread). The shipped ribbon is an 18px sliver at `y=170` sharing the bottom with a
+footer hint — far too short for fat fingers on a phone. So the chassis is being
+reworked to give the ribbon real estate, in two steps:
+
+**Step 1 — chrome declutter (SHIPPED 2026-06-11, commit `6d20232`).** The bottom
+**footer hint line was retired** (`rad_footer()` is now a no-op): every station's
+`H help` / `B band` / `G gtr:…` text is gone, because the affordances are now
+buttons. The `?` help button (bottom-right) already existed; a mirrored **`B`
+band button** (bottom-left, `rad_band_button()`) now opens THE BAND panel. **All
+timbre A/B routes through THE BAND** — the 4 old `G`-key toggles (bossa guitar,
+jangle guitar, dub skank, lowend lead) were folded into one-chair `RadBand`s, and
+the `G` key is gone. Net effect: the whole bottom strip is now free for the ribbon.
+
+**Step 2 — the bottom-third takeover (PLANNED, next session — `solo.h` + the 8 jam
+carts).** Closed, the ribbon is just its small "jam" tab (a radio looks like a
+radio). **Open, it expands to fill the bottom third (~`y133–200`), the chrome
+behind it dimming** — fat-finger room on a tiny screen, and the radio becomes an
+instrument only when you choose to play. Decisions already locked with Nikki:
+- **Extent:** bottom third (not half, not full) — his call.
+- **Chrome:** dims/darkens behind the expanded ribbon (the takeover is the open
+  state of the existing `solo_strip` tab, not a separate mode).
+- **`B` / `?` buttons stay reachable** while the ribbon is open (don't let the
+  expansion bury them).
+- Owns the geometry in `radio.h`/`solo.h` so it rolls to all 8 jam carts (bossa,
+  citypop, jingle, polopan, jangle, air, dub, napoleon) the way `rad_dial` did.
+- Open question for that session: **animated slide-up vs. instant**, and exactly
+  what "dim" looks like (overlay alpha vs. redrawn darker chrome).
+
 ### Making room — the station must yield its own lead
 
 The design problem that bit first: most stations *also* play a melodic lead
