@@ -2982,5 +2982,14 @@
     "kind": [
       "instrument"
     ]
+  },
+  {
+    "title": "eq",
+    "description": "A 2-band shelving EQ that can BOOST as well as cut - the library's first effect that can lift a band (the SVF filters only cut). A SAW bass + a bright SQUARE lead loop play; drag the LOW (~80 Hz) and HIGH (~6 kHz) faders +/-12 dB each and watch the response curve bend - up = boost, down = cut. Route the EQ over the WHOLE mix (eq) or just the BASS (instrument_eq), or hit AMP to stack DRIVE_ASYM + a mid-forward EQ for a guitar-amp tone. A cycles the route, B toggles AMP, arrows nudge each band.",
+    "file": "eq.cart.png",
+    "kind": [
+      "tech-demo",
+      "toy"
+    ]
   }
 ]

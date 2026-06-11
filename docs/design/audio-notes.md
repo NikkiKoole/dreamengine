@@ -1245,6 +1245,21 @@ v1, document it on the panel.
    `drummachine.c` carries the same kit (slots 5–10, the punch-recipe kick +
    per-row hat/snare filters, clap = three `schedule_hit` bursts) and a swing
    knob on its 16-step transport (↑/↓, 0–60%) — RMS −24.0 → −21.4 dBFS.
+7. **EQ** — the one tone tool that can BOOST (the SVF filters only cut, so until now no band
+   could be lifted — the gap the distortion/EQ discussion flagged).
+   **✓ SHIPPED 2026-06-12** — `eq(low_gain, high_gain)` (master) **and** `instrument_eq(slot, …)`
+   (per-instrument aux bus, the tape/wah/bitcrush pattern). 2-band shelving, ported from navkit
+   `processMasterEQ`, made **stereo + per-bus**: split the signal into low / mid / top via two
+   one-pole crossovers (~80 Hz / ~6 kHz), then scale the low + top bands by a dB→linear gain
+   (`10^(dB/20)`), mid stays unity. Gains in dB, **±12**; at 0/0 dB the three bands sum back to the
+   input exactly (gain 1.0 = identity), and it's dormant until the first `eq()` call → non-users
+   byte-identical. Applied after tape, before bitcrush, in both the per-bus insert loop and the
+   master chain (so it's pre-soft-clip). `SR_EQ`=55 / `SR_INSTR_EQ`=56, gains via the `*1000`
+   control convention. The point-of-having-it: paired with `DRIVE_ASYM` (EQ around a clipper) it's
+   a real **guitar-amp tone** — the `eq.c` showcase stacks exactly that on its AMP toggle. Verified
+   on a 55 Hz saw drone: `eq(+12, 0)` RMS −30.95 → −21.76 dBFS (**+9.2 dB**, the low fundamental
+   lifts as expected — under the full +12 because the tone straddles the 80 Hz pivot), `eq(−12, 0)`
+   drops it to −33.66 dBFS, per-instrument path clean (DC −0.00003) — 0 clipped, no NaN throughout.
 
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
