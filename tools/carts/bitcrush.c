@@ -1,7 +1,8 @@
 // bitcrush — lo-fi quantization (bit-depth + sample-rate reduction), master vs per-instrument.
 // A clean PLUCK melody plays over a SAW bass. Crush the WHOLE mix, or just the bass, and hear
 // the difference: per-instrument crush grits the bass while the lead stays crystal.
-//   ↑ ↓ : bit depth      ← → : sample rate      A : cycle  MASTER -> BASS ONLY -> OFF
+// The scope IS an XY pad: drag anywhere in it — X = sample rate, Y = bit depth — both at once.
+//   drag pad : X rate / Y bits      arrows : fine-tune      A / tap banner : route
 #include "studio.h"
 #include <stdio.h>
 #include <math.h>
@@ -9,10 +10,21 @@
 #define I_LEAD 0
 #define I_BASS 1
 
+// the XY pad / scope rect (shared by update + draw so the mapping + crosshair agree)
+#define PAD_X 24
+#define PAD_Y 96
+#define PAD_W (SCREEN_W - 48)
+#define PAD_H 70
+#define BITS_MIN 1.0f
+#define BITS_MAX 16.0f
+#define RATE_MIN 1.0f
+#define RATE_MAX 32.0f
+
 static float bits  = 5.0f;
 static float rate  = 6.0f;
 static int   route = 0;     // 0 = master (whole mix), 1 = per-instrument (bass only), 2 = off
 static int   dirty = 1;
+static int   padding = 0;   // 1 while a pointer is dragging the pad (for crosshair highlight)
 
 static const char *ROUTE_NAME[3] = { "MASTER (whole mix)", "BASS ONLY (per-instr)", "OFF (clean)" };
 
@@ -30,12 +42,30 @@ void init(void) {
 }
 
 void update(void) {
-    if (btn(0, BTN_UP))    { bits += 0.05f; if (bits > 16.0f) bits = 16.0f; dirty = 1; }
-    if (btn(0, BTN_DOWN))  { bits -= 0.05f; if (bits < 1.0f)  bits = 1.0f;  dirty = 1; }
-    if (btn(0, BTN_RIGHT)) { rate += 0.10f; if (rate > 32.0f) rate = 32.0f; dirty = 1; }
-    if (btn(0, BTN_LEFT))  { rate -= 0.10f; if (rate < 1.0f)  rate = 1.0f;  dirty = 1; }
-    if (btnp(0, BTN_A))    { route = (route + 1) % 3; dirty = 1; }
-    if (tapp(0, 60, SCREEN_W, 70)) { route = (route + 1) % 3; dirty = 1; }
+    // route: tap the banner (its own rect) or press A
+    if (btnp(0, BTN_A))                  { route = (route + 1) % 3; dirty = 1; }
+    if (tapp(40, 60, SCREEN_W - 80, 28)) { route = (route + 1) % 3; dirty = 1; }
+
+    // XY pad — drag anywhere in the scope with ONE pointer (mouse or touch): X = rate, Y = bits.
+    // top = more bits (cleaner), bottom = 1 bit; left = slow resample, right = fast.
+    padding = 0;
+    int mx = -1, my = -1;
+    if (mouse_down(MOUSE_LEFT)) { mx = mouse_x(); my = mouse_y(); }
+    if (touch_count() > 0)      { mx = touch_x(0); my = touch_y(0); }   // touch wins if both
+    if (mx >= PAD_X && mx < PAD_X + PAD_W && my >= PAD_Y && my < PAD_Y + PAD_H) {
+        rate = RATE_MIN + (mx - PAD_X) / (float)PAD_W * (RATE_MAX - RATE_MIN);
+        bits = BITS_MIN + (1.0f - (my - PAD_Y) / (float)PAD_H) * (BITS_MAX - BITS_MIN);
+        padding = 1; dirty = 1;
+    }
+
+    // arrows still fine-tune
+    if (btn(0, BTN_UP))    { bits += 0.05f; dirty = 1; }
+    if (btn(0, BTN_DOWN))  { bits -= 0.05f; dirty = 1; }
+    if (btn(0, BTN_RIGHT)) { rate += 0.10f; dirty = 1; }
+    if (btn(0, BTN_LEFT))  { rate -= 0.10f; dirty = 1; }
+    if (bits < BITS_MIN) bits = BITS_MIN; if (bits > BITS_MAX) bits = BITS_MAX;
+    if (rate < RATE_MIN) rate = RATE_MIN; if (rate > RATE_MAX) rate = RATE_MAX;
+
     if (dirty) { apply(); dirty = 0; }
 
     static const int lead[8] = { 72, 76, 79, 76, 74, 77, 81, 77 };
@@ -54,22 +84,33 @@ void draw(void) {
     rect(40, 60, SCREEN_W - 80, 28, CLR_WHITE);
     print_centered(ROUTE_NAME[route], SCREEN_W / 2, 70, CLR_BLACK);
 
-    // quantization preview: a sine quantized to `bits` levels, sample-held every `rate`
-    int gx = 30, gw = SCREEN_W - 60, gy = 120, gh = 40;
-    rect(gx - 2, gy - gh / 2 - 2, gw + 4, gh + 4, CLR_DARKER_GREY);
+    // the XY pad doubles as the scope: a sine quantized to `bits` levels, sample-held every
+    // `rate` samples, drawn across the pad — and a crosshair marks the live (rate, bits) point.
+    rect(PAD_X - 1, PAD_Y - 1, PAD_W + 2, PAD_H + 2, padding ? CLR_WHITE : CLR_DARKER_GREY);
+    int midY = PAD_Y + PAD_H / 2;
     float levels = powf(2.0f, bits);
     float hold = 0; int cnt = 999;
-    for (int px = 0; px < gw; px++) {
-        float t = (px / (float)gw) * 12.566f;          // two cycles
+    for (int px = 0; px < PAD_W; px++) {
+        float t = (px / (float)PAD_W) * 12.566f;        // two cycles
         float s = sinf(t);
         if (++cnt >= (int)rate) { cnt = 0; hold = floorf(s * levels) / levels; }
-        pset(gx + px, gy - (int)(hold * (gh * 0.5f - 1.0f)), CLR_LIME_GREEN);
+        pset(PAD_X + px, midY - (int)(hold * (PAD_H * 0.42f)), CLR_LIME_GREEN);
     }
+    // crosshair at the current setting: X ← rate, Y ← bits (top = max bits)
+    int cx = PAD_X + (int)((rate - RATE_MIN) / (RATE_MAX - RATE_MIN) * PAD_W);
+    int cy = PAD_Y + (int)((1.0f - (bits - BITS_MIN) / (BITS_MAX - BITS_MIN)) * PAD_H);
+    int cc = padding ? CLR_ORANGE : CLR_MAUVE;
+    line(cx, PAD_Y, cx, PAD_Y + PAD_H, cc);
+    line(PAD_X, cy, PAD_X + PAD_W, cy, cc);
+    rectfill(cx - 2, cy - 2, 5, 5, CLR_ORANGE);
+    // axis hints
+    print("bits", PAD_X + 2, PAD_Y + 2, CLR_DARKER_GREY);
+    print_right("rate", PAD_X + PAD_W - 2, PAD_Y + PAD_H - 9, CLR_DARKER_GREY);
 
     char buf[32];
     snprintf(buf, sizeof buf, "bits %.1f", bits);
     print(buf, 30, 172, CLR_YELLOW);
     snprintf(buf, sizeof buf, "rate %.0fx", rate);
     print(buf, 150, 172, CLR_YELLOW);
-    print_centered("up/down bits   left/right rate   A route", SCREEN_W / 2, 190, CLR_MEDIUM_GREY);
+    print_centered("drag the pad: X rate / Y bits", SCREEN_W / 2, 190, CLR_MEDIUM_GREY);
 }
