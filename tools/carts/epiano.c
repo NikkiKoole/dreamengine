@@ -120,6 +120,11 @@ static int midi_of(int idx) {
 static float bark_drive(float bark) { return bark > 0.5f ? (bark - 0.5f) * 1.4f : 0.0f; }  // 0 → 0.7
 
 static void apply_slot(void) {
+    // damper RELEASE tracks the instrument: a clav has a tight damper (~140ms, like navkit's
+    // Clav-Funky 120ms), a Rhodes tine rings longer after you lift the key. (SR_INSTR only sets
+    // wave+ADSR, so re-calling instrument() here leaves the macros below untouched.)
+    int ty = (int)(val[SL_INST] * 2.999f); if (ty < 0) ty = 0; else if (ty > 2) ty = 2;
+    instrument(I_EP, INSTR_EPIANO, 1, 0, 7, ty == 2 ? 140 : ty == 1 ? 280 : 450);   // clav / wurli / rhodes
     instrument_harmonics(I_EP, val[SL_INST]);
     instrument_timbre(I_EP, val[SL_BRITE]);
     instrument_morph(I_EP, val[SL_BARK]);
@@ -201,7 +206,7 @@ static void set_preset(int p) {
 }
 
 void init(void) {
-    instrument(I_EP, INSTR_EPIANO, 1, 0, 7, 1500);   // long gate: never chop the ring
+    instrument(I_EP, INSTR_EPIANO, 1, 0, 7, 450);    // defines the slot; apply_slot() then sets release per type
     for (int b = 0; b < NKEY; b++) handle[b] = -1;
     for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     apply_slot(); apply_wah(); apply_trem();
