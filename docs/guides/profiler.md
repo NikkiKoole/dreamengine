@@ -185,6 +185,26 @@ build mode → **release**. Compiles with `-O2 -DDE_RELEASE`, which redefines
 - **§2 shows only `update()`/`draw()` work.** Audio runs on its own thread and the
   vsync frame-limiter isn't your code, so both are excluded — §2 is "where does my
   per-frame logic and drawing go," not a whole-process accounting.
+- **Two blind spots when measuring engine work in `loop_step` itself.** Both §1's
+  timer and the `sample` graph have edges that will fool a before/after if you're
+  optimizing the loop, not the cart:
+  - **The work-timer starts *after* the pre-draw engine work.** `prof_t0` is taken at
+    `studio.c:1161`, just before `update()` — so anything earlier in the frame (the
+    input snapshot, `fade` reset, and the `pget` canvas readback at `:1137`) is **not**
+    in `workMsAvg`/`workMsMax`. A change to that pre-draw region shows up as **zero**
+    in §1 even when it's real. (How the `pget`-snapshot gate was measured: a temporary
+    timer right around that block — the built-in numbers couldn't see it. The fix is to
+    bracket the specific code, not trust the headline.)
+  - **`frameMsAvg` is vsync-capped, so sub-millisecond costs vanish.** Native runs at
+    `SetTargetFPS(60)`, so the full-frame time sits at ~16.6ms regardless; any cost
+    smaller than the leftover vsync slack is absorbed into the wait and never moves the
+    number. To see a sub-ms cost you must either bracket it directly or run uncapped.
+- **`perf.json` measures *time*, not allocations.** There is no memory profiler here.
+  Per-frame **allocator churn** (alloc + free within a frame — e.g. the `pget`
+  snapshot's 256KB `Image` each frame) never grows RSS and never appears in any timing,
+  so a memory-size tool reads zero. Measure churn by **counting the allocating call** ×
+  its allocation size (the `pget` gate's win was found this way: snapshots-taken ×
+  `SCREEN_W·SCREEN_H·4`), or just compute it — it's usually deterministic.
 
 ---
 
