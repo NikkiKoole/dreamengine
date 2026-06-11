@@ -177,7 +177,7 @@ static int   ps = 3;     // pixel size — bigger = chunkier + faster (fewer eva
 static float t;          // shader time (seconds)
 static bool  frozen;
 
-void init(void) { cur = 0; ps = 3; t = 0; }
+void init(void) { enable_pget(true); cur = 0; ps = 3; t = 0; }
 
 void update(void) {
     mu = (float)mouse_x() / SCREEN_W;        // refresh the uniforms from the pointer

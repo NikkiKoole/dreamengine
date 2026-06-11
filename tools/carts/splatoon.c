@@ -72,7 +72,7 @@ static void reset(void) {
     pl[1] = (Player){ SCREEN_W - 70, 110, -1, 0, SCREEN_W - 70, 110 };
 }
 
-void init(void) { reset(); }
+void init(void) { enable_pget(true); reset(); }
 
 void update(void) {
     if (over) { if (btnp(0, BTN_A) || btnp(1, BTN_A)) reset(); return; }

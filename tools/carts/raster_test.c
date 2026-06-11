@@ -335,6 +335,8 @@ static void draw_equiv(void) {
     draw_equiv_hud();
 }
 
+void init(void) { enable_pget(true); }   // this cart reads the canvas back in its analyse pass
+
 void update(void) {
     if (btnp(0, BTN_A)) { show_outline = !show_outline; if (fs != FS_LIVE) fs = FS_SETUP; }
     if (btnp(0, BTN_B)) { show_dither  = !show_dither;  if (fs != FS_LIVE) fs = FS_SETUP; }

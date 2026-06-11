@@ -432,6 +432,7 @@ static void scene_table(void) {
 }
 
 void init(void) {
+    enable_pget(true);
     apply_palette(2);    // boot on full Resurrect 64...
     scene = 3;           // ...over the blended night — the verdict view
 }

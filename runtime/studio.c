@@ -396,6 +396,12 @@ static bool  clip_active = false;
 // the previous frame's canvas (consistent state, no mid-frame RT readback)
 static Image pget_snapshot     = (Image){0};
 static bool  pget_snapshot_valid = false;
+// opt-in (enable_pget): the canvas read-back is only worth its GPU stall + per-frame
+// 256KB Image churn for carts that actually read pixels. Off by default; a cart that
+// uses pget/pget_rgb/touching_color turns it on (once in init, or around a reading
+// mode). pget_warned makes the "forgot to enable" hint fire only once.
+static bool  pget_enabled = false;
+static bool  pget_warned  = false;
 
 static void init_touch_layout(void) {
     int W = SCREEN_W * SCALE, H = SCREEN_H * SCALE;
@@ -1127,13 +1133,21 @@ static void loop_step(void) {
     frame_count++;                        // advance even while paused so --frames and dump filenames still work
     if (pause_active) goto draw_window;   // skip update() + draw() — last frame stays frozen
 
-    // snapshot last frame's canvas so pget() has stable pixels to read
-    // (skipped on web — GPU readback is expensive and triggers GL errors on WebGL1)
+    // snapshot last frame's canvas so pget() has stable pixels to read — but only if a
+    // cart opted in via enable_pget(). Carts that never read pixels pay nothing.
+    if (pget_enabled) {
 #ifndef PLATFORM_WEB
-    if (pget_snapshot.data) UnloadImage(pget_snapshot);
-    pget_snapshot       = LoadImageFromTexture(canvas.texture);
-    pget_snapshot_valid = pget_snapshot.data != NULL;
+        if (pget_snapshot.data) UnloadImage(pget_snapshot);
+        pget_snapshot       = LoadImageFromTexture(canvas.texture);
+        pget_snapshot_valid = pget_snapshot.data != NULL;
+#else
+        // web: the read-back needs a WebGL2 raylib-web build (WebGL1's glReadPixels
+        // errors on the canvas FBO). Until that lands, pget stays unavailable on web.
+        pget_snapshot_valid = false;
 #endif
+    } else {
+        pget_snapshot_valid = false;
+    }
     // snapshot input edges before update so btnp() works
     for (int p = 0; p < 2; p++)
         for (int b = 0; b < BTN_COUNT; b++) {
@@ -2220,8 +2234,21 @@ void pset_rgb(int x, int y, int hex) {
     DrawPixel(x, y, (Color){ (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 });
 }
 
+// enable_pget(true) keeps the canvas read-back warm so pget/pget_rgb/touching_color can
+// read last frame's pixels; enable_pget(false) stops paying for it. Toggle once in init()
+// for a cart that always reads, or around a reading mode to pay only while it's active.
+void enable_pget(bool on) { pget_enabled = on; }
+
+static void pget_warn_once(void) {
+    if (pget_warned) return;
+    pget_warned = true;
+    fprintf(stderr, "[pget] read-back is OFF — pget/pget_rgb/touching_color return empty. "
+                    "Call enable_pget(true) in init() (or around your reading mode).\n");
+}
+
 int pget(int x, int y) {
-    if (!pget_snapshot_valid) return 0;
+    if (!pget_enabled)        { pget_warn_once(); return 0; }
+    if (!pget_snapshot_valid) return 0;   // enabled but no snapshot yet (first frame, or web)
     // pget(x,y) takes a WORLD coord and reads the screen pixel it landed on, so run it
     // through the camera matrix. exact under translate; approximate under zoom/rotation
     // (it samples the rendered canvas, which is the documented limitation).
@@ -2241,7 +2268,8 @@ int pget(int x, int y) {
 // pairs with pset_rgb for feedback shaders (read your own true-colour canvas, write it
 // back). returns -1 off-screen so a real black pixel (0x000000) isn't ambiguous.
 int pget_rgb(int x, int y) {
-    if (!pget_snapshot_valid) return -1;
+    if (!pget_enabled)        { pget_warn_once(); return -1; }
+    if (!pget_snapshot_valid) return -1;   // enabled but no snapshot yet (first frame, or web)
     Vector2 s = GetWorldToScreen2D((Vector2){ (float)x, (float)y }, cam);
     int rx = (int)s.x;
     int ry = (int)s.y;

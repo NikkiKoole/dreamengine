@@ -7,6 +7,7 @@ int y    = 92;
 int face = 1;           // 1 = right, -1 = left  (set by sgn())
 
 void init() {
+    enable_pget(true);
     // build a tile floor (draw something in sprite slot 1 to see it)
     for (int cx = 0; cx < MAP_W; cx++) mset(cx, 11, 1);
 }

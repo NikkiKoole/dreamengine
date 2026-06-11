@@ -124,6 +124,7 @@ static void reset_game(void) {
 }
 
 void init(void) {
+    enable_pget(true);
     // a soft pluck for spawns / saves
     instrument(5, INSTR_SINE, 4, 60, 3, 120);
     instrument(6, INSTR_TRI, 2, 40, 4, 90);

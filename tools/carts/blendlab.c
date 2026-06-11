@@ -244,6 +244,7 @@ static void draw_table(void) {
 // ---- loop ----------------------------------------------------------------------
 
 void init(void) {
+    enable_pget(true);
     build_tables();
 }
 

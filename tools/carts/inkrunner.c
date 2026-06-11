@@ -84,7 +84,7 @@ static void reset_game(void) {
     S->ping_t = 0;
 }
 
-void init(void) { reset_game(); }
+void init(void) { enable_pget(true); reset_game(); }
 
 // ── the heart of the cart: is THIS PIXEL something a foot can stand on? ─────
 static bool solid_px(int x, int y) {

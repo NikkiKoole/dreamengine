@@ -41,6 +41,7 @@ static void reset_game(void) {
 }
 
 void init(void) {
+    enable_pget(true);
     reset_game();
     // build the tile obstacles once: a plus and a wall column in the MAP
     mset(6, 5, 1); mset(7, 5, 1); mset(8, 5, 1); mset(7, 4, 1); mset(7, 6, 1);
