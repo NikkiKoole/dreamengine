@@ -174,6 +174,27 @@ function finishCart(name) {
   return true
 }
 
+// ── reshell: re-apply the worklet loader (runtime/web_shell_worklet.html) to every
+// already-built worklet cart in site/ WITHOUT recompiling the wasm. Use after editing the
+// shell (e.g. the audio-backend chooser / coi gate) to push it to all published carts.
+// Reuses finishCart() so each cart keeps its own title/manifest/icon. A worklet cart is
+// any site/<name>/ that ships a worklet.js (the chooser's dedicated-thread build).
+function reshellWorkletCarts() {
+  const dirs = fs.readdirSync(SITE_DIR, { withFileTypes: true })
+    .filter(d => d.isDirectory() && fs.existsSync(path.join(SITE_DIR, d.name, 'worklet.js')))
+    .map(d => d.name)
+  let n = 0
+  for (const name of dirs) {
+    const outDir = path.join(SITE_DIR, name)
+    fs.copyFileSync(path.join(RUNTIME, 'web_shell_worklet.html'), path.join(outDir, 'index.html'))
+    fs.copyFileSync(path.join(RUNTIME, 'coi-serviceworker.js'), path.join(outDir, 'coi-serviceworker.js'))
+    finishCart(name)   // re-injects the cart's <title>/manifest/icon into the fresh shell
+    n++
+  }
+  console.log(`✓ reshelled ${n} worklet cart(s) from runtime/web_shell_worklet.html`)
+  return n
+}
+
 // ── gallery page ──────────────────────────────────────────────
 function cartIndex() {
   const raw = JSON.parse(fs.readFileSync(INDEX_JSON, 'utf8'))
@@ -240,7 +261,9 @@ function buildGallery() {
   const entries = []
   for (const name of built) {
     const meta = cartMeta(name) || { title: name, description: '' }
-    entries.push({ name, added: dateAdded(name), tier: mobileTier(name, meta), ...meta })
+    // dual-backend = ships a worklet.js alongside the plain build → responds to the Audio toggle
+    const dual = fs.existsSync(path.join(SITE_DIR, name, 'worklet.js'))
+    entries.push({ name, added: dateAdded(name), tier: mobileTier(name, meta), dual, ...meta })
   }
   // server-side default order = newest first (the client re-sorts live)
   entries.sort((a, b) => (b.added || '').localeCompare(a.added || '') || a.title.localeCompare(b.title))
@@ -254,7 +277,7 @@ function buildGallery() {
     <a class="card" href="${e.name}/" data-title="${esc(e.title.toLowerCase())}" data-search="${esc(hay)}" data-added="${e.added}" data-tier="${TIER_RANK[e.tier] ?? 9}">
       <img src="${e.name}/cart.png" alt="${esc(e.title)}" loading="lazy">
       <div class="body">
-        <h2>${esc(e.title)}${e.genre ? ` <span class="tag">${esc(e.genre)}</span>` : ''}</h2>
+        <h2>${esc(e.title)}${e.genre ? ` <span class="tag">${esc(e.genre)}</span>` : ''}${e.dual ? ` <span class="dual" title="Ships two audio backends — a dedicated-thread AudioWorklet build and a plain ScriptProcessor build. Responds to the Audio toggle above.">⚡2×audio</span>` : ''}</h2>
         ${badge ? `<div class="badge ${badge.cls}">${badge.text}</div>` : ''}
         <p>${esc(e.description)}</p>
         ${e.added ? `<div class="added">added ${e.added}</div>` : ''}
@@ -300,6 +323,7 @@ function buildGallery() {
   .card img { width: 100%; aspect-ratio: 8/5; object-fit: cover; image-rendering: pixelated; display: block; }
   .body { padding: 10px 12px 12px; }
   h2 { font-size: 14px; } .tag { color: #ffa300; font-size: 11px; font-weight: normal; }
+  .dual { color: var(--link); font-size: 10px; font-weight: normal; white-space: nowrap; }
   .badge { font-size: 11px; margin-top: 4px; }
   .b-ready { color: #00e436; } .b-mostly { color: #ffa300; }
   .b-rough { color: #ff6c24; } .b-desktop { color: var(--dim); }
@@ -330,6 +354,8 @@ function buildGallery() {
   <button id="desc-btn">desc: 3 lines</button>
   <span class="sep">·</span>
   <button id="theme-btn">☀ day</button>
+  <span class="sep">·</span>
+  <button id="audio-btn" title="Audio backend (applies to every cart you open). Auto = dedicated audio thread on desktop/Android, plain ScriptProcessor on iOS. If a cart is silent, switch to Plain; to try the dedicated thread anyway, pick Worklet.">audio: auto</button>
 </div>
 <div class="grid">
 ${cards}
@@ -399,6 +425,18 @@ ${cards}
     try { localStorage.setItem('de-theme', t) } catch (e) {}
   }
 
+  // audio backend pref (key 'de:audio' — the SAME key every cart's loader shell reads).
+  // The gallery has no audio itself; this just stores the choice so the next cart you open
+  // honors it. auto = iOS plain / desktop worklet; worklet = force it; plain = force fallback.
+  var AUDIO_ORDER = ['auto', 'worklet', 'plain']
+  var AUDIO_LABEL = { auto: 'audio: auto', worklet: 'audio: worklet', plain: 'audio: plain' }
+  function applyAudio(m) {
+    if (AUDIO_ORDER.indexOf(m) === -1) m = 'auto'
+    document.getElementById('audio-btn').textContent = AUDIO_LABEL[m]
+    document.getElementById('audio-btn').classList.toggle('on', m !== 'auto')
+    try { localStorage.setItem('de:audio', m) } catch (e) {}
+  }
+
   document.querySelectorAll('[data-sort]').forEach(function (b) {
     b.addEventListener('click', function () { applySort(b.dataset.sort) })
   })
@@ -409,14 +447,20 @@ ${cards}
   document.getElementById('theme-btn').addEventListener('click', function () {
     applyTheme(document.body.classList.contains('day') ? 'night' : 'day')
   })
+  document.getElementById('audio-btn').addEventListener('click', function () {
+    var cur = 'auto'; try { cur = localStorage.getItem('de:audio') || 'auto' } catch (e) {}
+    if (AUDIO_ORDER.indexOf(cur) === -1) cur = 'auto'
+    applyAudio(AUDIO_ORDER[(AUDIO_ORDER.indexOf(cur) + 1) % AUDIO_ORDER.length])
+  })
 
-  var s = 'added', d = 'clamp', t = 'night'
+  var s = 'added', d = 'clamp', t = 'night', a = 'auto'
   try {
     s = localStorage.getItem('de-sort')  || s
     d = localStorage.getItem('de-desc')  || d
     t = localStorage.getItem('de-theme') || t
+    a = localStorage.getItem('de:audio') || a
   } catch (e) {}
-  applySort(s); applyDesc(d); applyTheme(t)
+  applySort(s); applyDesc(d); applyTheme(t); applyAudio(a)
 })()
 </script>
 </body>
@@ -431,15 +475,18 @@ const force   = argv.includes('--force')
 const worklet = argv.includes('--worklet')   // AudioWorklet backend build → site/<name>-worklet/
 const names = argv.filter(a => !a.startsWith('--'))
 
-if (!argv.includes('--gallery') && names.length === 0) {
+if (!argv.includes('--gallery') && !argv.includes('--reshell') && names.length === 0) {
   console.log('usage: node tools/build-site.js <name> [<name>...] [--force]')
   console.log('       node tools/build-site.js --gallery')
+  console.log('       node tools/build-site.js --reshell          (re-apply the worklet loader shell to all built worklet carts, no recompile)')
   console.log('       node tools/build-site.js --finish <name>   (post-process an already-compiled site/<name>/)')
   process.exit(1)
 }
 
 let ok = true
-if (argv.includes('--finish')) {
+if (argv.includes('--reshell')) {
+  reshellWorkletCarts()
+} else if (argv.includes('--finish')) {
   for (const name of names) ok = finishCart(name) && ok
 } else {
   for (const name of names) ok = buildCart(name, { force, worklet }) && ok

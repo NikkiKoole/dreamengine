@@ -241,3 +241,45 @@ Staged so each step is verifiable on its own; **Stage 0 is the real risk to reti
 Risks to watch: Stage 0 (graphics+threads coexistence); artifact-size/rebuild-time bump;
 iOS Safari worklet quirks + the audio-unlock gesture; and keeping the ScriptProcessor
 fallback path compiling alongside the worklet path.
+
+## iOS findings + the audio-backend preference (2026-06-11)
+
+The Stage-5 rollout made **every chooser cart go silent on an iPhone (iOS 15.4.1)**. On-device
+testing (local HTTPS server with real COOP/COEP headers, so isolation came from headers, not
+the SW — see the disposable `build/.localtest/` rig) pinned down two distinct iOS bugs and the
+device split:
+
+- **The worklet is silent / won't start on older iOS.** The bare AudioWorklet sine + the
+  Stage-0 `combo` spike (recovered from git) **ran but produced no sound** on iOS 15.4.1
+  (context resumed, node connected, `state:"running"` — just silent). On a modern iPad
+  (iPadOS 26.5) the *same* worklet build **plays**. So it's a version split, not "iOS can't."
+  Matches public reports: silent-audio starts at *WebKit 15.4+*, and AudioWorklet-no-sound
+  reports persist through iOS 18 (WebKit #237144: a SharedArrayBuffer posted to an
+  AudioWorkletProcessor isn't actually shared). **No clean fixed-in version exists** — so a
+  precise version gate is unsafe.
+- **A service worker *controlling the page* mutes Web Audio on older iOS.** Even the plain
+  ScriptProcessor build went silent on the iPhone whenever the coi service worker controlled
+  the page; **unregistering the SW + reload restored sound** (proven live). `tb303`, which
+  shipped no SW, always played. So on old iOS the coi SW is doubly bad: it can't deliver a
+  working worklet *and* it kills the fallback.
+
+**Decision — a 3-way preference in `web_shell_worklet.html`, resolved before coi loads:**
+`?audio=` (persists to `localStorage['de:audio']`) → `localStorage['de:audio']` → `'auto'`.
+
+| pref | behaviour |
+|---|---|
+| `auto` (default) | worklet everywhere **except iOS < 16** (UA `iPhone OS`/`CPU OS` major < 16 → plain). iPadOS 13+ poses as "Macintosh" → treated modern → worklet. |
+| `worklet` | force-register the SW (→ isolation) + load `worklet.js` everywhere |
+| `plain` | force `plain.js` everywhere, no SW |
+
+Default is **worklet on modern iOS** (what most users have) with an auto-fallback to plain only
+on genuinely-old iOS, so old-iOS visitors get *sound*, not silence, without touching anything.
+The **gallery** (`build-site.js`) exposes the same choice as an `audio: auto/worklet/plain`
+toggle writing the same `localStorage` key (shared across the `/dreamengine/` origin), and marks
+dual-backend carts with a **⚡2×audio** badge. **Gotcha baked into the shell:** whenever the
+resolved pref wants *no* SW but one is registered, it must **unregister + reload once** — else
+`plain` stays silent right after a `worklet` attempt (this also subsumes the old not-isolated
+self-heal). Android/desktop are unaffected (worklet, the well-supported Chromium path).
+
+Propagating a shell edit to all published carts without recompiling: `node tools/build-site.js
+--reshell` (re-applies `web_shell_worklet.html` + re-runs `finishCart` per cart to keep titles).

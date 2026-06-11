@@ -7,15 +7,54 @@
        docs/design/audio-threading.md Stage 3/4. self-heal + coi-serviceworker FIRST so the
        page becomes cross-origin isolated (shared memory) before the chooser runs. -->
   <script>
-    /* self-heal: only when broken (not isolated AND a stale SW is registered) wipe it +
-       reload once, so coi gets a fresh start; never touches the happy path / first load. */
-    (function(){ if(window.crossOriginIsolated)return; if(sessionStorage.getItem('coiSelfHeal'))return;
-      if(!navigator.serviceWorker)return;
-      navigator.serviceWorker.getRegistrations().then(function(rs){ if(!rs.length)return;
-        sessionStorage.setItem('coiSelfHeal','1');
-        Promise.all(rs.map(function(r){return r.unregister();}))
-          .then(function(){return window.caches?caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x);}));}):0;})
-          .then(function(){location.reload();}); }); })();
+    /* ───────── audio backend preference (must run BEFORE coi-serviceworker.js) ─────────
+       The worklet build (dedicated audio thread) is the win on desktop/Android, but on iOS
+       Safari it is SILENT or won't start across many versions (verified 2026-06-11: iPhone
+       iOS 15.4.1 runs-but-silent; even iOS 18 has open AudioWorklet-no-sound reports; WebKit
+       #237144 = a SharedArrayBuffer isn't actually shared with the worklet). The plain
+       (ScriptProcessor) build sounds identical — only looser timing — and ALWAYS plays on
+       iOS. So 'auto' tries the worklet everywhere EXCEPT genuinely-old iOS (< 16 — e.g. the
+       iOS 15.4.1 iPhone this was found on, where the worklet is silent and a controlling SW
+       also mutes the plain path). Modern iOS/iPadOS get the worklet by default; old iOS
+       auto-falls-back to plain (sound, no toggle needed). Override via toggle/param:
+         pref = ?audio= (persisted to localStorage) → localStorage['de:audio'] → 'auto'
+           auto    → worklet everywhere, except iOS < 16 → plain
+           worklet → force isolation (register SW) + worklet everywhere
+           plain   → force the plain build everywhere (no SW)
+       Set site-wide from the gallery's Audio toggle, or per-link with ?audio=worklet.
+       Gotcha: the coi service worker enables isolation, but a SW *controlling the page* also
+       mutes Web Audio on older iOS — so whenever the resolved pref wants NO service worker we
+       must actively unregister any stale SW and reload, or 'plain' stays silent right after a
+       'worklet' attempt (this also subsumes the old not-isolated self-heal). */
+    (function(){
+      var sp; try { sp = new URLSearchParams(location.search); } catch(e) {}
+      var qp = sp && sp.get('audio');
+      if (qp === 'worklet' || qp === 'plain' || qp === 'auto') { try { localStorage.setItem('de:audio', qp); } catch(e){} }
+      var pref = qp;
+      if (!pref) { try { pref = localStorage.getItem('de:audio'); } catch(e){} }
+      if (pref !== 'worklet' && pref !== 'plain') pref = 'auto';
+      window.deAudioPref = pref;
+
+      // iPadOS 13+ hides as "Macintosh" (no OS version) → no match → treated as modern → worklet.
+      var m = navigator.userAgent.match(/(?:iPhone OS|CPU OS) (\d+)_/);
+      var oldIOS = !!m && parseInt(m[1], 10) < 16;   // only genuinely-old iOS falls back by default
+      var wantSW = pref === 'plain' ? false : pref === 'worklet' ? true : !oldIOS;
+      window.coi = { shouldRegister: function(){ return wantSW; } };  // coi reads this synchronously
+
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.getRegistrations().then(function(rs){
+          if (!wantSW && rs.length) {                       // SW present but unwanted → it can mute audio
+            if (sessionStorage.getItem('deAudioHeal')) return;  // already healing — don't loop
+            sessionStorage.setItem('deAudioHeal','1');
+            Promise.all(rs.map(function(r){return r.unregister();}))
+              .then(function(){return window.caches?caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x);}));}):0;})
+              .then(function(){location.reload();});
+          } else {
+            sessionStorage.removeItem('deAudioHeal');        // clean state → re-arm for the next switch
+          }
+        });
+      }
+    })();
   </script>
   <script src="coi-serviceworker.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -126,12 +165,14 @@
   <script>
     // THE CHOOSER: load the AudioWorklet build when the page is cross-origin isolated
     // (shared memory available), else the ScriptProcessor fallback. Both are plain
-    // emscripten outputs (no per-build html). See docs/design/audio-threading.md.
+    // emscripten outputs (no per-build html). pref==='plain' forces the fallback even when
+    // isolated (the debug / iOS-default path). See docs/design/audio-threading.md.
     (function () {
       var isolated = (window.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
+      var useWorklet = (window.deAudioPref === 'plain') ? false : isolated;
       var s = document.createElement('script');
       s.async = true;
-      s.src = isolated ? 'worklet.js' : 'plain.js';
+      s.src = useWorklet ? 'worklet.js' : 'plain.js';
       document.body.appendChild(s);
     })();
   </script>
