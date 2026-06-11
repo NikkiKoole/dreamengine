@@ -110,6 +110,18 @@ ships both a worklet build and a ScriptProcessor fallback + a loader that auto-p
 browser. Opt a *non*-instrument cart in with `worklet: true` in its `.cart.js`, or opt out with
 `worklet: false`. Full rationale + the build: [`design/audio-threading.md`](../design/audio-threading.md).
 
+**Computer-keyboard / keybed layout — ALWAYS the GarageBand map (cross-cutting):** any
+instrument a player types notes on defaults to the **GarageBand musical-typing** layout, so
+the muscle memory carries between carts. Home row `A S D F G H J K L ; '` = the **white** keys
+(`A` = C), the QWERTY row above `W E _ T Y U _ O P` = the **blacks** that sit over them — i.e.
+the key's index in the string `A W S E D F T G Y H U J K O L P ; '` *is* its semitone (18
+semis, 1.5 octaves). **`Z` / `X` shift the octave down / up.** Copy the `KBMAP[]` + `keyp/keyr`
+loop verbatim from `mt70`/`moog`/`mellotron`/`martenot` — don't invent a per-cart layout.
+And remember **the desktop mouse is already a synthetic touch** (`studio.c` mouse-as-touch),
+so a `tap()`/`tapp()` button is clickable for free — do **not** *also* handle it via
+`mouse_pressed()`, or every edge double-fires (an even number of toggles reads as a dead
+button — it bit `martenot`).
+
 ---
 
 ## Playable synths
@@ -158,6 +170,8 @@ the held-note API.
 | **glass harmonica** (`glassharmonica`) | Ben Franklin's rubbed-wine-glass contraption. | `note_on`, `INSTR_SINE` |
 | **hurdy-gurdy** (`hurdygurdy`) | The cranked drone-fiddle — built around a crank mechanic nothing else uses. | `note_on`, `INSTR_SAW`/`NOISE` |
 | **musical saw** (`musicalsaw`) | The theremin's spooky cousin — the one cart that drives `note_lfo` LIVE. | `note_on`, `INSTR_SINE` |
+| **upright bass** (`upright`) | The jazz double bass played on its FINGERBOARD — four strings, press to sound, **slide left/right to walk the frets** (each semitone re-articulates — clean both ways), **pull (either way) to bend up** continuously (+2 semis, the string deflects), or start a drag in the gap and **sweep through a string to PICK it** (à la `pluck.c` — press on a string grabs/frets, press in the gap picks), lift to damp; mono / last-note-wins like a walking line. The axis split matches the engine: a waveguide string bends UP but not below its pitch (verified), so down-moves are the fret walk, up-pulls are the smooth bend (and a bent note can be released to fall back to the fret). The right hand is a PIZZ / ARCO / SLAP switch, and pizz + arco are the SAME string (`INSTR_BOWED` + `eng_tune(slot,0,1)` plucks what the bow would draw — the only cart using the engine's built-in pizz mode). And the WOOD around the fingerboard is percussion — slap the belly for a low boom, knock the neck for a drier tick (`INSTR_MEMBRANE`, location-mapped). Mouse/tap or GarageBand keyboard + Z/X octave. | `note_on`/`note_pitch`/`note_glide`, `INSTR_BOWED` (`eng_tune` pizz), `INSTR_MEMBRANE` body, `INSTR_NOISE` slap |
+| **ondes martenot** (`martenot`) | The 1928 ribbon synth — a two-hand upgrade to the theremin. ONE persistent voice; the left **touche d'intensité** lever is the gate, driving `note_vol` *and* `note_cutoff` together (no press = silence, harder = louder + brighter). Pitch from a continuous **ruban** or a snapped **clavier**, aligned on one axis. The COMBINABLE timbre stops (O/C/G/N) are summed live into a single drawn cycle via `wave_set` (the drawbar trick — the only held-notes cart that rebuilds its own wave from toggles), + a souffle noise layer; the four **diffuseurs** are reverb/chorus sends (Métallique gong, Palme string-halo). The one cart whose dynamics live entirely in a separate lever, not the pitch hand. | `note_on`/`note_pitch`/`note_vol`/`note_cutoff`/`note_lfo`, `wave_set` (`INSTR_USER0`), `instrument_reverb`/`_chorus` |
 
 ## Single-engine showcases
 
@@ -252,6 +266,9 @@ overlay to swap a chair's instrument mid-song. Candidate swaps:
    API for sustained voices. Check `runtime/*.h` first (CLAUDE.md → runtime tree).
 3. **Pick the right engine** (`INSTR_*` table above) rather than approximating a timbre
    with raw waves if a modeled engine fits.
+3b. **Typing notes? Use the GarageBand keyboard map + `Z`/`X` octave** — never a bespoke
+   layout (see the cross-cutting note above; copy `KBMAP[]` from `mt70`/`martenot`). And don't
+   double-handle tap buttons with `mouse_pressed()` — the mouse is already a synthetic touch.
 4. **If it's a station**, read [`game-music.md`](game-music.md) for the chord/clock
    brain and pin the seed so THE BAND swaps stay byte-identical.
 5. **Follow the standard cart-add flow** (build → bake screenshot → register in

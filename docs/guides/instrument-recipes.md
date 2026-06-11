@@ -192,6 +192,7 @@ tuned↔inharmonic / strike-position center↔edge / pitch-bend flat↔glissando
 | membrane/bongo | tabla.c | h0.72 t0.65 m0.10 · ring~600ms | Bright inharmonic bongo, edge strike, flat pitch, snappy. |
 | membrane/djembe | tabla.c | h0.85 t0.55 m0.22 · ring~900ms | Inharmonic djembe, mid-edge slap, moderate bend, medium thud. |
 | membrane/tom | tabla.c | h0.62 t0.18 m0.55 · ring~1.5s | Center-strike boom, strong pitch drop, long resonant ring. |
+| membrane/upright-body | upright.c | A0 D170 S0 R60 · h0.45 m0 · LP2200 · belly t0.22 @ MIDI31–45 / neck t0.68 @ MIDI48–60 · + a NOISE knuckle | The bass body as percussion — slap the belly for a low center thump, knock the neck for a drier edge tick. Location maps pitch + strike position; same woody character. |
 
 > **Cross-ref:** addis is the first radio station to use `INSTR_MEMBRANE` for real modeled
 > drums — its `membrane/kebero`/`conga`/`bongo` and gamelan's `membrane/kendang` are
@@ -255,6 +256,8 @@ Schelleng bowing wedge (position/pressure/speed).
 | bowed/tasto | bowed.c | h0.90 t0.18 m0.45 | Far over the fingerboard, feather pressure, slow bow — flute-like whisper. |
 | bowed/tremolo | bowed.c | h0.40 t0.35 m0.85 | Fast hard bow speed, moderate position/pressure — driving tremolo. |
 | bowed/pizzicato | bowed.c | A1 D0 S7 R300 (pizz, friction off) · h0.30 t0.42 | Plucked string, same waveguide, pluck seeded — warm finger pluck. |
+| bowed/upright-pizz | upright.c | A4 D0 S7 R90–790 (RING) · eng_tune(0,1) pizz · h0.30 t0.30 m0.45 · LP 500–2700 (TONE) · low register E1–G3 | Jazz double-bass pizzicato — woody finger pluck that rings and thumps. The RING knob sets the release/damp tail. |
+| bowed/upright-arco | upright.c | A110 D0 S7 R260 · bowed (friction on) · h0.40 t0.45 m0.50 · vibrato LFO_PITCH 5/0.12 · LP ~TONE+400 | The same string drawn with the bow — slow speak, sustains, left-hand vibrato. |
 
 > **Cross-ref:** **`mariachi.c` is the FIRST radio station to use `INSTR_BOWED`** — its violin
 > section (`bowed/mariachi-violin`, two desks panned wide + a portamento scoop). tango's violin
@@ -558,6 +561,7 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 - **reed.c** → reed/clarinet · /sop_sax · /alto_sax · /tenor_sax · /oboe
 - **pipe.c** → pipe/flute · /recorder · /pan-pipe · /piccolo · /breathy
 - **bowed.c** → bowed/violin · /viola · /cello · /ponticello · /tasto · /tremolo · /pizzicato
+- **upright.c** → bowed/upright-pizz · bowed/upright-arco · membrane/upright-body (jazz double bass — pizz + arco are the SAME INSTR_BOWED string via eng_tune(0,1/0); left/right walks frets (re-articulate), pull-up = continuous bend — a waveguide bends up but not down; the wood body is MEMBRANE percussion)
 - **piano.c** → piano/grand · /bright · /harpsichord · /dulcimer · /clavichord · /celesta
 - **voxlab.c** → voice/gen · /mouth · /creat · /sing
 - **mt70.c** → sine/piano · /organ · /flute · /vibes · /chime · /bells · /cosmic · /jzorg · /celsta · /banjo · mallet/struck
@@ -598,6 +602,7 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 - **glassharmonica.c** → sine/glass
 - **hurdygurdy** → saw/drone-tonic · saw/drone-fifth · saw/melody-vibrato
 - **musicalsaw** → sine/bow
+- **martenot.c** → no fixed recipes (one persistent `INSTR_USER0` voice; the timbre is rebuilt live with `wave_set` by summing the lit O/C/G/N stops — a drawbar, not a patch; the touche lever drives `note_vol`+`note_cutoff`, diffuseurs are `instrument_reverb`/`_chorus` sends. + a souffle `INSTR_NOISE` bed)
 - **fartsynth** → fart/rumbler · /squeaker · /trumpet · /wetone · /silentbutdeadly · /machinegun
 - **multitouch.c** → no fixed recipes (default-MALLET `hit()` per touch; no `instrument()`)
 
