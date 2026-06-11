@@ -69,6 +69,7 @@ typedef struct {
     float flw_amount;               // 0 = off; Hz for cutoff, 0..1 for volume(duck), semitones for pitch
     float harmonics, timbre, morph; // engine macros 0..1 (INSTR_PLUCK+) — meaning is per-engine; default 0.5
     float drive;                    // post-filter saturation 0..1; 0 = clean bypass (default — old carts unchanged)
+    int   drive_mode;               // waveshaper flavour DRIVE_SOFT(0)/HARD/FOLD/ASYM; 0 = tanh (default — old carts unchanged)
     float echo;                     // send to THE echo bus 0..1; 0 = dry (default — old carts unchanged)
     float reverb;                   // send to THE reverb bus 0..1; 0 = dry (default — old carts unchanged)
     int   fx_bus;                   // insert bus for chorus/flanger: 0 = master (default), 1.. = a private aux bus (instrument_chorus/flanger)
@@ -120,6 +121,7 @@ typedef struct {
     float  harm, timb, mor;
     float  harm_target, timb_target, mor_target;
     float  drv, drv_target;        // post-filter drive (current + slew target, same machinery)
+    int    drv_mode;               // waveshaper flavour (DRIVE_*), copied from the instrument at note-on
     float  drv_dc_x1, drv_dc_y1;   // DC blocker on the drive output (tanh of an asymmetric wave = DC = a thump)
     float  eko, eko_target;        // echo-bus send (current + slew target, same machinery — note_echo)
     float  rvb, rvb_target;        // reverb-bus send (current + slew target, same machinery — note_reverb)
@@ -158,6 +160,8 @@ typedef struct {
     float  ep_ph[12], ep_amp[12], ep_dec[12], ep_ratio[12]; // per-mode phase / amp / decay-frac / ratio
     float  ep_dc_prev, ep_dc_state;  // DC blocker taps (the sum^2 nonlinearity injects DC)
     float  ep_freqnorm;              // register position 0..1 (upper modes + bark fade out high up)
+    int    ep_click;                 // tangent-click burst: samples remaining (the percussive chink)
+    float  ep_click_amp;             // its peak amp (per-type base × strike velocity × hammer hardness)
     int    ep_type;                  // 0 Rhodes / 1 Wurli / 2 Clav (from harmonics at note-on)
     bool   ep_on;                    // struck this note — guards an engine id without a note-on init
     // membrane-drum state (INSTR_MEMBRANE): six decaying sine modes at circular-membrane
@@ -791,6 +795,8 @@ typedef enum {
     SR_INSTR_TAPE   = 48,   // a=slot, b=wow*1000, c=flutter*1000, e0=sat*1000 — tape on one instrument (auto-bus)
     SR_WAH          = 49,   // a=sens*1000, b=res*1000, c=mix*1000 — THE master auto-wah (bus 0)
     SR_INSTR_WAH    = 50,   // a=slot, b=sens*1000, c=res*1000, e0=mix*1000 — auto-wah on one instrument (auto-bus)
+    SR_INSTR_DRIVE_MODE = 51,  // a=slot, b=mode (DRIVE_*) — set a slot's drive waveshaper
+    SR_NOTE_DRIVE_MODE  = 52,  // a=mode (DRIVE_*), e0/e1=handle — live waveshaper switch on a held note
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -1334,7 +1340,7 @@ static void sound_epiano_start(Voice *v) {
         { .60f, .55f, .60f, .35f, .25f, .12f, .18f, .22f, .10f, .08f, .06f, .10f },   // Wurli bright: octaves + upper odds for the bark
         { .60f, .55f, .50f, .20f, .30f, .10f, 0,0,0,0,0,0 },
     };
-    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.65f };   // base sustain s (Wurli/Clav; Rhodes uses the tuning split)
+    static const float BASE_DEC[3] = { 3.5f, 1.8f, 0.90f };   // base sustain s (Wurli/Clav; Rhodes uses the tuning split). Clav 0.90 ≈ navkit epDecay 1.0
     int ty = (int)(v->harm * 2.999f); if (ty < 0) ty = 0; else if (ty > 2) ty = 2;
     v->ep_type = ty;
     float pp  = v->timb;                                     // pickup position / brightness
@@ -1369,6 +1375,13 @@ static void sound_epiano_start(Voice *v) {
         v->ep_dec[i] = dt / dec;                             // per-sample decay fraction
     }
     v->ep_dc_prev = v->ep_dc_state = 0.0f;
+    // the TANGENT CLICK — the key driving the string against the fret, the percussive chink that
+    // IS the funky clav's attack. Loudest on the clav (a hard metal tangent), present-but-subtle
+    // on Rhodes/Wurli hammers. Scales with strike velocity AND hammer hardness (timbre = pp).
+    // navkit Clav-Funky: clickLevel 0.35 @ 2ms + velToClick (instrument_presets.h, preset 180).
+    static const float CLICK[3] = { 0.10f, 0.13f, 0.42f };   // Rhodes / Wurli / Clav peak
+    v->ep_click     = (int)(0.002f * (float)SOUND_SAMPLE_RATE);          // 2ms burst
+    v->ep_click_amp = CLICK[ty] * (0.45f + 0.55f * vel) * (0.6f + 0.4f * pp);
     v->ep_on = true;
 }
 
@@ -1402,10 +1415,11 @@ static inline float sound_epiano_sample(Voice *v, float pitch_mul) {
         out = sum + k3 * sum * s2 + k5 * sum * s2 * s2;
         out = tanhf(out);
     } else if (v->ep_type == 2) {                     // Clav: mixed even+odd, harder clip
-        float k2 = 0.30f + bark * 0.5f;
-        float k3 = 0.40f + bark * 0.6f;
+        float vb = 0.6f + 0.4f * v->vol;              // velToDrive — dig in → more honk (navkit velToDrive 1.0)
+        float k2 = (0.30f + bark * 0.5f) * vb;
+        float k3 = (0.40f + bark * 0.6f) * vb;
         out = sum + k2 * s2 + k3 * sum * s2;
-        out = tanhf(out * 1.2f);
+        out = tanhf(out * (1.2f + 0.4f * v->vol));    // harder strike clips harder
     } else {                                          // Rhodes: even harmonics, asymmetric clip.
         // The pickup nonlinearity is the REAL Rhodes harmonic source (Shear §2.2.1, Faraday's law
         // + non-uniform field), so it has an ALWAYS-ON floor (0.15) — even soft notes have grit —
@@ -1417,6 +1431,12 @@ static inline float sound_epiano_sample(Voice *v, float pitch_mul) {
         out = sum + k * s2 + k2 * sum * s2;
         float drive = 1.0f + rbark * 0.4f;
         out = (out >= 0.0f) ? tanhf(out * drive) : tanhf(out * drive * 0.85f) * 0.9f;
+    }
+    if (v->ep_click > 0) {                            // the tangent click burst (~2ms, linear decay)
+        v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
+        float n = ((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f;
+        out += n * v->ep_click_amp * ((float)v->ep_click * dt / 0.002f);
+        v->ep_click--;
     }
     float dcin = out;                                 // DC blocker (pickup AC coupling, ~7Hz)
     out = dcin - v->ep_dc_prev + 0.995f * v->ep_dc_state;
@@ -2871,6 +2891,7 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->mor  = v->mor_target  = ins->morph;
     if (v->wave == INSTR_VOICE) vox_apply_macros(v);   // seed VOWEL/SIZE/EFFORT from the macros
     v->drv  = v->drv_target  = ins->drive;
+    v->drv_mode = ins->drive_mode;
     v->eng_p[0] = ins->eng_p[0];
     v->eng_p[1] = ins->eng_p[1];
     v->drv_dc_x1 = v->drv_dc_y1 = 0.0f;

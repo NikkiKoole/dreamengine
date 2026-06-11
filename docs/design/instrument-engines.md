@@ -1610,8 +1610,15 @@ the canonical home — the §8.8.5 post-ship notes point here.)*
   (a fast per-note filter-env snap, ~100ms — genuinely per-note and shippable). **RESOLVED
   2026-06-11: epiano's TOUCH flavour migrated onto the bus** — it now calls the shipped
   `instrument_wah()` (the real "woah-woah", an envelope follower on the summed bus signal), no
-  longer a per-voice `instrument_follow`. So the only per-voice wah left is the LFO AUTO + the clav
-  ENV quack, both deliberate recipes; the parked stand-in part of this bullet is closed.
+  longer a per-voice `instrument_follow`. **Refined same day into the navkit "clav THROUGH a wah"
+  STACK:** TOUCH now layers the per-note ENV quack (the voice's own bite) UNDER the bus follower —
+  the exact pairing navkit's Clav-Funky uses (built-in filter-env + master SVF wah), and the
+  **clav preset boots into it** (the super-70s funk sound the A/B against navkit was missing). So
+  the only standalone per-voice wah left is the LFO AUTO; the parked stand-in part is closed.
+  *(Same A/B pass also added the engine-side funk the clav lacked vs navkit — a velocity+hardness
+  tangent CLICK on attack and a velocity→drive link on the clav nonlinearity, both in `sound.h`
+  `sound_epiano_*`; plus filter key-tracking in `epiano.c`. navkit ref: instrument_presets.h
+  preset 180 "Clav Funky", clickLevel 0.35 / velToDrive 1.0 / filterKeyTrack 0.6.)*
 - **The envelope follower (`instrument_follow` / `note_follow`)** — the 3rd modulation source
   (tracks a voice's own amplitude → cutoff/vol/pitch). Shipped + wired + tripwired, but its real
   home is **bus-level** (it should track the *whole performance*, not one voice), and it has **no

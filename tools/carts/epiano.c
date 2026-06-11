@@ -13,17 +13,25 @@
 //   off
 //   AUTO  — an LFO sweeps a resonant bandpass (per-voice, rhythmic; 0015's "auto-wah = LFO_CUTOFF")
 //   ENV   — a FAST per-note cutoff snap, the funky-clav "quack" (per-voice ENV_CUTOFF; navkit's
-//           "Clav Funky", confirmed by rendering it). The clav preset boots into this — a real
-//           D6 uses a per-note envelope filter, NOT a follower, so this stays the authentic recipe.
-//   TOUCH — the REAL "woah-woah" auto-wah: instrument_wah(), the BUS effect (an envelope follower
-//           on the summed signal opening a resonant bandpass). Opens with how hard you play.
+//           "Clav Funky", confirmed by rendering it). A real D6 uses a per-note envelope filter,
+//           NOT a follower, so this stays an authentic recipe on its own.
+//   TOUCH — the navkit "clav THROUGH a wah" STACK: the per-note quack (above) feeding the REAL
+//           bus auto-wah — instrument_wah(), an envelope follower on the summed signal opening a
+//           resonant bandpass. The quack bites each note; the follower makes the groove breathe.
+//           THE CLAV PRESET BOOTS INTO THIS — it's the super-70s funk sound (= navkit Clav-Funky's
+//           built-in filter-env + the master SVF wah, the exact pairing).
 // (The DX/digital EP is INSTR_FM; this is the real one.)
 //
-// Why TOUCH is a bus call and the other two aren't: a per-voice follower can't track the whole
+// Why TOUCH carries a bus call and AUTO/ENV don't: a per-voice follower can't track the whole
 // performance or pump with the groove — the original audit mis-filed the realistic auto-wah as a
-// per-voice filter (the "wah detour" scar). Resolved 2026-06-11: TOUCH now routes through the
-// shipped instrument_wah() bus insert (see clavinet.c, the showcase). AUTO + the clav ENV-quack
-// stay as the valid per-voice recipes 0015 / instrument-engines §8.10.1 defend.
+// per-voice filter (the "wah detour" scar). Resolved 2026-06-11: TOUCH routes through the shipped
+// instrument_wah() bus insert (see clavinet.c). AUTO + the standalone ENV-quack stay valid
+// per-voice recipes 0015 / instrument-engines §8.10.1 defend.
+//
+// THE ENGINE got two funk upgrades (2026-06-11, sound.h): a velocity+hardness-scaled TANGENT
+// CLICK on attack (the clav's percussive chink — navkit clickLevel 0.35; subtle on Rhodes/Wurli)
+// and a velocity→drive link on the clav nonlinearity (dig in → more honk). Plus filter
+// key-tracking here (ep_keytrack) so the quack/wah floor opens higher up the keyboard.
 //
 // The named instruments are just KNOB POSITIONS (audio-notes §8.1 / §8.8.5): if pressing
 // "wurli" doesn't sound like a Wurlitzer, the MAPPING is wrong, not the preset.
@@ -63,7 +71,7 @@ static const Preset PRESET[6] = {
     { "suitcase", { 0.15f, 0.20f, 0.12f, 0.5f, 0.45f }, 0 },   // mellow, clean, long, deep tremolo
     { "wurli",    { 0.50f, 0.35f, 0.30f, 0.5f, 0.50f }, 0 },   // soul ballad — the 200A's deeper trem
     { "wur buzz", { 0.50f, 0.66f, 0.82f, 0.6f, 0.55f }, 1 },   // cranked reed + auto-wah + trem
-    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f, 0.0f  }, 2 },   // funky bridge pickup + ENV-WAH (the fast per-note filter quack — navkit's "Clav Funky", confirmed by rendering it). NO tremolo — a real clav has none
+    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f, 0.0f  }, 3 },   // funky bridge pickup THROUGH the wah (TOUCH = the per-note quack + the bus auto-wah, navkit's clav+wah pairing). NO tremolo — a real clav has none
 };
 
 static int   handle[NKEY];
@@ -147,12 +155,24 @@ static void apply_wah(void) {
         // the envelope filter clav players actually use — not a follower (which hangs open).
         instrument_filter(I_EP, FILTER_LOW, 500, 9);
         instrument_env(I_EP, 0, ENV_CUTOFF, 2, 110, 2000.0f + amt * 800.0f);
-    } else {                                     // TOUCH: the REAL "woah-woah" auto-wah — a bus
-        // envelope follower (on the summed signal) opening a resonant bandpass. No per-voice
-        // filter; the instrument_wah() insert owns the sweep. amt drives sensitivity + the quack.
-        instrument_filter(I_EP, FILTER_OFF, 4000, 0);
-        instrument_wah(I_EP, 0.4f + amt * 0.6f, 0.4f + amt * 0.45f, 1.0f);
+    } else {                                     // TOUCH: the navkit "clav THROUGH a wah" stack —
+        // a per-note resonant filter quack (the voice's OWN funk snap) feeding the REAL bus
+        // auto-wah (an envelope follower on the summed signal). navkit pairs exactly this: the
+        // Clav-Funky preset's built-in filter-env AND the master SVF wah. The quack gives every
+        // note its bite; the bus follower makes the whole performance breathe/talk. amt drives both.
+        instrument_filter(I_EP, FILTER_LOW, 700, 9);
+        instrument_env(I_EP, 0, ENV_CUTOFF, 2, 110, 1700.0f + amt * 700.0f);
+        instrument_wah(I_EP, 0.4f + amt * 0.6f, 0.45f + amt * 0.4f, 0.75f + amt * 0.25f);
     }
+}
+
+// filter KEY-TRACKING — the per-note quack/wah floor opens higher up the keyboard (so high
+// comps stay bright, not muffled). navkit filterKeyTrack 0.6. Base + ENV_CUTOFF are additive
+// (sound.h), so raising the per-note base lifts the floor the quack settles to. Only meaningful
+// when a per-note filter is live (ENV / TOUCH); call right after every note_on.
+static void ep_keytrack(int h, int midi) {
+    if (h < 0 || (wahmode != 2 && wahmode != 3)) return;
+    note_cutoff(h, 300 + (midi - 36) * 14);          // ~+14 Hz/semitone above C2
 }
 
 // THE TREMOLO RECIPE — the suitcase/Wurli amp wobble, the "electric" signature: an LFO on the
@@ -167,6 +187,7 @@ static void apply_trem(void) {
 static void key_down(int b) {
     if (handle[b] >= 0) { note_off(handle[b]); handle[b] = -1; }
     handle[b] = note_on(midi_of(b), I_EP, 6);
+    ep_keytrack(handle[b], midi_of(b));
     glow[b] = 1.0f;
 }
 static void key_up(int b) {
@@ -185,6 +206,7 @@ static void octave_step(int d) {
 static void audition(void) {
     if (aud_h >= 0) note_off(aud_h);
     aud_h = note_on(midi_of(3), I_EP, 5);
+    ep_keytrack(aud_h, midi_of(3));
     glow[3] = 1.0f;
 }
 
@@ -291,7 +313,7 @@ void update(void) {
             for (int i = 0; i < 3; i++) if (ap_h[i] >= 0) { note_off(ap_h[i]); ap_h[i] = -1; }
             int r = ROOT[ap_step % 4];
             int notes[3] = { r, r + THIRD[ap_step % 4], r + 7 };
-            for (int i = 0; i < 3; i++) { ap_h[i] = note_on(notes[i], I_EP, 4); note_morph(ap_h[i], val[SL_BARK]); }
+            for (int i = 0; i < 3; i++) { ap_h[i] = note_on(notes[i], I_EP, 4); note_morph(ap_h[i], val[SL_BARK]); ep_keytrack(ap_h[i], notes[i]); }
             ap_step++;
         }
     } else {
