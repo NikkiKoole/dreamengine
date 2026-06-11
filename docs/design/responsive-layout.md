@@ -121,6 +121,28 @@ That's the whole surface. It's deliberately rect-in/rect-out so **nothing
 changes** when it graduates — the only difference is what you pass as the
 container.
 
+## What this is NOT — out of scope (and that's fine, it's an experiment)
+
+To be explicit: **this is just an experiment.** It's a positioning vocabulary,
+nothing more — proof that a small set of `lay_*` helpers feels right, run against
+a fake screen so it costs nothing and commits to nothing. It is *not* a layout
+engine and it does not pretend to cover everything a responsive UI eventually
+wants. Two known gaps, each its own concern, to add **only if a real cart hits
+them** (don't pre-build them):
+
+- **Text reflow.** Today we only do the font-step trick (TINY → SMALL → NORMAL by
+  width). Genuine **word-wrap inside a box** — break a string across lines to fit
+  a width, with truncation/ellipsis when even that won't fit — is a separate text
+  helper on top of `text_width()`. Not a layout primitive; a text one.
+- **Overflow / scroll.** When content can't shrink to fit even at its minimum
+  sizes (a long list on a phone), CSS reaches for `overflow:scroll`. That needs a
+  **scroll offset + clip** (and, on touch, momentum) — a whole mechanism the
+  layout helpers deliberately don't touch. `lay_*` decides *where things go*; it
+  has no opinion on *what to do when they don't fit*.
+
+Neither blocks the experiment. They're noted here so nobody mistakes "the layout
+math is done" for "responsive UIs are done."
+
 ## Path to graduation (if the prototype proves out)
 
 1. **Live now** — keep iterating in `respond.c` (already has the five helpers
