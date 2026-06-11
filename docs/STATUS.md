@@ -711,6 +711,30 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       whatever's off about the bowed voice, it is *not* pitch). **`INSTR_ORGAN`** reads an
       octave low but is in tune (+3–7¢) — that's the 16′ sub-octave drawbar, expected.
 
+32. **Split `runtime/sound.h` per-engine to cut the parallel-agent collision surface** *(new
+    2026-06-11, surfaced when a parallel commit silently clobbered a PIPE tuning fix)*. `sound.h`
+    is one ~4300-line file every audio change touches, edited by several agents in one shared
+    working tree — so a stale full-file edit committed over a neighbour's change silently reverts
+    it (no git conflict; "different content" only). Two clobbers happened this session: a
+    build-breaking half-finished refactor, and a PIPE `loopDelay` reverted to an older line (still
+    compiled, just out of tune). **Cheap guards already shipped** — the `.githooks/pre-commit`
+    compile-gate + the CLAUDE.md "Hot shared source files" protocol (no full-file `Write`,
+    re-Read before edit, grep HEAD after commit, `tune-check.js --quiet` for engine edits).
+    **The structural fix (this item):** carve each engine's `sound_<eng>_start`/`_sample` pair
+    (and the FX processors) into their own `#include`d headers — `runtime/engines/pipe.h`,
+    `brass.h`, …, `runtime/fx.h` — leaving only the shared `Voice` struct, the dispatch switch
+    (`sound_engine_sample`), the mixer callback and the public API in `sound.h`. Then an agent
+    voicing the flute edits `engines/pipe.h` only; a brass agent edits `brass.h` — engine work
+    stops colliding. Notes: it's a **pure textual move, zero runtime change** (all stays
+    `static`/`inline` in the one TU `studio.c` includes), so verify **byte-identical** after
+    (`soundcheck` + a cart or two rendered to WAV, `wav-analyze.js` "bytes identical" + unchanged
+    `tune-check.js`). The `Voice` struct stays shared (every engine's state lives in it), so adding
+    a *new* engine still touches the struct + dispatch — collision surface drops a lot, not to
+    zero. The refactor is itself one massive `sound.h` commit, so it only lands cleanly in a
+    **quiet window** (freeze other audio agents, split, verify, unfreeze) — else it becomes the
+    very clobber it prevents. High-effort; only worth it if you keep running several audio agents
+    at once. Until then the cheap guards hold the line.
+
 ---
 
 ## Decided-against / deferred ✗
