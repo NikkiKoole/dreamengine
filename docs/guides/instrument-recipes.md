@@ -175,6 +175,7 @@ plus its own ADSR.
 | pd/synth-brass | pd.c | A420 D300 R320 S5 · h0.56 t0.70 m0.50 | Sawpulse hybrid, slow swell, buzzy bright sustain — CZ brass. |
 | pd/sweep-pad | pd.c | A500 D620 R700 S4 · h0.69 t0.38 m0.95 | Resonant triangle, full-sweep DCW — the classic Casio "wowww" pad. |
 | pd/cz-pluck | pd.c | A0 D300 R220 S0 · h0.31 t0.72 m0.80 | Tight pulse, hard DCW snap, no sustain — plucky percussive. |
+| pd/pdbass | pdbass.c | A2 D150 S4 R220 · h0.20 m0.40 · t = TIMBRE slider 0→1 (clean→buzzy), live | A playable CZ bass on a string fingerboard. Sustains while held so SLIDES ring; INSTR_PD glides both ways (the bowed upright can't) → true smooth up/down slide + signed pull-bend. The one slider sweeps the distortion macro live. |
 
 > **Cross-ref:** italo's `pd/soaring-lead` and addis's `pd/synth-horn` are the station-side
 > PD voices — `pd/soaring-lead` mirrors `pd/reso-lead`, `pd/synth-horn` mirrors
@@ -557,6 +558,7 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 - **epiano** → epiano/rhodes · /rho-brite · /suitcase · /wurli · /wur-buzz · /clav
 - **organ.c** → organ/reggae · /combo · /bookerT · /jimmy · /larry · /ballad · /jonlord · /gospel · leslie/off · /slow · /fast
 - **pd.c** → pd/cz-bass · /reso-lead · /synth-brass · /sweep-pad · /cz-pluck
+- **pdbass.c** → pd/pdbass (the upright's fingerboard on INSTR_PD — an oscillator that glides both ways, so smooth continuous up/down slides + a live TIMBRE distortion slider; the synth-voiced sibling of `upright`)
 - **tabla.c** → membrane/tabla · /conga · /bongo · /djembe · /tom
 - **reed.c** → reed/clarinet · /sop_sax · /alto_sax · /tenor_sax · /oboe
 - **pipe.c** → pipe/flute · /recorder · /pan-pipe · /piccolo · /breathy
