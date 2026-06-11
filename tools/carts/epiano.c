@@ -140,14 +140,29 @@ static void apply_slot(void) {
 //  place by ear; the difference between them collapsed to LFO rate, a slider not a mode.)
 static void apply_wah(void) {
     float amt = val[SL_WAH];
-    instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);     // clear; the wah re-arms its own below
+    int  ty   = (int)(val[SL_INST] * 2.999f); if (ty < 0) ty = 0; else if (ty > 2) ty = 2;
+    bool clav = (ty == 2);
+    bool on   = (wahmode != 0);
+    instrument_lfo(I_EP, 0, LFO_CUTOFF, 0.0f, 0.0f);     // clear all three; re-armed below
     instrument_env(I_EP, 0, ENV_CUTOFF, 0, 0, 0.0f);
     instrument_wah(I_EP, 0.0f, 0.0f, 0.0f);              // bus follower off unless re-armed (mix 0 = bypass)
-    if (wahmode == 0) {                          // OFF
-        instrument_filter(I_EP, FILTER_OFF, 4000, 0);
-    } else {                                     // ON — quack + per-voice LFO pump + bus follower
+
+    // BASELINE VOICE FILTER — the CLAV is filtered by default, exactly like navkit's Clav-Funky
+    // preset (it always has filterEnabled): a static resonant lowpass + a fast per-note QUACK.
+    // This rolls off the pickup nonlinearity's inharmonic intermod that a bare clav exposes as
+    // mid-band "noisy bell" hash (proven against navkit's render — its clav is NEVER unfiltered).
+    // Rhodes/Wurli stay open unless the wah is on (their gentler nonlinearity doesn't need it).
+    if (clav) {
+        instrument_filter(I_EP, FILTER_LOW, 900, 6);                 // navkit filterCutoff ~0.5, modest reso
+        instrument_env(I_EP, 0, ENV_CUTOFF, 2, 100, 1500.0f);        // the funk quack: open on strike, shut ~100ms
+    } else if (on) {
         instrument_filter(I_EP, FILTER_LOW, 700, 9);
         instrument_env(I_EP, 0, ENV_CUTOFF, 2, 110, 1700.0f + amt * 700.0f);
+    } else {
+        instrument_filter(I_EP, FILTER_OFF, 4000, 0);
+    }
+
+    if (on) {                                    // WAH MOTION on top of the voice: LFO pump + bus follower
         instrument_lfo(I_EP, 0, LFO_CUTOFF, 2.5f + amt * 3.5f, 500.0f + amt * 900.0f);
         instrument_wah(I_EP, 0.4f + amt * 0.6f, 0.45f + amt * 0.4f, 0.75f + amt * 0.25f);
     }
