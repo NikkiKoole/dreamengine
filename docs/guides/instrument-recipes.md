@@ -219,17 +219,27 @@ cylinder↔cone / reed soft↔stiff / breath still↔growl.
 All from **pipe.c** (showcase), same base `A1 D0 S4 R1200`; macros shape
 embouchure/air/overblow.
 
-| name | source cart | recipe | character |
-|---|---|---|---|
-| pipe/flute | pipe.c | h0.00 t0.38 m0.70 | Concert flute — pure fundamental, moderate air, focused embouchure. |
-| pipe/recorder | pipe.c | h0.00 t0.55 m0.30 | Hollow, breathier, low embouchure — medieval recorder. |
-| pipe/pan-pipe | pipe.c | h0.08 t0.78 m0.50 | Very airy, a shimmer of overblow. |
-| pipe/piccolo | pipe.c | h0.55 t0.28 m0.82 | Overblown to the octave, focused, less air. |
-| pipe/breathy | pipe.c | h0.00 t0.90 m0.42 | Maximum air, jazzy breathy flute. |
+| name | source cart | recipe | character | tuning |
+|---|---|---|---|---|
+| pipe/flute | pipe.c | h0.00 t0.38 m0.70 | Concert flute — pure fundamental, moderate air, focused embouchure. | ✓ in tune C4→~E6 |
+| pipe/recorder | pipe.c | h0.00 t0.55 m0.30 | Hollow, breathier, low embouchure — medieval recorder. | ⚠ low embouchure → flat up high; keep below ~C5 |
+| pipe/pan-pipe | pipe.c | h0.08 t0.78 m0.50 | Very airy, a shimmer of overblow. | ~ borderline (m0.50); fine mid-register |
+| pipe/piccolo | pipe.c | h0.55 t0.28 m0.82 | Overblown to the octave, focused, less air. | ⚠ overblow = deliberate flageolet octave jump, not strict pitch |
+| pipe/breathy | pipe.c | h0.00 t0.90 m0.42 | Maximum air, jazzy breathy flute. | ⚠ low-ish embouchure → flat up high |
 
-> **Cross-ref:** no radio station uses `INSTR_PIPE` yet — the breathy flutes on the dial
-> (bossa's `sine/breathy-flute`, jingle's `sine/singing-lead`) fake it on SINE. pipe.c's
-> five presets are an untapped shelf.
+> **⚠ PIPE TUNING — read before picking a flute voice.** A jet-drive waveguide flute's
+> intonation **tracks the morph (embouchure) macro**: it's in tune for a FOCUSED embouchure
+> (**morph ≳ 0.5**, like `pipe/flute` m0.70 — verified in tune C4→~E6) but a hollow/low
+> embouchure (morph ≲ 0.4) or overblow (harmonics) drifts flat and gets unstable toward the
+> top. **For a melodic flute lead, use morph ≳ 0.5 and keep it in a natural register, then
+> verify:** `node tools/tune-check.js --engine PIPE --macros h,t,m --range lo-hi` (the default
+> `tune-check.js` sweep tests morph 0 — the worst case — so always recipe-check a flute voice).
+> The full why: [`design/audio-notes.md`](../design/audio-notes.md) §18, [`STATUS`](../STATUS.md) #31.
+
+> **Cross-ref:** the radio dial now uses `INSTR_PIPE` for real — **air**'s Cherry Blossom flute
+> (`pipe/air-flute`, m0.70, register 64–86) and **polopan**'s NANGA flute (m0.68, dropped to
+> C4–F5 to sit in the in-tune zone). Earlier breathy flutes faked it on SINE (bossa's
+> `sine/breathy-flute`, jingle's `sine/singing-lead`); those stay as cheaper stand-ins.
 
 ## INSTR_BOWED — bowed-string waveguide
 
@@ -595,3 +605,4 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 **Sequencers / visual carts (no instrument recipes):**
 
 - **garden.c** → no fixed recipes (procedural music; transient note()/hit()/strum())
+- **wowflutter.c** → no fixed recipes (a sequenced Frippertronics-ish loop: held INSTR_PD pad + INSTR_MALLET pentatonic bells + sub thumps, smeared through `echo()`; the `tape()` master insert + transport warble ARE the degradation — the soft-body / visual companion to tapeloop)
