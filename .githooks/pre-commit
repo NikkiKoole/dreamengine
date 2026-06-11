@@ -1,0 +1,32 @@
+#!/bin/sh
+# Guard the HOT SHARED FILES (runtime/sound.h, runtime/studio.h) against the
+# parallel-agent clobber: multiple agents edit these giant files in one shared working
+# tree, and a commit captures the committer's working copy — so a stale full-file edit can
+# silently revert another agent's already-committed change. Two failure modes this catches:
+#   1. BUILD-BREAKING clobber (a half-finished edit that doesn't compile) — caught here.
+#   2. SILENT SEMANTIC revert (compiles, but e.g. an engine drifts out of tune) — NOT caught
+#      by a compile alone; run `node tools/tune-check.js --quiet` (tuning) and the soundcheck
+#      tripwire (full 900-frame run) before committing pitched-engine / queue changes.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# (dormant until you do — committing this file changes nobody's flow on its own.)
+
+staged=$(git diff --cached --name-only)
+echo "$staged" | grep -qE 'runtime/(sound|studio)\.h' || exit 0
+
+echo "[pre-commit] runtime/sound.h or studio.h staged — compile-checking the runtime…"
+out=$(node tools/play.js soundcheck script /dev/null --headless --frames 2 2>&1)
+if printf '%s' "$out" | grep -qiE 'error:|compiling.*failed|undeclared identifier'; then
+  echo "[pre-commit] ✗ BUILD FAILED — refusing to commit a broken sound.h/studio.h."
+  printf '%s\n' "$out" | grep -iE 'error:|failed' | head -8
+  echo "[pre-commit] If you didn't write this break, a stale full-file edit may have clobbered"
+  echo "             another agent's change — re-Read the file fresh, re-apply, and re-commit."
+  exit 1
+fi
+if printf '%s' "$out" | grep -q '\[sound\] WARNING'; then
+  echo "[pre-commit] ✗ sound tripwire fired (requests dropped) — investigate before committing."
+  exit 1
+fi
+echo "[pre-commit] ✓ runtime builds. (Reminder: for pitched-engine edits also run"
+echo "             'node tools/tune-check.js --quiet' — a clobber can revert tuning silently.)"
+exit 0

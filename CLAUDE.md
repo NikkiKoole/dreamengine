@@ -32,6 +32,29 @@ Two parallel-agent commit hazards (both have bitten):
    refs). If the file is dirty with foreign edits: stash your working copy, `git checkout HEAD --
    <file>`, splice in ONLY your entry, commit (by pathspec), then restore the working copy.
 
+### Hot shared source files: `runtime/sound.h`, `runtime/studio.h`
+
+These two are giant single files that *every* audio/API change touches, so several agents
+edit them at once in the one shared working tree. The same hazard as #2, but worse because
+a revert here is **silent and semantic**, not just a broken ref. Two ways it bit this repo:
+a **build-breaking** clobber (a half-finished refactor committed mid-flight), and a **silent
+tuning revert** (an engine fix reverted to an older line by a stale full-file edit — it still
+compiled, it was just out of tune again). Git sees "different content," not a conflict, so it
+never warns. Rules that prevent and catch it:
+
+- **NEVER full-file `Write` these two — targeted `Edit`s only.** A `Write` (or any
+  regenerate-the-whole-file step) from stale in-context content is the #1 clobber. Edits that
+  replace a small unique string can't revert a neighbour's lines.
+- **Re-`Read` the exact region immediately before editing** (line numbers drift as others
+  edit), and **right after you commit, confirm your change survived:**
+  `git show HEAD:runtime/sound.h | grep '<a sentinel from your change>'` — if it's gone, a
+  parallel commit reverted you; re-apply and re-commit. Keep these commits small and prompt.
+- **Compile-gate before committing** (catches build-breaks): `node tools/play.js soundcheck
+  script /dev/null --headless --frames 2` — must print `compiling… ok` and no `[sound] WARNING`.
+  For **pitched-engine** edits also run `node tools/tune-check.js --quiet` (catches the silent
+  tuning revert a compile can't see). A repo pre-commit hook automates the compile-gate on these
+  files — enable it once per clone: `git config core.hooksPath .githooks`.
+
 ## Running the editor
 
 ```bash
