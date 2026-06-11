@@ -3000,5 +3000,14 @@
       "tech-demo",
       "toy"
     ]
+  },
+  {
+    "title": "seinelaan 31",
+    "description": "A real Eindhoven apartment (Seinelaan 31) walked as a top-down level, built from its Floorplanner .fml by the fmltools pipeline. Walls with walkable doorways and real door/window sprites, each room a distinct floor colour, 72 furniture pieces as top-down pixel sprites baked from Floorplanner CDN renders. WASD/arrows move, T toggles sprites vs boxes. Sibling of floorwalker.",
+    "file": "seinelaan.cart.png",
+    "kind": [
+      "tech-demo",
+      "toy"
+    ]
   }
 ]
