@@ -617,6 +617,23 @@ Details that make it read as a *car* and not a crate:
   to bring wrecks back into normal range later.
 - **Persistence**: a shoved/wrecked car is `dirty`, so its pose + `destroyed` ride the chunk-delta layer
   like a run-over cone (a reloaded wreck re-applies the `WRECK_GIVE` softening).
+- **Contact test is bidirectional** — rig-corners-in-car **and** car-corners-in-rig. The first version only
+  checked the rig's corners against the car (plus a centre-engulf fallback), so a slow nose-in to a car's
+  *side or end* — where no rig corner is inside the car and the car centre isn't yet inside the rig — was
+  missed entirely and the rig overlapped it; at speed you plowed in far enough for the engulf fallback to
+  catch it, which is exactly why it "only worked fast". The reverse test (project the car's 4 corners into
+  the rig's local frame, push the rig away from the deepest one) closes that gap, so a 6 km/h creep now
+  *pushes* the car instead of clipping through it.
+- **Depenetration pushes the RIG fully clear every frame** (not the mass-split it used to be), with the car
+  *also* shoved out by its mass share for feel. The split-only version let the rig **grind into / through**
+  a car on a follow-up tap: when the rig catches a gliding car at ~0 closing speed the impulse early-outs
+  (`vn ≥ 0` = separating), so only the positional push ran — and at half-depth-per-frame, under power, the
+  rig out-drove it and sank in for several frames before ejecting. Full rig depenetration kills the sink
+  regardless of the impulse branch.
+- **The spawn PARKING LOT** (`PARKING_CH`): the chunks around the origin (`|cx|,|cy| ≤ 2`, ≈ a 4×4-chunk
+  ~1000 px square) generate **no houses** and instead a dense grid of parked cars laid in the city block
+  interiors (kept off the road bands), all facing the same way. A billiard playground right where you start
+  — lots to bump and scatter. `MAXOB` was raised to 1280 for it (peak live ≈ 500, comfortable headroom).
 
 **Verified on the harness** (2026-06-11, deterministic `--script`): a head-on at 104 km/h dropped rig speed
 `103→27` (momentum dumped into the car) and the car shot off at `carv ≈ 76`, then *decayed slowly* under

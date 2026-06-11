@@ -522,7 +522,9 @@ static float restart_grace;       // s of stall-immunity after a crank (see REST
 // EVERY obstacle is a CELL-GRID (a cone is 1×1) — the seam that makes the future demolition
 // rung (distribute J to tiles, detach over-strength ones) a pure addition, not a rewrite.
 #define CHUNK      256            // world px per chunk (bookkeeping grid; independent of road zones)
-#define MAXOB      768            // live obstacles cap (a dense city chunk holds dozens of houses)
+#define MAXOB      1280           // live obstacles cap (raised for the spawn parking lot's dense car grid)
+#define PARKING_CH 2              // spawn PARKING LOT spans chunks |cx|,|cy| ≤ this (≈ a 4×4-chunk, ~1000 px
+                                  // square of cars and NO houses at the start — the billiard playground)
 #define MAXLOADED  64             // live chunks cap
 #define MAXDELTA   192            // remembered deltas for evicted chunks (bounded LRU)
 #define OB_GW      4              // obstacle cell-grid (cone 1×1, house up to 4×4 — the demolition tiles)
@@ -1799,7 +1801,10 @@ static int gen_chunk(int cx, int cy, Obstacle *out) {
     //    draw_houses did, but emitted as solid obstacles. Each house is owned by the chunk its
     //    CENTRE falls in (so no double-emit across chunk/block borders).
     int zone = zone_at(x0 + CHUNK * 0.5f, y0 + CHUNK * 0.5f);
-    if (zone == Z_CITY || zone == Z_TOWN) {
+    // the spawn PARKING LOT: chunks near the origin get NO houses and a dense grid of cars instead
+    // (section 4 below) — a big billiard playground right where you start.
+    int lot = (cx >= -PARKING_CH && cx <= PARKING_CH && cy >= -PARKING_CH && cy <= PARKING_CH);
+    if (!lot && (zone == Z_CITY || zone == Z_TOWN)) {
         int p = ZONE_PITCH[zone], hwr = ZONE_LANE[zone] / 2;
         int bx0 = ifloordiv(x0, p) - 1, bx1 = ifloordiv(x0 + CHUNK, p) + 1;
         int by0 = ifloordiv(y0, p) - 1, by1 = ifloordiv(y0 + CHUNK, p) + 1;
@@ -1838,7 +1843,7 @@ static int gen_chunk(int cx, int cy, Obstacle *out) {
     //    crash one and the SAME contact impulse SHOVES + SPINS it AND kicks back on your rig (momentum
     //    transfers both ways). It then rolls to a stop on its tyres (anisotropic friction). Emitted after
     //    houses so cone/house idx stay stable (idx = the delta key).
-    if (zone == Z_CITY || zone == Z_TOWN) {
+    if (!lot && (zone == Z_CITY || zone == Z_TOWN)) {
         int p = ZONE_PITCH[zone], hwr = ZONE_LANE[zone] / 2;
         float carHH = OB_CELL;                         // half-WIDTH (2 cells / 2 × OB_CELL)
         float lat = hwr - carHH - 1.0f;                // park just inside the curb
@@ -1862,6 +1867,32 @@ static int gen_chunk(int cx, int cy, Obstacle *out) {
             int pal[6] = { CLR_RED, CLR_TRUE_BLUE, CLR_DARK_GREEN, CLR_LIGHT_GREY, CLR_YELLOW, CLR_MAUVE };
             o.col = pal[(hc >> 16) % 6];
             ob_derive(&o); out[k++] = o;
+        }
+    }
+
+    // 4. the SPAWN PARKING LOT — a dense grid of parked cars filling the start-area chunks (no houses
+    //    here). Rows laid out in the city block interiors, kept clear of the road bands; all face the same
+    //    way (parked). This is the playground for the billiard-knock feel — lots to bump and scatter.
+    if (lot) {
+        int p = ZONE_PITCH[Z_CITY], hwr = ZONE_LANE[Z_CITY] / 2;   // lot lives on the dense city grid
+        int pal[6] = { CLR_RED, CLR_TRUE_BLUE, CLR_DARK_GREEN, CLR_LIGHT_GREY, CLR_YELLOW, CLR_MAUVE };
+        for (int gx = x0 + 14; gx < x0 + CHUNK && k < OB_PERCHUNK; gx += 22) {
+            int mx = ((gx % p) + p) % p;
+            if (mx < hwr + 9 || mx > p - hwr - 9) continue;        // keep the car's 14px width off a road
+            for (int gy = y0 + 22; gy < y0 + CHUNK && k < OB_PERCHUNK; gy += 40) {
+                int my = ((gy % p) + p) % p;
+                if (my < hwr + 16 || my > p - hwr - 16) continue;  // keep its 28px length off a road
+                unsigned hc = hash2(gx, gy);
+                Obstacle o; ob_init(&o, cx, cy, k);
+                o.kind = OB_CAR;
+                o.bx = o.x = (float)gx; o.by = o.y = (float)gy; o.ang = 90.0f;
+                o.gw = 2; o.gh = 4;
+                for (int rr = 0; rr < 4; rr++)
+                    for (int cc = 0; cc < 2; cc++) o.cell[rr][cc] = OM_CAR;
+                o.hw = o.gh * OB_CELL * 0.5f; o.hh = o.gw * OB_CELL * 0.5f;
+                o.col = pal[(hc >> 16) % 6];
+                ob_derive(&o); out[k++] = o;
+            }
         }
     }
     return k;
@@ -2000,6 +2031,30 @@ static void crash_body(Obstacle *o, float fwx, float fwy, float ltx, float lty) 
             bny = lnx * os + lny * oc;
         }
     }
+    if (movable) {
+        // ALSO test the CAR's corners against the RIG box (in the rig's local frame, via its forward/left
+        // axes). Catches a slow nose-in to a car's side/end where NO rig corner is inside the car and the
+        // car centre isn't inside the rig yet — the contact the rig-corner test + engulf fallback both miss,
+        // which is why slow contacts used to overlap while fast ones (deep enough to engulf) pushed.
+        float ccx2[4] = {  o->hw,  o->hw, -o->hw, -o->hw };
+        float ccy2[4] = {  o->hh, -o->hh, -o->hh,  o->hh };
+        for (int i = 0; i < 4; i++) {
+            float cwx = o->x + ccx2[i] * oc - ccy2[i] * os;   // car corner → world
+            float cwy = o->y + ccx2[i] * os + ccy2[i] * oc;
+            float rlx = (cwx - sx) * fwx + (cwy - sy) * fwy;  // → rig local (project onto forward / left)
+            float rly = (cwx - sx) * ltx + (cwy - sy) * lty;
+            if (rlx <= rigL0 || rlx >= rigL1 || rly <= rigW0 || rly >= rigW1) continue;  // outside the rig
+            float dF = rigL1 - rlx, dR = rlx - rigL0, dL = rigW1 - rly, dRg = rly - rigW0;
+            float pen = dF, onx = fwx, ony = fwy;             // nearest rig face → its outward world normal
+            if (dR  < pen) { pen = dR;  onx = -fwx; ony = -fwy; }
+            if (dL  < pen) { pen = dL;  onx =  ltx; ony =  lty; }
+            if (dRg < pen) { pen = dRg; onx = -ltx; ony = -lty; }
+            if (pen > bestPen) {
+                bestPen = pen; bcx = cwx; bcy = cwy;
+                bnx = -onx; bny = -ony;                       // push the RIG away from the car corner
+            }
+        }
+    }
     if (bestPen <= 0) {                              // no corner inside — a long rig may engulf a small box
         float dxx = o->x - sx, dyy = o->y - sy;
         float lx = dxx * fwx + dyy * fwy, lyy = dxx * ltx + dyy * lty;
@@ -2019,9 +2074,14 @@ static void crash_body(Obstacle *o, float fwx, float fwy, float ltx, float lty) 
     float ovx = movable ? o->vx - worad * roy : 0.0f;
     float ovy = movable ? o->vy + worad * rox : 0.0f;
     float vn = (vcx - ovx) * bnx + (vcy - ovy) * bny;   // RELATIVE normal velocity (< 0 = closing)
-    float push = movable ? Mo / (M + Mo) : 1.0f;        // depenetrate split by mass (heavy car barely yields)
-    sx += bnx * bestPen * push; sy += bny * bestPen * push;
-    if (movable) { o->x -= bnx * bestPen * (1.0f - push); o->y -= bny * bestPen * (1.0f - push); o->dirty = 1; }
+    // Depenetration: push the RIG fully clear every frame (never let it sink into / grind through a car,
+    // even when the impulse early-outs below because the rig is just catching a gliding car at ~0 closing
+    // speed), and ALSO shove the car out by its mass share so a heavy hit still visibly displaces it.
+    sx += bnx * bestPen; sy += bny * bestPen;
+    if (movable) {
+        float carShare = M / (M + Mo);                  // light car yields more; a semi barely budges it
+        o->x -= bnx * bestPen * carShare; o->y -= bny * bestPen * carShare; o->dirty = 1;
+    }
     if (vn >= 0) return;                            // already separating — just the push-out
     last_hit = 1;
     float rxn  = rx  * bny - ry  * bnx;             // rig lever ⟂ normal
