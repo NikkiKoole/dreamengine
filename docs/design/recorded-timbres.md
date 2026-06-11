@@ -2,7 +2,14 @@
 
 How to make a *synthesized* voice read as a *recorded* instrument, in an engine that has **no sample
 playback**. Written up off the `tapeloop` cart (which fakes tape-strings/choir/flute with drawn
-waves + `tape()`), as the design notes for a future, more-convincing **`mellotron` cart**.
+waves + `tape()`), as the design notes for a more-convincing **`mellotron` cart**.
+
+> **Built.** The `mellotron` cart (`tools/carts/mellotron.c`) now implements the recipe below: drawn
+> STRINGS/CHOIR/FLUTE/BRASS waves + a noise attack-chiff + `chorus()` ensemble + `tape()`/`reverb()`,
+> with the **~8-second forced release** as the headline behaviour and an M400-cabinet look. Recipe
+> rows in [`../guides/instrument-recipes.md`](../guides/instrument-recipes.md) (`user0/mellotron-*`);
+> shelf row in [`../guides/instrument-carts.md`](../guides/instrument-carts.md). This doc stays as the
+> *why* behind the build.
 
 > **Scope: design exploration, not a spec.** The recipe here is all *cart-side* — no engine work. It
 > composes things we already shipped (`wave_set`, `instrument_tune`, the LFOs, `chorus`/`tape`/

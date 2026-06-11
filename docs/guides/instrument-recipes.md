@@ -329,6 +329,11 @@ cart" for those. The named layouts:
 | drawn/sine | stylophone.c | A6 D130 S6 R110 · LP 2600/3 · sine seed, 0–5 smoothing | Sine seed; smoothing blends edits into a warped sinusoid. |
 | drawn/sawtooth | stylophone.c | A6 D130 S6 R110 · LP 2600/3 · sawtooth seed, 0–5 smoothing | Sawtooth seed; smoothing rounds the ramp edits. |
 | drawn/organ | stylophone.c | A6 D130 S6 R110 · LP 2600/3 · additive organ seed (f + 2f·0.55 + 3f·0.28 + 4f·0.18 + 5f·0.12), 0–5 smoothing | Additive harmonic organ seed; smoothing tames the multi-tone blend. |
+| user0/mellotron-strings | mellotron.c (machine) | A140 D0 S6 R600 · LP 700–4000/2 (TONE) · vibrato LFO_PITCH 5.2/0.10 · drift LFO_CUTOFF 0.30/220 · 7-harmonic bowed stack · + noise CHIFF (INSTR_NOISE A0 D26 R18, LP2600) · `chorus`(0.55/0.50/0.45) · `tape`(0.40/0.25/0.40) · `reverb`(0.55/0.45) | A faked tape "recording" of a string section — the drawn wave supplies the spectrum, the chiff/chorus/tape/reverb supply the recording cues. Held note force-released at the 2–8s TAPE length. |
+| user0/mellotron-choir | mellotron.c | same chassis; wave = vocal "aah" (f + 2f·0.62 + 3f·0.89 + 4f·0.93 + 5f·0.49 + 6f·0.22, the formant bump on h3–h4) | Mellotron 8-voice choir. |
+| user0/mellotron-flute | mellotron.c | same chassis; wave = near-pure (f + 2f·0.18 + 3f·0.08) | Mellotron flute (the Strawberry Fields timbre); breath is the chiff + lowpass. |
+| user0/mellotron-brass | mellotron.c | same chassis; wave = bright 8-harmonic stack (the blare) | Mellotron brass section. |
+| user0/mellotron-blend | mellotron.c | LAYERING — the active voices' tables are summed into one cycle and peak-normalized to 0.95, then `wave_set` (additive, still one note-voice). Presets: STR+CH, STR+FL, CHO+FL, FULL | A blended "tape frame" — stack timbres without multiplying polyphony. |
 
 > **Cross-ref:** the radio's drawn-wave voices — roadhouse's `user0/combo-organ` and tango's
 > `user0/bandoneon` — pull the same `wave_set` lever, hand-drawing a drawbar/free-reed cycle
@@ -572,6 +577,7 @@ The alternate view — each cart and the recipe names it stocks. Carts with no f
 - **cathedral.c** → organ/cathedral (the reverb showcase — a clean organ that blooms into a hall; `reverb()` is the instrument)
 - **mistress.c** → guitar/mistress (the flanger showcase — a strummed steel string through `flanger()`; the swept comb is the instrument)
 - **tapeloop.c** → saw/tapeloop (the tape showcase — a soft saw pad through a long echo loop + `tape()`; the wow/flutter/saturation degradation is the instrument)
+- **mellotron.c** → user0/mellotron-strings · -choir · -flute · -brass (drawn-wave fakes of a tape "recording" — wave + noise chiff + `chorus`/`tape`/`reverb` reconstruct the recording cues; the ~8s tape-length force-release is the headline. Cousin of tapeloop)
 - **clavinet.c** → epiano/clav-wah (the auto-wah showcase — a percussive INSTR_EPIANO clav (h0.85 t0.75 m0.55) through `instrument_wah()`; the envelope-following quack is the instrument)
 - **solina.c** → saw/solina-tab (the chorus companion to juno — a divide-down string machine: 6 stacked-saw footage tabs, the ensemble `chorus()` IS the Solina)
 - **stylophone.c** → pulse/square · drawn/square · /sine · /sawtooth · /organ
