@@ -393,8 +393,6 @@ void draw(void) {
     circfill(282, 28, 2, radioOn && breathe > 0.5f ? CLR_RED : CLR_DARK_RED);  // breathes, no beat
 
     rad_help_button(CLR_INDIGO);
-    rad_footer("H help");
-
     if (showHelp) {
         static const char *HELP[7][2] = {
             { "SPACE",      "next song (rolls a new seed)" },

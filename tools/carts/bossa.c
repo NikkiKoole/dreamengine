@@ -146,6 +146,8 @@ static bool   melOn      = true;     // does the cell play this 2-bar instance?
 static float  vu         = 0;        // VU needle drive
 static char   nowChord[3][8];        // prev / current / next chord names for the display
 static bool   showHelp   = false;    // H or the ? button
+static RadBand band;                 // THE BAND (B): the guitar chair — nylon TRI / real string
+static int    chGtr;                 // its chair index
 static int    toneSel    = 0;        // bossa has no tone knob — rad_input gets ntone=0
 
 static int iabs(int v) { return v < 0 ? -v : v; }
@@ -343,6 +345,7 @@ static void setup_gtr(void) {
 
 static void setup_instruments(void) {
     setup_gtr();
+    chGtr = rad_chair(&band, "guitar", "TRI", "PLUCK", NULL, NULL);   // the one A/B chair
 
     instrument(I_BASS, INSTR_TRI, 2, 200, 4, 80);            // round fingered bass
     instrument_filter(I_BASS, FILTER_LOW, 700, 2);
@@ -392,7 +395,8 @@ void update(void) {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;        // rejoin the broadcast mid-song
     }
-    if (keyp('G')) { gtrPluck = !gtrPluck; setup_gtr(); }    // A/B the guitar chair, mid-song
+    int chair = rad_band_input(&band, &showHelp);            // THE BAND (B) — A/B the guitar chair
+    if (chair == chGtr) { gtrPluck = band.c[chGtr].sel; setup_gtr(); }   // mid-song swap
 
     if (radioOn) {
         long st;                           // schedule one step ahead of the clock
@@ -478,7 +482,7 @@ void draw(void) {
     rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
     rad_help_button(CLR_ORANGE);
-    rad_footer(str("G gtr:%s   H help", gtrPluck ? "PLUCK" : "TRI"));
+    rad_band_button(CLR_ORANGE);
 
     if (showHelp) {
         static const char *HELP[9][2] = {
@@ -487,7 +491,7 @@ void draw(void) {
             { "[ / ]",      "back / forward through history" },
             { "LEFT/RIGHT", "feel - how many layers play" },
             { "UP/DOWN",    "tempo of this tune" },
-            { "G",          "guitar: nylon tri / real string" },
+            { "B",          "the band - swap the guitar timbre" },
             { "M",          "radio power on / off" },
             { "H or ?",     "show / hide this help" },
             { "L",          "jam ch/sc: chord-lock / free" },
@@ -499,6 +503,7 @@ void draw(void) {
         };
         rad_help_panel("BOSSA RADIO", HELP, 9, NOTES, 3, CLR_ORANGE);
     }
+    rad_band_panel(&band, CLR_ORANGE);
 
     // the jam strip — CHORD-LOCK (Omnichord): the strip is the current chord's own
     // tones (root/3rd/5th/9th), re-shaped as the ii-V-I changes move under you. Bossa's

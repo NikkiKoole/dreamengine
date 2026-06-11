@@ -491,8 +491,6 @@ void draw(void) {
     rad_power_led(radioOn, CLR_ORANGE, CLR_DARK_RED);
 
     rad_help_button(CLR_ORANGE);
-    rad_footer("H help");
-
     if (showHelp) {
         static const char *HELP[8][2] = {
             { "SPACE",      "next drive (rolls a new seed)" },

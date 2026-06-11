@@ -502,8 +502,6 @@ void draw(void) {
     rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
     rad_help_button(CLR_RED);
-    rad_footer("H help");
-
     if (showHelp) {
         static const char *HELP[8][2] = {
             { "SPACE",      "next song (rolls a new seed)" },

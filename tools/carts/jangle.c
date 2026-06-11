@@ -89,6 +89,8 @@ static int    tempo     = 96;
 static int    intensity = 2;     // 0 gtr+bass · 1 +drums · 2 +lead solos · 3 denser
 static bool   radioOn   = true;
 static bool   showHelp  = false;
+static RadBand band;                 // THE BAND (B): the guitar chair — chorus TRI / real string
+static int    chGtr;
 static int    songCount = 0;
 static int    gv[3]     = { 64, 67, 71 };   // guitar voices, voice-led
 static bool   gvInit    = false;
@@ -318,6 +320,7 @@ static void setup_gtr(void) {
 
 static void setup_instruments(void) {
     setup_gtr();
+    chGtr = rad_chair(&band, "guitar", "TRI", "PLUCK", NULL, NULL);   // the one A/B chair
 
     instrument(I_BASS, INSTR_SINE, 2, 250, 4, 90);
     instrument_filter(I_BASS, FILTER_LOW, 600, 1);
@@ -366,7 +369,8 @@ void update(void) {
         if (!radioOn) { note_off_all(); leadH = -1; }
         else scheduled = (long)pos;
     }
-    if (keyp('G')) { gtrPluck = !gtrPluck; setup_gtr(); }   // A/B the guitar chair, mid-song
+    int chair = rad_band_input(&band, &showHelp);            // THE BAND (B) — A/B the guitar chair
+    if (chair == chGtr) { gtrPluck = band.c[chGtr].sel; setup_gtr(); }   // mid-song swap
 
     if (radioOn) {
         long st;
@@ -474,7 +478,7 @@ void draw(void) {
     rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
     rad_help_button(CLR_ORANGE);
-    rad_footer(str("G gtr:%s   H help", gtrPluck ? "PLUCK" : "TRI"));
+    rad_band_button(CLR_ORANGE);
 
     if (showHelp) {
         static const char *HELP[9][2] = {
@@ -484,7 +488,7 @@ void draw(void) {
             { "LEFT/RIGHT", "feel - how many layers play" },
             { "UP/DOWN",    "tempo of this tune" },
             { "M",          "radio power on / off" },
-            { "G",          "guitar: chorus tri / real string" },
+            { "B",          "the band - swap the guitar timbre" },
             { "H or ?",     "show / hide this help" },
             { "L",          "jam ch/sc: chord-lock / free" },
         };
@@ -495,6 +499,7 @@ void draw(void) {
         };
         rad_help_panel("JANGLE RADIO", HELP, 9, NOTES, 3, CLR_ORANGE);
     }
+    rad_band_panel(&band, CLR_ORANGE);
 
     // the jam strip — whistle on the song's own MODE, the vamp chord lit. The whole
     // song lives in MIXOLYDIAN (MIXO above, what the lead whistle roams), so the strip

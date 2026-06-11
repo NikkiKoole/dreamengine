@@ -660,7 +660,7 @@ void draw(void) {
     rad_power_led(radioOn, CLR_ORANGE, CLR_DARK_ORANGE);
 
     rad_help_button(CLR_ORANGE);
-    rad_footer("B band   J jam   H help");
+    rad_band_button(CLR_ORANGE);
 
     if (showHelp) {
         static const char *HELP[9][2] = {

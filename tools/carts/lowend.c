@@ -141,6 +141,8 @@ static int    tempo     = 92;
 static int    intensity = 1;     // feel: shifts the arrangement's density curve (headnod = as composed)
 static bool   radioOn   = true;
 static bool   showHelp  = false;
+static RadBand band;                 // THE BAND (B): the lead chair — TRI hook / vibraphone
+static int    chLead;
 static int    songCount = 0;
 static int    gv[3]     = { 64, 67, 71 };
 static bool   gvInit    = false;
@@ -397,6 +399,7 @@ static void setup_lead(void) {
 }
 
 static void setup_instruments(void) {
+    chLead = rad_chair(&band, "lead", "TRI", "VIBES", NULL, NULL);   // the one A/B chair
     instrument(I_RHODES, INSTR_TRI, 8, 300, 3, 200);
     instrument_filter(I_RHODES, FILTER_LOW, 1600, 2);
     instrument_lfo(I_RHODES, 0, LFO_VOLUME, 4.2f, 0.10f);    // tremolo
@@ -448,7 +451,8 @@ void update(void) {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;
     }
-    if (keyp('G')) { leadVibes = !leadVibes; setup_lead(); }   // A/B the lead chair, mid-song
+    int chair = rad_band_input(&band, &showHelp);          // THE BAND (B) — A/B the lead chair
+    if (chair == chLead) { leadVibes = band.c[chLead].sel; setup_lead(); }   // mid-song swap
 
     if (radioOn) {
         long st;                           // schedule one step ahead of the clock
@@ -546,7 +550,7 @@ void draw(void) {
     rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
     rad_help_button(CLR_ORANGE);
-    rad_footer(str("G lead:%s   H help", leadVibes ? "VIBES" : "TRI"));
+    rad_band_button(CLR_ORANGE);
 
     if (showHelp) {
         static const char *HELP[8][2] = {
@@ -556,7 +560,7 @@ void draw(void) {
             { "LEFT/RIGHT", "feel - how many layers play" },
             { "UP/DOWN",    "tempo of this tune" },
             { "M",          "radio power on / off" },
-            { "G",          "lead: tri hook / vibraphone" },
+            { "B",          "the band - swap the lead timbre" },
             { "H or ?",     "show / hide this help" },
         };
         static const char *NOTES[3] = {
@@ -566,6 +570,7 @@ void draw(void) {
         };
         rad_help_panel("LOW END RADIO", HELP, 8, NOTES, 3, CLR_ORANGE);
     }
+    rad_band_panel(&band, CLR_ORANGE);
 
     ui_end();
 }

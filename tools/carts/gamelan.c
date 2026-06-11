@@ -505,8 +505,6 @@ void draw(void) {
     rad_power_led(radioOn, CLR_ORANGE, CLR_DARK_BROWN);
 
     rad_help_button(CLR_ORANGE);
-    rad_footer("LEFT/RIGHT irama   H help");
-
     if (showHelp) {
         static const char *HELP[7][2] = {
             { "SPACE",      "next gamelan (a new village)" },

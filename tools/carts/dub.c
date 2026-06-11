@@ -100,6 +100,8 @@ static int    tempo     = 72;
 static int    intensity = 1;     // feel: shifts the arrangement's density curve
 static bool   radioOn   = true;
 static bool   showHelp  = false;
+static RadBand band;                 // THE BAND (B): the skank chair — guitar chop / Hammond B3
+static int    chSkank;
 static int    songCount = 0;
 static int    gv[3]     = { 64, 67, 71 };
 static bool   gvInit    = false;
@@ -409,7 +411,8 @@ static void setup_skank(void) {
 
 // ── setup ─────────────────────────────────────────────────────────────────
 static void setup_instruments(void) {
-    setup_skank();                                          // the chop — A/B'd with G (guitar vs Hammond)
+    setup_skank();                                          // the chop — A/B'd via the band panel (guitar vs Hammond)
+    chSkank = rad_chair(&band, "skank", "guitar", "B3", NULL, NULL);   // the one A/B chair
 
     instrument(I_BASS, INSTR_SINE, 3, 260, 5, 130);          // deep and round
     instrument_env(I_BASS, 0, ENV_PITCH, 0, 30, 3);
@@ -482,7 +485,8 @@ void update(void) {
     if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
     if (ev & RAD_EV_TEMPO)  apply_echo_bus();          // the tape loop follows the tempo
     if (ev & RAD_EV_TONE)   apply_voicing();           // re-aim the filters live
-    if (keyp('G')) { skankOrgan = !skankOrgan; setup_skank(); apply_voicing(); }  // A/B the skank chair, mid-song
+    int chair = rad_band_input(&band, &showHelp);          // THE BAND (B) — A/B the skank chair
+    if (chair == chSkank) { skankOrgan = band.c[chSkank].sel; setup_skank(); apply_voicing(); }  // mid-song
     if (ev & RAD_EV_POWER)  {
         if (!radioOn) note_off_all();
         else scheduled = (long)pos;
@@ -592,7 +596,7 @@ void draw(void) {
     rad_power_led(radioOn, CLR_RED, CLR_DARK_RED);
 
     rad_help_button(CLR_MEDIUM_GREEN);
-    rad_footer(str("G skank:%s   H help", skankOrgan ? "B3" : "gtr"));
+    rad_band_button(CLR_MEDIUM_GREEN);
 
     if (showHelp) {
         static const char *HELP[10][2] = {
@@ -602,7 +606,7 @@ void draw(void) {
             { "LEFT/RIGHT", "feel - shifts the density curve" },
             { "UP/DOWN",    "tempo of this riddim" },
             { "T",          "tone - mellow/warm/clear/bright" },
-            { "G",          "skank: guitar chop / Hammond B3" },
+            { "B",          "the band - swap the skank timbre" },
             { "M",          "radio power on / off" },
             { "H or ?",     "show / hide this help" },
             { "L",          "jam ch/sc: chord-lock / free" },
@@ -614,6 +618,7 @@ void draw(void) {
         };
         rad_help_panel("DUB RADIO", HELP, 10, NOTES, 3, CLR_MEDIUM_GREEN);
     }
+    rad_band_panel(&band, CLR_MEDIUM_GREEN);
 
     // the jam strip — a melodica on the riddim's minor pentatonic, the vamp
     // chord's tones lit. vertical RIDES THE ECHO SEND: lean up and the note

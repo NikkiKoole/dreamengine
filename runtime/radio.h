@@ -435,15 +435,24 @@ static void rad_power_led(bool on, int accent, int dim) {
     circfill(292, 36, 2, on && beat_pos() < 0.25f ? accent : dim);  // right of the tune button
 }
 
-// the ?-button (its hit test lives in rad_input) + the one-line footer hint
+// the ?-button (its hit test lives in rad_input), bottom-right
 static void rad_help_button(int accent) {
     circfill(288, 172, 6, CLR_DARKER_GREY);
     circ(288, 172, 6, CLR_BLACK);
     print("?", 285, 169, accent);
 }
-static void rad_footer(const char *hint) {
-    print(hint, 8, 190, CLR_DARK_GREY);
+// the B-button (its hit test lives in rad_band_input), bottom-left — mirror of
+// the ?-button. Draw it only on stations that register a band panel; it's the
+// sole affordance for THE BAND now that the footer hint is gone.
+static void rad_band_button(int accent) {
+    circfill(32, 172, 6, CLR_DARKER_GREY);
+    circ(32, 172, 6, CLR_BLACK);
+    print("B", 29, 169, accent);
 }
+// footer retired — the ? and B buttons replace the one-line hint, freeing the
+// bottom strip for the ribbon. Kept as a no-op so existing calls compile during
+// the per-cart cleanup; remove the calls and this symbol once they're all gone.
+static void rad_footer(const char *hint) { (void)hint; }
 
 // the help panel scaffold: key/desc rows + accent note lines at the bottom
 static void rad_help_panel(const char *title, const char *(*rows)[2], int nrows,
@@ -508,6 +517,10 @@ static int rad_chair(RadBand *b, const char *name,
 // that just cycled (apply it in the cart) or -1.
 static int rad_band_input(RadBand *b, bool *showHelp) {
     if (keyp('B')) { b->show = !b->show; if (b->show) *showHelp = false; }
+    if (mouse_pressed(MOUSE_LEFT)) {                 // the B-button, bottom left
+        int dx = mouse_x() - 32, dy = mouse_y() - 172;
+        if (dx * dx + dy * dy < 81) { b->show = !b->show; if (b->show) *showHelp = false; }
+    }
     if (*showHelp) b->show = false;
     if (!b->show) return -1;
     int hit = -1;

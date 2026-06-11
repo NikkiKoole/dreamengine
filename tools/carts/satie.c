@@ -430,8 +430,6 @@ void draw(void) {
     rad_power_led(radioOn, CLR_DARK_RED, CLR_MEDIUM_GREY);
 
     rad_help_button(CLR_DARK_RED);
-    rad_footer("H help");
-
     if (showHelp) {
         static const char *HELP[8][2] = {
             { "SPACE",      "next piece (rolls a new seed)" },
