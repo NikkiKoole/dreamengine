@@ -126,7 +126,7 @@ void draw() {
 
         // y-side hits and distant walls get the shaded color
         int dark = (side == 1) || (dist > 5.0f);
-        line(x, y0, x, y1, wall_color(cell(mapX, mapY), dark));
+        rectfill(x, y0, 1, y1 - y0 + 1, wall_color(cell(mapX, mapY), dark));
     }
 
     if (minimap) {

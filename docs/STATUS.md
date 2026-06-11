@@ -754,6 +754,17 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     resolved on inspection: they're all present and value-accurate in `radio-voices.md` +
     `instrument-presets.md`, where radio voices belong; the audit checked `instrument-recipes.md`.)*
 
+34. **`line()` draws axis-aligned lines as unreliable `GL_LINES`** *(new 2026-06-11, found via the
+    `raycaster` cart)*. `line()` in `runtime/studio.c` is a bare Raylib `DrawLine` → GPU `GL_LINES`.
+    For perfectly **vertical** (and horizontal) lines at integer coords, the GL diamond-exit rule
+    darkens/drops individual columns — a raycaster (one vertical line per screen column) shows it as
+    regular dark vertical bars. GPU/driver-dependent, so it can surface without any code change.
+    **Worked around per-cart** in `raycaster.c` (vertical wall slices now use `rectfill(x, y0, 1, h, …)`
+    instead of `line`), but the **root-cause engine fix is deferred**: special-case axis-aligned lines
+    inside `line()` to draw as a filled rect (`DrawRectangle`) — fixes every cart drawing vlines/hlines,
+    but touches the hot shared `studio.c` so it needs a compile-gate + a look at any cart relying on
+    the current 1px GL behavior. Deferred deliberately (cart fix unblocked the regression).
+
 ---
 
 ## Decided-against / deferred ✗
