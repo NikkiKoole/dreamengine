@@ -122,6 +122,16 @@
       </div>
     </a>
 
+    <a class="card" href="respond/" data-title="respond" data-search="respond respond tech-demo toy a cart-land prototype of a responsive-layout primitive set, before any of it touches the engine. drag the yellow lower-right corner to resize a 'virtual screen' rectangle - everything inside it is positioned with four candidate layout functions (flex, fluid clamp/%, anchor+inset, aspect-ratio) so you can watch a real layout reflow live as the screen changes size: a top bar stays pinned and fluid-height, a notification badge stays anchored to the corner, a 16:9 viewport letterboxes itself to fit, and the button bar flips from a row to a stacked column when the width drops under a breakpoint (wide -&gt; phone). the idea: prove the toolkit in cart-land against a fake screen first, then graduate it to a runtime/lay.h header that takes the real screen rect. drag the corner to resize; no other controls." data-added="2026-06-11" data-tier="0">
+      <img src="respond/cart.png" alt="respond" loading="lazy">
+      <div class="body">
+        <h2>respond</h2>
+        <div class="badge b-ready">🟢 Mobile Ready — plays perfectly</div>
+        <p>A cart-land prototype of a responsive-layout primitive set, before any of it touches the engine. Drag the yellow lower-right corner to resize a 'virtual screen' rectangle - everything inside it is positioned with four candidate layout functions (flex, fluid clamp/%, anchor+inset, aspect-ratio) so you can watch a real layout REFLOW live as the screen changes size: a top bar stays pinned and fluid-height, a notification badge stays anchored to the corner, a 16:9 viewport letterboxes itself to fit, and the button bar flips from a row to a stacked column when the width drops under a breakpoint (wide -&gt; phone). The idea: prove the toolkit in cart-land against a fake screen first, then graduate it to a runtime/lay.h header that takes the real screen rect. Drag the corner to resize; no other controls.</p>
+        <div class="added">added 2026-06-11</div>
+      </div>
+    </a>
+
     <a class="card" href="shadelab/" data-title="shadelab" data-search="shadelab shadelab tech-demo toy a cpu fragment shader, the dreamengine way: there is no gpu shader hook, so every pixel is just a little c function returning a 0xrrggbb colour through pset_rgb() - full 24-bit colour, bypassing the 32-colour palette, painted on the cpu. flip through ten worked shaders - uv coords (red=x, green=y), hue sweep, distance field, plasma, value-noise clouds, warped checker, interference, a cursor torch and cursor ripples, and finally feedback: the read-and-write shader that reads the previous frame back with pget_rgb (the new true-colour read-back), dims it, and re-paints it rotated+zoomed, so the screen becomes its own memory - a glowing swirling tunnel you can paint into by holding the mouse. each shader is a few readable lines that are the lesson. up/down changes the pixel size so you can watch the fragments turn chunky (and trade detail for speed); left/right or keys 1..9 switch shader; space freezes time. the companion to the pset_rgb / pget_rgb engine primitives." data-added="2026-06-11" data-tier="1">
       <img src="shadelab/cart.png" alt="shadelab" loading="lazy">
       <div class="body">
@@ -3262,7 +3272,7 @@
       </div>
     </a>
 </div>
-<footer>319 carts · arrows + Z/X to play (most carts)</footer>
+<footer>320 carts · arrows + Z/X to play (most carts)</footer>
 <script>
 (function () {
   var grid = document.querySelector('.grid')
