@@ -129,10 +129,10 @@ static void apply_slot(void) {
     instrument_timbre(I_EP, val[SL_BRITE]);
     instrument_morph(I_EP, val[SL_BARK]);
     // drive (post-filter soft-clip): rhodes/wurli get growl from bark at the top. The CLAV gets a
-    // FIXED ~0.13 — navkit's Clav-Funky p_drive 0.1 + velToDrive: the slight saturation that rounds
-    // the tone ("a bit more muted" than a bare clav). Its honk comes from the morph→pickupDist in
-    // the oscillator, so the post-filter drive stays fixed (no double-dipping morph).
-    instrument_drive(I_EP, ty == 2 ? 0.13f : bark_drive(val[SL_BARK]));
+    // FIXED 0.10 — navkit's Clav-Funky reads exactly "Drive: Soft, 0.10" (the slight saturation
+    // that rounds it / "a bit more muted"; DRIVE_SOFT/tanh is our default mode = navkit's Soft).
+    // Its honk comes from morph→pickupDist in the oscillator, so the post-filter drive stays fixed.
+    instrument_drive(I_EP, ty == 2 ? 0.10f : bark_drive(val[SL_BARK]));
 }
 
 // THE WAH — slot-level, so every strike (keys, auditions, autoplay) inherits it. One flavour now,
