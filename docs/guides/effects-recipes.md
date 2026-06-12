@@ -178,6 +178,7 @@ unlike crush/tape). **Showcase: `vowel`** (a saw chord that talks).
 | open "ah" pad | `instrument_formant(I_PAD, 0.5f, 0.5f, 0.7f)` | a soft choral "ah" colour on a held pad — broad peaks, gentle | (pad pattern) |
 | syllable-per-pluck | `formant()` re-pushed each note-on with the next vowel in a list, glided | each strum speaks a new vowel — the guitar recites a "word" (cart-side: `formant()` has no trigger input, so the cart advances the vowel on each pluck) | `pedalboard` (STEP mode) |
 | picking-driven open | `formant()` driven by a strum envelope (vowel opens on attack, relaxes) | hands-free vocal swell — the auto-wah gesture wearing a vowel | `pedalboard` (ENV mode) |
+| auto-sweep LFO | `formant()` re-pushed each frame with `vowel = 0.5−0.5·cos(phase)` | the vowel rocks OO↔EE on its own at a set rate — the rhythmic "yoy-yoy" wobble, hands-free | `pedalboard` (LFO mode), `vowel` (AUTO) |
 
 ## drive — `instrument_drive(slot, amount)` · `note_drive` · `instrument_drive_mode(slot, mode)`
 

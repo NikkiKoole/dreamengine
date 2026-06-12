@@ -11,8 +11,9 @@
 // The chain can outgrow the screen — a scrollbar appears; drag it to pan. (REVERB is now a real
 // dry/wet INSERT (reverb_insert, Increment C), so its POSITION is audible — put it before the
 // bitcrush to crush the wet tail, or after to reverb the crushed guitar. See effects-bus-architecture.md.)
-// The VOWEL pedal (formant filter) makes the guitar TALK; its MOD knob picks how the vowel moves —
-// MAN (drag VWL by hand), ENV (each pick opens it), STP (a new vowel per pick — a spoken syllable).
+// The VOWEL pedal (formant filter) makes the guitar TALK; its MOD knob picks what moves the vowel —
+// MAN (drag VWL by hand), ENV (each pick opens it), STP (a new vowel per pick — a spoken syllable),
+// LFO (auto-sweeps on its own; VWL becomes the rate).
 //
 // THE GUITAR (lower half, when the palette is closed):
 //   FRETTING HAND — ROOT row (Z X C V B N M) moves up the neck (E F G A B C D); SHAPE row (A S D
@@ -155,24 +156,27 @@ static void chain_move(int from, int to) {   // move element `from` to FINAL ind
 
 // ── the VOWEL pedal's MOD knob: MANUAL / ENV / STEP ──────────────────────────────────────────
 // formant(vowel,q,mix) takes a STATIC vowel; the "talking" comes from MOVING it. The MOD knob
-// (k[3], snapped to 3 like TREMOLO's WAV) picks HOW it moves:
+// (k[3], snapped to 4 like TREMOLO's WAV) picks WHAT moves it — each mode is a different clock:
 //   MANUAL (0) — the VWL knob IS the vowel; drag it while you play = a hand-swept talkbox.
 //   ENV    (1) — each strum pops the vowel OPEN (from the VWL floor) and it relaxes back — picking
 //                dynamics drive it, hands-free (the auto-wah gesture, but a vowel).
 //   STEP   (2) — each strum advances to the NEXT vowel in a little "word", glided in — the guitar
 //                speaks a syllable per pluck (the move nothing else does; VWL is ignored here).
+//   LFO    (3) — the vowel auto-sweeps OO↔EE on its own, free-running; here the VWL knob = RATE.
 // The cart drives all of this (formant() has no trigger input) — fmt_on_attack() on each pluck/
 // strum, formant_tick() every frame easing the vowel toward its target and re-pushing only when it
 // moved (a swept vowel is the intended motion — a cheap coeff update, no buffer churn).
 static const int   FMT_WORD[6] = { 0, 2, 4, 2, 3, 1 };   // OO AH EE AH EH OH — the spoken "word"
 static float fmt_vowel = 0.5f, fmt_target = 0.5f, fmt_env = 0.0f;
 static int   fmt_step = 0;
+static float fmt_lfo_ph = 0.0f;                          // free-running LFO phase (LFO mode)
 static float fmt_last_v = -2.0f;
-static int   fmt_mode_of(Slot *sl) { return (int)(sl->k[3] * 2.99f); }   // k[3] 0..1 → 0/1/2
+static int   fmt_mode_of(Slot *sl) { return (int)(sl->k[3] * 3.99f); }   // k[3] 0..1 → 0/1/2/3
 static float fmt_live_vowel(Slot *sl) {
     int m = fmt_mode_of(sl);
-    if (m == 1) return sl->k[0] + fmt_env * (1.0f - sl->k[0]);   // ENV: open from the VWL floor
+    if (m == 1) return sl->k[0] + fmt_env * (1.0f - sl->k[0]);   // ENV:  open from the VWL floor
     if (m == 2) return fmt_vowel;                                 // STEP: the glided current vowel
+    if (m == 3) return 0.5f - 0.5f * cosf(fmt_lfo_ph * 6.2831853f); // LFO: a free sweep OO↔EE
     return sl->k[0];                                              // MANUAL: the VWL knob
 }
 static void fmt_on_attack(void) {   // a pluck/strum landed
@@ -189,7 +193,9 @@ static void formant_tick(void) {    // every frame: ease the moving modes, re-pu
     int m = fmt_mode_of(sl);
     if (m == 0) return;                                          // MANUAL: apply_fx() handles it on knob change
     if (m == 1) fmt_env *= 0.93f;                                // ENV decays back toward the floor
-    else        fmt_vowel += (fmt_target - fmt_vowel) * 0.16f;   // STEP glides toward the target vowel
+    else if (m == 2) fmt_vowel += (fmt_target - fmt_vowel) * 0.16f;  // STEP glides toward the target vowel
+    else { fmt_lfo_ph += 0.003f + sl->k[0] * 0.04f;              // LFO: VWL knob = rate (~0.18..2.6 Hz @60fps)
+           if (fmt_lfo_ph >= 1.0f) fmt_lfo_ph -= 1.0f; }
     float v = fmt_live_vowel(sl);
     if (fabsf(v - fmt_last_v) > 0.002f) { formant(v, sl->k[1], sl->k[2]); fmt_last_v = v; }
 }
@@ -445,8 +451,8 @@ static void draw_chain_pedal(int i, int x) {
         line(kx, ky, kx + (int)(sinf(a) * (kr - 1)), ky - (int)(cosf(a) * (kr - 1)), sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
         const char *lbl = d->klabel[j];
         if (d->kind == FX_FORMANT && j == 3) {                    // the MOD knob shows its mode, like TREM's WAV
-            static const char *MN[3] = { "MAN", "ENV", "STP" };
-            lbl = MN[(int)(sl->k[3] * 2.99f)];
+            static const char *MN[4] = { "MAN", "ENV", "STP", "LFO" };
+            lbl = MN[fmt_mode_of(sl)];
         }
         font(FONT_TINY);                                          // label tucked beside the knob (the empty column)
         if (j & 1) print_right(lbl, kx - kr - 2, ky - 2, lblcol);   // right-column knob → label on its left
