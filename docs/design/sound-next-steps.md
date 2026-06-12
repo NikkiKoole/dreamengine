@@ -241,23 +241,32 @@ The cheapest realism upgrades on the whole list — no engine, no decision, just
 > noise + tape/reverb), and the design notes for a more-real **Mellotron** cart (drawn voices + the
 > ~8s tape limit). `tapeloop` is the first lean on it.
 
-## Parked — reorderable effects chain (engine, wanted) — 2026-06-12
+## Parked — effects bus architecture (engine, wanted) — 2026-06-12
 
-**Make the master INSERT order configurable**, so an effect can be moved in the chain (e.g.
-bitcrush *before* vs *after* EQ — audibly different). Today the order is **hardcoded** in
-`runtime/sound.h`'s master-FX section (`chorus → flanger → tape → eq → bitcrush`, applied as a
-fixed `if (x_used[0]) x_process(0,…)` sequence; same fixed order in the per-bus aux loop).
+Three *independent* increments to the master-FX / aux-bus layer, fully mapped (sketches, cost
+ledger, open decisions) in **[`effects-bus-architecture.md`](effects-bus-architecture.md)**.
+The throughline: the engine is **already a mixing console** (per-instrument aux buses + a master
+strip); these are *routing* changes, not new effects (decision 0015 holds). Short version:
 
-- **Shape:** an order array the audio thread walks, calling each insert's `*_process` in that
-  order, + a small API to set it. Four-place API wiring + **hot-file care on `sound.h`** (re-read
-  region before editing, compile-gate, sentinel-check the commit).
-- **Scope:** the **5 inserts** — bitcrush / eq / chorus / flanger / tape. **echo + reverb are
-  parallel SENDS** (no position in the chain) — they stay at the end, not reorderable.
-- **Customer:** the [`pedalboard`](../../tools/carts/pedalboard.c) cart — the ask is to **drag the
-  stompboxes to reorder them** and have the *tone* actually change. The pedal row is currently
-  only a visual reading of the fixed order; this is what makes the drag mean something.
-- **Status:** user wants it, deferred (not urgent). Visual-only reorder is NOT worth doing alone
-  (it would imply an audio change that doesn't happen).
+- **A — reorderable inserts** (lowest cost, no new buffers). Make the per-bus INSERT order an
+  array the audio thread walks, + a small `fx_order(bus, kinds, n)` API. Today the order is
+  **hardcoded** (`…chorus→flanger→tape→eq→crush`). **The natural first move** — self-contained,
+  byte-identical when unused, and it makes the [`pedalboard`](../../tools/carts/pedalboard.c)
+  drag mean something (the pedal row is currently only a visual reading of the fixed order).
+- **B — multi-reverb send bus** (costs ~24 KB/tank). Lift the single shared reverb tank into a
+  small **sparse pool + `bus→tank` map**, so the drums can be in a tight room while the keys
+  ring in a long plate — two reverbs at once.
+- **C — reverb as an insert on a dedicated bus** (= B's tank pool + the wet returns through the
+  insert chain). Unlocks effects *after* the space (reverb→bitcrush). Composes with A, and keeps
+  B's simple send-knob as its friendly face. Its one tax — moving the FP summation order — is a
+  **one-time re-baseline, not ongoing wobble**, and this repo has **no committed golden-wav suite
+  to break** (`tune-check` is pitch-based and won't notice). See the detail doc §6.
+
+- **Scope of A:** the **5–6 inserts** (bitcrush / eq / chorus / flanger / tape / wah). **echo +
+  reverb are parallel SENDS** — not reorderable until C makes reverb a bus insert.
+- **Conclusion (2026-06-12): build A, then C; skip B standalone (C subsumes it).** Not urgent,
+  but the direction is settled. Visual-only reorder is NOT worth doing alone (implies an audio
+  change that doesn't happen).
 
 ## Decisions to make (deliberate — don't auto-do)
 
