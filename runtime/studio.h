@@ -31,6 +31,7 @@
 // ------------------------------------------------------------
 
 // standard 16 (0-15)
+// NB: the greys are British-spelled — GREY, not GRAY (CLR_*_GRAY won't compile).
 #define CLR_BLACK          0   // #000000
 #define CLR_DARK_BLUE      1   // #1d2b53
 #define CLR_DARK_PURPLE    2   // #7e2553
@@ -213,6 +214,7 @@ void enable_pget(bool on);                              // turn canvas read-back
 int  sget(int sx, int sy);                              // palette index of the spritesheet pixel at (sx,sy) — read sprites as data (paint a level, lookup tables). 0 if out of range
 void camera(int x, int y);                              // plain camera: shifts all drawing by (-x,-y), no zoom/rotation. camera(0,0) resets
 void camera_ex(int x, int y, float zoom, float angle);  // camera with zoom (1=normal, 2=2x in) and angle (degrees), pivoting on screen center. for a screen-space HUD after zooming, call camera(0,0)
+void smooth_zoom(bool on);                              // render camera_ex's fractional-zoom world at 1:1 then scale it in one blit — stops thin lines crawling under a fractional zoom. one toggle, default off; affects only the world between camera_ex and camera(0,0) (HUD stays crisp)
 void follow(int tx, int ty, int world_w, int world_h); // center camera on (tx,ty), clamped so world edges don't show
 void clip(int x, int y, int w, int h);                  // scissor rect. clip(0,0,0,0) disables
 void zoom_rect(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh); // copy the canvas region (sx,sy,sw,sh) scaled into (dx,dy,dw,dh) — nearest-neighbor, so zoom shows crisp pixels. samples the frame drawn so far (call it after that content). magnifier loupe, picture-in-picture, minimap
