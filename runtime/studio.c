@@ -1982,6 +1982,13 @@ int print_outline(const char *text, int x, int y, int color, int outline_color) 
     return print(text, x, y, color);
 }
 
+int print_rot(const char *text, int x, int y, float deg, int color) {
+    PROF("print_rot");
+    DrawTextPro(cur_font(), text, (Vector2){ (float)x, (float)y }, (Vector2){ 0, 0 },
+                deg, cur_font_size(), 0, palette[color % PALETTE_SIZE]);
+    return x + text_width(text);
+}
+
 void rect(int x, int y, int w, int h, int color) {
     PROF("rect");
     Color c = palette[color % PALETTE_SIZE];

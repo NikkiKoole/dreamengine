@@ -1,4 +1,4 @@
-// epiano — INSTR_EPIANO showcase: a piano manual + the three engine macros + a WAH + TREMOLO.
+// epiano — INSTR_EPIANO showcase: a piano manual + the three engine macros + a WAH + TREMOLO + a PHASER.
 //
 // The fifth modeled ENGINE: Rhodes / Wurlitzer / Clavinet in ONE. Every key sums 12 decaying
 // inharmonic sine modes and pushes them through a PICKUP NONLINEARITY — the bark/buzz/honk
@@ -30,9 +30,9 @@
 // "wurli" doesn't sound like a Wurlitzer, the MAPPING is wrong, not the preset.
 //
 // controls: white keys  A S D F G H J K   ·   black keys  W E . T Y U
-//           Z / X  octave   ·   1..6 presets   ·   V wah (off/on)   ·   M autoplay
+//           Z / X  octave   ·   1..6 presets   ·   V wah (off/on)   ·   P phaser (off/on)   ·   M autoplay
 //           drag a slider (re-strikes to audition), or LEFT/RIGHT pick + UP/DOWN turn
-// MULTITOUCH: every finger is its own pointer; tap the on-screen octave +/- and wah buttons.
+// MULTITOUCH: every finger is its own pointer; tap the on-screen octave +/-, wah and phaser buttons.
 
 #include "studio.h"
 #include <math.h>
@@ -56,15 +56,15 @@ static const char *SL_HI[NSL]   = { "clav",   "bright", "growl", "deep",   "thro
 static const char *INSTRUMENT[3]= { "RHODES", "WURLI", "CLAV" };
 static const char *WAHNAME[2]   = { "off", "on" };
 
-// presets = slider positions + a wah mode. harmonics lands on an instrument detent.
-typedef struct { const char *name; float v[NSL]; int wah; } Preset;
+// presets = slider positions + a wah mode + a phaser mode. harmonics lands on an instrument detent.
+typedef struct { const char *name; float v[NSL]; int wah; int phase; } Preset;
 static const Preset PRESET[6] = {
-    { "rhodes",   { 0.15f, 0.30f, 0.25f, 0.5f, 0.35f }, 0 },   // warm suitcase-ish + classic wobble
-    { "rho brite",{ 0.15f, 0.78f, 0.55f, 0.5f, 0.30f }, 0 },   // bright stage, barky
-    { "suitcase", { 0.15f, 0.20f, 0.12f, 0.5f, 0.45f }, 0 },   // mellow, clean, long, deep tremolo
-    { "wurli",    { 0.50f, 0.45f, 0.60f, 0.5f, 0.50f }, 0 },   // soul ballad — navkit Wurlitzer pickupPos 0.45 (timbre) + pickupDist 0.6 (morph→buzz); the 200A's deeper trem
-    { "wur buzz", { 0.50f, 0.66f, 0.82f, 0.6f, 0.55f }, 1 },   // cranked reed + the wah + trem
-    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f, 0.0f  }, 1 },   // funky bridge pickup THROUGH the wah (quack + LFO pump + bus follower, navkit's clav+wah pairing). NO tremolo — a real clav has none
+    { "rhodes",   { 0.15f, 0.30f, 0.25f, 0.5f, 0.35f }, 0, 0 },   // warm suitcase-ish + classic wobble
+    { "rho brite",{ 0.15f, 0.78f, 0.55f, 0.5f, 0.30f }, 0, 0 },   // bright stage, barky
+    { "suitcase", { 0.15f, 0.20f, 0.12f, 0.5f, 0.45f }, 0, 1 },   // mellow, clean, long, deep tremolo + the classic phased-Rhodes swirl
+    { "wurli",    { 0.50f, 0.45f, 0.60f, 0.5f, 0.50f }, 0, 0 },   // soul ballad — navkit Wurlitzer pickupPos 0.45 (timbre) + pickupDist 0.6 (morph→buzz); the 200A's deeper trem
+    { "wur buzz", { 0.50f, 0.66f, 0.82f, 0.6f, 0.55f }, 1, 0 },   // cranked reed + the wah + trem
+    { "clav",     { 0.85f, 0.75f, 0.55f, 0.6f, 0.0f  }, 1, 0 },   // funky bridge pickup THROUGH the wah (quack + LFO pump + bus follower, navkit's clav+wah pairing). NO tremolo — a real clav has none
 };
 
 static int   handle[NKEY];
@@ -74,6 +74,7 @@ static float val[NSL] = { 0.15f, 0.30f, 0.25f, 0.5f, 0.35f };   // boot on "rhod
 static int   sel = 0;
 static int   cur_preset = 0;
 static int   wahmode = 0;        // 0 off, 1 on (the funky-clav wah: quack + per-voice LFO pump + bus follower). NOT `wah` — clashes with the wah() API
+static int   phasermode = 0;     // 0 off, 1 on (the 70s phased-Rhodes swirl — navkit's processPhaser, ported verbatim). NOT `phaser` — clashes with the phaser() API
 
 static bool  autoplay = true;
 
@@ -105,6 +106,10 @@ static Ptr ptr[NPTR];
 #define WAH_Y 22
 #define WAH_W 86
 #define WAH_H 20
+#define PHA_W 80
+#define PHA_X (WAH_X - PHA_W - 6)   // just left of the wah button, same row
+#define PHA_Y WAH_Y
+#define PHA_H WAH_H
 
 #define KNOB_W   52
 #define KNOB_Y   (SCREEN_H - 30)
@@ -205,6 +210,16 @@ static void apply_trem(void) {
     instrument_tremolo(I_EP, 5.0f + amt * 1.5f, amt * 0.85f, TREM_SINE);
 }
 
+// THE PHASER — the 70s phased-Rhodes / Small Stone swirl (P toggles). navkit's processPhaser ported
+// VERBATIM (a 4-stage allpass chain swept by a slow LFO, A/B-matched sample-for-sample on a sine).
+// A fixed tasteful Phase-90 setting: slow 0.5 Hz sweep, deep, mild resonance, 50/50 mix (the deepest-
+// notch point — an all-wet allpass has no notches). Slot-level so every strike inherits it. mix 0 =
+// bypass. Off on the clav/Wurli (a real clav has wah, a Wurli has tremolo); the suitcase preset boots
+// it on — the classic phased suitcase Rhodes.
+static void apply_phaser(void) {
+    instrument_phaser(I_EP, 0.5f, 0.8f, 0.4f, phasermode ? 0.5f : 0.0f, 4);
+}
+
 static void key_down(int b) {
     if (handle[b] >= 0) { note_off(handle[b]); handle[b] = -1; }
     handle[b] = note_on(midi_of(b), I_EP, 6);
@@ -234,8 +249,9 @@ static void audition(void) {
 static void set_preset(int p) {
     for (int k = 0; k < NSL; k++) val[k] = PRESET[p].v[k];
     wahmode = PRESET[p].wah;
+    phasermode = PRESET[p].phase;
     cur_preset = p;
-    apply_slot(); apply_wah(); apply_trem();
+    apply_slot(); apply_wah(); apply_trem(); apply_phaser();
     audition();
 }
 
@@ -243,7 +259,7 @@ void init(void) {
     instrument(I_EP, INSTR_EPIANO, 1, 0, 7, 450);    // defines the slot; apply_slot() then sets release per type
     for (int b = 0; b < NKEY; b++) handle[b] = -1;
     for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
-    apply_slot(); apply_wah(); apply_trem();
+    apply_slot(); apply_wah(); apply_trem(); apply_phaser();
     bpm(76);
 }
 
@@ -271,6 +287,7 @@ void update(void) {
     }
 
     if (keyp('V')) { wahmode = (wahmode + 1) % 2; apply_wah(); audition(); }
+    if (keyp('P')) { phasermode = (phasermode + 1) % 2; apply_phaser(); audition(); }
     if (keyp('M')) autoplay = !autoplay;
 
     for (int b = 0; b < NKEY; b++) if (handle[b] >= 0) {   // live bark on ringing notes (morph + drive)
@@ -290,6 +307,7 @@ void update(void) {
             p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, -1 };
             if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) { autoplay = !autoplay; continue; }
             if (point_in_box(tx, ty, WAH_X, WAH_Y, WAH_W, WAH_H)) { wahmode = (wahmode + 1) % 2; apply_wah(); audition(); continue; }
+            if (point_in_box(tx, ty, PHA_X, PHA_Y, PHA_W, PHA_H)) { phasermode = (phasermode + 1) % 2; apply_phaser(); audition(); continue; }
             if (point_in_box(tx, ty, OCT_DN_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H)) { octave_step(-1); continue; }
             if (point_in_box(tx, ty, OCT_UP_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H)) { octave_step(+1); continue; }
             if (ty >= KNOB_Y - 26 && ty < KNOB_Y - 12) {
@@ -347,6 +365,7 @@ void update(void) {
     watch("bark", "%.2f", val[SL_BARK]);
     watch("trem", "%.2f", val[SL_TREM]);
     watch("wah",  "%d", wahmode);
+    watch("phaser", "%d", phasermode);
     watch("preset", "%d", cur_preset);
 #endif
 }
@@ -378,6 +397,14 @@ void draw(void) {
     rect(WAH_X, WAH_Y, WAH_W, WAH_H, won ? CLR_ORANGE : CLR_DARK_GREY);
     font(FONT_SMALL);
     print(str("V wah: %s", WAHNAME[wahmode]), WAH_X + 6, WAH_Y + 6, won ? CLR_LIGHT_YELLOW : CLR_MEDIUM_GREY);
+    font(FONT_NORMAL);
+
+    // PHASER button (tappable; off/on). On = the 70s phased-Rhodes swirl (navkit processPhaser).
+    bool pon = (phasermode != 0);
+    rectfill(PHA_X, PHA_Y, PHA_W, PHA_H, pon ? CLR_DARK_ORANGE : CLR_DARKER_GREY);
+    rect(PHA_X, PHA_Y, PHA_W, PHA_H, pon ? CLR_ORANGE : CLR_DARK_GREY);
+    font(FONT_SMALL);
+    print(str("P phaser: %s", WAHNAME[phasermode]), PHA_X + 6, PHA_Y + 6, pon ? CLR_LIGHT_YELLOW : CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 
     // the manual
@@ -433,7 +460,7 @@ void draw(void) {
     }
 
     font(FONT_TINY);
-    print("white A..K  black W E T Y U   Z/X octave   1..6 presets   V wah   drag a slider",
+    print("white A..K  black W E T Y U   Z/X octave   1..6 presets   V wah   P phaser   drag a slider",
           8, SCREEN_H - 8, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }

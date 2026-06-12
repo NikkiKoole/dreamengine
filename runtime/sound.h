@@ -862,6 +862,58 @@ static void fx_set_tremolo(int b, float rate, float depth, int shape) {
     trem_used[b] = (depth > 0.0f);   // depth 0 = off (identity gain), like mix 0 elsewhere
 }
 
+// ── phaser — cascaded allpass chain swept by an LFO (the 70s Rhodes / Small Stone swirl) ─────────
+// A VERBATIM port of navkit's bus processPhaser: N first-order allpass stages in series, all sharing
+// one LFO-swept coefficient (coeff = 0.5 + lfo·depth·0.4, navkit's 0.1..0.9 range), with feedback
+// from the last stage's state — the moving NOTCHES in the spectrum are the phaser sound (distinct
+// from the flanger's swept comb). navkit's processor is mono; we run it PER CHANNEL (own allpass
+// memory L/R) sharing one LFO phase, so a centered source matches navkit's mono exactly and a stereo
+// source keeps its width. stages 2..8 (4 = the classic Phase-90). Dormant until mix>0 → byte-identical.
+#define SOUND_PHASER_STAGES 8
+static float phaser_rate [SOUND_FX_BUSES];   // LFO rate Hz
+static float phaser_depth[SOUND_FX_BUSES];   // sweep depth 0..1
+static float phaser_fb   [SOUND_FX_BUSES];   // feedback (resonance), signed
+static float phaser_mix  [SOUND_FX_BUSES];   // dry/wet 0..1
+static int   phaser_stages[SOUND_FX_BUSES];  // allpass stages 2..8
+static float phaser_phase[SOUND_FX_BUSES];   // LFO phase 0..1 (shared L/R)
+static float phaser_stL[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // per-stage allpass output (L)
+static float phaser_pvL[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // per-stage allpass input  (L)
+static float phaser_stR[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // … (R)
+static float phaser_pvR[SOUND_FX_BUSES][SOUND_PHASER_STAGES];
+static bool  phaser_used[SOUND_FX_BUSES];
+static float phaser_chan(float in, float coeff, float fb, float mix, int stages, float *st, float *pv) {
+    float dry = in;
+    float pIn = in + st[stages - 1] * fb;
+    if (pIn > 1.5f) pIn = 1.5f; if (pIn < -1.5f) pIn = -1.5f;
+    for (int s = 0; s < stages; s++) {
+        float ap = coeff * (pIn - st[s]) + pv[s];
+        pv[s] = pIn;
+        st[s] = ap;
+        pIn = ap;
+    }
+    return dry * (1.0f - mix) + pIn * mix;
+}
+static void phaser_process(int b, float *mixL, float *mixR) {
+    phaser_phase[b] += phaser_rate[b] * (1.0f / (float)SOUND_SAMPLE_RATE);
+    if (phaser_phase[b] >= 1.0f) phaser_phase[b] -= 1.0f;
+    float lfo = sinf(phaser_phase[b] * 6.2831853f);
+    float coeff = 0.5f + lfo * phaser_depth[b] * 0.4f;   // navkit: cCenter 0.5 ± lfo·depth·cRange(0.4)
+    int stages = phaser_stages[b];
+    float fb = phaser_fb[b], mix = phaser_mix[b];
+    *mixL = phaser_chan(*mixL, coeff, fb, mix, stages, phaser_stL[b], phaser_pvL[b]);
+    *mixR = phaser_chan(*mixR, coeff, fb, mix, stages, phaser_stR[b], phaser_pvR[b]);
+}
+static void fx_set_phaser(int b, float rate, float depth, float feedback, float mix, int stages) {
+    if (rate  < 0.0f)  rate  = 0.0f;  if (rate  > 10.0f) rate  = 10.0f;
+    if (depth < 0.0f)  depth = 0.0f;  if (depth > 1.0f)  depth = 1.0f;
+    if (feedback < -0.95f) feedback = -0.95f; if (feedback > 0.95f) feedback = 0.95f;
+    if (mix < 0.0f)  mix  = 0.0f; if (mix > 1.0f) mix = 1.0f;
+    if (stages < 2) stages = 2; if (stages > SOUND_PHASER_STAGES) stages = SOUND_PHASER_STAGES;
+    phaser_rate[b] = rate; phaser_depth[b] = depth; phaser_fb[b] = feedback;
+    phaser_mix[b] = mix; phaser_stages[b] = stages;
+    phaser_used[b] = (mix > 0.0f);   // mix 0 = off, like chorus/flanger/tremolo
+}
+
 // envelope-follower smoothing coefficient from a time in ms (one-pole; 0 ms = instant)
 static float sound_follow_coef(int ms) {
     if (ms <= 0) return 1.0f;
@@ -940,6 +992,8 @@ typedef enum {
     SR_INSTR_WAH_LFO= 58,   // a=slot, b=rate*1000, c=res*1000, e0=mix*1000 — LFO-wah on one instrument (auto-bus)
     SR_TREMOLO      = 59,   // a=rate*1000, b=depth*1000, c=shape — THE master tremolo (bus 0, navkit processTremolo)
     SR_INSTR_TREMOLO= 60,   // a=slot, b=rate*1000, c=depth*1000, e0=shape — tremolo on one instrument (auto-bus)
+    SR_PHASER       = 61,   // a=rate*1000, b=depth*1000, c=fb*1000(signed), e0=mix*1000, e1=stages — THE master phaser (bus 0, navkit processPhaser)
+    SR_INSTR_PHASER = 62,   // a=slot, b=rate*1000, c=depth*1000, e0=fb*1000(signed), e1=mix*1000, e2=stages — phaser on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3513,6 +3567,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_tremolo(b, r.b / 1000.0f, r.c / 1000.0f, r.e0);
+    } else if (r.kind == SR_PHASER) {       // master phaser (bus 0): a=rate, b=depth, c=fb(signed), e0=mix (×1000), e1=stages
+        fx_set_phaser(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1);
+    } else if (r.kind == SR_INSTR_PHASER) { // per-instrument: a=slot, b=rate, c=depth, e0=fb(signed), e1=mix (×1000), e2=stages
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_phaser(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f, r.e2);
     } else if (r.kind == SR_BITCRUSH) {     // master bitcrush (bus 0): a=bits*100, b=rate*100, c=mix*1000
         fx_set_crush(0, r.a / 100.0f, r.b / 100.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_BITCRUSH) { // per-instrument: a=slot, b=bits*100, c=rate*100, e0=mix*1000
@@ -3790,6 +3850,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             if (trem_used[b]) trem_process(b, &busL[b], &busR[b]);   // tremolo first (amp volume LFO)
             if (wah_used[b]) wah_process(b, &busL[b], &busR[b]);     // filter next
             if (cho_used[b]) chorus_process(b, &busL[b], &busR[b]);
+            if (phaser_used[b]) phaser_process(b, &busL[b], &busR[b]);  // swept allpass notches (after chorus, navkit's order)
             if (flg_used[b]) flanger_process(b, &busL[b], &busR[b]);
             if (tape_used[b]) tape_process(b, &busL[b], &busR[b]);
             if (eq_used[b]) eq_process(b, &busL[b], &busR[b]);        // 2-band shelving tone (boost/cut)
@@ -3855,6 +3916,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         if (trem_used[0]) trem_process(0, &mixL, &mixR);    // tremolo (amp volume LFO), before the filter
         if (wah_used[0]) wah_process(0, &mixL, &mixR);      // auto-wah (envelope bandpass), filter first
         if (cho_used[0]) chorus_process(0, &mixL, &mixR);   // BBD chorus, antiphase stereo width, in place
+        if (phaser_used[0]) phaser_process(0, &mixL, &mixR); // swept allpass notches (the Rhodes/Small Stone swirl)
         if (flg_used[0]) flanger_process(0, &mixL, &mixR);  // short swept delay + feedback, mono, in place
         if (tape_used[0]) tape_process(0, &mixL, &mixR);    // wow/flutter/saturation, stereo, in place
         if (eq_used[0]) eq_process(0, &mixL, &mixR);        // 2-band shelving EQ (boost/cut), stereo, in place
@@ -4408,6 +4470,17 @@ void tremolo(float rate, float depth, int shape) {
 void instrument_tremolo(int slot, float rate, float depth, int shape) {
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
     sound_push_ctrl(SR_INSTR_TREMOLO, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), shape, 0, 0);
+}
+
+// ── phaser: THE master phaser (LFO-swept allpass chain — the 70s Rhodes / Small Stone swirl) ──
+
+void phaser(float rate, float depth, float feedback, float mix, int stages) {
+    sound_push_ctrl(SR_PHASER, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(feedback * 1000.0f), (int)(mix * 1000.0f), stages, 0);
+}
+
+void instrument_phaser(int slot, float rate, float depth, float feedback, float mix, int stages) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_PHASER, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(feedback * 1000.0f), (int)(mix * 1000.0f), stages);
 }
 
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {

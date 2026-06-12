@@ -151,6 +151,7 @@ int  print_centered(const char *text, int x, int y, int color);    // draw text 
 int  print_right(const char *text, int right_x, int y, int color); // right-align text at right_x; returns x after last char
 int  print_scaled(const char *text, int x, int y, int color, int scale); // bigger text for titles/menus (scale 2 = double size); returns x after last char
 int  print_outline(const char *text, int x, int y, int color, int outline_color); // text with a 1px outline in all 8 directions; maximum legibility
+int  print_rot(const char *text, int x, int y, float deg, int color); // EXPERIMENTAL playground: text rotated `deg` degrees around (x,y). not yet wired into docs/help
 void line(int x1, int y1, int x2, int y2, int color);
 void bezier(int x0, int y0, int cx, int cy, int x1, int y1, int color);                                                    // quadratic Bezier: smooth curve from (x0,y0) to (x1,y1) pulled toward control point (cx,cy)
 void pset(int x, int y, int color);                     // set a single pixel (pairs with pget)
@@ -428,6 +429,13 @@ void instrument_eq(int slot, float low_gain, float mid_gain, float high_gain);  
 #define TREM_TRI     2   // linear ramp up/down — a sharper sine, between sine and square
 void tremolo(float rate, float depth, int shape);                       // rate 0.1..20 Hz, depth 0..1 (0 = off), shape TREM_*. THE master tremolo
 void instrument_tremolo(int slot, float rate, float depth, int shape);  // tremolo on just this slot (auto-grabs a private FX bus)
+
+// phaser — a chain of allpass filters swept by an LFO carves moving NOTCHES in the spectrum: the
+// 70s electric-piano / Small Stone swirl (vocal, hollow, "jet-like" but softer than a flanger's
+// metallic comb). stages = how many notches (4 = the classic Phase-90; more = thicker/deeper).
+// feedback adds resonance around the notches. Master (whole mix), or per-instrument. mix 0 = off.
+void phaser(float rate, float depth, float feedback, float mix, int stages);                       // rate 0..10 Hz, depth 0..1, feedback -0.95..0.95, mix 0..1 (0 = off), stages 2..8. THE master phaser
+void instrument_phaser(int slot, float rate, float depth, float feedback, float mix, int stages);  // phaser on just this slot (auto-grabs a private FX bus)
 
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti

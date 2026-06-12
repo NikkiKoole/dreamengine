@@ -1283,6 +1283,23 @@ v1, document it on the panel.
    0.700** on a sine, and **8.018 Hz / 0.400 / square** at a second setting — rate and depth dead-on, on
    both the master and per-instrument paths. Showcase: `epiano` (Rhodes/Wurli throb; clav preset depth 0).
 
+9. **Phaser** — the swept allpass NOTCHES: the 70s phased-Rhodes / Small Stone swirl (the one EP
+   effect the library was missing — we had a flanger's swept *comb*, but not a phaser's *notches*).
+   **✓ SHIPPED 2026-06-12** — `phaser(rate, depth, feedback, mix, stages)` (master) **and**
+   `instrument_phaser(slot, …)` (per-instrument aux bus, the tape/wah/eq pattern). A **VERBATIM port
+   of navkit's bus `processPhaser`**: N first-order allpass stages in series sharing one LFO-swept
+   coefficient (`coeff = 0.5 + lfo·depth·0.4`, navkit's 0.1..0.9 range) with feedback from the last
+   stage. navkit's is mono; we run it **per channel** (own allpass memory L/R) sharing one LFO phase,
+   so a centered source matches navkit's mono exactly and a stereo source keeps its width. `stages`
+   2..8 (**4 = the classic Phase-90**); `mix` 0 = bypass → non-users byte-identical, and **0.5 is the
+   deepest** (an all-wet allpass is magnitude-flat — the notches live in the dry+wet sum). Applied
+   after chorus in both the per-bus insert loop and the master chain (navkit's order). `SR_PHASER`=61
+   / `SR_INSTR_PHASER`=62 (`*1000` for rate/depth/fb/mix, stages a raw int). **A/B-verified against
+   navkit's REAL DSP** (the saved `tools/navkit-fx-render.c` harness driving navkit's genuine
+   `setBusPhaser`+`processBusEffects`): **0.99999 sample-level correlation** (`tools/wav-correlate.js`)
+   at two settings (4-stage/fb0.3 and 6-stage/fb0.6/depth1.0). Showcase: `epiano` (the `P` toggle; the
+   `suitcase` preset boots it — the classic phased suitcase Rhodes).
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 

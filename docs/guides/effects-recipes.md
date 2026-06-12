@@ -27,7 +27,7 @@ and leave the rest dry. `drive` is the exception — it's a **per-voice** insert
 > point is *that effect as the instrument* — crib from it first. Showcases:
 > `spacecho` (echo) · `cathedral` (reverb) · `juno`/`solina` (chorus) · `mistress` (flanger) ·
 > `tapeloop` (tape) · `clavinet` (wah) · `drivemodes` (drive modes) · `bitcrush` (bitcrush) · `eq` (EQ) ·
-> `epiano` (tremolo).
+> `epiano` (tremolo + phaser).
 
 ---
 
@@ -177,6 +177,27 @@ instrument's WHOLE output in unison — the coherent amp wobble a per-voice `LFO
 
 > A real clav has **no** tremolo — the `epiano` clav preset sets depth 0 (bypass). Tremolo is the
 > Rhodes/Wurli signature, not a universal EP effect.
+
+## phaser — `phaser(rate, depth, feedback, mix, stages)` · `instrument_phaser(slot, …)`
+
+A chain of allpass filters swept by an LFO carves moving NOTCHES in the spectrum — the **70s
+electric-piano / Small Stone swirl** (vocal, hollow; softer + rounder than a flanger's metallic comb).
+`rate` 0–10 Hz (sweep speed; ~0.3–0.7 for the classic slow swirl), `depth` 0–1 (how far the notches
+travel), `feedback` −0.95..0.95 (resonance around the notches), `mix` 0–1 (**0 = off**, and note
+**0.5 is the deepest** — an all-wet allpass has no notches, the notches form in the dry+wet sum),
+`stages` 2–8 (notch count — **4 = the classic Phase-90**, more = thicker). A VERBATIM port of navkit's
+`processPhaser` (A/B-matched sample-for-sample, 0.99999 correlation). Master or per-instrument.
+**Showcase: `epiano`** (the `P` toggle; on by default on the `suitcase` preset). Dormant until mix>0.
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| phased suitcase Rhodes | `instrument_phaser(I_EP, 0.5f, 0.8f, 0.4f, 0.5f, 4)` | the slow 4-stage Phase-90 swirl on an EP — the 70s signature | `epiano` |
+| deep 6-stage swirl | `phaser(1.0f, 1.0f, 0.6f, 0.5f, 6)` | thicker, more notches, more resonant — a wider whole-mix sweep | (6-stage pattern) |
+| through-zero-ish | `phaser(0.3f, 0.9f, -0.6f, 0.5f, 4)` | negative feedback hollows the notches differently — a more "inside-out" sweep | (neg-fb pattern) |
+
+> **Phaser vs flanger:** both sweep and whoosh, but a phaser is allpass NOTCHES (vocal, smooth — the
+> Rhodes/Small Stone) and a flanger is a swept COMB with delay (metallic, jet-like — needs a rich
+> source). For an electric piano, reach for the phaser.
 
 ---
 

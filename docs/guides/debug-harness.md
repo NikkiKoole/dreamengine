@@ -261,44 +261,40 @@ pitch); play the analyzed note seconds after any audition, with autoplay off.
 #### A/B a bus EFFECT (not a preset voice) — drive navkit's *real* effect code
 
 `preset_audition` renders **voices**, not the **bus effect chain** — it never calls
-`processBusEffects`, so there's no ready-made tool to render navkit's echo/chorus/tremolo/etc.
+`processBusEffects`, so there's no ready-made navkit tool to render echo/chorus/tremolo/phaser/etc.
 The temptation is to copy navkit's formula into a standalone harness and diff it against your
 `sound.h` copy — **don't**: that tests your copy against your copy and never touches navkit. The
-honest A/B drives navkit's *genuine* functions. They're reachable from a ~40-line harness because
-`engines/effects.h` exposes the real per-sample bus processor (`processBusEffects(input, busIndex,
-dt)`) and its setters (`setBusTremolo`, `setBusEcho`, …). Include navkit's real chain (`synth.h`
-**then** `effects.h` — `effects.h` needs `applyDistortion` from `synth.h`), configure the bus, and
-pump a known signal through it:
+honest A/B drives navkit's *genuine* functions, and there's a **saved kit** for exactly this (built
+during the tremolo + phaser ports):
 
-```c
-// nav_fx_render.c — navkit's ACTUAL bus tremolo over a 440 Hz sine → mono WAV (no formula copied)
-#include <stdio.h> #include <stdlib.h> #include <math.h>
-#include "/abs/path/navkit/soundsystem/engines/synth.h"
-#include "/abs/path/navkit/soundsystem/engines/effects.h"
-int main(void){
-  _ensureMixerCtx();
-  setBusTremolo(0, true, 5.5f, 0.7f, TREMOLO_SHAPE_SINE);   // rate, depth, shape
-  float dt = 1.0f/SAMPLE_RATE; double ph=0, inc=440.0/SAMPLE_RATE;
-  /* write a WAV header, then per sample: */
-  float s = (float)sin(ph*2*M_PI)*0.5f; ph+=inc; if(ph>=1)ph-=1;
-  float y = processBusEffects(s, 0, dt);   // navkit's genuine DSP
-  /* …int16-clamp y, fwrite… */
-}
-// clang -O2 -o /tmp/nav_fx nav_fx_render.c -lm   (absolute include paths, no -I needed)
-```
+| tool | what it does |
+|---|---|
+| `tools/navkit-fx-render.c` | renders navkit's REAL bus effect over a pure sine → mono WAV. Links navkit's actual `setBus*`+`processBusEffects` (via `synth.h` **then** `effects.h` — `effects.h` needs `applyDistortion` from `synth.h`). `clang -O2 -o /tmp/navfx tools/navkit-fx-render.c -lm` then `/tmp/navfx tremolo 5.5 0.7 0 out.wav 3 587` or `/tmp/navfx phaser 0.5 0.7 0.3 0.5 4 out.wav 6 587`. Add a new effect = one more `else if` calling its `setBus*` |
+| `tools/wav-correlate.js` | **sample-level A/B** — normalized cross-correlation of two WAVs (1.000 = identical DSP up to a constant gain + small delay). The definitive check; robust to our engine's output-gain offset |
+| `tools/wav-modrate.js` | extracts an amplitude-modulating effect's **LFO rate + depth** from a WAV, level-independent (for tremolo / auto-pan / a phaser's wobble on a steady tone) |
 
-Render **ours** by exercising the matching API in a tiny cart (a flat-top sine + the effect) and
-`play.js … --det --wav`. Then compare the **effect's characteristic**, not raw samples — our engine
-adds ADSR/mix gain so a byte diff isn't apples-to-apples. For tremolo that's the **LFO rate** and
-**depth** (`1 − trough/peak`), pulled from each WAV's amplitude envelope; for echo, the tap spacing;
-for a filter, the spectrum. The tremolo port matched navkit dead-on this way — **5.513 Hz / depth
-0.700** from both, at two different settings (also 8 Hz / 0.4 / square). Two gotchas that bit:
+> **Gotcha (cost an hour):** navkit's `effects.h` does `#define fx (fxCtx->params)` (+ `delayBuffer`,
+> `reverbComb1`, …). Name a local `fx` in your harness and it explodes into nonsense parse errors.
+> Avoid those names — `tools/navkit-fx-render.c` uses `effect`.
+
+Render **ours** by exercising the matching API in a tiny cart (a flat-top sine + the effect — see
+`tremtest.c` / `phasertest.c`) with `play.js … --det --wav`, then compare. Two comparison modes,
+pick by effect:
+- **sample-level** (`wav-correlate.js`) — the strongest: same deterministic sine in ⟹ identical DSP
+  gives ~1.0 correlation regardless of level. The phaser port hit **0.99999** at two settings.
+- **characteristic** (`wav-modrate.js`, or an FFT) — when you want the *number*: tremolo matched
+  **5.513 Hz / depth 0.700** on both, at two settings (also 8 Hz / 0.4 / square).
+
+Three gotchas that bit:
 - **our `--wav` is STEREO** (`byteRate = sr·4`), navkit harness WAVs are mono — an analyzer that
   reads int16 as mono halves the detected rate on the stereo file (reads L,R,L,R as a 2× stream).
-  Parse the `fmt ` channel count; take the left channel.
-- **don't measure the effect off a busy source** — an autoplaying/decaying cart's envelope is
-  dominated by note dynamics, not the effect. Use a steady, flat-top tone (the `tremtest.c` cart:
-  `INSTR_SINE`, full sustain, one held note).
+  Parse the `fmt ` channel count; take the left channel (the saved tools do).
+- **don't measure off a busy source** — an autoplaying/decaying cart's envelope is dominated by note
+  dynamics, not the effect. Use a steady, flat-top tone (`tremtest.c`: `INSTR_SINE`, full sustain).
+- **allpass effects barely move a sine** (phaser): an allpass is magnitude-preserving, so a pure sine
+  through a phaser hardly modulates (the notches live in the dry+wet *sum*, and a sine has energy at
+  one frequency). That's correct physics, not a weak effect — use `wav-correlate.js` (sample-level)
+  for the A/B, and test the *audible* swirl on broadband material (the EP itself), not a sine.
 
 **Gotcha — navkit's velocity is `clampf(velocity·2, 0, 1)`.** Its volume range is ~0–0.5,
 so `preset_audition -v 0.5` already clamps to full velocity. To velocity-match *our* note
