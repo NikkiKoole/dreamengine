@@ -5,6 +5,16 @@ The rich-instrument program: porting navkit's self-contained oscillator engines
 `INSTR_*` ids with the fixed three-macro surface (harmonics / timbre / morph), plus
 the effects-layer plan. **Genre: design exploration.**
 
+> **Actually porting a voice/effect from navkit? Read the HOW-TO first:
+> [`../guides/porting-from-navkit.md`](../guides/porting-from-navkit.md).** The hard-won rule is
+> **copy the oscillator VERBATIM, oscillator-first** — never crib or match formulas piecemeal
+> (it compounds errors and never converges). That doc has the workflow (render the reference +
+> FFT-compare, rule out pipeline/aliasing/velocity, copy verbatim, verify), the gotchas that eat
+> the most time (the `velocity·2` clamp, the ratio-blend toward integer harmonics, the
+> amp-normalize, the preset's always-on filter, the drive knob-scale mismatch), the macro↔param
+> mapping, and the epiano **clav + wurli** ports as the end-to-end worked example. This doc (the
+> *program* / engine catalog) tells you *what* to port and *why*; that one tells you *how*.
+
 > ## ⏱ STATE — read this first (2026-06-10)
 >
 > Orient cheaply: current state + the next bite, so you don't have to read 1,400 lines to
@@ -1647,9 +1657,22 @@ the canonical home — the §8.8.5 post-ship notes point here.)*
     tremolo; the suitcase's defining wobble needs a stereo field — itself a reason its home is the
     output/bus layer. The mono amp-trem is a stand-in until then.
   - **Wurlitzer wants mono amplitude tremolo** (the 200A's built-in trem genuinely is level
-    modulation, deeper/faster than the Rhodes) — our per-voice amp-trem already matches it closely.
+    modulation). **EAR-CONFIRMED 2026-06-12 the per-voice version "doesn't cut it"** — after the
+    clav + wurli oscillators were verbatim-ported to navkit (they now match), the tremolo was the
+    last gap on the wurli, and the per-voice `LFO_VOLUME` (capped at a ~50% dip by the engine's
+    `0.5×` factor, and a shallow level-chop rather than an amp wobble) reads wrong no matter how
+    deep you push it. (navkit's own wurli `p_vibratoDepth` is only **0.05** — so it was never
+    about depth; it's the *architecture*: a bus amp-mod, not a per-voice chop.) This is the
+    concrete trigger to build the bus effect.
   - **Clav**: none (the preset zeroes it; a real clav has no tremolo).
 
 All three want **one shared phase-coherent LFO on the summed mix**, alongside the bus auto-wah — and
-the bus is where the suitcase stereo auto-pan can finally exist. See
+the bus is where the suitcase stereo auto-pan can finally exist. **→ NEXT SOUND-ENGINE PIECE: a
+tremolo / auto-pan BUS effect** (the wurli's deferred tremolo is the customer; the suitcase Rhodes
+auto-pan is the second). Sibling to the wah/chorus/tape buses. See
 [decision 0015 Correction](../decisions/0015-effects-are-recipes-not-primitives.md).
+
+> **Status note (2026-06-12):** the epiano **clav** and **wurli** oscillators are now VERBATIM
+> navkit ports (`sound_epiano_start`/`_sample`, `ty==2`/`ty==1`) — see the worked example in
+> [`../guides/porting-from-navkit.md`](../guides/porting-from-navkit.md). Rhodes (`ty==0`) is kept
+> as ours by choice. Only the wurli tremolo remains, pending the bus effect above.
