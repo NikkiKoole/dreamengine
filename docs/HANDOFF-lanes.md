@@ -31,7 +31,7 @@ toggle). Legacy `reverb()` bytes-identical (verified). Leslie + fonts landed, tr
 Working tree is dirty with **other agents'** in-flight work (none mine — all my work is committed):
 
 - **Leslie agent**: `sound.h`, `studio.c/.h`, `effects-recipes.md`, `decisions/0015…md`, `navkit-fx-render.c`, `organ.*`, `tools/carts/leslietest.c`. Leslie is correctly **pinned per-bus** (rotary speaker = output stage, not a reorderable pedal), reuses `moddel_hermite`, lives around `sound.h:994`.
-- **Font agent**: `font-bake.js`, `gen-rom-font.js`, `fontcomic.*`, `FONT_LARGE` / `FONT_BOOT` in `studio.h`.
+- **Font agent**: `font-bake.js`, `gen-rom-font.js`, `fontcomic10x20.*` / `fontthin8x8.*`, `FONT_COMIC` / `FONT_THIN` in `studio.h` (and dropped `FONT_LARGE`/`FONT_BOOT`/`FONT_SMOOTH`).
 
 → **Don't edit `sound.h` / `studio.h` until those are committed and the tree is green.**
 

@@ -14,12 +14,12 @@ STATE {
     int   fi;        // font index into FONTS[]
 };
 
-static const int   FONTS[]  = { FONT_NORMAL, FONT_SMALL, FONT_TINY, FONT_LARGE,  FONT_BOOT,   FONT_SMOOTH,    FONT_COMIC,    FONT_THIN };
-static const char *FNAMES[] = { "NORMAL 8x8", "SMALL 4x6", "TINY 3x5", "LARGE 9x14", "BOOT 9x16", "SMOOTH 16x16", "COMIC 10x20", "THIN CGA 8x8" };
-#define NFONTS 8
+static const int   FONTS[]  = { FONT_NORMAL, FONT_SMALL, FONT_TINY, FONT_COMIC,    FONT_THIN };
+static const char *FNAMES[] = { "NORMAL 8x8", "SMALL 4x6", "TINY 3x5", "COMIC 10x20", "THIN CGA 8x8" };
+#define NFONTS 5
 
 void init(void) {
-    S->fi = 6;   // show off the new comic font by default; X cycles through them all
+    S->fi = 3;   // show off the comic font by default; X cycles through them all
 }
 
 void update(void) {
@@ -38,7 +38,7 @@ void draw(void) {
     cls(CLR_DARK_BLUE);
 
     // the headline: the CURRENT font's name rendered IN that font, centered up
-    // top — you read the name and see the glyphs at once. X cycles all 7 fonts.
+    // top — you read the name and see the glyphs at once. X cycles all 5 fonts.
     font(FONTS[S->fi]);
     print_centered(FNAMES[S->fi], SCREEN_W / 2, 4, CLR_YELLOW);
 
@@ -47,10 +47,6 @@ void draw(void) {
     print("print_rot  (X cycles font)", 6, 30, CLR_WHITE);
     print(p ? "pivot: CENTER (z)" : "pivot: top-left (z)", 6, 41, CLR_ORANGE);
     print("< > angle  space spin", 6, SCREEN_H - 12, CLR_INDIGO);
-
-    // "bigger & wider" with no new asset: the boot font scaled 2x (DOS 40-col style)
-    font(FONT_BOOT);
-    print_scaled("BOOT", SCREEN_W - 92, SCREEN_H - 36, CLR_MEDIUM_GREEN, 2);
 
     // the rotated samples use whichever font we're auditing
     font(FONTS[S->fi]);

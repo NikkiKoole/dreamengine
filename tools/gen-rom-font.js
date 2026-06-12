@@ -4,16 +4,15 @@
 // Two sources feed the same atlas format (so the one LoadFontFromImage(YELLOW, 0)
 // loader in studio.c handles them all, no new runtime code per font):
 //
-//   1. IBM ROM dumps  (tools/fonts/*.F1x) — raw 256-glyph × H-byte bitmaps from
+//   1. IBM ROM dumps  (tools/fonts/*.F08) — raw 256-glyph × H-byte bitmaps from
 //      VileR's int10h collection (github.com/viler-int10h/vga-text-mode-fonts).
-//      Each byte = one 8-pixel scanline, MSB = leftmost. IBM text modes render
-//      these 8-wide glyphs in a 9-wide cell: the 9th column is blank EXCEPT for
-//      the line/block-drawing range 0xC0–0xDF, where it duplicates the 8th column
-//      so horizontal rules connect. We bake that in → authentic MDA/VGA look.
+//      Each byte = one 8-pixel scanline, MSB = leftmost. romGlyphs() takes a cell
+//      width: 8 for true CGA (FONT_THIN), 9 for MDA/VGA (the 9th column copies the
+//      8th over the 0xC0–0xDF box-drawing range so horizontal rules connect).
 //
-//   2. Smoothed upscale of our own dos_8x8 default — decode the PNG, run each
-//      8×8 glyph through EPX/Scale2x (diagonals rounded, stays 2-colour pixel,
-//      no blur) into a 16×16 cell. The "more pixels, used well" font.
+//   2. TrueType rasterization — ttfGlyphs() bakes a monospace TTF (FONT_COMIC,
+//      from ComicMono-Bold.ttf) into fixed cells via font-bake.js's outline path,
+//      with a per-glyph patch table for hand cleanups that survive re-bakes.
 //
 // Atlas contract (matches dos_8x8 exactly): 16×16 grid, firstChar 0 (full OEM /
 // CP437 set), 1px opaque-yellow separators + border (the key colour), glyph
@@ -102,57 +101,7 @@ function romGlyphs(srcFile, rows, width = 9) {
   return glyphs
 }
 
-// ── source 2: decode dos_8x8.png, EPX each 8×8 glyph → smoothed 16×16 grids ──
-function decodePNG(file) {
-  const b = fs.readFileSync(file); let o = 8, idat = [], W, H
-  while (o < b.length) {
-    const len = b.readUInt32BE(o), type = b.toString('ascii', o + 4, o + 8), data = b.slice(o + 8, o + 8 + len)
-    if (type === 'IHDR') { W = data.readUInt32BE(0); H = data.readUInt32BE(4) }
-    else if (type === 'IDAT') idat.push(data); else if (type === 'IEND') break
-    o += 12 + len
-  }
-  const raw = zlib.inflateSync(Buffer.concat(idat)), bpp = 4, stride = W * bpp, out = Buffer.alloc(H * stride)
-  const paeth = (a, b, c) => { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); return pa <= pb && pa <= pc ? a : pb <= pc ? b : c }
-  for (let y = 0; y < H; y++) {
-    const f = raw[y * (stride + 1)], ro = y * (stride + 1) + 1
-    for (let x = 0; x < stride; x++) {
-      const v = raw[ro + x], a = x >= bpp ? out[y * stride + x - bpp] : 0, u = y > 0 ? out[(y - 1) * stride + x] : 0
-      const ul = (x >= bpp && y > 0) ? out[(y - 1) * stride + x - bpp] : 0
-      let r; switch (f) { case 0: r = v; break; case 1: r = v + a; break; case 2: r = v + u; break
-        case 3: r = v + ((a + u) >> 1); break; case 4: r = v + paeth(a, u, ul); break; default: throw 'filter ' + f }
-      out[y * stride + x] = r & 255
-    }
-  }
-  return { W, H, px: out }
-}
-// EPX / Scale2x — identical algorithm to sprite-draw.js scale2x(), on a 1-bit grid
-function epx(g) {
-  const h = g.length, w = g[0].length, o = Array.from({ length: h * 2 }, () => Array(w * 2).fill(0))
-  const P = (x, y) => g[Math.max(0, Math.min(h - 1, y))][Math.max(0, Math.min(w - 1, x))]
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const p = g[y][x], A = P(x, y - 1), B = P(x + 1, y), C = P(x - 1, y), D = P(x, y + 1)
-    let e0 = p, e1 = p, e2 = p, e3 = p
-    if (C === A && C !== D && A !== B) e0 = A
-    if (A === B && A !== C && B !== D) e1 = B
-    if (D === C && D !== B && C !== A) e2 = C
-    if (B === D && B !== A && D !== C) e3 = D
-    o[y*2][x*2] = e0; o[y*2][x*2+1] = e1; o[y*2+1][x*2] = e2; o[y*2+1][x*2+1] = e3
-  }
-  return o
-}
-function smoothGlyphs() {
-  const img = decodePNG(path.join(ROOT, 'editor/public/dos_8x8.png'))   // 145×145, RGBA, 16×16 cells of 8×8
-  const ink = (x, y) => { const i = (y * img.W + x) * 4; return (img.px[i+3] > 128 && img.px[i+2] > 128) ? 1 : 0 }  // opaque & not-yellow (white)
-  const glyphs = []
-  for (let code = 0; code < 256; code++) {
-    const x0 = 1 + (code % 16) * 9, y0 = 1 + ((code / 16) | 0) * 9, g = []
-    for (let y = 0; y < 8; y++) { const r = []; for (let x = 0; x < 8; x++) r.push(ink(x0 + x, y0 + y)); g.push(r) }
-    glyphs.push(epx(g))   // 8×8 → smoothed 16×16
-  }
-  return glyphs
-}
-
-// ── source 3: rasterize a TTF into fixed gw×gh cells (printable ASCII 32–127) ──
+// ── source 2: rasterize a TTF into fixed gw×gh cells (printable ASCII 32–127) ──
 // Reuses font-bake.js's outline→coverage path. Monospace glyphs are centred in
 // the cell by advance width; the baseline is placed so descenders clear the
 // bottom edge. Non-printable codes (0–31, 128–255) stay blank — this atlas loads
@@ -189,12 +138,6 @@ function ttfGlyphs(fontFile, px, gw, gh, threshold = 0.5, patches = {}) {
 }
 
 // ── generate everything ──
-writeAtlas(romGlyphs('MDA9.F14', 14), 9, 14, 'font9x14.png', 'font9x14_data.h', 'FONT9X14',
-  'IBM MDA 9×14 atlas (source: int10h MDA9.F14, public-domain ROM dump).')
-writeAtlas(romGlyphs('VGA9.F16', 16), 9, 16, 'font9x16.png', 'font9x16_data.h', 'FONT9X16',
-  'IBM VGA 9×16 / BIOS boot font atlas (source: int10h VGA9.F16, public-domain ROM dump).')
-writeAtlas(smoothGlyphs(), 16, 16, 'font16x16.png', 'font16x16_data.h', 'FONT16X16',
-  'dos_8x8 default upscaled 8×8→16×16 via EPX/Scale2x (diagonals smoothed, stays 2-colour).')
 writeAtlas(ttfGlyphs('ComicMono-Bold.ttf', 18, 10, 20, 0.5, COMIC_PATCHES), 10, 20, 'fontcomic10x20.png', 'fontcomic10x20_data.h', 'FONTCOMIC10X20',
   'Comic Mono Bold rasterized at 18px into 10×20 cells (source: ComicMono-Bold.ttf, MIT).')
 writeAtlas(romGlyphs('CGA-TH.F08', 8, 8), 8, 8, 'fontthin8x8.png', 'fontthin8x8_data.h', 'FONTTHIN8X8',

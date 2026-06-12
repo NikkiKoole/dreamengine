@@ -16,9 +16,6 @@
 #include "dos_8x8_font.h"
 #include "font4x6_data.h"
 #include "font3x5_data.h"
-#include "font9x14_data.h"
-#include "font9x16_data.h"
-#include "font16x16_data.h"
 #include "fontcomic10x20_data.h"
 #include "fontthin8x8_data.h"
 #include "sprites_data.h"
@@ -146,9 +143,6 @@ static RenderTexture2D canvas_snap;   // scratch copy for zoom_rect (avoids samp
 static Font            game_font;
 static Font            font_small = {0};
 static Font            font_tiny  = {0};
-static Font            font_large = {0};
-static Font            font_boot  = {0};
-static Font            font_smooth = {0};
 static Font            font_comic = {0};
 static Font            font_thin = {0};
 static int             active_font_id = FONT_NORMAL;
@@ -1523,24 +1517,6 @@ int main(int argc, char **argv) {
         UnloadImage(img);
     }
     {
-        Image img = LoadImageFromMemory(".png", FONT9X14_DATA, FONT9X14_DATA_LEN);
-        font_large = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 0);   // firstChar 0: full OEM set incl. box-drawing
-        SetTextureFilter(font_large.texture, TEXTURE_FILTER_POINT);
-        UnloadImage(img);
-    }
-    {
-        Image img = LoadImageFromMemory(".png", FONT9X16_DATA, FONT9X16_DATA_LEN);
-        font_boot = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 0);    // VGA BIOS/boot font, full OEM set
-        SetTextureFilter(font_boot.texture, TEXTURE_FILTER_POINT);
-        UnloadImage(img);
-    }
-    {
-        Image img = LoadImageFromMemory(".png", FONT16X16_DATA, FONT16X16_DATA_LEN);
-        font_smooth = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 0);  // dos_8x8 upscaled 16×16 via EPX/Scale2x
-        SetTextureFilter(font_smooth.texture, TEXTURE_FILTER_POINT);
-        UnloadImage(img);
-    }
-    {
         Image img = LoadImageFromMemory(".png", FONTCOMIC10X20_DATA, FONTCOMIC10X20_DATA_LEN);
         font_comic = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 0);   // Comic Mono Bold @ 18px, 10×20 cells
         SetTextureFilter(font_comic.texture, TEXTURE_FILTER_POINT);
@@ -1598,9 +1574,6 @@ int main(int argc, char **argv) {
     if (custom_font) UnloadFont(game_font);
     if (font_small.texture.id > 0) UnloadFont(font_small);
     if (font_tiny.texture.id  > 0) UnloadFont(font_tiny);
-    if (font_large.texture.id > 0) UnloadFont(font_large);
-    if (font_boot.texture.id  > 0) UnloadFont(font_boot);
-    if (font_smooth.texture.id > 0) UnloadFont(font_smooth);
     if (font_comic.texture.id > 0) UnloadFont(font_comic);
     if (font_thin.texture.id > 0) UnloadFont(font_thin);
     if (pal_shader_ok) UnloadShader(pal_shader);
@@ -1989,14 +1962,11 @@ void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, flo
 // font state + print helpers
 // ------------------------------------------------------------
 
-void font(int f) { active_font_id = (f == FONT_SMALL || f == FONT_TINY || f == FONT_LARGE || f == FONT_BOOT || f == FONT_SMOOTH || f == FONT_COMIC || f == FONT_THIN) ? f : FONT_NORMAL; }
+void font(int f) { active_font_id = (f == FONT_SMALL || f == FONT_TINY || f == FONT_COMIC || f == FONT_THIN) ? f : FONT_NORMAL; }
 
 static Font cur_font(void) {
     if (active_font_id == FONT_SMALL) return font_small;
     if (active_font_id == FONT_TINY)  return font_tiny;
-    if (active_font_id == FONT_LARGE) return font_large;
-    if (active_font_id == FONT_BOOT)  return font_boot;
-    if (active_font_id == FONT_SMOOTH) return font_smooth;
     if (active_font_id == FONT_COMIC) return font_comic;
     if (active_font_id == FONT_THIN) return font_thin;
     return game_font;
