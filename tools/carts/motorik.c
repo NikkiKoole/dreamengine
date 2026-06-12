@@ -182,6 +182,12 @@ static void apply_band(void) {
     instrument_harmonics(I_ORG, 0.19f);                  // thin combo registration (organ.c #1)
     instrument_timbre(I_ORG, sng.orgTimbre);             // bright Farfisa vs dark Vox (rolled)
     instrument_morph(I_ORG, 0.18f);                      // a touch of scanner chorus
+    // THE PHASED FARFISA — the krautrock signature (Neu!/Cluster): a slow, deep phaser swept across
+    // the held drone. Extreme in DEPTH/resonance (full depth, fb 0.6, 6 stages) but SLOW in rate
+    // (~0.12 Hz = one sweep every ~8s) — the sweep evolves hypnotically over the motorik pulse
+    // instead of whooshing against it. Baked into the drone's voice (the machine is invariant — no
+    // knob); re-asserted each song after instrument() so the slot stays routed to its phaser bus.
+    instrument_phaser(I_ORG, 0.12f, 1.0f, 0.6f, 0.5f, 6);
 
     instrument(I_BASS, sng.bassWave, 2, 90, 3, 100);     // Moog pulse — round saw vs buzzy square
 }

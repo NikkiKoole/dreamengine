@@ -192,6 +192,7 @@ travel), `feedback` −0.95..0.95 (resonance around the notches), `mix` 0–1 (*
 | recipe | call | character | used by |
 |---|---|---|---|
 | phased suitcase Rhodes | `instrument_phaser(I_EP, 0.5f, 0.8f, 0.4f, 0.5f, 4)` | the slow 4-stage Phase-90 swirl on an EP — the 70s signature | `epiano` |
+| krautrock phased drone | `instrument_phaser(I_ORG, 0.12f, 1.0f, 0.6f, 0.5f, 6)` | very slow (~8s/sweep), deep, resonant on a held organ drone — the Neu!/Cluster hypnotic swirl; extreme in depth, gentle in rate so it evolves *with* the motorik pulse, not against it | `motorik` |
 | deep 6-stage swirl | `phaser(1.0f, 1.0f, 0.6f, 0.5f, 6)` | thicker, more notches, more resonant — a wider whole-mix sweep | (6-stage pattern) |
 | through-zero-ish | `phaser(0.3f, 0.9f, -0.6f, 0.5f, 4)` | negative feedback hollows the notches differently — a more "inside-out" sweep | (neg-fb pattern) |
 
