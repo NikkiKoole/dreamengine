@@ -104,6 +104,16 @@ call order; `crush`/`chorus` `mix 0` = bypass. Call `reverb_bus(tank,…)` first
 | dark-tail EQ | `reverb_bus_fx(1, FX_EQ, 0, 0, -8.0f)` | roll the highs off the wet only — a warm tail without dulling the dry source | — |
 | tape-worn reverb | `reverb_bus_fx(2, FX_TAPE, 0.4f, 0.2f, 0.5f)` | the tail wows + saturates like a reverb printed to tape | — |
 
+#### reverb as an in-line pedal — `reverb_insert(size, damp, mix)`
+
+The third reverb shape: a dry/wet-MIX insert **on the master bus**, so it's a real reorderable pedal
+(unlike `reverb()`, a parallel send whose chain position is cosmetic). Put `FX_REVERB` in your
+`fx_order(0, …)` list to place it; dragging it before/after another pedal is then audible. `mix 0` = bypass.
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| honest pedalboard reverb | `reverb_insert(0.7f, 0.3f, 0.45f)` + `FX_REVERB` in `fx_order(0,…)` | a guitar-pedal reverb whose position matters: before crush = crush the wet tail; after = reverb the crushed guitar | `pedalboard` (REVERB pedal) |
+
 ## chorus — `chorus(rate, depth, mix)` · `instrument_chorus(slot, rate, depth, mix)`
 
 BBD/Juno ensemble widening. `rate` 0.1–5 Hz, `depth` 0–1, `mix` 0–1 (0 = off). Master (whole mix) or

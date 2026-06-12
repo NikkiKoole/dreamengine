@@ -455,6 +455,7 @@ typedef struct {
     int   pd_p;                      // predelay write position
     float clp1, clp2, clp3, clp4;    // per-comb damping LP states
     float fb, damp;                  // config from size/damping — set by reverb() (tank 0) / reverb_bus()
+    float mix;                       // dry/wet blend at the insert: 1 = wet-replace (a dedicated send-bus), <1 = in-line (reverb_insert)
     bool  used;                      // per-tank dormancy: a dormant tank is skipped (costs zero)
 } ReverbTank;
 static ReverbTank rvb_tank[SOUND_REVERB_TANKS];
@@ -1054,8 +1055,10 @@ static void apply_insert(int kind, int b, float *L, float *R) {
         case FX_REVERB: {
             int t = bus_tank[b];
             if (t >= 0 && rvb_tank[t].used) {
+                float m = rvb_tank[t].mix;                                   // 1 = wet-replace (send-bus), <1 = in-line blend
                 float wet = reverb_process(&rvb_tank[t], (*L + *R) * 0.5f);   // MONO core, v1
-                *L = wet; *R = wet;
+                *L = *L * (1.0f - m) + wet * m;   // m=1 → *L = wet, byte-identical to the old wet-replace
+                *R = *R * (1.0f - m) + wet * m;
             }
         } break;
     }
@@ -1147,6 +1150,7 @@ typedef enum {
     SR_REVERB_BUS   = 66,   // a=tank(1..N-1), b=size*1000, c=damp*1000 — configure a reverb send-bus (claims an aux bus, chain = [FX_REVERB])
     SR_INSTR_REVERB_BUS = 67, // a=slot, b=tank, c=mix*1000 — route a slot's reverb send into tank N's bus instead of the master send
     SR_REVERB_BUS_FX = 68,  // a=tank, b=fx (FX_*), c/e0/e1 = params*1000 — add/configure an insert AFTER the reverb on tank N's bus
+    SR_REVERB_INSERT = 69,  // a=size*1000, b=damp*1000, c=mix*1000 — reverb as a dry/wet-MIX INSERT on the master bus (in the fx_order chain)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3704,6 +3708,7 @@ static void sound_fire_req(SoundReq r) {
         float damp = r.c / 1000.0f; if (damp < 0.0f) damp = 0.0f; if (damp > 1.0f) damp = 1.0f;
         rvb_tank[tank].fb   = REVERB_FEEDBACK_MIN + size * REVERB_FEEDBACK_RANGE;
         rvb_tank[tank].damp = damp;
+        rvb_tank[tank].mix  = 1.0f;   // a dedicated send-bus is full wet (wet-replace) — keeps reverbspace byte-identical
         rvb_tank[tank].used = true;
     } else if (r.kind == SR_INSTR_REVERB_BUS) { // a=slot, b=tank, c=mix*1000 — route a slot's send into tank N's bus
         int slot = r.a;
@@ -3731,6 +3736,16 @@ static void sound_fire_req(SoundReq r) {
         bool present = false;
         for (int s = 0; s < insert_order_n[bus]; s++) if (insert_order[bus][s] == fx) present = true;
         if (!present && insert_order_n[bus] < N_INSERTS) insert_order[bus][insert_order_n[bus]++] = fx;
+    } else if (r.kind == SR_REVERB_INSERT) {  // a=size*1000, b=damp*1000, c=mix*1000 — master mix-reverb INSERT (bus 0, tank 1)
+        float size = r.a / 1000.0f; if (size < 0.0f) size = 0.0f; if (size > 1.0f) size = 1.0f;
+        float damp = r.b / 1000.0f; if (damp < 0.0f) damp = 0.0f; if (damp > 1.0f) damp = 1.0f;
+        float mix  = r.c / 1000.0f; if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
+        bus_tank[0] = 1;              // master bus runs FX_REVERB through tank 1 — the in-line insert tank
+        rvb_tank[1].fb   = REVERB_FEEDBACK_MIN + size * REVERB_FEEDBACK_RANGE;
+        rvb_tank[1].damp = damp;
+        rvb_tank[1].mix  = mix;       // <1 = dry+wet blend in the chain (an honest reverb pedal)
+        rvb_tank[1].used = true;
+        // the cart places FX_REVERB in its fx_order(0, …) list to set the reverb's position in the master chain
     } else if (r.kind == SR_CHORUS) {       // master chorus (bus 0): a=rate*1000, b=depth*1000, c=mix*1000
         fx_set_chorus(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_CHORUS) { // per-instrument: a=slot, b=rate*1000, c=depth*1000, e0=mix*1000
@@ -4603,6 +4618,13 @@ void instrument_reverb_bus(int slot, int tank, float mix) {
     sound_push_ctrl(SR_INSTR_REVERB_BUS, slot, tank, (int)(mix * 1000.0f), 0, 0, 0);
 }
 
+// reverb as a dry/wet-MIX INSERT on the master bus — a real reorderable pedal (unlike reverb(), a
+// parallel send whose chain position is cosmetic). Put FX_REVERB in your fx_order(0, …) list to set
+// where it sits; mix 0..1 (0 = bypass dry). For pedalboards: drag it before/after crush and hear it.
+void reverb_insert(float size, float damp, float mix) {
+    sound_push_ctrl(SR_REVERB_INSERT, (int)(size * 1000.0f), (int)(damp * 1000.0f), (int)(mix * 1000.0f), 0, 0, 0);
+}
+
 // add an effect AFTER the reverb on tank N's bus (effects-after-reverb — reverb→crush/eq/tape).
 // fx = FX_CRUSH/FX_EQ/FX_TAPE/FX_CHORUS; a/b/c are that effect's own params (×1000 packed, same
 // scale as its dedicated API). Appends to the bus chain in call order; call reverb_bus(tank,…) first.
@@ -4906,6 +4928,7 @@ static void sound_init(void) {
     for (int t = 0; t < SOUND_REVERB_TANKS; t++) {
         rvb_tank[t].fb   = REVERB_FEEDBACK_MIN + 0.5f * REVERB_FEEDBACK_RANGE;
         rvb_tank[t].damp = 0.5f;
+        rvb_tank[t].mix  = 1.0f;   // full wet by default (wet-replace); reverb_insert lowers it for an in-line blend
         rvb_tank[t].used = false;
     }
     reverb_used = false;

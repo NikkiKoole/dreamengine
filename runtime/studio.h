@@ -393,6 +393,7 @@ void note_reverb(int handle, float x);         // sweep a held note's reverb sen
 void reverb_bus(int tank, float size, float damp);          // configure reverb tank 1..2 as a send-bus: size 0..1, damp 0..1 (claims an aux bus on first call)
 void instrument_reverb_bus(int slot, int tank, float mix);  // route this slot's reverb send into tank 1..2 instead of the master send; mix 0..1
 void reverb_bus_fx(int tank, int fx, float a, float b, float c);  // add an effect AFTER the reverb on tank 1..2 — fx = FX_CRUSH/FX_EQ/FX_TAPE/FX_CHORUS; a/b/c = that effect's params (crush:bits,rate,mix · eq:lo,mid,hi dB · tape:wow,flut,sat · chorus:rate,depth,mix). crush/chorus mix 0 = off
+void reverb_insert(float size, float damp, float mix);            // reverb as a dry/wet INSERT on the master bus — a REAL reorderable pedal (put FX_REVERB in fx_order(0,…) to place it). size/damp 0..1, mix 0..1 (0 = bypass). Unlike reverb() (a send), its chain position is audible
 
 // chorus — THE master chorus (there is exactly one), applied to the whole mix: a BBD/Juno-style
 // modulated delay that thickens + widens everything into a lush shimmer. Master-wide (not per-slot).

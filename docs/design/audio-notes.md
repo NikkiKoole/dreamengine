@@ -1354,6 +1354,13 @@ v1, document it on the panel.
     index), configures the insert (crush/eq/tape/chorus) on the reverb-bus, and appends it after FX_REVERB
     so it chews the wet tail. reverb→crush = the **reverb spaces** CRUSH toggle. `SR_REVERB_BUS_FX`=68.
     This is increment C of [`effects-bus-architecture.md`](effects-bus-architecture.md), now fully exposed.
+    **In-line reverb (`reverb_insert`)** completed the picture: the wet-replace insert gained a dry/wet
+    **mix** (`out = dry·(1−mix) + wet·mix`; `mix=1` = the old wet-replace, so reverb-buses are byte-identical),
+    and `reverb_insert(size, damp, mix)` puts a mix-reverb on the master bus (tank 1) as a real reorderable
+    `FX_REVERB` pedal. The **pedalboard** cart switched its reverb from a parallel send to this, so its chain
+    position is finally audible — closing the increment-A "reverb position is cosmetic" caveat. The reverb
+    doctrine ladder: **send** (`reverb()`, parallel) → **in-line insert** (`reverb_insert`, mix) → **dedicated
+    space** (`reverb_bus`, wet-replace + downstream `reverb_bus_fx`).
 
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**

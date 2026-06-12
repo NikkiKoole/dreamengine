@@ -8,9 +8,9 @@
 //   • DRAG a chain pedal by its LABEL sideways to REORDER it (the sound reorders with it).
 //   • DRAG a chain pedal DOWN out of the chain to REMOVE it (it returns to the palette).
 //   • drag a KNOB to dial it; tap the FOOTSWITCH to toggle on/off; 1..9 toggle by position.
-// The chain can outgrow the screen — a scrollbar appears; drag it to pan. (REVERB is in the chain
-// like any pedal, but it's a SEND, so its POSITION is cosmetic for now — Step C / multiple reverb
-// tanks makes it a real insert. See docs/design/effects-bus-architecture.md.)
+// The chain can outgrow the screen — a scrollbar appears; drag it to pan. (REVERB is now a real
+// dry/wet INSERT (reverb_insert, Increment C), so its POSITION is audible — put it before the
+// bitcrush to crush the wet tail, or after to reverb the crushed guitar. See effects-bus-architecture.md.)
 //
 // THE GUITAR (lower half, when the palette is closed):
 //   FRETTING HAND — ROOT row (Z X C V B N M) moves up the neck (E F G A B C D); SHAPE row (A S D
@@ -31,8 +31,8 @@
 #define NROOT  7
 
 // ── the effect catalog: every pedal you can drag into the chain ──────────────────────────────
-// kind = the engine FX_* insert kind (its slot in the reorderable chain), or -1 for a SEND (reverb),
-// whose chain position is cosmetic until Step C.
+// kind = the engine FX_* insert kind (its slot in the reorderable chain). Every pedal — REVERB
+// included now (FX_REVERB via reverb_insert) — is a real insert, so chain order is audible.
 enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, NCAT };
 typedef struct {
     const char *name; int body, accent, kind, nk;
@@ -47,7 +47,7 @@ static const FxDef CAT[NCAT] = {
     { "TAPE",     CLR_DARK_RED,      CLR_PEACH,        FX_TAPE,    3, { "WOW","FLT","SAT" },   { 0.35f, 0.25f, 0.45f } },
     { "TREMOLO",  CLR_DARKER_GREY,   CLR_LIGHT_YELLOW, FX_TREM,    3, { "SPD","DEP","WAV" },   { 0.45f, 0.60f, 0.0f } },
     { "WAH",      CLR_DARK_PURPLE,   CLR_MAUVE,        FX_WAH,     3, { "SNS","RES","MIX" },   { 0.50f, 0.55f, 0.70f } },
-    { "REVERB",   CLR_DARK_BLUE,     CLR_INDIGO,       -1,         3, { "SIZ","DMP","MIX" },   { 0.70f, 0.40f, 0.45f } },
+    { "REVERB",   CLR_DARK_BLUE,     CLR_INDIGO,       FX_REVERB,  3, { "SIZ","DMP","MIX" },   { 0.70f, 0.40f, 0.45f } },
 };
 
 // ── the chain: an ordered list of DISTINCT catalog ids, each with its own knobs + on-state ──
@@ -148,8 +148,9 @@ static void chain_move(int from, int to) {   // move element `from` to FINAL ind
 }
 
 // push every effect's state to the engine, then set the INSERT ORDER from the chain order.
-// An effect not in the chain (or off) is pushed dry; reverb (a send) is driven by its on-state,
-// its chain POSITION ignored (cosmetic until Step C).
+// An effect not in the chain (or off) is pushed dry. REVERB is now a real dry/wet INSERT
+// (reverb_insert → FX_REVERB in the chain), so its POSITION is audible — drag it before/after
+// the bitcrusher and you crush the wet tail vs. reverb the crushed guitar (Increment C).
 static void apply_fx(void) {
     for (int c = 0; c < NCAT; c++) {
         int idx = chain_index(c);
@@ -164,7 +165,7 @@ static void apply_fx(void) {
             case C_TAP: tape(act ? k[0] : 0.0f, act ? k[1] : 0.0f, act ? k[2] : 0.0f); break;
             case C_TRM: tremolo(0.5f + k[0] * 11.5f, act ? k[1] : 0.0f, (int)(k[2] * 2.99f)); break;
             case C_WAH: wah(k[0], k[1], act ? k[2] : 0.0f); break;
-            case C_RVB: reverb(0.2f + k[0] * 0.78f, k[1]); instrument_reverb(I_GTR, act ? k[2] : 0.0f); break;
+            case C_RVB: reverb_insert(0.2f + k[0] * 0.78f, k[1], act ? k[2] : 0.0f); break;   // a real in-line dry/wet reverb pedal
         }
     }
     int kinds[NCAT], n = 0;
