@@ -193,13 +193,16 @@ static void ep_keytrack(int h, int midi) {
     note_cutoff(h, 300 + (midi - 36) * 14);          // ~+14 Hz/semitone above C2
 }
 
-// THE TREMOLO RECIPE — the suitcase/Wurli amp wobble, the "electric" signature: an LFO on the
-// voice VOLUME (~5-6 Hz, depth scales with the slider). Slot-level so every strike inherits it.
-// LFO slot 1 — the wah owns slot 0 (LFO_VOLUME and LFO_CUTOFF run independently). Rhodes &
-// Wurli want this (the 200A's is deeper); the clav preset zeroes it — a real clav has no tremolo.
+// THE TREMOLO RECIPE — the suitcase/Wurli amp wobble, the "electric" signature: the BUS tremolo
+// on the EP's slot (~5-6 Hz, depth scales with the slider). instrument_tremolo is navkit's amp
+// tremolo VERBATIM (processBusEffects, A/B-matched on a sine: rate + depth dead-on) — one shared
+// LFO phase across the whole instrument, so every note throbs in UNISON like a real amp. (This
+// replaced a per-voice LFO_VOLUME, where each note had its own phase = a shimmer, not the coherent
+// amp wobble the Wurli is known for — the verbatim-navkit fix.) Rhodes & Wurli want this (the 200A's
+// is deeper); the clav preset zeroes it (depth 0 = bypass) — a real clav has no tremolo.
 static void apply_trem(void) {
     float amt = val[SL_TREM];
-    instrument_lfo(I_EP, 1, LFO_VOLUME, 5.0f + amt * 1.5f, amt * 0.85f);
+    instrument_tremolo(I_EP, 5.0f + amt * 1.5f, amt * 0.85f, TREM_SINE);
 }
 
 static void key_down(int b) {

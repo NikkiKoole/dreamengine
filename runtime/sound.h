@@ -819,6 +819,49 @@ static void fx_set_eq(int b, float low_db, float mid_db, float high_db) {
     eq_used[b] = true;
 }
 
+// ── tremolo — volume LFO (Fender/Wurlitzer amp wobble) ───────────────────────────────────
+// A VERBATIM port of navkit's processTremolo: one LFO ducks the bus level — `out = in·(1 −
+// depth·(1 − mod))`, where `mod` is the chosen shape in 0..1 (so it only attenuates below unity,
+// never boosts — the amp-tremolo character). Per-bus phase, so a per-instrument tremolo wobbles
+// that instrument's WHOLE output in unison (the coherent amp wobble a per-voice LFO_VOLUME can't
+// give — every note shares one phase, tails included). Stereo (same gain L/R). Dormant until the
+// first tremolo()/instrument_tremolo() with depth>0 → non-users byte-identical.
+#define TREM_SHAPE_SINE   0
+#define TREM_SHAPE_SQUARE 1
+#define TREM_SHAPE_TRI    2
+static float trem_rate [SOUND_FX_BUSES];   // LFO rate Hz
+static float trem_depth[SOUND_FX_BUSES];   // modulation depth 0..1
+static int   trem_shape[SOUND_FX_BUSES];   // TREM_SHAPE_*
+static float trem_phase[SOUND_FX_BUSES];   // LFO phase 0..1
+static bool  trem_used [SOUND_FX_BUSES];
+static void trem_process(int b, float *mixL, float *mixR) {
+    float phase = trem_phase[b];
+    float mod;
+    switch (trem_shape[b]) {
+        case TREM_SHAPE_SQUARE:
+            mod = phase < 0.5f ? 1.0f : 0.0f;
+            break;
+        case TREM_SHAPE_TRI:
+            mod = phase < 0.5f ? phase * 4.0f - 1.0f : 3.0f - phase * 4.0f;
+            mod = mod * 0.5f + 0.5f;
+            break;
+        default: // sine
+            mod = 0.5f + 0.5f * sinf(phase * 6.2831853f);
+            break;
+    }
+    trem_phase[b] += trem_rate[b] * (1.0f / (float)SOUND_SAMPLE_RATE);
+    if (trem_phase[b] >= 1.0f) trem_phase[b] -= 1.0f;
+    float g = 1.0f - trem_depth[b] * (1.0f - mod);
+    *mixL *= g; *mixR *= g;
+}
+static void fx_set_tremolo(int b, float rate, float depth, int shape) {
+    if (rate  < 0.1f)  rate  = 0.1f;  if (rate  > 20.0f) rate  = 20.0f;
+    if (depth < 0.0f)  depth = 0.0f;  if (depth > 1.0f)  depth = 1.0f;
+    if (shape < 0 || shape > TREM_SHAPE_TRI) shape = TREM_SHAPE_SINE;
+    trem_rate[b] = rate; trem_depth[b] = depth; trem_shape[b] = shape;
+    trem_used[b] = (depth > 0.0f);   // depth 0 = off (identity gain), like mix 0 elsewhere
+}
+
 // envelope-follower smoothing coefficient from a time in ms (one-pole; 0 ms = instant)
 static float sound_follow_coef(int ms) {
     if (ms <= 0) return 1.0f;
@@ -895,6 +938,8 @@ typedef enum {
     SR_INSTR_EQ     = 56,   // a=slot, b=low_db*1000, c=mid_db*1000, e0=high_db*1000 — EQ on one instrument (auto-bus)
     SR_WAH_LFO      = 57,   // a=rate*1000, b=res*1000, c=mix*1000 — THE master LFO-wah (bus 0, navkit WAH_MODE_LFO)
     SR_INSTR_WAH_LFO= 58,   // a=slot, b=rate*1000, c=res*1000, e0=mix*1000 — LFO-wah on one instrument (auto-bus)
+    SR_TREMOLO      = 59,   // a=rate*1000, b=depth*1000, c=shape — THE master tremolo (bus 0, navkit processTremolo)
+    SR_INSTR_TREMOLO= 60,   // a=slot, b=rate*1000, c=depth*1000, e0=shape — tremolo on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3462,6 +3507,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_wah_lfo(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
+    } else if (r.kind == SR_TREMOLO) {      // master tremolo (bus 0): a=rate*1000, b=depth*1000, c=shape
+        fx_set_tremolo(0, r.a / 1000.0f, r.b / 1000.0f, r.c);
+    } else if (r.kind == SR_INSTR_TREMOLO) {// per-instrument: a=slot, b=rate*1000, c=depth*1000, e0=shape
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_tremolo(b, r.b / 1000.0f, r.c / 1000.0f, r.e0);
     } else if (r.kind == SR_BITCRUSH) {     // master bitcrush (bus 0): a=bits*100, b=rate*100, c=mix*1000
         fx_set_crush(0, r.a / 100.0f, r.b / 100.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_BITCRUSH) { // per-instrument: a=slot, b=bits*100, c=rate*100, e0=mix*1000
@@ -3736,7 +3787,8 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         // master (bus 0). A slot routed here (instrument_chorus/flanger) is effected in isolation;
         // everything on bus 0 bypasses. All-bus-0 carts skip this entirely → byte-identical.
         for (int b = 1; b < SOUND_FX_BUSES; b++) {
-            if (wah_used[b]) wah_process(b, &busL[b], &busR[b]);     // filter first
+            if (trem_used[b]) trem_process(b, &busL[b], &busR[b]);   // tremolo first (amp volume LFO)
+            if (wah_used[b]) wah_process(b, &busL[b], &busR[b]);     // filter next
             if (cho_used[b]) chorus_process(b, &busL[b], &busR[b]);
             if (flg_used[b]) flanger_process(b, &busL[b], &busR[b]);
             if (tape_used[b]) tape_process(b, &busL[b], &busR[b]);
@@ -3800,6 +3852,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         // INSERT CHAIN — MASTER (bus 0) inserts, on the whole mix (chorus()/flanger() configure
         // these). Per-instrument inserts already ran on their aux buses above. (tape/comp/bitcrush
         // land here later, before the soft-clip.)
+        if (trem_used[0]) trem_process(0, &mixL, &mixR);    // tremolo (amp volume LFO), before the filter
         if (wah_used[0]) wah_process(0, &mixL, &mixR);      // auto-wah (envelope bandpass), filter first
         if (cho_used[0]) chorus_process(0, &mixL, &mixR);   // BBD chorus, antiphase stereo width, in place
         if (flg_used[0]) flanger_process(0, &mixL, &mixR);  // short swept delay + feedback, mono, in place
@@ -4344,6 +4397,17 @@ void eq(float low_gain, float mid_gain, float high_gain) {
 void instrument_eq(int slot, float low_gain, float mid_gain, float high_gain) {
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
     sound_push_ctrl(SR_INSTR_EQ, slot, (int)(low_gain * 1000.0f), (int)(mid_gain * 1000.0f), (int)(high_gain * 1000.0f), 0, 0);
+}
+
+// ── tremolo: THE master tremolo (volume LFO — the Fender/Wurlitzer amp wobble) ──
+
+void tremolo(float rate, float depth, int shape) {
+    sound_push_ctrl(SR_TREMOLO, (int)(rate * 1000.0f), (int)(depth * 1000.0f), shape, 0, 0, 0);
+}
+
+void instrument_tremolo(int slot, float rate, float depth, int shape) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_TREMOLO, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), shape, 0, 0);
 }
 
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount) {

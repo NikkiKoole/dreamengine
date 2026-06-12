@@ -26,7 +26,8 @@ and leave the rest dry. `drive` is the exception — it's a **per-voice** insert
 > **The showcase carts ARE the de-facto effect library.** Each effect has one cart whose whole
 > point is *that effect as the instrument* — crib from it first. Showcases:
 > `spacecho` (echo) · `cathedral` (reverb) · `juno`/`solina` (chorus) · `mistress` (flanger) ·
-> `tapeloop` (tape) · `clavinet` (wah) · `drivemodes` (drive modes) · `bitcrush` (bitcrush) · `eq` (EQ).
+> `tapeloop` (tape) · `clavinet` (wah) · `drivemodes` (drive modes) · `bitcrush` (bitcrush) · `eq` (EQ) ·
+> `epiano` (tremolo).
 
 ---
 
@@ -156,6 +157,26 @@ partner to `DRIVE_ASYM`: EQ before/after a clipper = a real **guitar-amp tone**.
 | fat bass | `instrument_eq(I_BASS, 7.0f, 0.0f, 0.0f)` | weight under one part while the mix stays clear (per-instrument bus) | `eq` |
 | guitar-amp tone | `instrument_drive_mode(slot, DRIVE_ASYM); instrument_drive(slot, 0.55f); eq(3.0f, 2.0f, -4.0f)` | asymmetric clip + a mid-forward EQ around it — the cranked-amp move | `eq` |
 | mud cut | `eq(-5.0f, 1.0f, 2.0f)` | thin out a boomy low end, nudge clarity up top | (cut pattern) |
+
+## tremolo — `tremolo(rate, depth, shape)` · `instrument_tremolo(slot, rate, depth, shape)`
+
+A volume LFO that ducks the level up and down — the Fender/Wurlitzer **amp wobble**, the "electric
+piano" throb. `rate` 0.1–20 Hz, `depth` 0–1 (0 = off; only attenuates, never boosts — like a real
+amp: `out = in·(1 − depth·(1 − lfo))`), `shape` `TREM_SINE` (smooth, default) / `TREM_SQUARE` (hard
+chop) / `TREM_TRI` (ramp). A VERBATIM port of navkit's `processTremolo` (A/B-matched on a sine —
+rate + depth dead-on). **One shared LFO phase per bus**, so a per-instrument tremolo wobbles that
+instrument's WHOLE output in unison — the coherent amp wobble a per-voice `LFO_VOLUME` can't give
+(there each note has its own phase = a shimmer, not a throb). Master or per-instrument. **Showcase:
+`epiano`** (the Rhodes/Wurli throb, off on the clav). Dormant until depth>0 → non-users byte-identical.
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| Wurlitzer 200A throb | `instrument_tremolo(I_EP, 5.0f+amt*1.5f, amt*0.85f, TREM_SINE)` | the soul-ballad EP wobble — deeper than the Rhodes; the tremolo slider rides rate+depth together | `epiano` |
+| suitcase Rhodes wobble | `instrument_tremolo(I_EP, 5.4f, 0.38f, TREM_SINE)` | the classic gentle ~5 Hz suitcase pulse | `epiano` |
+| helicopter chop | `tremolo(8.0f, 0.9f, TREM_SQUARE)` | hard on/off gate on the whole mix — stutter/strobe | (square pattern) |
+
+> A real clav has **no** tremolo — the `epiano` clav preset sets depth 0 (bypass). Tremolo is the
+> Rhodes/Wurli signature, not a universal EP effect.
 
 ---
 

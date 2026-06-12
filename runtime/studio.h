@@ -419,6 +419,16 @@ void instrument_crush(int slot, float bits, float rate, float mix);     // bitcr
 void eq(float low_gain, float mid_gain, float high_gain);               // THE master 3-band EQ, on the whole mix
 void instrument_eq(int slot, float low_gain, float mid_gain, float high_gain);  // EQ on just this slot (auto-grabs a private FX bus)
 
+// tremolo — a volume LFO that ducks the level up and down: the Fender/Wurlitzer amp wobble (the
+// "electric piano" throb). One shared phase per bus, so a per-instrument tremolo wobbles that
+// instrument's whole output in unison — the coherent amp wobble a per-voice LFO_VOLUME can't give.
+// Master (whole mix), or per-instrument. Only attenuates (never boosts), like a real amp.
+#define TREM_SINE    0   // smooth sine wobble — the classic amp/EP tremolo (default)
+#define TREM_SQUARE  1   // hard on/off chop — the helicopter/stutter
+#define TREM_TRI     2   // linear ramp up/down — a sharper sine, between sine and square
+void tremolo(float rate, float depth, int shape);                       // rate 0.1..20 Hz, depth 0..1 (0 = off), shape TREM_*. THE master tremolo
+void instrument_tremolo(int slot, float rate, float depth, int shape);  // tremolo on just this slot (auto-grabs a private FX bus)
+
 // musical scales (C root)
 #define SCALE_MAJOR      0   // do re mi fa sol la ti
 #define SCALE_MINOR      1   // natural minor

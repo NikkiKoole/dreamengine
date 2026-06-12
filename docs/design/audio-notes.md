@@ -1265,6 +1265,24 @@ v1, document it on the panel.
    pivot), `eq(−12,0,0)` drops it to −33.66; per-instrument path clean (DC ~−0.00003) — 0 clipped,
    no NaN throughout.
 
+8. **Tremolo** — the amp volume-LFO (Fender/Wurlitzer throb), the "electric piano" signature.
+   **✓ SHIPPED 2026-06-12** — `tremolo(rate, depth, shape)` (master) **and** `instrument_tremolo(slot, …)`
+   (per-instrument aux bus, the tape/wah/eq pattern). A **VERBATIM port of navkit's `processTremolo`**:
+   one LFO ducks the bus level, `out = in·(1 − depth·(1 − mod))` where `mod` is the shape in 0..1, so
+   it only attenuates below unity (never boosts — the amp character). `shape` = `TREM_SINE` (default) /
+   `TREM_SQUARE` / `TREM_TRI`; `rate` 0.1–20 Hz, `depth` 0–1 (0 = bypass → non-users byte-identical).
+   **Per-bus phase** is the whole point: a per-instrument tremolo shares ONE LFO phase across all the
+   slot's voices, so the instrument throbs in unison like a real amp — the coherent wobble a per-voice
+   `LFO_VOLUME` can't give (there each note runs its own phase = a shimmer, not a throb). This replaced
+   the `epiano`'s old per-voice `LFO_VOLUME` tremolo — the "Wurli dry is good, tremolo still TODO" gap:
+   the Wurli 200A's amp tremolo IS a bus effect. Applied **first** in both the per-bus insert loop and
+   the master chain (before wah — navkit's order), `SR_TREMOLO`=59 / `SR_INSTR_TREMOLO`=60 (`*1000` for
+   rate/depth, shape passed as a raw int). **A/B-verified against navkit's real DSP** (a harness driving
+   navkit's genuine `setBusTremolo`+`processBusEffects`, NOT a formula copy — see
+   [debug-harness.md](../guides/debug-harness.md) → "A/B a bus EFFECT"): both read **5.513 Hz / depth
+   0.700** on a sine, and **8.018 Hz / 0.400 / square** at a second setting — rate and depth dead-on, on
+   both the master and per-instrument paths. Showcase: `epiano` (Rhodes/Wurli throb; clav preset depth 0).
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 
