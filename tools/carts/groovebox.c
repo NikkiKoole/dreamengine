@@ -1,14 +1,18 @@
 #include "studio.h"
 #include "ui.h"
 
-// GROOVEBOX — a tiny house/techno box and a HOME for the summed-bus effects.
+// GROOVEBOX — a melodic / progressive-house box and a HOME for the summed-bus effects.
 //
-// The pedalboard cart owns the SERIAL-insert family (one guitar → a chain of
-// pedals). This cart owns the other half: the SUMMED-BUS family — many looping
-// voices summed into one master, then sculpted as a whole. Those effects can't
-// be shown on a single held chord; the loop has to run so you can hear the mix
-// breathe. So: a 6-row × 16-step grid plays itself, freeing both hands to ride
-// the rack along the bottom.
+// The genre is chosen for the headline effect: melodic house is where SIDECHAIN is the
+// soul, not a trick (Lane 8 / Ben Böhmer / Eric Prydz). A LUSH sustained PAD on a slow
+// emotional minor progression breathes against a soft four-floor kick — that breathing
+// IS the beauty — while a cascading ARP lead carries the tune over the top.
+//
+// The pedalboard cart owns the SERIAL-insert family (one guitar → a chain of pedals).
+// This cart owns the other half: the SUMMED-BUS family — many looping voices summed into
+// one master, then sculpted as a whole. Those effects can't be shown on a single held
+// chord; the loop has to run so you can hear the mix breathe. So: a 6-row × 16-step grid
+// plays itself, freeing both hands to ride the rack along the bottom.
 //
 // The headline is the PUMP — a REAL summed-bus sidechain (effects-bus Increment D):
 // sidechain_key(SL_KICK, 0, 1) routes the kick as the trigger, and sidechain(0, 0,
@@ -41,20 +45,21 @@
 #define CW 15    // cell width
 #define CH 15    // cell height
 
-// instrument slots 5..11 — the kit + the pumped pad
-enum { SL_KICK = 5, SL_CLAP, SL_CHAT, SL_OHAT, SL_BASS, SL_STAB, SL_PAD };
+// instrument slots 5..11 — the kit + the lead arp + the pumped pad
+enum { SL_KICK = 5, SL_CLAP, SL_CHAT, SL_OHAT, SL_BASS, SL_ARP, SL_PAD };
 
-static const char *LABEL[ROWS] = { "KICK", "CLAP", "CHAT", "OHAT", "BASS", "STAB" };
+static const char *LABEL[ROWS] = { "KICK", "CLAP", "CHAT", "OHAT", "BASS", "ARP" };
 static const int   LIT  [ROWS] = { CLR_RED, CLR_PINK, CLR_YELLOW, CLR_LIGHT_YELLOW, CLR_BLUE, CLR_GREEN };
 
-// a house groove that sounds good the instant it loads
+// a spacious melodic/progressive-house groove — soft four-floor, off-beat sub, a
+// cascading arp lead, all breathing under the lush sidechained PAD
 static const char *PRESET[ROWS] = {
     "x...x...x...x...",   // kick — four on the floor (the pump trigger)
     "....x.......x...",   // clap — backbeat
-    "x.x.x.x.x.x.x.x.",   // closed hat — sixteenths
-    "..x...x...x...x.",   // open hat — the off-beat lift
-    "..x.x...x.x.x...",   // bass — a little bounce
-    "x.......x.......",   // stab — chord on the one
+    "..x...x...x...x.",   // closed hat — the off-beat tick
+    "............x...",   // open hat — a lift before the turn
+    "..x...x...x...x.",   // bass — rolling off-beat sub
+    "x.x.x.x.x.x.x.x.",   // arp — cascading 8th-note lead over the chord
 };
 
 // a 4-chord minor vamp (A minor: i–VI–III–VII), voiced for smooth pad movement
@@ -72,8 +77,9 @@ static int  curR = 0, curC = 0;        // keyboard cursor
 static int  cur_step = 0;              // playhead column
 static int  last_16  = -1;             // last sixteenth we triggered
 static int  flash[ROWS];               // frame() each row last fired
-static int  tempo    = 122;
+static int  tempo    = 123;
 static int  chordIdx = 0, lastChord = -1;
+static int  arpIdx = 0;                 // cascading-arp position (advances each ARP step)
 
 static int   padH[3] = { -1, -1, -1 }; // the held pad chord
 static float pumpEnv = 0;              // VISUAL only — 1 on each kick, decays (mirrors the engine duck on the meter)
@@ -81,7 +87,7 @@ static float openness = 1;             // meter level 0..1
 
 // rack knobs (0..1). EQ is the engine's real 3 bands (0.5 = flat) — a louder EQ is
 // what makes the fx_order CRUSH↔EQ toggle audible (gentle = no difference to hear).
-static float k_pump = 0.60f, k_glue = 0.0f, k_crush = 0.0f, k_tape = 0.20f, k_space = 0.30f;
+static float k_pump = 0.65f, k_glue = 0.0f, k_crush = 0.0f, k_tape = 0.20f, k_space = 0.40f;
 static float k_eqLo = 0.5f, k_eqMid = 0.5f, k_eqHi = 0.5f;
 static bool  orderSwapped = false;     // CRUSH after eq (default) vs before
 
@@ -117,9 +123,12 @@ static void play_row(int r) {
                 schedule_hit(24, 64, SL_CLAP, 4, 60); break;
         case 2: hit(92, SL_CHAT, 3, 24); break;              // closed hat
         case 3: hit(92, SL_OHAT, 2, 170); break;             // open hat
-        case 4: hit(ROOT[chordIdx], SL_BASS, 5, 110); break; // bass root
-        case 5: for (int k = 0; k < 3; k++)                  // chord stab
-                    hit(CHORD[chordIdx][k], SL_STAB, 4, 150); break;
+        case 4: hit(ROOT[chordIdx], SL_BASS, 5, 150); break; // rolling sub root
+        case 5: {                                            // ARP — a cascading lead over the chord (the topline)
+            int i = arpIdx % 6;                              // root·3rd·5th, then the octave up — rising
+            hit(CHORD[chordIdx][i % 3] + 12 * (i / 3), SL_ARP, 4, 200);
+            arpIdx++;
+        } break;
     }
 }
 
@@ -134,15 +143,18 @@ void init() {
     instrument_filter(SL_CHAT, FILTER_HIGH, 7000, 2);
     instrument(SL_OHAT, INSTR_NOISE, 0, 180, 0, 90);
     instrument_filter(SL_OHAT, FILTER_HIGH, 6500, 2);
-    instrument(SL_BASS, INSTR_SQUARE, 1, 120, 2, 70);
-    instrument_filter(SL_BASS, FILTER_LOW, 700, 4);
-    instrument(SL_STAB, INSTR_SAW, 2, 150, 1, 120);
-    instrument_filter(SL_STAB, FILTER_LOW, 1600, 3);
+    instrument(SL_BASS, INSTR_SAW, 2, 160, 3, 130);          // round rolling sub
+    instrument_filter(SL_BASS, FILTER_LOW, 480, 3);
+    instrument(SL_ARP, INSTR_SAW, 1, 90, 0, 220);            // a plucky lead — short decay, ringing tail
+    instrument_filter(SL_ARP, FILTER_LOW, 3000, 5);
+    instrument_echo(SL_ARP, 0.28f);                          // dreamy dotted-8th tail — the prog-house topline
+    echo(366, 0.34f, 0.42f);                                 // ~dotted-8th at 123 BPM, dark repeats
 
-    // the PAD (slot 11) — a detuned-saw string wash, resonant LP. The pump victim.
-    instrument(SL_PAD, INSTR_SAW, 80, 700, 6, 900);
-    instrument_filter(SL_PAD, FILTER_LOW, 2200, 4);
-    instrument_tune(SL_PAD, 0.07f);                          // unison detune shimmer
+    // the PAD (slot 11) — a LUSH wide detuned-saw wash on a slow swell. The sidechain victim
+    // (it breathes against the kick), so the longer + more sustained it is, the more beautiful the pump.
+    instrument(SL_PAD, INSTR_SAW, 220, 900, 7, 1400);        // slow attack = a swell; long release = it hangs
+    instrument_filter(SL_PAD, FILTER_LOW, 2400, 3);
+    instrument_tune(SL_PAD, 0.12f);                          // wider unison detune = the analog shimmer
 
     // master insert chain: tape → eq → crush → reverb. Reverb is a REAL insert now
     // (reverb_insert), so the ORDER toggle can move it before/after crush — audible.
