@@ -1,7 +1,7 @@
-# Effects bus architecture — reorderable inserts, multi-reverb, reverb-as-bus
+# Effects bus architecture — reorderable inserts, multi-reverb, reverb-as-bus, sidechain
 
-**Status: Increment A SHIPPED 2026-06-12; Increment C engine SHIPPED 2026-06-12 (multi-reverb live;
-effects-after-reverb is engine-ready, cart API is the fast-follow — see §5).** A design map for
+**Status: Increment A SHIPPED 2026-06-12; Increment C SHIPPED 2026-06-12 (multi-reverb live, AND
+effects-after-reverb live via `reverb_bus_fx` — see §5).** A design map for
 three *independent* increments to the master-FX / aux-bus layer. The point of this doc is that the
 engine is already shaped for all three, and to record the exact costs so the build isn't re-derived
 from scratch.
@@ -253,11 +253,14 @@ Drums → tank 0 (tight room), keys → tank 1 (long plate), guitar → tank 2 (
 > **`reverb_bus(tank, size, damp)`** carves a space on its own aux bus (chain = `[FX_REVERB]`,
 > wet-replace) + **`instrument_reverb_bus(slot, tank, mix)`** routes a slot's send into it. Showcase:
 > the **reverb spaces** cart (a bright mallet in a tight room + a soft organ in a vast plate, ringing
-> at once). **What shipped is the multi-reverb capability** (the §4 Increment B win, subsumed). **What's
-> engine-ready but NOT yet cart-exposed: effects AFTER the reverb** (reverb→bitcrush). The wet-replace +
-> reorderable chain are built and work, but a cart can't yet *address* a reverb-bus's allocated index to
-> call `fx_order`/per-bus effect params on it — that addressing (a tank-keyed order + per-bus effect
-> setters) is a clean small follow-up. See §6 "no committed suite to break" — the bit-repro tax did not bite.
+> at once). Multi-reverb (the §4 Increment B win) is subsumed.
+>
+> **✅ Effects AFTER the reverb SHIPPED too (the fast-follow landed same-day).** The addressing gap is
+> closed by **`reverb_bus_fx(tank, fx, a, b, c)`** — tank-keyed, so a cart never sees the auto-allocated
+> bus index: it resolves tank→bus on the audio thread, configures the insert (crush/eq/tape/chorus) on
+> that bus, and appends it after `FX_REVERB` in the chain (so the pedal chews the wet tail). `reverb→crush`
+> is the demo (the **reverb spaces** CRUSH toggle: the plate decays into 5-bit dust). `SR_REVERB_BUS_FX`=68.
+> So Increment C is fully cart-exposed: multi-reverb **and** effects-after-the-space.
 
 ## 5. Increment C — reverb as an insert on a dedicated bus
 
@@ -302,6 +305,109 @@ and you have reverb→crush for free — the Increment-A machinery handles the r
 exactly right — the bus carries only the send signal, so no internal dry/wet param is needed.
 You'd *only* need an internal mix knob to put reverb in-line on an instrument's own **dry** bus,
 which is not this feature. So C gets off easy on wet/dry **because** it's a send.
+
+---
+
+## Increment D — sidechain & bus compression (the side-chain input path)
+
+**The piece that's genuinely new architecture, and the reason to design it carefully once:** a
+**second input path**. Every effect so far reads one signal — its own bus. A sidechain comp reads
+**two**: the *victim* (what gets ducked) and a *trigger/key* (what drives the ducking). The vocoder
+has the same shape (carrier × modulator). `sound-next-steps.md` says it outright — *"design the
+side-chain path once, during the bus refactor, so it isn't bolted on twice."* This section is that
+design.
+
+Motivating demand: the `house` station and `groovebox` both **fake** the pump (a per-voice
+`note_cutoff` duck against the kick); Afrobeat voted compression a missing roster entry. The fake is
+per-voice + filter-not-gain + event-triggered. The real thing is summed-bus + gain + audio-keyed.
+
+### D.1 The side-chain SEND — a key accumulator (the reusable bit, shared with the vocoder)
+
+A send already exists in the engine: `reverb_in`/`echo_in` are mono accumulators a voice adds into
+(`sound.h:497`, the same shape as `busL[rvb_bus] += cL * v->rvb`). A side-chain key is **the same
+thing with a different consumer**:
+
+```c
+#define N_SC_KEYS 3                       // independent trigger buses (kick / snare / …)
+static float sc_key[N_SC_KEYS];           // mono trigger level, refilled each sample (like reverb_in)
+```
+
+During the per-voice write (`sound.h:~3777`), a voice flagged as a key source *also* adds its mono
+contribution: `sc_key[v->sc_key] += (cL + cR) * 0.5f * v->sc_send;`. **This accumulator is the only
+new input path** — and it is exactly what the vocoder needs (its modulator routes into a key; the
+vocoder insert reads that key through its analysis filterbank instead of as a broadband level). Build
+the key accumulator + routing here; vocoder reuses it. Keep the *accumulator* generic; the
+*consumer* (broadband detector vs filterbank) is the effect's business.
+
+### D.2 The detector + gain stage (the compressor itself)
+
+Per active compressor: a one-pole envelope follower over its key, then a gain applied to the victim
+bus. Peak detect (snappy, tracks the kick transient), no lookahead in v1 (matches the fake; a real
+lookahead wants a tiny delay line — deferred):
+
+```c
+typedef struct { uint8_t used, victim_bus, key; float amount, atkCoef, relCoef, env; } SideChain;
+static SideChain sc[SOUND_FX_BUSES];      // at most one keyed comp per victim bus
+
+// in the per-bus / master stage, BEFORE the victim folds to master:
+SideChain *s = &sc[b];
+if (s->used) {
+    float k = fabsf(sc_key[s->key]);
+    s->env += (k > s->env ? s->atkCoef : s->relCoef) * (k - s->env);   // attack/release
+    float duck = 1.0f - s->amount * clampf(s->env, 0, 1);              // gain reduction
+    busL[b] *= duck; busR[b] *= duck;
+}
+```
+
+- **Victim is any bus.** Master (`b==0`, the usual "duck the whole mix to the kick") applies after the
+  master insert chain, before the soft-clip. A per-instrument victim ducks just that aux bus — nearly
+  free, the gain multiply rides the bus loop that already runs.
+- **Single-sample, no ordering trap.** The kick writes its bus *and* `sc_key` in the same per-voice
+  pass, so by the per-bus stage `sc_key` holds the full summed trigger for sample *t*. No frame lag
+  (unlike the cart fake, which is frame-quantized at 60 Hz — the engine version is sample-accurate).
+- **GLUE = the self-keyed case.** A bus compressor with no external trigger is the same gain stage
+  whose detector reads the **victim's own** summed level instead of a key. One bool (`s->key < 0` →
+  read `busL[b]+busR[b]` instead of `sc_key`). That's the dormant GLUE knob, woken for free.
+
+### D.3 The API (four-place wiring)
+
+```c
+void sidechain(int victim_bus, int key, float amount, int attack_ms, int release_ms);
+   // duck victim_bus (0 = master) by up to amount (0..1), keyed off `key`. amount 0 = OFF (byte-identical).
+void sidechain_key(int slot, int key, float send);   // route a slot into a trigger key. send 0 = not a trigger.
+void glue(int victim_bus, float amount, int attack_ms, int release_ms);   // self-keyed bus comp (no trigger)
+```
+
+v1 is **amount + attack/release** (no threshold/ratio/knee) — deliberately, because that's exactly
+what the groovebox PUMP already exposes, so the rewire is 1:1 and the cart can't expose params the
+engine lacks. Threshold/ratio/soft-knee is a clean follow-up (more detector math, same plumbing).
+
+### D.4 The groovebox rewire (1:1 — this is why the cart was built first)
+
+The PUMP/GLUE knobs were designed onto this. Today (cart-side fake), tomorrow (engine):
+
+| | today (faked) | after Increment D |
+|---|---|---|
+| trigger | `pumpEnv = 1` on each kick fire (frame-quantized) | `sidechain_key(SL_KICK, 0, 1.0f)` (sample-accurate) |
+| duck | `note_cutoff` on the held PAD only, filter | `sidechain(0, 0, k_pump, ~1, ~120)` — gain on the **whole master mix** |
+| breadth | one voice | bass + stab + pad + hats all pump together (the real summed pump) |
+| GLUE | drawn but dead | `glue(0, k_glue, ~5, ~150)` — wakes up |
+
+The hand-rolled `pumpEnv` / per-frame `note_cutoff` deletes; `k_pump` maps straight to `amount`. The
+PUMP meter can read the engine's gain, or keep the cart envelope purely as the visual. **Net: the cart
+gets simpler *and* more correct.** Showcase + acceptance test ready on day one.
+
+### D.5 Cost & sequencing
+
+- **Cheapest increment.** `sc_key[N_SC_KEYS]` floats + one `SideChain` per victim bus + a multiply
+  per victim per sample. **No buffers.** Far under reverb. Gated on `amount`/`used` → unused is
+  **byte-identical**, so **no bit-repro re-baseline** (unlike C).
+- **Independent of A/B/C** — D touches the per-voice send accumulator + the bus/master gain stage; C
+  touches send→tank routing. D could land before or after C. It does want the **same quiet tree** (it
+  edits the hot per-voice write loop + the master stage), so it's **post-tuning**, like C.
+- **Open calls when built:** (1) `N_SC_KEYS` = 2 or 3? (2) peak vs RMS detect (lean peak). (3) v1
+  amount-only vs ship threshold/ratio (lean amount-only → 1:1 with the cart). (4) master-only victim
+  first, or per-bus victim from the start (per-bus is ~free — expose `victim_bus`).
 
 ---
 
@@ -410,6 +516,11 @@ an abrupt gate — is the right shape. **Optional refinement, not needed for a f
 - **Still outside both:** echo gets the same multi-tank treatment as B/C if wanted (it's a
   cheaper single ring buffer, `echo_buf`, `sound.h:401`) — not sketched here, lower priority
   than "everyone in the same room."
+- **Increment D (sidechain / bus comp) is independent of all three** and arguably the highest-demand
+  next build: it's the **cheapest** (no buffers, no bit-repro tax), it ends the per-voice pump *fake*
+  that `house` + `groovebox` ship today, and it lands the **side-chain input path the vocoder also
+  needs** — so building it pays a second debt. It does edit the hot per-voice write loop + the master
+  stage, so it wants the **same quiet tree as C** (post-tuning). Sketched in [Increment D](#increment-d--sidechain--bus-compression-the-side-chain-input-path) above; the `groovebox` PUMP/GLUE knobs are its ready showcase + acceptance test.
 
 Open calls still to make when C is actually built (not blockers on the direction):
 1. **`SOUND_REVERB_TANKS` = 2 or 3?** (room+plate vs +spring; 48 KB vs 72 KB).

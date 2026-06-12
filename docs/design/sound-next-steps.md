@@ -261,12 +261,20 @@ strip); these are *routing* changes, not new effects (decision 0015 holds). Shor
   B's simple send-knob as its friendly face. Its one tax — moving the FP summation order — is a
   **one-time re-baseline, not ongoing wobble**, and this repo has **no committed golden-wav suite
   to break** (`tune-check` is pitch-based and won't notice). See the detail doc §6.
+- **D — sidechain & bus compression** (independent of A/B/C; the **cheapest** — no buffers, no
+  bit-repro tax). Adds the one genuinely-new thing: a **second input path** — a `sc_key[]` send
+  accumulator a trigger (the kick) feeds, read by a compressor that ducks the *victim* bus. Ends the
+  per-voice pump **fake** that `house` + `groovebox` ship today, and the side-chain input path is
+  **the same plumbing the vocoder needs**, so it pays a second debt. `sidechain()`/`sidechain_key()`/
+  `glue()`; the `groovebox` PUMP/GLUE knobs are a 1:1 rewire + ready acceptance test. Full sketch:
+  detail doc **Increment D**.
 
 - **Scope of A:** the **5–6 inserts** (bitcrush / eq / chorus / flanger / tape / wah). **echo +
   reverb are parallel SENDS** — not reorderable until C makes reverb a bus insert.
-- **A SHIPPED 2026-06-12** — `fx_order(bus, kinds, n)` + the `FX_*` constants; the pedalboard
-  cart became a drag-and-drop chain builder (its showcase). **Next: C** (skip B standalone — C
-  subsumes it). See STATUS.md + [`effects-bus-architecture.md`](effects-bus-architecture.md).
+- **A + C SHIPPED 2026-06-12** — A: `fx_order(bus, kinds, n)` + `FX_*` (pedalboard builder is the
+  showcase). C: multi-reverb tank pool + reverb-as-bus-insert + `reverb_bus_fx` (effects after the
+  reverb); B was subsumed as planned. **Next: D** (sidechain / bus comp — cheapest, highest-demand,
+  carries the vocoder's input path). See STATUS.md + [`effects-bus-architecture.md`](effects-bus-architecture.md).
 
 ## Decisions to make (deliberate — don't auto-do)
 
