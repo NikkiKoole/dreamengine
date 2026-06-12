@@ -417,6 +417,26 @@ the less logic baked per-cart, the cheaper web iteration gets.
 Develop menu → remote Web Inspector = full console into a running cart. The
 overlay's value is being cable-free and game-legible.
 
+## 6e. Web MIDI — SHIPPED 2026-06-12 (desktop browsers only)
+
+A USB MIDI keyboard plays published carts on the web, via the same `midi_get()` API as
+native. The bridge is `runtime/web_midi.js` (injected by emcc `--post-js` in both build
+paths): it drives `navigator.requestMIDIAccess()` and feeds note/bend events into the same
+ring the cart drains. Full design: [`midi-and-keybed.md`](midi-and-keybed.md).
+
+Mobile/web facts worth knowing:
+- **Desktop only, Chromium + Firefox.** Web MIDI exists in Chrome / Edge / Opera / Firefox.
+  **Safari does NOT** ship it, and **iOS has no Web MIDI at all** (any browser) — so this is a
+  desktop-laptop feature, not a phone one. The bridge no-ops cleanly where it's absent.
+- **Secure context required** — `https://` or `localhost`. A cart opened as a `file://`
+  won't get MIDI; the published GitHub-Pages site (https) is fine.
+- **Permission prompt** — the browser asks once to allow MIDI; the bridge handles a denial.
+- **Pre-connected devices** — a keyboard already plugged in at page load can enumerate late
+  and may not fire a `statechange`, so the bridge polls until a device appears, then pops a
+  small on-page toast naming it (and re-announces on a real hot-plug).
+- Not a `mobile-lint` axis — MIDI is an *additive* input on desktop; carts stay fully
+  playable by touch/keys without it.
+
 ## 7. Next steps
 
 1. ~~**`tools/mobile-lint.js` v1**~~ — **SHIPPED 2026-06-05** (checks 1, 3, 4, 5

@@ -80,6 +80,7 @@ Design the *voices* intent-first; never inherit the cousin's instrument lineup.
 | **An auto-composing station** (plays itself, you tune it) | `radio.h` (+ `solo.h` for a player jam strip, `improv.h` for an auto-soloist) | `bossa` (simplest), `cocktail`/`motorik` (improv.h soloist), `dub`/`citypop` (solo.h jam strip), `addis`/`afrobeat` (real-engine band: MEMBRANE/GUITAR/BRASS/REED + `euclid()` polyrhythm), `mariachi` (real-engine band: BOWED violins/BRASS trumpets/GUITAR rhythm, the sesquialtera time brain), `air`/`polopan`/`napoleon` (ARTIST stations: roll SONG ARCHETYPES, not a re-keyed texture — `napoleon` swaps engines per song + a per-archetype jam ribbon) | See [`game-music.md`](game-music.md) for the chord/clock brain. NEVER hand-roll the chassis. |
 | **An expressive monophonic instrument** (one voice that bends/slurs as you move) | held notes: `note_on`/`note_off` + live `note_pitch`/`note_vol`/`note_cutoff` + `note_glide` | `heldnotes` (the 100-line theremin — the canonical minimal one), `otamatone`, `glassharmonica`, `hurdygurdy`, `musicalsaw` | The sustain layer is spec'd in [`design/held-notes.md`](../design/held-notes.md). |
 | **A patch panel + keyboard** (build a sound with knobs, then play it) | `ui.h` widgets (knob/slider/button) + `instrument_*` setters + `note_on` | `moog` (dream synth), `modrack` (the big modular) | Use `ui.h` — never hand-roll the drag machine. `modrack` is the data-driven-indices archetype (name knobs with an enum). |
+| **A polyphonic keyboard you play** (white/black keys, chords, glissando) | **`keybed.h`** — touch + mouse + QWERTY + **MIDI keyboard**, all → one slot, with velocity | `epiano`, `touchpiano`, `mellotron`, `organ`, `solina`, `piano` (`moog` = panel + keys) | **NEVER hand-roll the key tables / finger pool / glissando** — `keybed.h` owns it, and a USB MIDI keyboard plays it for free (native + web). Carts with a special voice model (`mt70`, `sh101`) or a continuous ribbon (`martenot`) instead wire MIDI cart-side via `midi_get()`. See [`../design/midi-and-keybed.md`](../design/midi-and-keybed.md). |
 | **A classic-machine homage** (faithful hardware recreation) | `ui.h` faders/knobs + a step sequencer or keybed | drums: `tr808`/`tr909`/`cr78`; mono synth: `tb303`; keyboard synth: `sh101`; poly synth: `juno`; effect showcase: `spacecho` (echo) / `cathedral` (reverb) / `juno` (chorus) / `mistress` (flanger) | These are dense; pick the one whose *form factor* matches (drum grid vs faders vs keybed). |
 | **A single-engine showcase** ("here's what INSTR_X sounds like") | one `INSTR_*` engine + a simple keyboard/pad | `pluck`, `mallet`, `organ`, `epiano`, `fm`, `pd`, `tabla`, `handpan` | The tech-demo pattern: one engine, a few live knobs, an autoplay noodle. ~250–390 lines each. |
 | **A step sequencer / looper** (a grid or a record-and-layer loop) | the beat clock (`bpm`/`beat`/`beat_pos`) + `schedule_hit` | `drummachine` (16-step grid), `loopstation` (4-track live looper), `mariopaint` (note-placement staff) | |
@@ -115,8 +116,11 @@ instrument a player types notes on defaults to the **GarageBand musical-typing**
 the muscle memory carries between carts. Home row `A S D F G H J K L ; '` = the **white** keys
 (`A` = C), the QWERTY row above `W E _ T Y U _ O P` = the **blacks** that sit over them — i.e.
 the key's index in the string `A W S E D F T G Y H U J K O L P ; '` *is* its semitone (18
-semis, 1.5 octaves). **`Z` / `X` shift the octave down / up.** Copy the `KBMAP[]` + `keyp/keyr`
-loop verbatim from `mt70`/`moog`/`mellotron`/`martenot` — don't invent a per-cart layout.
+semis, 1.5 octaves). **`Z` / `X` shift the octave down / up.** **The easy way to get all of
+this (plus touch + MIDI):** use `keybed.h` — it bakes in the GarageBand layout and the octave
+keys; you only `#define KEYBED_WHITE_KEYS`/`_BLACK_KEYS` if a cart needs a different reach.
+Only hand-roll the `KBMAP[]` + `keyp/keyr` loop (copy it verbatim from `mt70`/`sh101`/
+`martenot`) when the cart is a keybed.h exception (special voice model or a ribbon).
 And remember **the desktop mouse is already a synthetic touch** (`studio.c` mouse-as-touch),
 so a `tap()`/`tapp()` button is clickable for free — do **not** *also* handle it via
 `mouse_pressed()`, or every edge double-fires (an even number of toggles reads as a dead
