@@ -86,32 +86,34 @@ static int   apos = 0;
 
 // ── geometry ──
 #define PED_Y 14
-#define PED_H 72
-#define PED_W 48
-#define PITCH 52
+#define PED_H 70                     // a touch shorter (was 72) — trimmed padding feeds the neck
+#define PED_W 54                     // a touch wider — room for the staggered knobs + side labels
+#define PITCH 58
 #define CHAIN_X0 4
 #define VIEW_W  312                  // chain viewport: x 4..316
 #define VIEW_R  (CHAIN_X0 + VIEW_W)
 #define SB_Y    (PED_Y + PED_H)      // scrollbar track (only drawn on overflow)
-#define KNOB_CY (PED_Y + 44)
-#define ILLU_CY (PED_Y + 22)
+#define ILLU_CY (PED_Y + 13)         // illustration center — pulled up, padding trimmed
 #define PAL_Y   88                   // palette panel top (when open)
 #define SX0   22                     // nut (neck end)
 #define SX1   302                    // bridge (body end)
 #define STRUMX 196                   // strum zone starts here (right side, over the body)
-#define STR_Y0 96
-#define STR_DY 7
+#define STR_Y0 93                    // strings spread WIDER now (10px, was 7) — easy to pick on a phone
+#define STR_DY 10
 #define STR_Y(s) (STR_Y0 + (s) * STR_DY)
-#define SHAPE_Y 143
+#define CHORD_H 21                   // chord buttons ~1.5× taller (was 14), parked at the bottom
+#define SHAPE_Y 154
 #define SHAPE_W 56
 #define SHAPE_X(i) (12 + (i) * 60)
-#define ROOT_Y  159
+#define ROOT_Y  177
 #define ROOT_W  40
 #define ROOT_X(i) (11 + (i) * 43)
-#define ROW_H 14
 
-static int knob_cx_at(int px, int j, int nk) { return px + 4 + (PED_W - 8) * (2 * j + 1) / (2 * nk); }
-static int knob_slot_w(int nk)                { return (PED_W - 8) / nk; }
+// knobs are STAGGERED (zigzag, 2 columns) so each gets room to be bigger than a cramped row.
+// even j → left column, odd j → right column; each on its own row down the pedal.
+static int knob_cx(int x, int j)  { return (j & 1) ? (x + PED_W - 16) : (x + 16); }
+static int knob_cy(int j, int nk) { return PED_Y + 24 + j * (nk <= 3 ? 13 : 9); }
+static int knob_rad(int nk)       { return nk <= 3 ? 6 : 5; }
 static int gate_ms(void) { return 1800; }
 
 static int str_fret(int s) { return SHAPE_F[sel_shape][s] < 0 ? 0 : ROOT_FRET[sel_root] + SHAPE_F[sel_shape][s]; }
@@ -313,12 +315,12 @@ void update(void) {
                 int s = slot_under(tx);
                 if (s >= 0) {
                     int px = ped_screen_x(s); int nk = CAT[chain[s].cat].nk;
+                    int hitk = -1;                                        // a generous fat-finger box per staggered knob
+                    for (int j = 0; j < nk; j++)
+                        if (point_in_box(tx, ty, knob_cx(px, j) - 11, knob_cy(j, nk) - 7, 22, 14)) { hitk = j; break; }
                     if (point_in_box(tx, ty, px + 8, PED_Y + 57, PED_W - 16, 14)) { chain[s].on = !chain[s].on; dirty = 1; }
-                    else if (point_in_box(tx, ty, px, KNOB_CY - 11, PED_W, 22)) {
-                        int sw = knob_slot_w(nk);
-                        for (int j = 0; j < nk; j++)
-                            if (tx >= knob_cx_at(px, j, nk) - sw / 2 && tx < knob_cx_at(px, j, nk) + sw / 2) { p->mode = PTR_KNOB; p->slot = s; p->knob = j; }
-                    } else { p->mode = PTR_DRAGSLOT; p->slot = s; p->cat = chain[s].cat; }   // label = drag handle
+                    else if (hitk >= 0) { p->mode = PTR_KNOB; p->slot = s; p->knob = hitk; }
+                    else { p->mode = PTR_DRAGSLOT; p->slot = s; p->cat = chain[s].cat; }   // anywhere else = drag handle
                 }
             }
             // 2. scrollbar
@@ -331,9 +333,9 @@ void update(void) {
             }
             // 4. the guitar (only when palette closed)
             if (p->mode == PTR_IDLE && !palette_open) {
-                for (int i2 = 0; i2 < NSHAPE; i2++) if (point_in_box(tx, ty, SHAPE_X(i2), SHAPE_Y, SHAPE_W, ROW_H)) set_shape(i2);
+                for (int i2 = 0; i2 < NSHAPE; i2++) if (point_in_box(tx, ty, SHAPE_X(i2), SHAPE_Y, SHAPE_W, CHORD_H)) set_shape(i2);
                 if (p->mode == PTR_IDLE)
-                    for (int i2 = 0; i2 < NROOT; i2++) if (point_in_box(tx, ty, ROOT_X(i2), ROOT_Y, ROOT_W, ROW_H)) set_root(i2);
+                    for (int i2 = 0; i2 < NROOT; i2++) if (point_in_box(tx, ty, ROOT_X(i2), ROOT_Y, ROOT_W, CHORD_H)) set_root(i2);
                 if (p->mode == PTR_IDLE && ty >= STR_Y0 - 9 && ty <= STR_Y(NSTR - 1) + 9 && tx >= SX0 - 8 && tx <= SX1 + 8) {
                     p->mode = PTR_PICK; autoplay = false;
                     pick_string(near_string(ty), tx);
@@ -424,15 +426,17 @@ static void draw_chain_pedal(int i, int x) {
     font(FONT_SMALL);
     print_centered(d->name, cx, PED_Y + 3, sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
     draw_illu(sl->cat, cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY, d->body);
-    int kr = d->nk >= 4 ? 4 : 5;
+    int kr = knob_rad(d->nk);
+    int lblcol = sl->on ? CLR_LIGHT_PEACH : CLR_DARK_GREY;
     for (int j = 0; j < d->nk; j++) {
-        int kx = knob_cx_at(x, j, d->nk);
-        circfill(kx, KNOB_CY, kr, CLR_BROWNISH_BLACK);
-        circ(kx, KNOB_CY, kr, sl->on ? d->accent : CLR_DARK_GREY);
+        int kx = knob_cx(x, j), ky = knob_cy(j, d->nk);
+        circfill(kx, ky, kr, CLR_BROWNISH_BLACK);
+        circ(kx, ky, kr, sl->on ? d->accent : CLR_DARK_GREY);
         float a = (-135.0f + sl->k[j] * 270.0f) * 0.0174533f;
-        line(kx, KNOB_CY, kx + (int)(sinf(a) * (kr - 1)), KNOB_CY - (int)(cosf(a) * (kr - 1)), sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
-        font(FONT_TINY);
-        print_centered(d->klabel[j], kx, KNOB_CY + kr + 1, sl->on ? CLR_LIGHT_PEACH : CLR_DARK_GREY);
+        line(kx, ky, kx + (int)(sinf(a) * (kr - 1)), ky - (int)(cosf(a) * (kr - 1)), sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
+        font(FONT_TINY);                                          // label tucked beside the knob (the empty column)
+        if (j & 1) print_right(d->klabel[j], kx - kr - 2, ky - 2, lblcol);   // right-column knob → label on its left
+        else       print(d->klabel[j],       kx + kr + 2, ky - 2, lblcol);   // left-column knob  → label on its right
     }
     font(FONT_NORMAL);
     circfill(x + 7, PED_Y + 63, 2, sl->on ? CLR_LIME_GREEN : CLR_DARKER_GREY);
@@ -460,7 +464,7 @@ static void draw_palette(void) {
 }
 
 static void draw_guitar(void) {
-    int by = STR_Y0 - 8, bh = (STR_Y(NSTR - 1) + 8) - by;
+    int by = STR_Y0 - 4, bh = (STR_Y(NSTR - 1) + 8) - by;   // clears the scrollbar above; the neck is taller now
     rrectfill(6, by, SCREEN_W - 12, bh, 6, CLR_BLUE_GREEN);
     rrect(6, by, SCREEN_W - 12, bh, 6, CLR_BLUE);
     rrectfill(SX0 - 8, by + 3, SX1 - SX0 + 28, bh - 6, 4, CLR_LIGHT_PEACH);
@@ -490,21 +494,18 @@ static void draw_guitar(void) {
             trifill(ptr[j].x - 3, ptr[j].y - 4, ptr[j].x + 3, ptr[j].y - 4, ptr[j].x, ptr[j].y + 4, CLR_WHITE);
     for (int i = 0; i < NSHAPE; i++) {
         int x = SHAPE_X(i); bool on = (i == sel_shape);
-        rrectfill(x, SHAPE_Y, SHAPE_W, ROW_H, 3, on ? CLR_ORANGE : CLR_DARKER_GREY);
-        rrect(x, SHAPE_Y, SHAPE_W, ROW_H, 3, on ? CLR_WHITE : CLR_DARK_GREY);
-        print_centered(SHAPE_NAME[i], x + SHAPE_W / 2, SHAPE_Y + 4, on ? CLR_BLACK : CLR_MEDIUM_GREY);
-        font(FONT_TINY); print(str("%c", SHAPE_KEY[i]), x + 2, SHAPE_Y + 1, on ? CLR_BLACK : CLR_DARK_GREY); font(FONT_NORMAL);
+        rrectfill(x, SHAPE_Y, SHAPE_W, CHORD_H, 3, on ? CLR_ORANGE : CLR_DARKER_GREY);
+        rrect(x, SHAPE_Y, SHAPE_W, CHORD_H, 3, on ? CLR_WHITE : CLR_DARK_GREY);
+        print_centered(SHAPE_NAME[i], x + SHAPE_W / 2, SHAPE_Y + 8, on ? CLR_BLACK : CLR_MEDIUM_GREY);
+        font(FONT_TINY); print(str("%c", SHAPE_KEY[i]), x + 3, SHAPE_Y + 2, on ? CLR_BLACK : CLR_DARK_GREY); font(FONT_NORMAL);
     }
     for (int i = 0; i < NROOT; i++) {
         int x = ROOT_X(i); bool on = (i == sel_root);
-        rrectfill(x, ROOT_Y, ROOT_W, ROW_H, 3, on ? CLR_LIME_GREEN : CLR_DARKER_GREY);
-        rrect(x, ROOT_Y, ROOT_W, ROW_H, 3, on ? CLR_WHITE : CLR_DARK_GREY);
-        print_centered(ROOT_NAME[i], x + ROOT_W / 2, ROOT_Y + 4, on ? CLR_BLACK : CLR_MEDIUM_GREY);
-        font(FONT_TINY); print(str("%c", ROOT_KEY[i]), x + 2, ROOT_Y + 1, on ? CLR_BLACK : CLR_DARK_GREY); font(FONT_NORMAL);
+        rrectfill(x, ROOT_Y, ROOT_W, CHORD_H, 3, on ? CLR_LIME_GREEN : CLR_DARKER_GREY);
+        rrect(x, ROOT_Y, ROOT_W, CHORD_H, 3, on ? CLR_WHITE : CLR_DARK_GREY);
+        print_centered(ROOT_NAME[i], x + ROOT_W / 2, ROOT_Y + 8, on ? CLR_BLACK : CLR_MEDIUM_GREY);
+        font(FONT_TINY); print(str("%c", ROOT_KEY[i]), x + 3, ROOT_Y + 2, on ? CLR_BLACK : CLR_DARK_GREY); font(FONT_NORMAL);
     }
-    font(FONT_TINY);
-    print_centered("ZXCVBNM = neck   ASDFG = shape   strum the body = chord, near the nut = high ghosts", SCREEN_W / 2, ROOT_Y + ROW_H + 2, CLR_DARK_GREY);
-    font(FONT_NORMAL);
 }
 
 void draw(void) {
@@ -531,7 +532,7 @@ void draw(void) {
         int x = CHAIN_X0 + disp * PITCH - (int)scroll_x;
         if (!(x > VIEW_R || x + PED_W < CHAIN_X0)) {
             draw_chain_pedal(i, x);
-            if (disp < shown - 1) print(">", x + PED_W, KNOB_CY - 3, CLR_DARK_GREY);
+            if (disp < shown - 1) print(">", x + PED_W, PED_Y + 33, CLR_DARK_GREY);
         }
         disp++;
     }
