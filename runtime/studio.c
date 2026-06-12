@@ -2014,6 +2014,20 @@ int print_rot(const char *text, int x, int y, float deg, int color, int pivot) {
     return x + text_width(text);
 }
 
+int print_rot_scaled(const char *text, int x, int y, float deg, int scale, int color, int pivot) {
+    PROF("print_rot_scaled");
+    if (scale < 1) scale = 1;
+    float sz = cur_font_size() * scale;        // DrawTextPro scales by fontSize; POINT filter keeps it crisp
+    Vector2 org = { 0, 0 };                    // pivot 0 = rotate around (x,y) = top-left
+    if (pivot) {                               // pivot 1 = rotate around the (scaled) text center
+        org.x = (text_width(text) * scale) / 2.0f;
+        org.y = sz / 2.0f;
+    }
+    DrawTextPro(cur_font(), text, (Vector2){ (float)x, (float)y }, org,
+                deg, sz, 0, palette[color % PALETTE_SIZE]);
+    return x + text_width(text) * scale;
+}
+
 void rect(int x, int y, int w, int h, int color) {
     PROF("rect");
     Color c = palette[color % PALETTE_SIZE];

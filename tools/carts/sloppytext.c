@@ -53,10 +53,9 @@ static int print_sloppy(const char *s, int x, int y, int color,
 // from SCALING UP the 8×8 fonts (NORMAL/THIN double cleanly to 16/24px) or from
 // dropping in COMIC (already a chunky 20px) — never from scaling the little fonts,
 // which just turns to mush. SMALL appears at 1× as the odd tiny accent. All
-// bottom-aligned to one baseline. The engine can't rotate AND scale in one call
-// (cart-land), so 1× glyphs tilt (print_rot) and scaled 8×8 glyphs stand upright
-// and big (print_scaled). Per glyph we roll a treatment:
-//   ~50% normal 8×8 (tilted)   ~20% BIG scaled 8×8 (2–3×)   ~15% COMIC   ~15% small accent
+// bottom-aligned to one baseline. Every glyph both tilts AND scales in one call
+// via print_rot_scaled, so even the big letters lean. Per glyph we roll:
+//   ~50% normal 8×8   ~20% BIG scaled 8×8 (2-3x)   ~15% COMIC   ~15% small accent
 static int print_wild(const char *s, int x, int baseline, int color, float maxang) {
     int cx = x;
     for (int i = 0; s[i]; i++) {
@@ -72,8 +71,8 @@ static int print_wild(const char *s, int x, int baseline, int color, float maxan
         char ch[2] = { s[i], 0 };
         int w   = text_width(ch) * scale;
         int top = baseline - gh;                          // bottom-align the (scaled) cell
-        if (scale == 1) print_rot(ch, cx, top, (prand(h ^ 0x55u) * 2.0f - 1.0f) * maxang, color, 0);
-        else            print_scaled(ch, cx, top, color, scale);   // big upright pop, crisp
+        float a = (prand(h ^ 0x55u) * 2.0f - 1.0f) * maxang;
+        print_rot_scaled(ch, cx, top, a, scale, color, 0);  // tilt AND scale in one call
         cx += w + 2;
     }
     font(FONT_NORMAL);
