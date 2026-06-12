@@ -1,7 +1,34 @@
 # Pixel-perfect scaling at non-integer offsets ("sharp bilinear")
 
-**Status:** exploration / parked. Nothing wired into the engine yet. This note exists so
-future-me can pick it up cold.
+**Status:** SHIPPED as an opt-in engine setting. The exploration below is preserved for the
+reasoning; the outcome differs from where it started (see "Update" next).
+
+## Update — what we actually shipped
+
+Built a demo (`tools/carts/pixelperfect.c` → the "Pixel-Perfect Scaling" cart) comparing
+nearest / bilinear / two-stage / **sharp-bilinear** on scrolling 1px lines, each with a 7×
+magnifier. Conclusions that revised the plan below:
+
+- **Sharp-bilinear beats the two-stage trick** and is *simpler*: it's a SINGLE fragment-shader
+  pass (no integer-prescale, no intermediate RenderTexture). It keeps each source texel a flat
+  colour and confines the blend to a 1-output-pixel seam at texel edges — crisp like nearest,
+  stable like bilinear. So the "possible polish (later)" at the bottom became the actual answer;
+  the two-stage section is now historical.
+- **Gamma-correct (linear-light) blending** of that seam is a worthwhile refinement for thin
+  *bright* lines: a half-covered pixel keeps its true brightness instead of pulsing dark as it
+  moves. It's the demo's `SHARP+g` and the best-looking option.
+- **`fwidth` sizes the seam** to exactly one output pixel, so it's correct at any scale/rotation
+  (no need to pass the scale factor as a uniform).
+
+Wired into the engine as **settings → "scaling"** (`scaleFilter`, a machine-local `-D` flag like
+`SCALE`): `0` crisp/nearest (default, unchanged) · `1` bilinear · `2` sharp · `3` sharp+gamma.
+The shader (`SCALE_FS`) and present-blit hook live in `runtime/studio.c` next to `pal_shader`;
+the flag flows through `editor/src/settings.js` → `editor/electron/main.cjs` (native/live/web).
+It is **NOT a cart-facing API** — carts never see it. Default is off, so nothing changes unless
+chosen. **Only matters at non-integer scale** (web fit-to-viewport, fullscreen, resizable); at
+the editor's integer `SCALE` all four look identically crisp. Desktop only for modes 2/3 (GLSL
+330 `fwidth`); web falls back to the chosen texture filter (mode 1 bilinear still works there) —
+a GLSL-100 + derivatives port is the open follow-up.
 
 ## The problem
 

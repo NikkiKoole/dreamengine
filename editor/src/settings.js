@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal' }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal', scaleFilter: 0 }
 
 // ── key bindings ──────────────────────────────────────────────
 // Values are raylib (GLFW) keycodes — letters/digits are ASCII, specials match
@@ -87,6 +87,7 @@ function load() {
     welcomeCart:   localStorage.getItem('welcomeCart') || 'zoo',
     backend:       localStorage.getItem('backend')   || DEFAULTS.backend,
     buildMode:     localStorage.getItem('buildMode') || DEFAULTS.buildMode,
+    scaleFilter:   parseInt(localStorage.getItem('scaleFilter') || DEFAULTS.scaleFilter),
     keymap:        loadKeymap(),
   }
 }
@@ -119,6 +120,22 @@ export function buildSettingsPanel(el) {
     field('scale',  'number', settings.scale,   v => { settings.scale   = v; save('scale', v)   }),
   ))
   el.appendChild(screenSection)
+
+  // ── scaling (present filter) ─────────────────────────────────
+  const scaleSection = section('scaling')
+  scaleSection.appendChild(select(
+    'how the canvas scales to the window',
+    [
+      { value: '0', label: 'crisp — nearest (default)' },
+      { value: '1', label: 'smooth — bilinear' },
+      { value: '2', label: 'sharp — anti-aliased pixels' },
+      { value: '3', label: 'sharp + gamma-correct' },
+    ],
+    String(settings.scaleFilter),
+    v => { settings.scaleFilter = parseInt(v); save('scaleFilter', v) },
+  ))
+  scaleSection.appendChild(note('only changes anything at a NON-INTEGER scale — the web build fit to the browser, fullscreen, a resizable window. At the editor’s integer scale all four look identically crisp. "sharp" keeps pixels crisp but anti-aliases the 1px seam at pixel edges, so fractional scaling neither shimmers (like nearest) nor blurs (like bilinear); "+gamma" blends that seam in linear light so bright edges keep their brightness. Free (one GPU pass). Takes effect on the next ▶ run; native + live, desktop. See the "Pixel-Perfect Scaling" demo cart.'))
+  el.appendChild(scaleSection)
 
   // ── controls (key bindings) ──────────────────────────────────
   // Click a key, then press the key you want. Stored as raylib keycodes in

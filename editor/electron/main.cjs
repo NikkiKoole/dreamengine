@@ -115,6 +115,7 @@ function prepareCart(code, cfg) {
     cellW:   cfg?.cellW   || 16,
     cellH:   cfg?.cellH   || 16,
     touchDefault: cfg?.touchControls ? 1 : 0,
+    scaleFilter: cfg?.scaleFilter || 0,
     keymap:  cfg?.keymap || null,
     studioC: path.join(RUNTIME_DIR, 'studio.c'),
   }
@@ -196,7 +197,7 @@ function saveDirArgs(cfg) {
 // studio.c primitives as distinct, named symbols so `sample` can attribute
 // time to them instead of folding them into draw()).
 function macCompileArgs(dims, optFlags) {
-  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, keymap, studioC } = dims
+  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, scaleFilter, keymap, studioC } = dims
   return [
     `"${CART_SRC}"`,
     `"${studioC}"`,
@@ -211,6 +212,7 @@ function macCompileArgs(dims, optFlags) {
     `-DCELL_W=${cellW}`,
     `-DCELL_H=${cellH}`,
     `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
+    `-DSCALE_FILTER=${scaleFilter}`,
     ...keymapDefs(keymap),
     ...optFlags,
     // keep beginners' null-pointer mistakes as real crashes (caught by the
@@ -233,7 +235,7 @@ function macCompileArgs(dims, optFlags) {
 // cart.c at runtime and hot-reloads it on save. Screen/map dims are baked into the host
 // (it forwards them to the cart), so a dims change means a host rebuild.
 function macTccHostArgs(dims) {
-  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, keymap } = dims
+  const { screenW, screenH, scale, mapW, mapH, cellW, cellH, touchDefault, scaleFilter, keymap } = dims
   return [
     `"${path.join(RUNTIME_DIR, 'studio.c')}"`,
     '-DDE_TCC',
@@ -251,6 +253,7 @@ function macTccHostArgs(dims) {
     `-DCELL_W=${cellW}`,
     `-DCELL_H=${cellH}`,
     `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
+    `-DSCALE_FILTER=${scaleFilter}`,
     ...keymapDefs(keymap),
     '-fno-delete-null-pointer-checks',
     `"${path.join(LIBTCC_ARCH_DIR, 'libtcc.dylib')}"`,
@@ -894,6 +897,7 @@ ipcMain.handle('studio:build-web', async (_event, code, cfg) => {
     `-DCELL_W=${cellW}`,
     `-DCELL_H=${cellH}`,
     `-DTOUCH_CONTROLS_DEFAULT=${touchDefault}`,
+    `-DSCALE_FILTER=${cfg?.scaleFilter || 0}`,   // present filter; modes 2/3 are desktop-only, web falls back
     `-DRENDER_EVERY=${cfg?.renderEvery ?? 1}`,   // present every Nth tick (web heat lever); 1 = every tick
     '-Os',
     '-fno-delete-null-pointer-checks',

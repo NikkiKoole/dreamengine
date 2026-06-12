@@ -162,6 +162,18 @@ static int             loc_cur_pal   = -1;
 static bool            pal_active    = false;          // any palette[i] != base_palette[i]?
 static float           cur_pal_rgb[PALETTE_SIZE * 3];  // current palette, normalized — uploaded to the shader
 static bool            cur_pal_dirty = true;
+
+// present-scaling filter, picked in settings → "scaling" (machine-local, -D flag):
+//   0 crisp (nearest, default) · 1 bilinear (smooth) · 2 sharp-bilinear · 3 sharp+gamma
+// modes 2/3 use scale_shader at the final blit; only matters at NON-integer scale
+// (web viewport fit / resizable / fullscreen) — at integer SCALE all look crisp.
+#ifndef SCALE_FILTER
+#define SCALE_FILTER 0
+#endif
+static Shader          scale_shader;
+static bool            scale_shader_ok   = false;
+static int             loc_scale_texsize = -1;
+static int             loc_scale_gamma   = -1;
 static float           fade_amt   = 0.0f;            // fade()  — 0 normal .. 1 black
 static float           shake_amt  = 0.0f;            // shake() — pixels, self-decaying
 static float           frame_dt   = 0.0f;            // dt()    — seconds since last frame
@@ -182,6 +194,7 @@ static void poly_stroke_cov(const int *xy, int n, int color);
 // pal()-on-sprites helpers (defined in the graphics section, used earlier in main/pal)
 static void pal_shader_init(void);
 static void pal_recompute(void);
+static void scale_shader_init(void);
 
 #define BTN_COUNT 6
 static bool            btn_curr[2][BTN_COUNT];
@@ -1264,6 +1277,7 @@ static void loop_step(void) {
     }
     if (!skip_render) {
     BeginDrawing();
+        if (scale_shader_ok) BeginShaderMode(scale_shader);   // sharp-bilinear (modes 2/3)
         DrawTexturePro(
             canvas.texture,
             (Rectangle){ 0, 0,  SCREEN_W, -SCREEN_H },
@@ -1272,6 +1286,7 @@ static void loop_step(void) {
             0.0f,
             WHITE
         );
+        if (scale_shader_ok) EndShaderMode();
         if (fade_amt > 0.0f)
             DrawRectangle(0, 0, SCREEN_W * SCALE, SCREEN_H * SCALE,
                           (Color){ 0, 0, 0, (unsigned char)(fade_amt * 255) });
@@ -1485,6 +1500,7 @@ int main(int argc, char **argv) {
 
     load_palette();
     pal_shader_init();   // pal()-on-sprites swap shader (needs the GL context from InitWindow)
+    scale_shader_init(); // sharp-bilinear present filter (modes 2/3; no-op otherwise)
     init_touch_layout();
 
     if (MAP_DATA_LEN >= sizeof(map_data)) {
@@ -1496,6 +1512,9 @@ int main(int argc, char **argv) {
     // low-res canvas — all drawing goes here, then scaled up
     canvas = LoadRenderTexture(SCREEN_W, SCREEN_H);
     SetTextureFilter(canvas.texture, TEXTURE_FILTER_POINT);
+#if SCALE_FILTER == 1
+    SetTextureFilter(canvas.texture, TEXTURE_FILTER_BILINEAR);  // mode 1: smooth present
+#endif
     canvas_snap = LoadRenderTexture(SCREEN_W, SCREEN_H);
     SetTextureFilter(canvas_snap.texture, TEXTURE_FILTER_POINT);
 
@@ -1579,6 +1598,7 @@ int main(int argc, char **argv) {
     if (font_comic.texture.id > 0) UnloadFont(font_comic);
     if (font_thin.texture.id > 0) UnloadFont(font_thin);
     if (pal_shader_ok) UnloadShader(pal_shader);
+    if (scale_shader_ok) UnloadShader(scale_shader);
     if (spritesheet.width > 0) UnloadTexture(spritesheet);
     if (spritesheet_img.data) UnloadImage(spritesheet_img);
     if (pget_snapshot.data) UnloadImage(pget_snapshot);
@@ -1864,6 +1884,64 @@ static void pal_shader_init(void) {
     }
     SetShaderValueV(pal_shader, loc_base_pal, base_rgb, SHADER_UNIFORM_VEC3, PALETTE_SIZE);
     pal_shader_ok = true;
+}
+
+// "sharp bilinear" present filter. Keeps each source texel a FLAT colour and
+// confines the blend to a 1-output-pixel seam at texel edges (fwidth sizes the
+// seam to exactly one screen pixel, so it's correct at any scale). gammaCorrect
+// blends the seam in linear light so a bright edge keeps its true brightness.
+// Manual 4-tap (canvas stays POINT) so it matches the pixelperfect demo exactly.
+// Desktop (GLSL 330) only — fwidth needs derivatives; web falls back to the
+// chosen texture filter. Reads the canvas, so it runs at the final window blit.
+#ifndef PLATFORM_WEB
+static const char *SCALE_FS =
+    "#version 330\n"
+    "in vec2 fragTexCoord;\n"
+    "in vec4 fragColor;\n"
+    "out vec4 finalColor;\n"
+    "uniform sampler2D texture0;\n"
+    "uniform vec4 colDiffuse;\n"
+    "uniform vec2 texSize;\n"
+    "uniform int  gammaCorrect;\n"
+    "void main() {\n"
+    "    vec2 texel = fragTexCoord * texSize - 0.5;\n"   // texel-centre coords
+    "    vec2 ii = floor(texel);\n"
+    "    vec2 f  = texel - ii;\n"
+    "    vec2 ppt = 1.0 / max(fwidth(fragTexCoord * texSize), vec2(1e-4));\n"  // output px per texel
+    "    f = clamp((f - 0.5) * ppt + 0.5, 0.0, 1.0);\n"  // flat except a 1-px seam
+    "    vec2 tx = 1.0 / texSize;\n"
+    "    vec2 uv = (ii + 0.5) * tx;\n"
+    "    vec3 c00 = texture(texture0, uv).rgb;\n"
+    "    vec3 c10 = texture(texture0, uv + vec2(tx.x, 0.0)).rgb;\n"
+    "    vec3 c01 = texture(texture0, uv + vec2(0.0, tx.y)).rgb;\n"
+    "    vec3 c11 = texture(texture0, uv + vec2(tx.x, tx.y)).rgb;\n"
+    "    vec3 col;\n"
+    "    if (gammaCorrect == 1) {\n"
+    "        c00 = pow(c00, vec3(2.2)); c10 = pow(c10, vec3(2.2));\n"
+    "        c01 = pow(c01, vec3(2.2)); c11 = pow(c11, vec3(2.2));\n"
+    "        col = pow(mix(mix(c00,c10,f.x), mix(c01,c11,f.x), f.y), vec3(1.0/2.2));\n"
+    "    } else {\n"
+    "        col = mix(mix(c00,c10,f.x), mix(c01,c11,f.x), f.y);\n"
+    "    }\n"
+    "    finalColor = vec4(col, 1.0) * colDiffuse * fragColor;\n"
+    "}\n";
+#endif
+
+// load the sharp-bilinear shader (modes 2/3 only). On failure scale_shader_ok
+// stays false and the present falls back to the plain blit (the chosen filter).
+static void scale_shader_init(void) {
+#ifndef PLATFORM_WEB
+    if (SCALE_FILTER < 2) return;          // crisp / bilinear need no shader
+    scale_shader = LoadShaderFromMemory(0, SCALE_FS);
+    if (scale_shader.id == 0) return;
+    loc_scale_texsize = GetShaderLocation(scale_shader, "texSize");
+    loc_scale_gamma   = GetShaderLocation(scale_shader, "gammaCorrect");
+    float ts[2] = { (float)SCREEN_W, (float)SCREEN_H };
+    SetShaderValue(scale_shader, loc_scale_texsize, ts, SHADER_UNIFORM_VEC2);
+    int g = (SCALE_FILTER == 3) ? 1 : 0;
+    SetShaderValue(scale_shader, loc_scale_gamma, &g, SHADER_UNIFORM_INT);
+    scale_shader_ok = true;
+#endif
 }
 
 // rebuild the normalized current-palette array + pal_active flag from palette[].
