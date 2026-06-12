@@ -11,6 +11,8 @@
 // The chain can outgrow the screen — a scrollbar appears; drag it to pan. (REVERB is now a real
 // dry/wet INSERT (reverb_insert, Increment C), so its POSITION is audible — put it before the
 // bitcrush to crush the wet tail, or after to reverb the crushed guitar. See effects-bus-architecture.md.)
+// The VOWEL pedal (formant filter) makes the guitar TALK; its MOD knob picks how the vowel moves —
+// MAN (drag VWL by hand), ENV (each pick opens it), STP (a new vowel per pick — a spoken syllable).
 //
 // THE GUITAR (lower half, when the palette is closed):
 //   FRETTING HAND — ROOT row (Z X C V B N M) moves up the neck (E F G A B C D); SHAPE row (A S D
@@ -34,7 +36,7 @@
 // ── the effect catalog: every pedal you can drag into the chain ──────────────────────────────
 // kind = the engine FX_* insert kind (its slot in the reorderable chain). Every pedal — REVERB
 // included now (FX_REVERB via reverb_insert) — is a real insert, so chain order is audible.
-enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, NCAT };
+enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, NCAT };
 typedef struct {
     const char *name; int body, accent, kind, nk;
     const char *klabel[MAXK]; float kdef[MAXK];
@@ -49,6 +51,7 @@ static const FxDef CAT[NCAT] = {
     { "TREMOLO",  CLR_DARKER_GREY,   CLR_LIGHT_YELLOW, FX_TREM,    3, { "SPD","DEP","WAV" },   { 0.45f, 0.60f, 0.0f } },
     { "WAH",      CLR_DARK_PURPLE,   CLR_MAUVE,        FX_WAH,     3, { "SNS","RES","MIX" },   { 0.50f, 0.55f, 0.70f } },
     { "REVERB",   CLR_DARK_BLUE,     CLR_INDIGO,       FX_REVERB,  3, { "SIZ","DMP","MIX" },   { 0.70f, 0.40f, 0.45f } },
+    { "VOWEL",    CLR_BROWN,         CLR_LIGHT_PEACH,  FX_FORMANT, 4, { "VWL","Q","MIX","MOD" },{ 0.50f, 0.60f, 0.90f, 0.0f } },
 };
 
 // ── the chain: an ordered list of DISTINCT catalog ids, each with its own knobs + on-state ──
@@ -150,6 +153,47 @@ static void chain_move(int from, int to) {   // move element `from` to FINAL ind
     chain[to] = s;
 }
 
+// ── the VOWEL pedal's MOD knob: MANUAL / ENV / STEP ──────────────────────────────────────────
+// formant(vowel,q,mix) takes a STATIC vowel; the "talking" comes from MOVING it. The MOD knob
+// (k[3], snapped to 3 like TREMOLO's WAV) picks HOW it moves:
+//   MANUAL (0) — the VWL knob IS the vowel; drag it while you play = a hand-swept talkbox.
+//   ENV    (1) — each strum pops the vowel OPEN (from the VWL floor) and it relaxes back — picking
+//                dynamics drive it, hands-free (the auto-wah gesture, but a vowel).
+//   STEP   (2) — each strum advances to the NEXT vowel in a little "word", glided in — the guitar
+//                speaks a syllable per pluck (the move nothing else does; VWL is ignored here).
+// The cart drives all of this (formant() has no trigger input) — fmt_on_attack() on each pluck/
+// strum, formant_tick() every frame easing the vowel toward its target and re-pushing only when it
+// moved (a swept vowel is the intended motion — a cheap coeff update, no buffer churn).
+static const int   FMT_WORD[6] = { 0, 2, 4, 2, 3, 1 };   // OO AH EE AH EH OH — the spoken "word"
+static float fmt_vowel = 0.5f, fmt_target = 0.5f, fmt_env = 0.0f;
+static int   fmt_step = 0;
+static float fmt_last_v = -2.0f;
+static int   fmt_mode_of(Slot *sl) { return (int)(sl->k[3] * 2.99f); }   // k[3] 0..1 → 0/1/2
+static float fmt_live_vowel(Slot *sl) {
+    int m = fmt_mode_of(sl);
+    if (m == 1) return sl->k[0] + fmt_env * (1.0f - sl->k[0]);   // ENV: open from the VWL floor
+    if (m == 2) return fmt_vowel;                                 // STEP: the glided current vowel
+    return sl->k[0];                                              // MANUAL: the VWL knob
+}
+static void fmt_on_attack(void) {   // a pluck/strum landed
+    int idx = chain_index(C_FMT);
+    if (idx < 0 || !chain[idx].on) return;
+    int m = fmt_mode_of(&chain[idx]);
+    if (m == 1) fmt_env = 1.0f;                                              // ENV: pop open
+    else if (m == 2) { fmt_step = (fmt_step + 1) % 6; fmt_target = FMT_WORD[fmt_step] / 4.0f; }  // STEP: next vowel
+}
+static void formant_tick(void) {    // every frame: ease the moving modes, re-push on change
+    int idx = chain_index(C_FMT);
+    if (idx < 0 || !chain[idx].on) return;
+    Slot *sl = &chain[idx];
+    int m = fmt_mode_of(sl);
+    if (m == 0) return;                                          // MANUAL: apply_fx() handles it on knob change
+    if (m == 1) fmt_env *= 0.93f;                                // ENV decays back toward the floor
+    else        fmt_vowel += (fmt_target - fmt_vowel) * 0.16f;   // STEP glides toward the target vowel
+    float v = fmt_live_vowel(sl);
+    if (fabsf(v - fmt_last_v) > 0.002f) { formant(v, sl->k[1], sl->k[2]); fmt_last_v = v; }
+}
+
 // push every effect's state to the engine, then set the INSERT ORDER from the chain order.
 // An effect not in the chain (or off) is pushed dry. REVERB is now a real dry/wet INSERT
 // (reverb_insert → FX_REVERB in the chain), so its POSITION is audible — drag it before/after
@@ -169,6 +213,7 @@ static void apply_fx(void) {
             case C_TRM: tremolo(0.5f + k[0] * 11.5f, act ? k[1] : 0.0f, (int)(k[2] * 2.99f)); break;
             case C_WAH: wah(k[0], k[1], act ? k[2] : 0.0f); break;
             case C_RVB: reverb_insert(0.2f + k[0] * 0.78f, k[1], act ? k[2] : 0.0f); break;   // a real in-line dry/wet reverb pedal
+            case C_FMT: { float v = (idx >= 0) ? fmt_live_vowel(&chain[idx]) : k[0]; formant(v, k[1], act ? k[2] : 0.0f); fmt_last_v = v; } break;
         }
     }
     int kinds[NCAT], n = 0;
@@ -203,12 +248,14 @@ static void pluck_str(int s, int vol) {
     if (s < 0 || s >= NSTR) return;
     hit(str_midi[s], I_GTR, vol, gate_ms());
     amp[s] = 1.0f; vib_ph[s] = 0.0f;
+    fmt_on_attack();                          // VOWEL pedal: advance/open the vowel on each pick
 }
 static void strum_down(void) {
     for (int s = 0; s < NSTR; s++) {
         schedule_hit(s * 28, str_midi[s], I_GTR, 5, gate_ms());
         pend[s] = 1 + (s * 28 * 60) / 1000;
     }
+    fmt_on_attack();                          // one vowel advance per strum (a syllable per chord)
 }
 static void set_shape(int sh) { sel_shape = sh; build_strings(); autoplay = false; }
 static void set_root(int r)   { sel_root  = r;  build_strings(); autoplay = false; }
@@ -362,6 +409,7 @@ void update(void) {
     }
 
     if (dirty) { apply_fx(); dirty = 0; }
+    formant_tick();   // VOWEL pedal: ease the moving modes (ENV/STEP) and re-push the vowel when it shifts
 
     if (autoplay && every(1)) {
         static const int prog[8] = { 0, 2, 6, 3, 0, 5, 3, 2 };
@@ -395,9 +443,14 @@ static void draw_chain_pedal(int i, int x) {
         circ(kx, ky, kr, sl->on ? d->accent : CLR_DARK_GREY);
         float a = (-135.0f + sl->k[j] * 270.0f) * 0.0174533f;
         line(kx, ky, kx + (int)(sinf(a) * (kr - 1)), ky - (int)(cosf(a) * (kr - 1)), sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
+        const char *lbl = d->klabel[j];
+        if (d->kind == FX_FORMANT && j == 3) {                    // the MOD knob shows its mode, like TREM's WAV
+            static const char *MN[3] = { "MAN", "ENV", "STP" };
+            lbl = MN[(int)(sl->k[3] * 2.99f)];
+        }
         font(FONT_TINY);                                          // label tucked beside the knob (the empty column)
-        if (j & 1) print_right(d->klabel[j], kx - kr - 2, ky - 2, lblcol);   // right-column knob → label on its left
-        else       print(d->klabel[j],       kx + kr + 2, ky - 2, lblcol);   // left-column knob  → label on its right
+        if (j & 1) print_right(lbl, kx - kr - 2, ky - 2, lblcol);   // right-column knob → label on its left
+        else       print(lbl,       kx + kr + 2, ky - 2, lblcol);   // left-column knob  → label on its right
     }
     font(FONT_NORMAL);
     circfill(x + 7, PED_Y + 63, 2, sl->on ? CLR_LIME_GREEN : CLR_DARKER_GREY);

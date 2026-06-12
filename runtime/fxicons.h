@@ -23,6 +23,7 @@ static int fx_body(int kind) {
         case FX_TREM:    return CLR_DARKER_GREY;
         case FX_WAH:     return CLR_DARK_PURPLE;
         case FX_REVERB:  return CLR_DARK_BLUE;
+        case FX_FORMANT: return CLR_BROWN;
         default:         return CLR_DARKER_GREY;
     }
 }
@@ -37,6 +38,7 @@ static int fx_accent(int kind) {
         case FX_TREM:    return CLR_LIGHT_YELLOW;
         case FX_WAH:     return CLR_MAUVE;
         case FX_REVERB:  return CLR_INDIGO;
+        case FX_FORMANT: return CLR_LIGHT_PEACH;
         default:         return CLR_LIGHT_GREY;
     }
 }
@@ -51,6 +53,7 @@ static const char *fx_name(int kind) {
         case FX_TREM:    return "TREMOLO";
         case FX_WAH:     return "WAH";
         case FX_REVERB:  return "REVERB";
+        case FX_FORMANT: return "VOWEL";
         default:         return "FX";
     }
 }
@@ -93,6 +96,14 @@ static void fx_icon(int kind, int cx, int cy, int col, int bg) {
     } else if (kind == FX_WAH) {                             // a resonant bandpass peak
         line(cx - 12, cy + 5, cx - 2, cy - 6, col); line(cx - 2, cy - 6, cx + 2, cy - 6, col);
         line(cx + 2, cy - 6, cx + 12, cy + 5, col); line(cx - 13, cy + 5, cx + 13, cy + 5, col);
+    } else if (kind == FX_FORMANT) {                         // an open vowel mouth (the talkbox)
+        int ww = 11, oh = 6;
+        for (int dx = -ww; dx <= ww; dx++) {
+            float t = (float)dx / (float)ww;
+            int h = (int)(oh * (1.0f - t * t)); if (h < 1) h = 1;
+            line(cx + dx, cy - h, cx + dx, cy + h, col);
+        }
+        circ(cx, cy, 2, bg);                                 // a darker opening so it reads as a mouth
     } else {                                                 // REVERB — expanding rings (the bloom)
         for (int i = 1; i <= 3; i++) circ(cx, cy, i * 3, col);
         pset(cx, cy, col);
