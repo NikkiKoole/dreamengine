@@ -105,6 +105,7 @@ float lever = 0.55f;        // touche set-level / ceiling, 0..1 (a playable rest
 float intens = 0.0f;        // current (slewed) intensity reaching the voice
 float curMidi = 60.0f;      // pitch the voice is singing
 int   fromRibbon = 1;       // was the last pitch set on the ribbon? (ribbon is primary)
+int   midi_note = -1, midi_vel = 0;   // MIDI keyboard: last-note pitch + velocity (mono)
 
 const int WHITE_SEMI[7] = { 0, 2, 4, 5, 7, 9, 11 };
 const int HAS_BLACK[7]  = { 1, 1, 0, 1, 1, 1, 0 };   // black key sits after C D _ F G A _
@@ -172,6 +173,14 @@ void update(void) {
     for (int s = 0; s < NSTOP; s++) if (keyp('1' + s)) toggle_stop(s);
     for (int d = 0; d < 4; d++)     if (keyp('6' + d)) { diffuseur = d; apply_diffuseur(); }
 
+    // ---- MIDI keyboard (engine midi_get): mono, last-note priority. Notes set the
+    //      ribbon pitch, velocity sets the swell, and the bend wheel bends the ribbon. ----
+    int mn, mv, mt;
+    while ((mt = midi_get(&mn, &mv)) != 0) {
+        if (mt > 0)               { midi_note = mn; midi_vel = mv; }
+        else if (mn == midi_note)   midi_note = -1;
+    }
+
     // ---- computer keyboard: GarageBand musical typing = the CLAVIER (tempered) ----
     if (keyp('Z') && kb_oct > -1) kb_oct--;
     if (keyp('X') && kb_oct <  2) kb_oct++;
@@ -203,11 +212,20 @@ void update(void) {
     for (int d = 0; d < 4; d++)
         if (tapp(STX, DFY + d * (STH + 2), STW, STH)) { diffuseur = d; apply_diffuseur(); }
 
+    // MIDI drives the ribbon pitch when no on-screen pointer is, and the pitch-bend
+    // wheel bends it (the Ondes ring/glissando — the one cart that wants midi_bend()).
+    int midiOn = 0;
+    if (midi_note >= 0 && !pitchPtr) {
+        curMidi = midi_note + midi_bend() / 8192.0f * 2.0f;   // ±2 semitones of bend
+        fromRibbon = 0; pitchPtr = 1; midiOn = 1;
+    }
+
     // ---- intensity: touche overrides · else ribbon-Y is the theremin volume ·
-    //      else a tempered note swells to the touche ceiling · else release.
+    //      else MIDI velocity · else a tempered note swells to the touche ceiling · else release.
     float target;
     if (touchePtr)      target = lever;
     else if (ribbonOn)  target = ribbon_swell((int)ribY);
+    else if (midiOn)    target = midi_vel / 127.0f;
     else if (pitchPtr)  target = lever;
     else                target = 0;
     float rate = (touchePtr || ribbonOn) ? 0.5f : (target > intens ? 0.22f : 0.14f);
