@@ -90,10 +90,19 @@ same mix. Configure the space with `reverb_bus(tank, size, damp)`, route a slot 
 | tight bright room | `reverb_bus(1, 0.34f, 0.15f)` + send 0.6–0.8 | small, close, lively — percussion/plucks that need to stay crisp | `reverbspace` (ROOM) |
 | vast dark plate | `reverb_bus(2, 0.95f, 0.55f)` + send 0.8 | endless, warm, swallowing — pads/organ that should drown | `reverbspace` (PLATE) |
 
-> **Effects after the reverb** (reverb→bitcrush/eq/tape) is engine-ready (the bus runs `[FX_REVERB]`
-> as a reorderable insert, wet-replace) but not cart-exposed yet — a cart can't address the auto-allocated
-> bus index for `fx_order`/per-bus params. The tank-keyed addressing API is the fast-follow; until then,
-> reverb-buses are pure spaces. See [`../design/effects-bus-architecture.md`](../design/effects-bus-architecture.md) §5.
+#### effects AFTER the reverb — `reverb_bus_fx(tank, fx, a, b, c)`
+
+The send-bus's signature trick: run a pedal **on the wet tail** (the reverb rings, then the effect
+chews it — a plain send can't, its wet always returns clean). `fx` = `FX_CRUSH` / `FX_EQ` / `FX_TAPE`
+/ `FX_CHORUS`; `a/b/c` are that effect's own params (same scale as its dedicated API — crush: bits,
+rate, mix · eq: low/mid/high dB · tape: wow/flutter/sat · chorus: rate/depth/mix). Effects stack in
+call order; `crush`/`chorus` `mix 0` = bypass. Call `reverb_bus(tank,…)` first.
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| crushed lo-fi tail | `reverb_bus_fx(2, FX_CRUSH, 5, 8, 1.0f)` | the plate decays into grainy, aliased 5-bit dust — shoegaze/vaporwave space | `reverbspace` (CRUSH toggle) |
+| dark-tail EQ | `reverb_bus_fx(1, FX_EQ, 0, 0, -8.0f)` | roll the highs off the wet only — a warm tail without dulling the dry source | — |
+| tape-worn reverb | `reverb_bus_fx(2, FX_TAPE, 0.4f, 0.2f, 0.5f)` | the tail wows + saturates like a reverb printed to tape | — |
 
 ## chorus — `chorus(rate, depth, mix)` · `instrument_chorus(slot, rate, depth, mix)`
 

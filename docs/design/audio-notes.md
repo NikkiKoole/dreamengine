@@ -1349,10 +1349,11 @@ v1, document it on the panel.
     gotcha increment A flagged. `SR_REVERB_BUS`=66 / `SR_INSTR_REVERB_BUS`=67; bus-pool exhaustion bumps
     `sound_dropped` (no silent caps). Two instruments now ring in two different spaces at once (drums in a
     room + keys in a plate) — the §4 increment-B win, subsumed. Showcase: the **reverb spaces** cart.
-    **Engine-ready but NOT cart-exposed yet: effects AFTER the reverb** (reverb→bitcrush) — the wet-replace
-    + reorderable chain are built, but a cart can't address a reverb-bus's index for `fx_order`/per-bus
-    params; the tank-keyed addressing API is the fast-follow. This is increment C of
-    [`effects-bus-architecture.md`](effects-bus-architecture.md) (its §5 banner + §7 open calls).
+    **Effects AFTER the reverb also shipped** (the same-day fast-follow): `reverb_bus_fx(tank, fx, a, b, c)`
+    is tank-keyed (resolves tank→bus on the audio thread, so a cart never sees the auto-allocated bus
+    index), configures the insert (crush/eq/tape/chorus) on the reverb-bus, and appends it after FX_REVERB
+    so it chews the wet tail. reverb→crush = the **reverb spaces** CRUSH toggle. `SR_REVERB_BUS_FX`=68.
+    This is increment C of [`effects-bus-architecture.md`](effects-bus-architecture.md), now fully exposed.
 
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**

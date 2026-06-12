@@ -1146,6 +1146,7 @@ typedef enum {
     SR_INSTR_LESLIE = 65,   // a=slot, b=speed, c=drive*1000, e0=balance*1000, e1=doppler*1000, e2=mix*1000 — Leslie on one instrument (auto-bus)
     SR_REVERB_BUS   = 66,   // a=tank(1..N-1), b=size*1000, c=damp*1000 — configure a reverb send-bus (claims an aux bus, chain = [FX_REVERB])
     SR_INSTR_REVERB_BUS = 67, // a=slot, b=tank, c=mix*1000 — route a slot's reverb send into tank N's bus instead of the master send
+    SR_REVERB_BUS_FX = 68,  // a=tank, b=fx (FX_*), c/e0/e1 = params*1000 — add/configure an insert AFTER the reverb on tank N's bus
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3712,6 +3713,24 @@ static void sound_fire_req(SoundReq r) {
         float mix = r.c / 1000.0f; if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
         instr_bank[slot].reverb   = mix;
         instr_bank[slot].rvb_tank = tank;
+    } else if (r.kind == SR_REVERB_BUS_FX) {  // a=tank, b=fx, c/e0/e1=params*1000 — an insert AFTER the reverb on tank N's bus
+        int tank = r.a;
+        if (tank < 1 || tank >= SOUND_REVERB_TANKS) return;
+        int bus = tank_bus[tank];
+        if (bus == 0) return;                 // tank isn't a reverb-bus yet — call reverb_bus() first
+        int fx = r.b;
+        float a = r.c / 1000.0f, b = r.e0 / 1000.0f, c = r.e1 / 1000.0f;
+        switch (fx) {                         // configure the insert on this bus (params per effect)
+            case FX_CRUSH:  fx_set_crush(bus, a, b, c); break;   // bits, rate, mix (mix 0 = off)
+            case FX_EQ:     fx_set_eq(bus, a, b, c);    break;   // low, mid, high dB
+            case FX_TAPE:   fx_set_tape(bus, a, b, c);  break;   // wow, flutter, saturation
+            case FX_CHORUS: fx_set_chorus(bus, a, b, c); break;  // rate, depth, mix (mix 0 = off)
+            default: return;                  // only these 4 make sense (+fit 3 params) on a reverb tail
+        }
+        // ensure fx runs AFTER the reverb: append to the bus chain if not already present
+        bool present = false;
+        for (int s = 0; s < insert_order_n[bus]; s++) if (insert_order[bus][s] == fx) present = true;
+        if (!present && insert_order_n[bus] < N_INSERTS) insert_order[bus][insert_order_n[bus]++] = fx;
     } else if (r.kind == SR_CHORUS) {       // master chorus (bus 0): a=rate*1000, b=depth*1000, c=mix*1000
         fx_set_chorus(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_CHORUS) { // per-instrument: a=slot, b=rate*1000, c=depth*1000, e0=mix*1000
@@ -4582,6 +4601,13 @@ void reverb_bus(int tank, float size, float damp) {
 void instrument_reverb_bus(int slot, int tank, float mix) {
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
     sound_push_ctrl(SR_INSTR_REVERB_BUS, slot, tank, (int)(mix * 1000.0f), 0, 0, 0);
+}
+
+// add an effect AFTER the reverb on tank N's bus (effects-after-reverb — reverb→crush/eq/tape).
+// fx = FX_CRUSH/FX_EQ/FX_TAPE/FX_CHORUS; a/b/c are that effect's own params (×1000 packed, same
+// scale as its dedicated API). Appends to the bus chain in call order; call reverb_bus(tank,…) first.
+void reverb_bus_fx(int tank, int fx, float a, float b, float c) {
+    sound_push_ctrl(SR_REVERB_BUS_FX, tank, fx, (int)(a * 1000.0f), (int)(b * 1000.0f), (int)(c * 1000.0f), 0);
 }
 
 // ── chorus: THE master mod-delay (BBD) — first use of the shared modulated-delay buffer ──
