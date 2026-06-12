@@ -1316,6 +1316,26 @@ v1, document it on the panel.
     BUILDER (palette → drag to add / reorder / remove, with a live drop caret). This is increment A
     of [`effects-bus-architecture.md`](effects-bus-architecture.md).
 
+11. **Leslie** — the rotary-speaker cabinet (the organ's voice), and the decision-0015 refusal
+    reversed. **✓ SHIPPED 2026-06-12** — `leslie(speed, drive, balance, doppler, mix)` (master) **and**
+    `instrument_leslie(slot, …)` (per-instrument aux bus). A **VERBATIM port of navkit's processLeslie**
+    (Leslie 122 model): a 1-pole 800 Hz crossover splits DRUM (bass, gentle sine AM) from HORN
+    (treble, shaped AM + a physical **Doppler** via a Hermite-tapped modulated delay line — reusing
+    `moddel_hermite`), with two rotors spinning at INDEPENDENT rates and asymmetric spin-up/down
+    inertia (horn light/fast, drum heavy/slow) — so `LESLIE_STOP/SLOW/FAST` ramps the chorale↔tremolo
+    swell on its own. navkit is mono; we run it per channel (own crossover + Doppler buffer L/R)
+    sharing one rotor → centered source matches navkit's mono exactly. **PINNED last** in both the
+    aux-bus loop and the master chain (the cabinet output stage, like the soft-clip — NOT a reorderable
+    `FX_*` kind, so it never touches the `fx_order` 3-bit packing); `leslie_used[]`-gated → dormant
+    carts byte-identical (soundcheck silent). `SR_LESLIE`=64 / `SR_INSTR_LESLIE`=65. **A/B vs navkit's
+    real `processLeslie`: 0.99999** sample-level correlation (FAST & SLOW); a driven setting reads
+    0.992 only because *our* master soft-clip catches the hotter signal navkit's bare harness lacks —
+    not a Leslie discrepancy. **The 0015 angle:** this was the ADR's flagship refusal ("Leslie = 3 LFOs
+    + drive, a recipe; no `instrument_leslie`, ever") — building the real one proved the recipe can't
+    band-split, can't delay-line-Doppler, can't run two inertial rotors, so it clears 0015's own gate.
+    Reversal logged in [decision 0015](../decisions/0015-effects-are-recipes-not-primitives.md). Showcase:
+    `organ` (the `L` footswitch — replaced its old per-voice tremolo+doppler recipe with the real bus rotary).
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 

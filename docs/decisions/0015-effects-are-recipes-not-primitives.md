@@ -62,7 +62,11 @@ stutter/slicer → `note_vol` chopped by the beat clock.
 A slot has exactly three LFOs — the full budget, spent on one effect. The iconic
 chorale↔tremolo spin-up is a cart-side `lerp` of the shared LFO rate via `note_lfo()`,
 which keeps phase and so never clicks — the lerp *is* the horn's mechanical inertia.
-No `instrument_leslie`, ever.
+No `instrument_leslie`, ever. **[SUPERSEDED 2026-06-12 — see the correction below. The 3-LFO
+recipe can't split the band at an 800 Hz crossover, can't do a delay-line Doppler (`LFO_PITCH`
+bends pitch, it doesn't model a moving source), and can't run two rotors with independent inertia.
+So the Leslie CLEARS this decision's own gate, and `leslie()`/`instrument_leslie` shipped — a
+verbatim navkit port. The example stands as the *reasoning pattern*; its verdict flipped.]**
 
 **Deliberate refusals** — flanger (the one true gap: needs a modulated short delay;
 if the master wow/flutter buffer ever lands for tape, flanger falls out of it free);
@@ -200,3 +204,26 @@ convention — it's **refusing to admit new primitives**.
     primitives*," not "no function will ever be added." The routing-layer companion
     [`effects-bus-architecture.md`](../design/effects-bus-architecture.md) (2026-06-12) still cites
     this decision correctly — its reorder/multi-reverb work is routing, not new effects.
+
+- **2026-06-12 — the Leslie refusal is reversed (the gate flipped its own verdict).** The "Worked
+  example: the Leslie → No `instrument_leslie`, ever" above was this decision's flagship refusal: a
+  rotary speaker = tremolo + `LFO_PITCH` Doppler + `LFO_CUTOFF` swirl + drive, spent across a slot's
+  three LFOs. Building the **real** thing (navkit's `processLeslie`, the Leslie 122 model) proved the
+  recipe can't reach it on three counts, each a thing an LFO simply can't do: (1) an **800 Hz
+  crossover** splitting the signal into a bass DRUM and treble HORN that rotate at *different* speeds —
+  one LFO can't band-split; (2) a **physical Doppler** via a modulated **delay line** (Hermite-tapped)
+  — `LFO_PITCH` bends an oscillator's pitch, it doesn't model a moving sound source, and a mix has no
+  single pitch to bend anyway; (3) **two rotors with independent inertia** (horn light/fast, drum
+  heavy/slow — different accel *and* decel time constants), where the recipe had one shared lerp. So
+  the Leslie **fails the recipe test and clears the gate** — exactly like the realistic auto-wah and
+  the bus tremolo before it. Shipped: `leslie(speed, drive, balance, doppler, mix)` +
+  `instrument_leslie(slot, …)`, a verbatim navkit port, **pinned LAST** in the insert chain (the
+  speaker/cabinet output stage — like the soft-clip, not a reorderable `FX_*` pedal, so it never
+  touches the `fx_order` packing). Per-bus + `leslie_used[]`-gated → dormant carts byte-identical
+  (soundcheck silent). A/B vs navkit's real `processLeslie`: **0.99999 sample-level correlation**
+  (FAST & SLOW); a driven setting reads 0.992 only because *our* master soft-clip catches the hotter
+  signal that navkit's bare harness doesn't have — not a Leslie discrepancy. This is the cleanest case
+  yet OF the gate working: the refusal wasn't wrong *as reasoning* (a Leslie really is "modulation +
+  Doppler + drive"), it was wrong that those could be *assembled from the rostered primitives* — and
+  the gate is precisely the test that catches that. The pattern is now explicit across wah/tremolo/
+  Leslie: **"X = a + b + c" does not imply "X is a recipe" unless a, b, c are each reachable today.**

@@ -16,10 +16,13 @@
 // "jimmy" doesn't sound like a jazz B3, the MAPPING is wrong, not the preset — this cart is
 // the engine's tuning rig.
 //
-// THE LESLIE is NOT in the engine — it's a per-voice RECIPE (decision 0015): tremolo
-// (LFO_VOLUME) + doppler (LFO_PITCH), the rate lerping slow<->fast = the horn's mechanical
-// spin-up inertia. Cycle OFF / slow (chorale) / fast (tremolo) and hear the engine + its
-// companion recipe together — the whole §8.10/0015 story in one cart.
+// THE LESLIE is the real bus rotary speaker — instrument_leslie(), a VERBATIM navkit processLeslie
+// port (an 800 Hz horn/drum crossover, a Doppler delay-line on the horn, two rotors with their own
+// spin-up/down inertia). It REPLACED an earlier per-voice tremolo+doppler recipe: decision 0015
+// had refused a Leslie effect as "just a recipe of the 3 LFOs," but building the real one proved an
+// LFO can't band-split or model a moving source — so the gate flipped its own verdict (0015 correction
+// 2026-06-12). Cycle OFF / slow (chorale) / fast (tremolo); the engine ramps the rotors, so the
+// slow<->fast SWELL is real mechanical inertia now, not a cart-side lerp — held chords swirl too.
 //
 // controls: white keys  A S D F G H J K   ·   black keys  W E . T Y U
 //           hold for sustain (chords welcome — hold several)
@@ -75,9 +78,12 @@ static int   sel = 0;
 static int   cur_preset = 3;
 static bool  autoplay = true;
 
-// the Leslie recipe: 0 off, 1 slow (chorale), 2 fast (tremolo). rate lerps toward target.
-static int   leslie = 0;
-static float leslie_rate = 0.0f;
+// the Leslie: 0 off, 1 slow (chorale), 2 fast (tremolo). NOW the real bus rotary (instrument_leslie
+// = navkit's processLeslie) — the engine spins the rotors up/down with real inertia. rotor_rate
+// here is VISUAL-ONLY, easing toward the target just to animate the on-screen rotor. (NOT `leslie`
+// — that name is now the leslie() API.)
+static int   lesmode = 0;
+static float rotor_rate = 0.0f;
 static float rotor_ph = 0.0f;
 
 // autoplay state — a managed 3-voice held comp that walks a gospel-ish progression
@@ -141,20 +147,16 @@ static void apply_live(void) {
     for (int i = 0; i < 3; i++)    if (ap_h[i] >= 0)   apply_voice(ap_h[i]);
 }
 
-// push the Leslie recipe (tremolo + doppler) onto every sounding voice at the current rate
+// THE LESLIE — the real bus rotary speaker (instrument_leslie = navkit's processLeslie, ported
+// VERBATIM: an 800 Hz horn/drum crossover, a Doppler delay-line on the horn, two rotors with
+// independent spin-up/down inertia). This REPLACED the old per-voice tremolo+doppler RECIPE —
+// decision 0015 reversed its "Leslie is a recipe" refusal once the real thing proved an LFO can't
+// band-split or model a moving source. Set on the slot from init (mix 0 = bypass) so the organ is
+// routed through its Leslie bus from the first key — then flipping L just changes the mix/speed and
+// even HELD chords swirl. The engine ramps the rotors, so slow<->fast gives the spin-up swell free.
 static void apply_leslie(void) {
-    float depth_v = leslie ? 0.45f : 0.0f;       // volume tremolo
-    float depth_p = leslie ? 0.16f : 0.0f;       // pitch doppler (small — it's a rotation, not vibrato)
-    instrument_lfo(I_ORG, 0, LFO_VOLUME, leslie_rate, depth_v);
-    instrument_lfo(I_ORG, 1, LFO_PITCH,  leslie_rate, depth_p);
-    for (int b = 0; b < NKEY; b++) if (handle[b] >= 0) {
-        note_lfo(handle[b], 0, LFO_VOLUME, leslie_rate, depth_v);
-        note_lfo(handle[b], 1, LFO_PITCH,  leslie_rate, depth_p);
-    }
-    for (int i = 0; i < 3; i++) if (ap_h[i] >= 0) {
-        note_lfo(ap_h[i], 0, LFO_VOLUME, leslie_rate, depth_v);
-        note_lfo(ap_h[i], 1, LFO_PITCH,  leslie_rate, depth_p);
-    }
+    int speed = (lesmode == 2) ? LESLIE_FAST : LESLIE_SLOW;
+    instrument_leslie(I_ORG, speed, 0.0f, 0.5f, 0.7f, lesmode ? 1.0f : 0.0f);   // off → mix 0 = dry organ
 }
 
 static void key_down(int b) {
@@ -187,6 +189,7 @@ void init(void) {
     for (int b = 0; b < NKEY; b++) handle[b] = -1;
     for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     set_preset(3);
+    apply_leslie();    // route I_ORG through its Leslie bus from note 1 (mix 0 = bypass until L)
     bpm(84);
 }
 
@@ -213,13 +216,13 @@ void update(void) {
         apply_live();
     }
 
-    if (keyp('L')) leslie = (leslie + 1) % 3;
+    if (keyp('L')) { lesmode = (lesmode + 1) % 3; apply_leslie(); }
     if (keyp('M')) autoplay = !autoplay;
 
-    // the Leslie spin-up: rate eases toward its target (the mechanical inertia IS the lerp)
-    float target = leslie == 2 ? 6.6f : leslie == 1 ? 0.8f : 0.0f;
-    leslie_rate += (target - leslie_rate) * 0.06f;
-    apply_leslie();
+    // the on-screen rotor's spin: a VISUAL ease toward the target speed (the AUDIO rotor inertia is
+    // the engine's now). off → idle, slow → ~0.8 Hz, fast → ~6.6 Hz (navkit's horn rates).
+    float target = lesmode == 2 ? 6.6f : lesmode == 1 ? 0.8f : 0.0f;
+    rotor_rate += (target - rotor_rate) * 0.06f;
 
     // touch: every finger holds a key, taps a button, or drags a slider, independently
     for (int i = 0; i < touch_count(); i++) {
@@ -233,7 +236,7 @@ void update(void) {
             if (!freeP) continue;
             p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, -1 };
             if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) { autoplay = !autoplay; continue; }
-            if (point_in_box(tx, ty, LES_X, LES_Y, LES_W, LES_H)) { leslie = (leslie + 1) % 3; continue; }
+            if (point_in_box(tx, ty, LES_X, LES_Y, LES_W, LES_H)) { lesmode = (lesmode + 1) % 3; apply_leslie(); continue; }
             if (point_in_box(tx, ty, OCT_DN_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H)) { octave_step(-1); continue; }
             if (point_in_box(tx, ty, OCT_UP_X, OCT_BTN_Y, OCT_BTN_W, OCT_BTN_H)) { octave_step(+1); continue; }
             if (ty >= KNOB_Y - 26 && ty < KNOB_Y - 12) {    // preset labels tappable
@@ -297,7 +300,7 @@ void update(void) {
     watch("drive","%.2f", val[SL_DRIVE]);
     watch("preset", "%d", cur_preset);
     watch("octave", "%d", octave);
-    watch("leslie", "%d", leslie);
+    watch("leslie", "%d", lesmode);
 #endif
 }
 
@@ -321,16 +324,16 @@ void draw(void) {
     print("X", OCT_UP_X + 7, OCT_BTN_Y + 5, CLR_LIGHT_PEACH);
 
     // LESLIE button — a spinning rotor (speed = the live eased rate, so you SEE the spin-up)
-    rotor_ph += 0.02f + leslie_rate * 0.06f;
-    rectfill(LES_X, LES_Y, LES_W, LES_H, leslie ? CLR_DARK_ORANGE : CLR_DARKER_GREY);
-    rect(LES_X, LES_Y, LES_W, LES_H, leslie ? CLR_ORANGE : CLR_DARK_GREY);
+    rotor_ph += 0.02f + rotor_rate * 0.06f;
+    rectfill(LES_X, LES_Y, LES_W, LES_H, lesmode ? CLR_DARK_ORANGE : CLR_DARKER_GREY);
+    rect(LES_X, LES_Y, LES_W, LES_H, lesmode ? CLR_ORANGE : CLR_DARK_GREY);
     int rx = LES_X + 12, ry = LES_Y + LES_H / 2, rr = 7;
     line(rx - (int)(cosf(rotor_ph) * rr), ry - (int)(sinf(rotor_ph) * rr),
          rx + (int)(cosf(rotor_ph) * rr), ry + (int)(sinf(rotor_ph) * rr),
-         leslie ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
+         lesmode ? CLR_LIGHT_YELLOW : CLR_DARK_GREY);
     font(FONT_SMALL);
-    print(str("L leslie %s", leslie == 2 ? "fast" : leslie == 1 ? "slow" : "off"),
-          LES_X + 24, ry - 3, leslie ? CLR_LIGHT_YELLOW : CLR_MEDIUM_GREY);
+    print(str("L leslie %s", lesmode == 2 ? "fast" : lesmode == 1 ? "slow" : "off"),
+          LES_X + 24, ry - 3, lesmode ? CLR_LIGHT_YELLOW : CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 
     // the manual — white keys first, then black keys overlaid on top

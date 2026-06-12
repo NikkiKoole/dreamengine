@@ -914,6 +914,99 @@ static void fx_set_phaser(int b, float rate, float depth, float feedback, float 
     phaser_used[b] = (mix > 0.0f);   // mix 0 = off, like chorus/flanger/tremolo
 }
 
+// ── Leslie — rotary speaker (the organ's spinning horn+drum cabinet) ─────────────────────────────
+// A VERBATIM port of navkit's processLeslie (the Leslie 122 model): a 1-pole crossover at 800 Hz
+// splits the signal into a DRUM band (bass, gentle sine AM) and a HORN band (treble, shaped AM +
+// physical DOPPLER via a modulated delay line). The two rotors spin at INDEPENDENT rates with
+// asymmetric spin-up/down inertia (horn light/fast, drum heavy/slow) — so flipping STOP→SLOW→FAST
+// ramps them in over seconds, the iconic chorale↔tremolo swell. NOT a recipe of the 3 per-voice
+// LFOs (decision 0015, 2026-06-12): an LFO can't split the band at a crossover, can't do a delay-
+// line Doppler (LFO_PITCH is a pitch-bend, not a delay tap), and can't run two inertial rotors —
+// so it clears the "prove it can't be a recipe" gate. navkit is mono; we run it per channel (own
+// crossover + Doppler buffer L/R) sharing one rotor, so a centered source matches navkit's mono
+// exactly and a stereo source keeps its width. Pinned LAST in the insert chain (the speaker/cabinet
+// output stage, like the soft-clip — not a reorderable pedal). Dormant until mix>0 → byte-identical.
+#define LESLIE_BUF        512        // ~11.6ms horn Doppler delay line (navkit LESLIE_BUFFER_SIZE)
+#define LESLIE_XOVER_COEF 0.1074f    // 1-exp(-2π·800/44100), the 800 Hz drum/horn crossover (navkit, precomputed)
+#define LESLIE_BASE_MS    3.0f       // horn base delay (center of the Doppler modulation)
+#define LESLIE_DOPP_MS    0.5f       // max Doppler excursion ±0.5ms
+#define LESLIE_HORN_SLOW  0.8f       // chorale horn rate Hz (48 RPM)   ·  FAST = tremolo
+#define LESLIE_HORN_FAST  6.6f       // tremolo horn rate Hz (396 RPM)
+#define LESLIE_DRUM_SLOW  0.7f       // chorale drum rate Hz (42 RPM)
+#define LESLIE_DRUM_FAST  5.8f       // tremolo drum rate Hz (348 RPM)
+#define LESLIE_HORN_ACC   0.7f       // horn spin-up time constant (s)  — light, ramps fast
+#define LESLIE_HORN_DEC   1.2f       // horn spin-down
+#define LESLIE_DRUM_ACC   4.0f       // drum spin-up — heavy, ramps slow
+#define LESLIE_DRUM_DEC   5.0f
+static int   leslie_speed[SOUND_FX_BUSES];   // 0=stop 1=slow(chorale) 2=fast(tremolo) — LESLIE_* in studio.h
+static float leslie_drive[SOUND_FX_BUSES];   // pre-amp tube overdrive 0..1
+static float leslie_bal  [SOUND_FX_BUSES];   // horn/drum balance 0=drum .. 0.5=equal .. 1=horn
+static float leslie_dopp [SOUND_FX_BUSES];   // horn Doppler depth 0..1
+static float leslie_mix  [SOUND_FX_BUSES];   // dry/wet 0..1
+static bool  leslie_used [SOUND_FX_BUSES];
+static float leslie_hornPh[SOUND_FX_BUSES], leslie_drumPh[SOUND_FX_BUSES];   // rotor phase (shared L/R)
+static float leslie_hornRt[SOUND_FX_BUSES], leslie_drumRt[SOUND_FX_BUSES];   // rotor rate, slewed toward target
+static float leslie_xoL[SOUND_FX_BUSES], leslie_xoR[SOUND_FX_BUSES];          // crossover LP state (per channel)
+static int   leslie_wpos[SOUND_FX_BUSES];                                     // Doppler write pos (shared)
+static float leslie_bufL[SOUND_FX_BUSES][LESLIE_BUF], leslie_bufR[SOUND_FX_BUSES][LESLIE_BUF];
+static float leslie_pre(float s, float drive) {   // tube pre-amp: Padé tanh (navkit, no libm call)
+    if (drive <= 0.001f) return s;
+    s *= 1.0f + drive * 5.0f;
+    float x2 = s * s;
+    return s * (27.0f + x2) / (27.0f + 9.0f * x2);
+}
+static void leslie_process(int b, float *mixL, float *mixR) {
+    float dt = 1.0f / (float)SOUND_SAMPLE_RATE;
+    // rotor rates slew toward their speed target (independent, asymmetric accel/decel)
+    float hornT, drumT;
+    switch (leslie_speed[b]) {
+        case 2:  hornT = LESLIE_HORN_FAST; drumT = LESLIE_DRUM_FAST; break;   // fast / tremolo
+        case 0:  hornT = 0.0f;             drumT = 0.0f;             break;   // stop / brake
+        default: hornT = LESLIE_HORN_SLOW; drumT = LESLIE_DRUM_SLOW; break;   // slow / chorale
+    }
+    float hA = dt / (hornT > leslie_hornRt[b] ? LESLIE_HORN_ACC : LESLIE_HORN_DEC); if (hA > 1.0f) hA = 1.0f;
+    float dA = dt / (drumT > leslie_drumRt[b] ? LESLIE_DRUM_ACC : LESLIE_DRUM_DEC); if (dA > 1.0f) dA = 1.0f;
+    leslie_hornRt[b] += hA * (hornT - leslie_hornRt[b]);
+    leslie_drumRt[b] += dA * (drumT - leslie_drumRt[b]);
+    // advance the two rotors (shared across channels)
+    leslie_drumPh[b] += leslie_drumRt[b] * dt; if (leslie_drumPh[b] >= 1.0f) leslie_drumPh[b] -= 1.0f;
+    leslie_hornPh[b] += leslie_hornRt[b] * dt; if (leslie_hornPh[b] >= 1.0f) leslie_hornPh[b] -= 1.0f;
+    float drumAM = 1.0f - 0.3f * (0.5f - 0.5f * cosf(leslie_drumPh[b] * 6.2831853f));
+    float ang    = leslie_hornPh[b] * 6.2831853f;
+    float hornAM = 0.5f + 0.5f * cosf(ang) + 0.12f * cosf(2.0f * ang);   // shaped: directional horn bell
+    hornAM = hornAM * 0.75f + 0.15f;
+    if (hornAM < 0.1f) hornAM = 0.1f; if (hornAM > 1.0f) hornAM = 1.0f;
+    float delaySamples = LESLIE_BASE_MS * 0.001f * SOUND_SAMPLE_RATE
+                       + LESLIE_DOPP_MS * 0.001f * SOUND_SAMPLE_RATE * leslie_dopp[b] * sinf(ang);
+    float bal = leslie_bal[b];
+    float drumLvl = 2.0f * (1.0f - bal); if (drumLvl > 1.0f) drumLvl = 1.0f;
+    float hornLvl = 2.0f * bal;          if (hornLvl > 1.0f) hornLvl = 1.0f;
+    float mix = leslie_mix[b];
+    // per channel: pre-amp → crossover → drum AM + horn Doppler/AM → recombine
+    float sL = leslie_pre(*mixL, leslie_drive[b]);
+    float sR = leslie_pre(*mixR, leslie_drive[b]);
+    leslie_xoL[b] += LESLIE_XOVER_COEF * (sL - leslie_xoL[b]);   float loL = leslie_xoL[b], hiL = sL - loL;
+    leslie_xoR[b] += LESLIE_XOVER_COEF * (sR - leslie_xoR[b]);   float loR = leslie_xoR[b], hiR = sR - loR;
+    leslie_bufL[b][leslie_wpos[b]] = hiL;
+    leslie_bufR[b][leslie_wpos[b]] = hiR;
+    leslie_wpos[b] = (leslie_wpos[b] + 1) % LESLIE_BUF;
+    float rp = (float)leslie_wpos[b] - delaySamples; if (rp < 0.0f) rp += LESLIE_BUF;
+    float wetL = (loL * drumAM) * drumLvl + (moddel_hermite(leslie_bufL[b], LESLIE_BUF, rp) * hornAM) * hornLvl;
+    float wetR = (loR * drumAM) * drumLvl + (moddel_hermite(leslie_bufR[b], LESLIE_BUF, rp) * hornAM) * hornLvl;
+    *mixL = *mixL * (1.0f - mix) + wetL * mix;
+    *mixR = *mixR * (1.0f - mix) + wetR * mix;
+}
+static void fx_set_leslie(int b, int speed, float drive, float balance, float doppler, float mix) {
+    if (speed < 0) speed = 0; if (speed > 2) speed = 2;
+    if (drive   < 0.0f) drive   = 0.0f; if (drive   > 1.0f) drive   = 1.0f;
+    if (balance < 0.0f) balance = 0.0f; if (balance > 1.0f) balance = 1.0f;
+    if (doppler < 0.0f) doppler = 0.0f; if (doppler > 1.0f) doppler = 1.0f;
+    if (mix     < 0.0f) mix     = 0.0f; if (mix     > 1.0f) mix     = 1.0f;
+    leslie_speed[b] = speed; leslie_drive[b] = drive; leslie_bal[b] = balance;
+    leslie_dopp[b] = doppler; leslie_mix[b] = mix;
+    leslie_used[b] = (mix > 0.0f);   // mix 0 = off, like the other inserts
+}
+
 // ── reorderable insert chain (fx_order) ──────────────────────────────────────────────────────
 // The inserts above (FX_* in studio.h) run in a default order; fx_order() lets a cart rearrange
 // them PER BUS. fx_order[b] is the visit list; default = the canonical order, so an un-reordered
@@ -1017,6 +1110,8 @@ typedef enum {
     SR_PHASER       = 61,   // a=rate*1000, b=depth*1000, c=fb*1000(signed), e0=mix*1000, e1=stages — THE master phaser (bus 0, navkit processPhaser)
     SR_INSTR_PHASER = 62,   // a=slot, b=rate*1000, c=depth*1000, e0=fb*1000(signed), e1=mix*1000, e2=stages — phaser on one instrument (auto-bus)
     SR_FX_ORDER     = 63,   // a=bus, b=packed kinds (3 bits each, FX_*), c=count — set a bus's insert visit order
+    SR_LESLIE       = 64,   // a=speed, b=drive*1000, c=balance*1000, e0=doppler*1000, e1=mix*1000 — THE master Leslie (bus 0, navkit processLeslie)
+    SR_INSTR_LESLIE = 65,   // a=slot, b=speed, c=drive*1000, e0=balance*1000, e1=doppler*1000, e2=mix*1000 — Leslie on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3596,6 +3691,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_phaser(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f, r.e2);
+    } else if (r.kind == SR_LESLIE) {       // master Leslie (bus 0): a=speed, b=drive, c=balance, e0=doppler, e1=mix (×1000 except speed)
+        fx_set_leslie(0, r.a, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f);
+    } else if (r.kind == SR_INSTR_LESLIE) { // per-instrument: a=slot, b=speed, c=drive, e0=balance, e1=doppler, e2=mix
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_leslie(b, r.b, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f, r.e2 / 1000.0f);
     } else if (r.kind == SR_FX_ORDER) {     // set a bus's insert order: a=bus, b=packed kinds (3 bits each), c=count
         int bus = r.a;
         if (bus < 0 || bus >= SOUND_FX_BUSES) return;
@@ -3882,6 +3983,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             // run this bus's inserts in its (reorderable) order, then fold to master. Default order
             // = the old fixed ladder (trem→wah→cho→phaser→flg→tape→eq→crush); fx_order() rearranges.
             for (int s = 0; s < insert_order_n[b]; s++) apply_insert(insert_order[b][s], b, &busL[b], &busR[b]);
+            if (leslie_used[b]) leslie_process(b, &busL[b], &busR[b]);   // rotary speaker — pinned LAST (cabinet output stage, not a reorderable pedal)
             busL[0] += busL[b]; busR[0] += busR[b];
         }
 
@@ -3942,6 +4044,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
         // (reorderable) order — default = the old fixed ladder; fx_order(0, …) rearranges. Ends in
         // the soft-clip below (pinned last — a safety limiter, not a reorderable pedal).
         for (int s = 0; s < insert_order_n[0]; s++) apply_insert(insert_order[0][s], 0, &mixL, &mixR);
+        if (leslie_used[0]) leslie_process(0, &mixL, &mixR);   // rotary speaker — pinned after the inserts, before the soft-clip (cabinet output stage)
 
         // master soft-clip: linear below the ±0.8 knee (quiet mixes stay bit-identical),
         // tanh-shaped above, asymptote at ±1.0 — a hot sum folds over smoothly instead of
@@ -4502,6 +4605,17 @@ void phaser(float rate, float depth, float feedback, float mix, int stages) {
 void instrument_phaser(int slot, float rate, float depth, float feedback, float mix, int stages) {
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
     sound_push_ctrl(SR_INSTR_PHASER, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(feedback * 1000.0f), (int)(mix * 1000.0f), stages);
+}
+
+// ── Leslie: THE master rotary speaker (spinning horn+drum cabinet — the organ's voice) ──
+
+void leslie(int speed, float drive, float balance, float doppler, float mix) {
+    sound_push_ctrl(SR_LESLIE, speed, (int)(drive * 1000.0f), (int)(balance * 1000.0f), (int)(doppler * 1000.0f), (int)(mix * 1000.0f), 0);
+}
+
+void instrument_leslie(int slot, int speed, float drive, float balance, float doppler, float mix) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_LESLIE, slot, speed, (int)(drive * 1000.0f), (int)(balance * 1000.0f), (int)(doppler * 1000.0f), (int)(mix * 1000.0f));
 }
 
 // set a bus's insert visit order (FX_* kinds). bus 0 = master, 1.. = an instrument's private bus.

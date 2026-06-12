@@ -53,6 +53,11 @@ int main(int argc, char **argv) {
         int stages = atoi(argv[6]);
         setBusPhaser(0, true, rate, depth, mix, fb, stages);
         next = 7;
+    } else if (!strcmp(effect, "leslie")) {
+        int speed = atoi(argv[2]);
+        float drive = atof(argv[3]), balance = atof(argv[4]), doppler = atof(argv[5]), mix = atof(argv[6]);
+        setBusLeslie(0, true, speed, drive, balance, doppler, mix);
+        next = 7;
     } else {
         fprintf(stderr, "unknown effect '%s' (add an else-if calling its setBus*)\n", effect);
         return 1;

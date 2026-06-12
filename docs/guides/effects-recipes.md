@@ -27,7 +27,7 @@ and leave the rest dry. `drive` is the exception — it's a **per-voice** insert
 > point is *that effect as the instrument* — crib from it first. Showcases:
 > `spacecho` (echo) · `cathedral` (reverb) · `juno`/`solina` (chorus) · `mistress` (flanger) ·
 > `tapeloop` (tape) · `clavinet` (wah) · `drivemodes` (drive modes) · `bitcrush` (bitcrush) · `eq` (EQ) ·
-> `epiano` (tremolo + phaser).
+> `epiano` (tremolo + phaser) · `organ` (leslie).
 
 ---
 
@@ -199,6 +199,29 @@ travel), `feedback` −0.95..0.95 (resonance around the notches), `mix` 0–1 (*
 > **Phaser vs flanger:** both sweep and whoosh, but a phaser is allpass NOTCHES (vocal, smooth — the
 > Rhodes/Small Stone) and a flanger is a swept COMB with delay (metallic, jet-like — needs a rich
 > source). For an electric piano, reach for the phaser.
+
+## leslie — `leslie(speed, drive, balance, doppler, mix)` · `instrument_leslie(slot, …)`
+
+THE rotary-speaker cabinet — the organ's voice. A spinning treble **HORN** (pitch wobble via a
+real **Doppler** delay-line + a swirling volume) over a bass **DRUM**, split at an 800 Hz crossover.
+The two rotors spin at independent speeds with **real spin-up/down inertia**, so flipping `speed`
+gives the iconic **chorale↔tremolo swell** on its own — you don't ramp it, the engine does. `speed`
+= `LESLIE_STOP` / `LESLIE_SLOW` (chorale ~0.7 Hz) / `LESLIE_FAST` (tremolo ~6 Hz); `drive` 0–1 (tube
+preamp grit); `balance` 0=drum..1=horn; `doppler` 0–1 (horn pitch-wobble depth); `mix` 0–1 (**0 =
+off**). A VERBATIM navkit `processLeslie` port (A/B 0.99999). **Pinned LAST** in the chain (the
+cabinet output stage, not a reorderable pedal). **Showcase: `organ`** (the `L` footswitch).
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| jazz B3 swell | `instrument_leslie(I_ORG, LESLIE_SLOW, 0.0f, 0.5f, 0.7f, 1.0f)` → flip to `LESLIE_FAST` | chorale sway, then hit the switch for the spin-up to tremolo — the signature Hammond move | `organ` |
+| overdriven rock organ | `instrument_leslie(I_ORG, LESLIE_FAST, 0.4f, 0.5f, 0.8f, 1.0f)` | cranked tube preamp into a fast horn — the cabinet screams | `organ` |
+| horn-forward | `instrument_leslie(slot, LESLIE_FAST, 0.0f, 0.85f, 1.0f, 1.0f)` | balance toward the treble horn + deep Doppler = maximum shimmer/wobble | (balance pattern) |
+| brake | `instrument_leslie(slot, LESLIE_STOP, …)` | rotors coast to a halt — the static, slightly-doubled "stopped" tone between songs | (stop pattern) |
+
+> **Leslie vs the recipe:** decision 0015 first refused this as "tremolo + `LFO_PITCH` + drive, a
+> recipe" — then building it proved an LFO can't band-split at a crossover, can't run a delay-line
+> Doppler, and can't drive two inertial rotors. The reversal (0015, 2026-06-12) is the model case of
+> the gate working. Great on organ; also try it on electric piano, guitar, or a whole psych mix.
 
 ---
 
