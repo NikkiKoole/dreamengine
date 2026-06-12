@@ -71,7 +71,7 @@ dark tail). Bus-only configure; per-slot `send`. **Showcase: `cathedral`** (orga
 | recipe | call | character | used by |
 |---|---|---|---|
 | stone hall | `reverb(0.94f, 0.32f)` + sends 0.5–0.9 | vast bright cathedral bloom; the chord becomes the instrument | `cathedral`, `deeper` (hall) |
-| lush plate | `reverb(0.62f, 0.38f)` | a roomy, slightly-dark pop verb that doesn't drown the mix | `air`, `groovebox` (SPACE knob, pad + stab sends) |
+| lush plate | `reverb(0.62f, 0.38f)` | a roomy, slightly-dark pop verb that doesn't drown the mix | `air` |
 | small warm room | `reverb(0.30f, 0.55f)` | tight dark ambience — upright bass, close jazz | `upright` |
 | worn-tape ensemble | `reverb(0.55f, 0.45f)` | mid room under chorus+tape = the Mellotron "recording" | `mellotron` |
 | dynamic openness | `reverb(0.12f+open*0.82f, 0.50f-open*0.18f)` | corridor→hall on one knob; sends 0.08→0.92 (10× range) | `deeper` |
@@ -112,7 +112,7 @@ The third reverb shape: a dry/wet-MIX insert **on the master bus**, so it's a re
 
 | recipe | call | character | used by |
 |---|---|---|---|
-| honest pedalboard reverb | `reverb_insert(0.7f, 0.3f, 0.45f)` + `FX_REVERB` in `fx_order(0,…)` | a guitar-pedal reverb whose position matters: before crush = crush the wet tail; after = reverb the crushed guitar | `pedalboard` (REVERB pedal) |
+| honest pedalboard reverb | `reverb_insert(0.7f, 0.3f, 0.45f)` + `FX_REVERB` in `fx_order(0,…)` | a guitar-pedal reverb whose position matters: before crush = crush the wet tail; after = reverb the crushed guitar | `pedalboard` (REVERB pedal), `groovebox` (SPACE knob — the ORDER toggle IS reverb↔crush on the summed mix) |
 
 ## chorus — `chorus(rate, depth, mix)` · `instrument_chorus(slot, rate, depth, mix)`
 

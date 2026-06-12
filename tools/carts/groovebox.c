@@ -20,8 +20,10 @@
 //
 // Everything else on the rack is REAL and already in the engine, here shown on a
 // full mix for the first time: CRUSH (summed bitcrush — the SP-1200 grit that
-// only exists on the sum), EQ, TAPE, SPACE (reverb), and the ORDER toggle that
-// reorders the master inserts (crush before vs after eq — audibly different).
+// only exists on the sum), EQ (3-band), TAPE, SPACE (reverb as a real master
+// INSERT via reverb_insert), and the ORDER toggle that reorders the master inserts:
+// CRUSH→VERB (clean space on a gritty mix) vs VERB→CRUSH (the wet tail gets crushed
+// — grainy/vaporwave space). Reverb's position only matters because it's an insert.
 //
 //   TAP / DRAG cells   toggle steps; drag to paint a run (each finger paints)
 //   WASD + Z           move cursor / toggle the cell under it
@@ -143,7 +145,10 @@ void init() {
     instrument_filter(SL_PAD, FILTER_LOW, 2200, 4);
     instrument_tune(SL_PAD, 0.07f);                          // unison detune shimmer
 
-    reverb(0.62f, 0.40f);                                    // one shared hall; sends ride the knob
+    // master insert chain: tape → eq → crush → reverb. Reverb is a REAL insert now
+    // (reverb_insert), so the ORDER toggle can move it before/after crush — audible.
+    int order[4] = { FX_TAPE, FX_EQ, FX_CRUSH, FX_REVERB };
+    fx_order(0, order, 4);
 
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < STEPS; c++)
@@ -175,10 +180,8 @@ static void apply_fx(void) {
         aTape = k_tape;
     }
     if (k_space != aSpace) {
-        instrument_reverb(SL_STAB, k_space * 0.8f);
-        for (int k = 0; k < 3; k++)
-            if (padH[k] >= 0) note_reverb(padH[k], k_space * 0.7f);  // held → live send
-        aSpace = k_space;
+        reverb_insert(0.62f, 0.40f, k_space);    // a REAL master insert (mix 0 = bypass), not a send —
+        aSpace = k_space;                        // so its chain position (ORDER toggle) is audible
     }
 }
 
@@ -327,11 +330,13 @@ void draw() {
     print("EQ", kx[3] - text_width("EQ") / 2, ky - 11, CLR_LIGHT_GREY);
     font(FONT_NORMAL);
 
-    if (ui_button(110, 2, 96, 12, orderSwapped ? "CRUSH>EQ" : "EQ>CRUSH")) {
+    if (ui_button(104, 2, 110, 12, orderSwapped ? "VERB>CRUSH" : "CRUSH>VERB")) {
         orderSwapped = !orderSwapped;
-        int kinds[3] = { FX_TAPE, FX_EQ, FX_CRUSH };         // default: tape→eq→crush
-        if (orderSwapped) { kinds[1] = FX_CRUSH; kinds[2] = FX_EQ; }
-        fx_order(0, kinds, 3);                               // master bus insert order
+        // tape→eq stay first; toggle the CRUSH/REVERB tail. CRUSH→VERB = clean space on a
+        // gritty mix; VERB→CRUSH = the wet reverb tail gets crushed (grainy/vaporwave space).
+        int kinds[4] = { FX_TAPE, FX_EQ, FX_CRUSH, FX_REVERB };
+        if (orderSwapped) { kinds[2] = FX_REVERB; kinds[3] = FX_CRUSH; }
+        fx_order(0, kinds, 4);                               // master bus insert order
     }
     ui_end();
 }
