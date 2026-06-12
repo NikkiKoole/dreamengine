@@ -45,7 +45,7 @@ static const char *MNAME[NMACHINE] = { "RHODES", "WURLI", "CLAV" };
 static const int M_BODY[NMACHINE]   = { CLR_DARK_BROWN, CLR_BLUE_GREEN,   CLR_DARK_PURPLE };
 static const int M_ACCENT[NMACHINE] = { CLR_DARK_ORANGE, CLR_LIGHT_YELLOW, CLR_MAUVE };
 static const int M_LIT[NMACHINE]    = { CLR_PEACH,       CLR_LIGHT_PEACH,  CLR_PINK };
-static const float M_INST[NMACHINE] = { 0.08f, 0.5f, 0.85f };
+static const float M_INST[NMACHINE] = { 0.15f, 0.50f, 0.85f };   // the instrument-macro detents (original values)
 static int machine = M_RHODES;
 
 // ── the PEDALS: a footswitch + 1-2 knobs each, per machine ──
@@ -75,15 +75,26 @@ static float ped_k [NMACHINE][3][2];
 static float barkv [NMACHINE] = { 0.25f, 0.40f, 0.55f };
 
 // PRESETS — per machine, a small vertical stack of buttons at the LEFT of the option row. Each is a
-// named patch = which pedals are on. Pick one, or flip footswitches by hand (clears the highlight).
-typedef struct { const char *name; bool on[3]; } MPreset;
+// full named patch: the VOICE macros (bright, bark) + which pedals are on. bright/bark are the
+// ORIGINAL values that gave each its character (rho-brite is barky 0.78/0.55, etc.). Pick one, or
+// flip footswitches / dial BARK by hand (clears the highlight).
+typedef struct { const char *name; float bright, bark; bool on[3]; } MPreset;
 static const MPreset MPRESET[NMACHINE][3] = {
-  { { "stage",    { 0, 0, 0 } }, { "suitcase", { 1, 0, 0 } }, { "dyno", { 0, 1, 1 } } },  // RHODES (3)
-  { { "wurli",    { 1, 0, 0 } }, { "buzz",     { 1, 1, 0 } }, { 0, { 0 } } },             // WURLI (2)
-  { { "clav",     { 1, 0, 0 } }, { "mute",     { 1, 1, 0 } }, { 0, { 0 } } },             // CLAV (2)
+  { { "stage",    0.30f, 0.25f, { 0, 0, 0 } },   // RHODES: warm dry tine (the original "rhodes")
+    { "suitcase", 0.20f, 0.12f, { 1, 0, 1 } },   //         mellow + stereo vibrato + the phased swirl
+    { "dyno",     0.78f, 0.55f, { 0, 1, 1 } } }, //         bright + barky, chorus + phaser ("rho brite")
+  { { "wurli",    0.45f, 0.60f, { 1, 0, 0 } },   // WURLI:  soul ballad — pickupPos/dist (the 200A buzz)
+    { "buzz",     0.66f, 0.82f, { 1, 1, 0 } },   //         cranked reed growl
+    { 0,0,0, { 0 } } },
+  { { "clav",     0.75f, 0.55f, { 1, 0, 0 } },   // CLAV:   funky bright bridge pickup through the wah
+    { "mute",     0.50f, 0.55f, { 1, 1, 0 } },   //         the D6 damper
+    { 0,0,0, { 0 } } },
 };
 static const int NMP[NMACHINE] = { 3, 2, 2 };
-static int cur_mp[NMACHINE] = { 1, 0, 0 };   // active preset per machine (boot matches ped_on; -1 = hand-tweaked)
+static int   cur_mp [NMACHINE] = { 0, 0, 0 };   // active preset per machine (-1 = hand-tweaked)
+static float bright [NMACHINE];                 // live brightness (timbre macro) per machine — set by presets / the MACRO panel
+static float mharm  [NMACHINE];                 // live harmonics macro per machine (init from M_INST; the MACRO panel tweaks it)
+static bool  show_macros = false;               // the raw-macro tweak panel (HARM/TIMB/MORPH), behind the ⠿ button after BARK
 
 static int   octave = 4;
 static bool  autoplay = true;
@@ -108,7 +119,10 @@ static Ptr ptr[NPTR];
 #define OPT_Y    40
 #define OPT_H    58            // tall enough for icon + knobs + footswitch
 #define PED_TOP  41
-#define BARK_CX  286
+#define BARK_CX  252                 // BARK knob centre (moved left to make room for the MACRO button)
+#define MACRO_BX 276                 // the MACRO panel toggle button (right of BARK)
+#define MACRO_BW 38
+#define MAC_CX(i) (74 + (i) * 78)    // the 3 raw-macro knob centres (HARM/TIMB/MORPH) when the panel is open
 #define KEY_Y    102           // big keybed
 #define KEY_H    92
 #define KEY_W    36
@@ -174,9 +188,12 @@ static void apply_phaser(void) { instrument_phaser(I_EP, phaser_rate, 0.5f + pha
 
 // ════ the FRONT PANEL → the param layer + the per-machine effects ════════════════════════════════
 static void apply_machine(void) {
-    val[SL_INST] = M_INST[machine];
-    val[SL_BARK] = barkv[machine];
-    val[SL_TREM] = 0.0f; val[SL_BRITE] = 0.35f; wahmode = 0; phasermode = 0;
+    // VOICE MACROS — exactly as the original fed them (so the engine's bell/bark is unchanged):
+    // harmonics = the instrument detent, timbre = the machine's brightness, morph = bark.
+    val[SL_INST]  = mharm[machine];      // the live harmonics macro (= M_INST by default; the MACRO panel tweaks it)
+    val[SL_BRITE] = bright[machine];
+    val[SL_BARK]  = barkv[machine];
+    val[SL_TREM]  = 0.0f; wahmode = 0; phasermode = 0;
 
     bool suitcase = false, dyno = false;
     if (machine == M_RHODES) {
@@ -185,23 +202,20 @@ static void apply_machine(void) {
         phasermode = ped_on[0][2];
         phaser_rate = 0.4f + ped_k[0][2][0] * 1.6f;
         phaser_str  = ped_k[0][2][1];
-        val[SL_BRITE] = dyno ? 0.78f : 0.28f;
     } else if (machine == M_WURLI) {
         if (ped_on[1][0]) { trem_spd = ped_k[1][0][0]; val[SL_TREM] = ped_k[1][0][1]; }
-        val[SL_BRITE] = 0.45f + (ped_on[1][1] ? 0.25f : 0.0f);
     } else { // CLAV
         wahmode     = ped_on[2][0];
         val[SL_WAH] = ped_k[2][0][0];
-        val[SL_BRITE] = ped_on[2][1] ? 0.30f : 0.80f;
     }
     apply_slot(); apply_wah(); apply_trem(); apply_phaser();
 
     // RHODES VIBE — stereo vibrato (auto-pan). LFO_PAN now; → the auto-pan PEDAL when it ships.
-    float vs = 3.0f + ped_k[0][0][0] * 4.0f;
-    instrument_lfo(I_EP, 1, LFO_PAN, vs, suitcase ? (0.35f + ped_k[0][0][1] * 0.55f) : 0.0f);
-    // RHODES DYNO — lush stereo chorus + an EQ presence bump
+    instrument_lfo(I_EP, 1, LFO_PAN, 3.0f + ped_k[0][0][0] * 4.0f, suitcase ? (0.35f + ped_k[0][0][1] * 0.55f) : 0.0f);
+    // RHODES DYNO — lush stereo chorus (bypassed at mix 0). EQ presence ONLY when on, so a clean
+    // machine is NEVER routed through an EQ (that was the character-killer — it dulled the bell).
     instrument_chorus(I_EP, 0.6f, 0.35f + ped_k[0][1][0] * 0.4f, dyno ? 0.55f : 0.0f);
-    instrument_eq(I_EP, 0.0f, 0.0f, dyno ? 4.0f : 0.0f);
+    if (dyno) instrument_eq(I_EP, 0.0f, 0.0f, 4.0f);
     // WURLI BUZZ — extra reed drive
     if (machine == M_WURLI && ped_on[1][1]) instrument_drive(I_EP, 0.17f + ped_k[1][1][0] * 0.45f);
     // CLAV MUTE — the D6 damper: a lowpass the TONE knob opens/closes
@@ -224,9 +238,14 @@ static int key_at(int tx, int ty) {            // black first (they overlap the 
 static void octave_step(int d) { int n = octave + d; if (n < 1 || n > 7) return; for (int b = 0; b < NKEY; b++) key_up(b); octave = n; }
 static void audition(void) { if (aud_h >= 0) note_off(aud_h); aud_h = note_on(midi_of(3), I_EP, 5); ep_keytrack(aud_h, midi_of(3)); glow[3] = 1.0f; }
 static void set_machine(int m) { machine = m; apply_machine(); audition(); }
+static void load_mpreset(int m, int i) {                // set a machine's voice macros + pedals from a preset
+    bright[m] = MPRESET[m][i].bright;
+    barkv[m]  = MPRESET[m][i].bark;
+    for (int k = 0; k < 3; k++) ped_on[m][k] = MPRESET[m][i].on[k];
+    cur_mp[m] = i;
+}
 static void apply_mpreset(int i) {                      // the current machine's named patch
-    for (int k = 0; k < 3; k++) ped_on[machine][k] = MPRESET[machine][i].on[k];
-    cur_mp[machine] = i;
+    load_mpreset(machine, i);
     apply_machine(); audition();
 }
 
@@ -235,6 +254,8 @@ void init(void) {
     for (int b = 0; b < NKEY; b++) handle[b] = -1;
     for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
     for (int m = 0; m < NMACHINE; m++) for (int i = 0; i < 3; i++) { ped_k[m][i][0] = PED[m][i].kdef[0]; ped_k[m][i][1] = PED[m][i].kdef[1]; }
+    for (int m = 0; m < NMACHINE; m++) mharm[m] = M_INST[m];         // harmonics macro starts at the instrument detent
+    for (int m = 0; m < NMACHINE; m++) load_mpreset(m, cur_mp[m]);   // seed each machine's voice + pedals from its default preset
     apply_machine();
     bpm(76);
 }
@@ -264,6 +285,15 @@ void update(void) {
             for (int m = 0; m < NMACHINE; m++) if (point_in_box(tx, ty, MSEL_X(m), MSEL_Y, MSEL_W, MSEL_H)) { set_machine(m); break; }
             if (ty >= MSEL_Y && ty < MSEL_Y + MSEL_H) continue;
             if (ty >= OPT_Y && ty < OPT_Y + OPT_H) {
+                if (point_in_box(tx, ty, MACRO_BX, PED_TOP, MACRO_BW, OPT_H - 2)) { show_macros = !show_macros; continue; }
+                if (show_macros) {                          // raw-macro panel: HARM / TIMB / MORPH
+                    for (int g = 0; g < 3; g++)
+                        if (point_in_box(tx, ty, MAC_CX(g) - 13, PKNOB_CY - 13, 26, 26)) {
+                            p->mode = PTR_KNOB; p->pedal = -2; p->knob = g;
+                            p->grabv = (g == 0 ? mharm[machine] : g == 1 ? bright[machine] : barkv[machine]); p->grabY = ty; break;
+                        }
+                    continue;
+                }
                 // preset column (left): pick the machine's named patch
                 int n = NMP[machine];
                 for (int q = 0; q < n; q++) if (point_in_box(tx, ty, MP_X, MP_BY(n, q), MP_W, MP_BH(n))) { apply_mpreset(q); break; }
@@ -283,7 +313,9 @@ void update(void) {
             if (kk >= 0) { key_down(kk); p->mode = PTR_KEY; p->key = kk; }
         } else if (p->mode == PTR_KNOB) {
             float nv = clamp(p->grabv + (p->grabY - ty) * 0.012f, 0.0f, 1.0f);
-            if (p->pedal < 0) barkv[machine] = nv; else ped_k[machine][p->pedal][p->knob] = nv;
+            if (p->pedal == -2) { if (p->knob == 0) mharm[machine] = nv; else if (p->knob == 1) bright[machine] = nv; else barkv[machine] = nv; cur_mp[machine] = -1; }
+            else if (p->pedal < 0) barkv[machine] = nv;
+            else ped_k[machine][p->pedal][p->knob] = nv;
             apply_machine();                                    // live — but DON'T strike a note while dialing
         } else if (p->mode == PTR_KEY) {                        // GLISSANDO
             int kk = key_at(tx, ty);
@@ -374,17 +406,33 @@ void draw(void) {
         font(FONT_TINY); print(str("%d", m + 1), MSEL_X(m) + 4, MSEL_Y + 2, on ? M_LIT[m] : CLR_DARK_GREY); font(FONT_NORMAL);
     }
 
-    // option panel: the machine's PRESET column (left) + its pedals + a BARK knob
-    int nmp = NMP[machine];
-    for (int q = 0; q < nmp; q++) {
-        bool on = (cur_mp[machine] == q);
-        int by = MP_BY(nmp, q), bh = MP_BH(nmp);
-        rrectfill(MP_X, by, MP_W, bh, 2, on ? M_BODY[machine] : CLR_DARKER_GREY);
-        rrect(MP_X, by, MP_W, bh, 2, on ? M_LIT[machine] : CLR_DARK_GREY);
-        font(FONT_SMALL); print_centered(MPRESET[machine][q].name, MP_X + MP_W / 2, by + bh / 2 - 2, on ? M_LIT[machine] : CLR_MEDIUM_GREY); font(FONT_NORMAL);
+    // option panel — either the MACRO tweak panel or the normal presets+pedals+bark
+    if (show_macros) {
+        // raw engine macros for dialing/finalizing the voice — with numeric readouts to bake
+        static const char *ML[3] = { "HARM", "TIMB", "MORPH" };
+        float mv[3] = { mharm[machine], bright[machine], barkv[machine] };
+        font(FONT_SMALL); print("raw engine macros - read the value to bake it", 6, OPT_Y + 1, CLR_DARK_GREY); font(FONT_NORMAL);
+        for (int g = 0; g < 3; g++) {
+            draw_knob(MAC_CX(g), PKNOB_CY - 1, mv[g], ML[g], M_ACCENT[machine], CLR_LIGHT_PEACH);
+            font(FONT_SMALL); print_centered(str("%.2f", mv[g]), MAC_CX(g), PKNOB_CY + 16, CLR_WHITE); font(FONT_NORMAL);
+        }
+    } else {
+        int nmp = NMP[machine];
+        for (int q = 0; q < nmp; q++) {
+            bool on = (cur_mp[machine] == q);
+            int by = MP_BY(nmp, q), bh = MP_BH(nmp);
+            rrectfill(MP_X, by, MP_W, bh, 2, on ? M_BODY[machine] : CLR_DARKER_GREY);
+            rrect(MP_X, by, MP_W, bh, 2, on ? M_LIT[machine] : CLR_DARK_GREY);
+            font(FONT_SMALL); print_centered(MPRESET[machine][q].name, MP_X + MP_W / 2, by + bh / 2 - 2, on ? M_LIT[machine] : CLR_MEDIUM_GREY); font(FONT_NORMAL);
+        }
+        for (int i = 0; i < NPED[machine]; i++) draw_pedal(machine, i);
+        draw_knob(BARK_CX, PKNOB_CY, barkv[machine], "BARK", M_ACCENT[machine], CLR_MEDIUM_GREY);
     }
-    for (int i = 0; i < NPED[machine]; i++) draw_pedal(machine, i);
-    draw_knob(BARK_CX, PKNOB_CY, barkv[machine], "BARK", M_ACCENT[machine], CLR_MEDIUM_GREY);
+    // the MACRO panel toggle (always visible, right of BARK) — a little 3-knob icon
+    rrectfill(MACRO_BX, PED_TOP, MACRO_BW, OPT_H - 2, 3, show_macros ? M_BODY[machine] : CLR_DARKER_GREY);
+    rrect(MACRO_BX, PED_TOP, MACRO_BW, OPT_H - 2, 3, show_macros ? M_LIT[machine] : CLR_DARK_GREY);
+    for (int d = 0; d < 3; d++) circ(MACRO_BX + 10 + d * 9, PED_TOP + 12, 3, show_macros ? M_LIT[machine] : CLR_MEDIUM_GREY);
+    font(FONT_TINY); print_centered(show_macros ? "x" : "MACRO", MACRO_BX + MACRO_BW / 2, FOOT_Y + 3, show_macros ? CLR_WHITE : CLR_MEDIUM_GREY); font(FONT_NORMAL);
 
     // the manual
     for (int b = 0; b < NWHITE; b++) {
