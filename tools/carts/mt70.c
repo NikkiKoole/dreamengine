@@ -326,8 +326,14 @@ void update(void) {
         if (keyr(KBMAP[s]) && ks[s].finger == FNG_KB)   lift_semi(s);
     }
 
-    // a plugged-in MIDI keyboard (engine midi_get; macOS) — its notes land in the
-    // C3..C5 window (mn - KB_BASE); notes outside the 2-octave range are ignored
+    // ── keybed.h EXCEPTION ───────────────────────────────────────────────────
+    // This cart does NOT use runtime/keybed.h (the shared keybed). Its voice model
+    // is too special — 1-3 oscillator voices per key + struck notes that detach and
+    // keep ringing on lift. So the keyboard stays hand-rolled and MIDI is wired here
+    // cart-side: just drain the engine's midi_get(). Full keybed.h adoption is
+    // deferred — see docs/design/midi-and-keybed.md → "Deferred — exceptional cases".
+    // A plugged-in MIDI keyboard (macOS) plays the C3..C5 window (mn - KB_BASE);
+    // notes outside the 2-octave range are ignored. (No velocity yet.)
     int mn, mv, mt2;
     while ((mt2 = midi_get(&mn, &mv)) != 0) {
         int s = mn - KB_BASE;

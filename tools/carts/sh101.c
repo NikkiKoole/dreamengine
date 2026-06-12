@@ -629,8 +629,14 @@ void init(void) {
 }
 
 void update(void) {
-    // a plugged-in MIDI keyboard plays the mono voice directly (engine midi_get; macOS).
-    // absolute pitches — independent of the on-screen octave, like a real keyboard.
+    // ── keybed.h EXCEPTION ───────────────────────────────────────────────────
+    // This cart does NOT use runtime/keybed.h (the shared keybed). Its keyboard is
+    // drawn as TWO stacked rows (two octaves of one mono synth), which keybed.h's
+    // single-row layout can't render yet. So the keyboard stays hand-rolled and MIDI
+    // is wired here cart-side: drain the engine's midi_get() into key_down/key_up.
+    // Full keybed.h adoption is deferred — see docs/design/midi-and-keybed.md →
+    // "Deferred — exceptional cases". MIDI plays absolute pitches, independent of the
+    // on-screen octave, like a real keyboard. (No velocity yet.)
     int mn, mv, mt;
     while ((mt = midi_get(&mn, &mv)) != 0) { if (mt > 0) key_down(mn); else key_up(mn); }
 
