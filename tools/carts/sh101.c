@@ -611,7 +611,7 @@ static int key_at(int x, int y) {
     return NONE;
 }
 
-static int midi_held(int midi) {
+static int sh_held(int midi) {
     for (int i = 0; i < nlatch; i++) if (latch[i] == midi) return 1;
     for (int i = 0; i < nphys;  i++) if (phys[i]  == midi) return 1;
     return 0;
@@ -823,14 +823,14 @@ void draw(void) {
     // ── keyboard ────────────────────────────────────────────────────────
     for (int i = 0; i < NWHITE; i++) {
         int x = white_kx(i);
-        int lit = midi_held(base + W_SEMI[i]);
+        int lit = sh_held(base + W_SEMI[i]);
         rectfill(x, KBY, KBW - 1, KBH, lit ? C_ACT : CLR_WHITE);
         rect(x, KBY, KBW - 1, KBH, CLR_BLACK);
         print(str("%c", WLBL[i]), x + (KBW - 9) / 2, KBY + KBH - 10, CLR_MEDIUM_GREY);
     }
     for (int j = 0; j < NBLACK; j++) {
         int x = black_kx(j);
-        int lit = midi_held(base + B_SEMI[j]);
+        int lit = sh_held(base + B_SEMI[j]);
         rectfill(x, KBY, BKW, BKH, lit ? C_ACT : CLR_BLACK);
         print(str("%c", BLBL[j]), x + (BKW - 7) / 2, KBY + BKH - 12, CLR_DARK_GREY);
     }
