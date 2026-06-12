@@ -98,8 +98,7 @@ const refIndex = (r) => { if (!HEX40.test(r)) return -1; let i = refs.indexOf(r)
 // ---- walls: split by DOOR openings into solid spans; windows kept + emitted ----
 const segs = [];     // {ax,ay,bx,by,thick} solid, collidable
 const windows = [];  // {ax,ay,bx,by,thick} glass, collidable + drawn light
-const doorways = [];  // {ax,ay,bx,by,thick} just for drawing the threshold (walkable)
-const openings = []; // {cx,cy,w,h,rot,ref,type} real door/window sprites (doors non-colliding)
+const doormarks = []; // {cx,cy,w,rot} doorway markers — cart draws an open-door swing symbol
 
 for (const w of walls) {
   const ax = w.a.x, ay = w.a.y, bx = w.b.x, by = w.b.y;
@@ -112,13 +111,8 @@ for (const w of walls) {
     const half = (o.width / 2) / Lmm;
     const lo = Math.max(0, o.t - half), hi = Math.min(1, o.t + half);
     (o.type === 'window' ? wins : doors).push([lo, hi]);
-    // placement for the real door/window sprite (centred on the opening, along the wall).
-    // windows sit thin in the wall; doors get a near-square footprint so the leaf/swing reads.
-    openings.push({
-      cx: PX(ax + (bx - ax) * o.t), cy: PY(ay + (by - ay) * o.t),
-      w: PL(o.width), h: (o.type === 'window' ? thick : PL(o.width)), rot: wallDeg, type: o.type,
-      ref: refIndex(o.refid || ''),
-    });
+    if (o.type !== 'window')   // a door -> a swing symbol drawn in the open gap
+      doormarks.push({ cx: PX(ax + (bx - ax) * o.t), cy: PY(ay + (by - ay) * o.t), w: PL(o.width), rot: wallDeg });
   }
   const lerp = (t) => ({ x: ax + (bx - ax) * t, y: ay + (by - ay) * t });
   const emit = (arr, t0, t1) => {
@@ -127,8 +121,6 @@ for (const w of walls) {
   };
   // windows: drawn as glass spans
   for (const [lo, hi] of wins) emit(windows, lo, hi);
-  // doorway thresholds: drawn faint
-  for (const [lo, hi] of doors) emit(doorways, lo, hi);
   // solid spans = [0,1] minus union of door intervals (windows stay solid -> kept in span)
   const cuts = doors.slice().sort((p, q) => p[0] - q[0]);
   let cur = 0;
@@ -202,15 +194,14 @@ c += `static const Seg lv_walls[] = {${fmt(segs, segC)}};\n`;
 c += `#define N_WALLS ${segs.length}\n`;
 c += `static const Seg lv_windows[] = {${windows.length ? fmt(windows, segC) : '{0,0,0,0,0}'}};\n`;
 c += `#define N_WINDOWS ${windows.length}\n`;
-c += `static const Seg lv_doorways[] = {${doorways.length ? fmt(doorways, segC) : '{0,0,0,0,0}'}};\n`;
-c += `#define N_DOORWAYS ${doorways.length}\n`;
-c += `typedef struct { float cx,cy,w,h,rot; int ref; } Furn;\n`;
 const rotLit = (r) => Number.isInteger(r) ? `${r}` : `${r}f`;
+c += `typedef struct { float cx,cy,w,rot; } Door;\n`;
+c += `static const Door lv_doors[] = {${doormarks.length ? fmt(doormarks, d => `{${d.cx},${d.cy},${d.w},${rotLit(d.rot)}}`) : '{0,0,0,0}'}};\n`;
+c += `#define N_DOORS ${doormarks.length}\n`;
+c += `typedef struct { float cx,cy,w,h,rot; int ref; } Furn;\n`;
 const furnC = (f) => `{${f.cx},${f.cy},${f.w},${f.h},${rotLit(f.rot)},${f.ref}}`;
 c += `static const Furn lv_furn[] = {${fmt(furn, furnC)}};\n`;
 c += `#define N_FURN ${furn.length}\n`;
-c += `static const Furn lv_openings[] = {${openings.length ? fmt(openings, furnC) : '{0,0,0,0,0,-1}'}};\n`;
-c += `#define N_OPENINGS ${openings.length}\n`;
 c += `typedef struct { int color,n,off; } AreaP;\n`;
 c += `static const AreaP lv_areas[] = {${areaOut.length ? fmt(areaOut, a => `{${a.color},${a.n},${a.off}}`) : '{0,0,0}'}};\n`;
 c += `#define N_AREAS ${areaOut.length}\n`;
@@ -219,7 +210,7 @@ c += `static const char* lv_refs[] = {${refs.length ? refs.map(r => `"${r}"`).jo
 c += `#define N_REFS ${refs.length}\n`;
 c += `/* <<<FML_DATA */`;
 
-const summary = `walls:${segs.length} spans, openings:${openings.length} (doors+windows), areas:${areaOut.length}, furniture:${furn.length} (skipped ${skipped} oversize), refids:${refs.length}, world:${W}x${H}px`;
+const summary = `walls:${segs.length} spans, doors:${doormarks.length}, windows:${windows.length}, areas:${areaOut.length}, furniture:${furn.length} (skipped ${skipped} oversize), refids:${refs.length}, world:${W}x${H}px`;
 
 if (opt.stdout) { console.log(c); console.error(summary); process.exit(0); }
 
