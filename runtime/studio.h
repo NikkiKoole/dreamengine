@@ -431,6 +431,12 @@ void instrument_crush(int slot, float bits, float rate, float mix);     // bitcr
 void eq(float low_gain, float mid_gain, float high_gain);               // THE master 3-band EQ, on the whole mix
 void instrument_eq(int slot, float low_gain, float mid_gain, float high_gain);  // EQ on just this slot (auto-grabs a private FX bus)
 
+// formant — a VOWEL filter: 4 bandpasses at the human formant frequencies make any sound take on
+// an "ooh/aah/eee" vocal colour (the talkbox/vowel-filter; a wah is the one-peak version). vowel
+// 0..1 sweeps U→O→A→E→I; q 0..1 narrows the peaks (broad → nasal/pronounced); mix 0..1 (0 = off).
+void formant(float vowel, float q, float mix);                          // THE master formant/vowel filter, on the whole mix
+void instrument_formant(int slot, float vowel, float q, float mix);     // formant filter on just this slot (auto-grabs a private FX bus)
+
 // tremolo — a volume LFO that ducks the level up and down: the Fender/Wurlitzer amp wobble (the
 // "electric piano" throb). One shared phase per bus, so a per-instrument tremolo wobbles that
 // instrument's whole output in unison — the coherent amp wobble a per-voice LFO_VOLUME can't give.
@@ -460,7 +466,8 @@ void instrument_phaser(int slot, float rate, float depth, float feedback, float 
 #define FX_EQ       6   // EQ
 #define FX_CRUSH    7   // bitcrush
 #define FX_REVERB   8   // reverb — ONLY valid on a reverb_bus() send-bus; a no-op on any other bus. Put it first, then FX_* after it for reverb→effect
-void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 9
+#define FX_FORMANT  9   // formant/vowel filter (a reorderable pedal, like the others — in every bus's default chain)
+void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 10
 
 // leslie — a rotary-speaker cabinet (a spinning treble HORN + bass DRUM): the organ's voice. The
 // horn adds pitch wobble (Doppler) + a swirling volume; the two rotors spin at independent speeds
