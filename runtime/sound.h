@@ -800,6 +800,56 @@ static void fx_set_wah_lfo(int b, float rate, float res, float mix) {
     wah_used[b] = true;
 }
 
+// ── resonant FILTER — the DJ filter (studio.h filter()) ──
+// The plain sweepable filter wah/formant are specialized cases of: one TPT state-variable filter
+// (Zavalishin) in a selectable mode (LP/HP/BP/notch), cutoff + resonance set by the cart and RIDDEN
+// live (the build-up / breakdown sweep). Per-channel state → preserves stereo. Cheap to re-call every
+// frame (just stores 3 values — unlike the buffer effects, sweeping it live is fine). filt_used-gated.
+static int   filt_mode[SOUND_FX_BUSES];     // FILTER_LOW / HIGH / BAND / NOTCH
+static float filt_cut [SOUND_FX_BUSES];     // cutoff Hz
+static float filt_res [SOUND_FX_BUSES];     // resonance 0..1 (peak height / the scream)
+static float filt_ic1L[SOUND_FX_BUSES], filt_ic2L[SOUND_FX_BUSES];   // TPT integrator state, L
+static float filt_ic1R[SOUND_FX_BUSES], filt_ic2R[SOUND_FX_BUSES];   //                        R
+static bool  filt_used[SOUND_FX_BUSES];
+
+static void filter_process(int b, float *mixL, float *mixR) {
+    float freq = filt_cut[b];
+    if (freq < 20.0f) freq = 20.0f;
+    if (freq > SOUND_SAMPLE_RATE * 0.45f) freq = SOUND_SAMPLE_RATE * 0.45f;
+    float g  = tanf(3.14159265f * freq / (float)SOUND_SAMPLE_RATE);
+    float k  = 2.0f - 2.0f * filt_res[b] * 0.99f;       // small k = resonant peak
+    float a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    int   m  = filt_mode[b];
+    // L channel
+    float in = *mixL;
+    float v3 = in - filt_ic2L[b];
+    float v1 = a1 * filt_ic1L[b] + a2 * v3;
+    float v2 = filt_ic2L[b] + a2 * filt_ic1L[b] + a3 * v3;
+    filt_ic1L[b] = 2.0f * v1 - filt_ic1L[b];
+    filt_ic2L[b] = 2.0f * v2 - filt_ic2L[b];
+    if (filt_ic1L[b] >  4.0f) filt_ic1L[b] =  4.0f; if (filt_ic1L[b] < -4.0f) filt_ic1L[b] = -4.0f;
+    if (filt_ic2L[b] >  4.0f) filt_ic2L[b] =  4.0f; if (filt_ic2L[b] < -4.0f) filt_ic2L[b] = -4.0f;
+    *mixL = (m == FILTER_HIGH) ? in - k * v1 - v2 : (m == FILTER_BAND) ? v1
+          : (m == FILTER_NOTCH) ? in - k * v1 : v2;     // v2 = lowpass (default)
+    // R channel
+    in = *mixR;
+    v3 = in - filt_ic2R[b];
+    v1 = a1 * filt_ic1R[b] + a2 * v3;
+    v2 = filt_ic2R[b] + a2 * filt_ic1R[b] + a3 * v3;
+    filt_ic1R[b] = 2.0f * v1 - filt_ic1R[b];
+    filt_ic2R[b] = 2.0f * v2 - filt_ic2R[b];
+    if (filt_ic1R[b] >  4.0f) filt_ic1R[b] =  4.0f; if (filt_ic1R[b] < -4.0f) filt_ic1R[b] = -4.0f;
+    if (filt_ic2R[b] >  4.0f) filt_ic2R[b] =  4.0f; if (filt_ic2R[b] < -4.0f) filt_ic2R[b] = -4.0f;
+    *mixR = (m == FILTER_HIGH) ? in - k * v1 - v2 : (m == FILTER_BAND) ? v1
+          : (m == FILTER_NOTCH) ? in - k * v1 : v2;
+}
+static void fx_set_filter(int b, int mode, float cutoff, float res) {
+    if (mode == FILTER_OFF) { filt_used[b] = false; return; }   // OFF = bypass → byte-identical
+    if (res < 0.0f) res = 0.0f; if (res > 1.0f) res = 1.0f;
+    filt_mode[b] = mode; filt_cut[b] = cutoff; filt_res[b] = res;
+    filt_used[b] = true;
+}
+
 // ── formant filter — vowel resonance, the "push any sound through a voice" effect ──
 // FOUR parallel TPT bandpasses tuned to the human vowel formants (F1..F4), summed by the vowel's
 // relative amplitudes → whatever passes through takes on an "ooh / aah / eee" vocal colour (the
@@ -1100,7 +1150,7 @@ static void fx_set_leslie(int b, int speed, float drive, float balance, float do
 // bus is byte-identical to the old hardcoded ladder. Each step still gates on its _used[b] flag,
 // so the default-order case is the same work as before.
 #define N_PEDALS  (FX_CRUSH + 1)            // the 8 reorderable PEDALS (FX_TREM..FX_CRUSH) — the default chain
-#define N_INSERTS (FX_FORMANT + 1)          // array size / max chain length: the 8 pedals + FX_FORMANT (a pedal) + FX_REVERB (reverb-bus only)
+#define N_INSERTS (FX_FILTER + 1)           // array size / max chain length: 8 pedals + FX_FORMANT + FX_FILTER (both pedals) + FX_REVERB (reverb-bus only)
 static int insert_order  [SOUND_FX_BUSES][N_INSERTS];   // per-bus visit list (kept distinct from the fx_order() API)
 static int insert_order_n[SOUND_FX_BUSES];  // populated slot count (default N_PEDALS = the 8 pedals; FX_REVERB only on a reverb-bus)
 // dispatch ONE insert by kind on bus b, in place. The _used[b] gate keeps dormant inserts free.
@@ -1115,6 +1165,7 @@ static void apply_insert(int kind, int b, float *L, float *R) {
         case FX_EQ:      if (eq_used[b])     eq_process(b, L, R);      break;
         case FX_CRUSH:   if (crush_used[b])  crush_process(b, L, R);   break;
         case FX_FORMANT: if (fmt_used[b])    formant_process(b, L, R); break;
+        case FX_FILTER:  if (filt_used[b])   filter_process(b, L, R);  break;
         // FX_REVERB: wet-REPLACE on a reverb-bus (a bus fed only by sends, bus_tank[b] >= 0), so any
         // inserts AFTER it in the chain chew on the wet tail (reverb→bitcrush). On any other bus
         // (master / a pedalboard's bus, bus_tank[b] == -1) it's a no-op pass-through — never zeroes a real mix.
@@ -1222,6 +1273,7 @@ typedef enum {
     SR_SIDECHAIN    = 72,   // a=victim_bus, b=key, c=amount*1000, e0=attack_ms, e1=release_ms — duck a bus on a trigger key
     SR_SIDECHAIN_KEY= 73,   // a=slot, b=key, c=send*1000 — route a slot into a sidechain trigger key
     SR_GLUE         = 74,   // a=victim_bus, b=amount*1000, c=attack_ms, e0=release_ms — bus comp (self-keyed, no trigger)
+    SR_FILTER       = 75,   // a=mode, b=cutoff_hz, c=resonance*1000 — THE master resonant filter (DJ filter), bus 0
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3946,6 +3998,8 @@ static void sound_fire_req(SoundReq r) {
         sc[vb].atk    = 1.0f - expf(-1.0f / (atk * 0.001f * (float)SOUND_SAMPLE_RATE));
         sc[vb].rel    = 1.0f - expf(-1.0f / (rel * 0.001f * (float)SOUND_SAMPLE_RATE));
         sc[vb].used   = (amount > 0.0005f);
+    } else if (r.kind == SR_FILTER) {       // a=mode, b=cutoff_hz, c=res*1000 — master resonant filter (bus 0)
+        fx_set_filter(0, r.a, (float)r.b, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_PAN) {    // a=slot, b=pan*1000 (signed)
         int slot = r.a;
         if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
@@ -4772,6 +4826,11 @@ void sidechain_key(int slot, int key, float send) {
 void glue(int victim_bus, float amount, int attack_ms, int release_ms) {
     sound_push_ctrl(SR_GLUE, victim_bus, (int)(amount * 1000.0f), attack_ms, release_ms, 0, 0);
 }
+// THE master resonant filter (the DJ filter) — mode FILTER_*, cutoff Hz, resonance 0..1. Cheap to
+// re-call live (ride the cutoff for the build-up/breakdown sweep). FILTER_OFF = bypass.
+void filter(int mode, float cutoff_hz, float resonance) {
+    sound_push_ctrl(SR_FILTER, mode, (int)cutoff_hz, (int)(resonance * 1000.0f), 0, 0, 0);
+}
 
 // add an effect AFTER the reverb on tank N's bus (effects-after-reverb — reverb→crush/eq/tape).
 // fx = FX_CRUSH/FX_EQ/FX_TAPE/FX_CHORUS; a/b/c are that effect's own params (×1000 packed, same
@@ -5118,9 +5177,12 @@ static void sound_init(void) {
         eq_loL[b] = 0.0f; eq_loR[b] = 0.0f; eq_hiL[b] = 0.0f; eq_hiR[b] = 0.0f; eq_used[b] = false;
         for (int i = 0; i < 4; i++) { fmt_freq[b][i] = 700.0f; fmt_k[b][i] = 0.2f; fmt_amp[b][i] = 0.0f; fmt_ic1[b][i] = 0.0f; fmt_ic2[b][i] = 0.0f; }
         fmt_mix[b] = 0.0f; fmt_used[b] = false;   // dormant; fx_set_formant() fills the bands from the vowel table
+        filt_mode[b] = FILTER_LOW; filt_cut[b] = 8000.0f; filt_res[b] = 0.3f;
+        filt_ic1L[b] = filt_ic2L[b] = filt_ic1R[b] = filt_ic2R[b] = 0.0f; filt_used[b] = false;
         for (int s = 0; s < N_PEDALS; s++) insert_order[b][s] = s;   // default insert order = the 8 pedals, canonical (identity)
-        insert_order[b][N_PEDALS] = FX_FORMANT;                      // + formant as the 9th pedal (dormant until formant() → byte-identical)
-        insert_order_n[b] = N_PEDALS + 1;                            // FX_REVERB is never in the default chain — reverb_bus() places it
+        insert_order[b][N_PEDALS]     = FX_FORMANT;                  // + formant as the 9th pedal (dormant until formant() → byte-identical)
+        insert_order[b][N_PEDALS + 1] = FX_FILTER;                   // + filter as the 10th pedal (dormant until filter() → byte-identical)
+        insert_order_n[b] = N_PEDALS + 2;                            // FX_REVERB is never in the default chain — reverb_bus() places it
     }
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence

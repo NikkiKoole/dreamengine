@@ -455,6 +455,12 @@ void instrument_tremolo(int slot, float rate, float depth, int shape);  // tremo
 void phaser(float rate, float depth, float feedback, float mix, int stages);                       // rate 0..10 Hz, depth 0..1, feedback -0.95..0.95, mix 0..1 (0 = off), stages 2..8. THE master phaser
 void instrument_phaser(int slot, float rate, float depth, float feedback, float mix, int stages);  // phaser on just this slot (auto-grabs a private FX bus)
 
+// filter — a sweepable resonant FILTER on the whole mix: the DJ-filter / build-up sweep. A plain
+// state-variable filter (low/high/band/notch) you RIDE live — close it to a muffled thump on the
+// breakdown, open it back up (crank resonance for the scream) on the build. THE electronic-music
+// gesture. A reorderable insert (FX_FILTER); unlike the buffer effects it's cheap to sweep every frame.
+void filter(int mode, float cutoff_hz, float resonance);   // mode FILTER_LOW/HIGH/BAND/NOTCH (FILTER_OFF = bypass), cutoff 20..~20000 Hz (ride it live), resonance 0..1 (the peak/scream). THE master filter
+
 // sidechain & bus compression — DYNAMICS on the SUMMED signal (not a per-voice insert): the
 // "pumping" duck and the glue. sidechain() ducks a victim bus's level whenever a TRIGGER fires,
 // keyed off a slot you route in with sidechain_key() — the kick is the classic trigger → the
@@ -477,7 +483,8 @@ void glue(int victim_bus, float amount, int attack_ms, int release_ms);  // bus 
 #define FX_CRUSH    7   // bitcrush
 #define FX_REVERB   8   // reverb — ONLY valid on a reverb_bus() send-bus; a no-op on any other bus. Put it first, then FX_* after it for reverb→effect
 #define FX_FORMANT  9   // formant/vowel filter (a reorderable pedal, like the others — in every bus's default chain)
-void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 10
+#define FX_FILTER   10  // resonant filter — the DJ filter (a reorderable pedal, in every bus's default chain)
+void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 11
 
 // leslie — a rotary-speaker cabinet (a spinning treble HORN + bass DRUM): the organ's voice. The
 // horn adds pitch wobble (Doppler) + a swirling volume; the two rotors spin at independent speeds
