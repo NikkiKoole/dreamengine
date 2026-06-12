@@ -1,6 +1,7 @@
 # MIDI input + `keybed.h` — a shared note-input layer
 
-> **Status: plan of record (not yet built).** Captures the design conversation
+> **Status: core SHIPPED 2026-06-12 (see "What shipped" at the bottom); `solo.h`/
+> martenot/Web-MIDI still open.** Captures the design conversation
 > (session, 2026-06-12) sparked by "is there a way to plug in my MIDI keyboard?"
 > The honest answer turned into a bigger one: there's no shared note-input layer,
 > so every sound cart re-rolls its keybed — and MIDI, done right, is a one-place
@@ -204,3 +205,26 @@ incremental and independently shippable.
   table in `CLAUDE.md` so the agent *finds* it instead of hand-rolling again.
 - **Scope discipline:** CC→knob mapping, MPE, and MIDI clock are explicitly **out**
   for now. Notes + velocity + pitch-bend only.
+- **`keybed.h` is a singleton (file-global state) — one keybed per cart.** Every cart
+  we have is fine with this (and martenot's dual ribbon+manual is a different family),
+  but a **split keyboard** (different instrument slots left/right, or stacked manuals)
+  can't use two keybeds at once. **We may want to support this in the future** — it
+  would mean making keybed.h instance-based (a `Keybed` struct the cart owns, with the
+  functions taking a `Keybed*`) instead of the current global. Not needed yet; recorded
+  so the next person hitting a split-keyboard cart knows it's a known ceiling, not a bug.
+
+## What shipped (2026-06-12)
+
+Built and committed this session — see `STATUS.md` for the canonical ledger:
+- Engine MIDI input (`midi_get`/`midi_held`/`midi_bend`/`midi_present`, CoreMIDI),
+  hardware-verified on an Arturia KeyStep.
+- `keybed.h` with the touch/mouse/QWERTY/MIDI router + discrete voice manager +
+  drawn manual + geometry helpers. API grew, via battle-testing four carts, to:
+  `keybed_config/layout/velocity/update/draw`, `keybed_held/glow/handle/finger/octave`,
+  `keybed_white_rect/black_rect/white_midi/midi_at`, `keybed_octave_shift`,
+  `keybed_on_note` (pre-note hook).
+- Migrated: **epiano, moog, touchpiano, mellotron** (each plays from a MIDI keyboard
+  now; ~210 lines of duplicated keybed code removed net).
+
+Still open: `solo.h` MIDI-snap, martenot ribbon (`midi_get` direct), the Web MIDI
+backend (desktop Chrome).
