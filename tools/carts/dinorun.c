@@ -1,7 +1,7 @@
 #include "studio.h"
 
 // DINO RUN — infinite side-scroller after the Chrome offline game.
-// Z / W / Up: jump over cacti.   S / Down: duck under birds.
+// Z / W / Up / left-click: jump over cacti.   S / Down / right-click: duck under birds.
 // Speed climbs the longer you survive. Best score saved.
 
 #define GY        160    // ground line y
@@ -119,7 +119,14 @@ static void start(void) {
 
 static bool press_jump(void) {
     return btnp(0, BTN_A) || btnp(0, BTN_B) || btnp(0, BTN_UP)
-        || btnp(1, BTN_A) || btnp(1, BTN_UP);
+        || btnp(1, BTN_A) || btnp(1, BTN_UP)
+        || mouse_pressed(MOUSE_LEFT)
+        || tapp(0, 0, SCREEN_W, GY - 28);   // tap the upper screen = jump
+}
+
+static bool hold_duck(void) {
+    return btn(0, BTN_DOWN) || btn(1, BTN_DOWN) || mouse_down(MOUSE_RIGHT)
+        || tap(0, GY - 28, SCREEN_W, SCREEN_H - (GY - 28));  // hold near the ground = duck
 }
 
 void update(void) {
@@ -146,7 +153,7 @@ void update(void) {
     if (press_jump() && !grounded) jump_buf = 8;
     if (jump_buf > 0) jump_buf--;
 
-    duck = (btn(0, BTN_DOWN) || btn(1, BTN_DOWN)) && grounded;
+    duck = hold_duck() && grounded;
     int cur_h = duck ? DH_DUCK : DH;
     bool was_gr = grounded;
 
@@ -352,7 +359,7 @@ void draw(void) {
     if (state == ST_IDLE) {
         print_centered("DINO RUN", SCREEN_W/2, 74, CLR_DARK_GREY);
         font(FONT_SMALL);
-        print_centered("Z / UP  jump     DOWN  duck under birds", SCREEN_W/2, 90, CLR_DARK_GREY);
+        print_centered("Z / UP / CLICK  jump     DOWN / R-CLICK  duck", SCREEN_W/2, 90, CLR_DARK_GREY);
         font(FONT_NORMAL);
     }
 
@@ -362,7 +369,7 @@ void draw(void) {
         rrect    (SCREEN_W/2 - 68, 78, 136, 40, 4, CLR_DARK_GREY);
         print_centered("GAME OVER", SCREEN_W/2, 88, CLR_DARK_GREY);
         font(FONT_SMALL);
-        if (blink(20)) print_centered("press Z to run again", SCREEN_W/2, 102, CLR_DARK_GREY);
+        if (blink(20)) print_centered("press Z or click to run again", SCREEN_W/2, 102, CLR_DARK_GREY);
         font(FONT_NORMAL);
     }
 
