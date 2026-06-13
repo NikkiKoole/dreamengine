@@ -134,12 +134,16 @@ params are `P_*` floats in 0..1; getters map each to its real range and the
 Only the **water** slider touches the terrain cache (added to its key); cell-size /
 density / wiggle only affect the per-frame road draw, so they're free to live-edit.
 
-**Mousewheel zoom** (ZMIN..ZMAX, pivot = screen centre): tile-pixel size is
-`P = TILE·zoom`; all screen transforms use `P` instead of a fixed `TILE`. Zooming
-*out* shows more tiles than a zoom-1 buffer holds, so `colgrid` is sized for the
-most-zoomed-out case (`MAXCOLS/ROWS`) and the visible tile span (`vcols/vrows`) is
-recomputed per frame from the zoom — and added to the terrain-cache key so a zoom
-change regenerates. Markers/road widths stay constant screen-px (don't scale).
+**Mousewheel zoom** (ZMIN 0.12 .. ZMAX 2.5, pivot = screen centre): tile-pixel size
+is `P = TILE·zoom`; all screen transforms use `P`. Terrain is **sampled per screen
+cell** — `height_at` at the world coord under each 2px block — *not* cached in a
+per-tile buffer, so cost is fixed at any zoom and there's **no zoom-out ceiling**
+(an earlier `colgrid` buffer capped it). **LOD:** below zoom 0.45 the town/feeder
+tier is dropped (highway skeleton only) and hub markers shrink (3→1px), so a
+continental view reads as a road network rather than a polka-dot field. `vcols/vrows`
+(the visible world-tile span) is still recomputed per frame for the road-loop bounds.
+**Left-drag pans** ("grab the map" — screen-px delta ÷ P → world tiles); in the setup
+panel it's gated to `mouse_x > PANEL_W` so it doesn't fight the sliders.
 
 ## Rungs
 

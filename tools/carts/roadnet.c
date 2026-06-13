@@ -8,6 +8,7 @@
 //   intro panel      drag the SLIDERS (world re-rolls live behind the panel),
 //                    ROLL = fresh seed, EXPLORE / ENTER = dismiss the panel
 //   ◄▲▼►  /  WASD   pan across the (infinite) world
+//   left-drag        grab + pan the world with the mouse
 //   mouse wheel      zoom in / out (a bit), pivoting on the screen centre
 //   SPACE           deterministic jump to fresh scenery
 //   R               new seed (a fresh, repeatable world)
@@ -46,15 +47,14 @@
 // ============================================================================
 
 #define TILE 4                                  // screen px per world tile at zoom 1
-#define ZMIN 0.6f                                // mousewheel zoom range
-#define ZMAX 2.5f
-// colgrid is sized for the MOST zoomed-OUT case (most tiles on screen): SCREEN/(TILE·ZMIN)
-#define MAXCOLS (SCREEN_W * 10 / (TILE * 6) + 3) // = SCREEN_W/(TILE*0.6)+3
-#define MAXROWS (SCREEN_H * 10 / (TILE * 6) + 3)
+#define ZMIN 0.12f                               // mousewheel zoom range — far out
+#define ZMAX 2.5f                                 // (terrain is sampled per screen
+                                                  //  pixel, so there's no buffer ceiling)
 #define SPAWN_X 312.0f
 #define SPAWN_Y 8.0f
 
 #define ROAD_R    2                  // road ribbon radius (px) at this zoom
+#define PANEL_W   96                 // intro-panel width (px); left-drag pans only right of it
 
 // ── tweakable world params — all 0..1 (driven by the intro-panel sliders) ─────
 // Getters map each to its real range; the NODE_CS / HUB_CS macros below call them
@@ -86,12 +86,13 @@ static int   show_grid = 0;          // cell-border overlay (seam test)
 static int   show_hud  = 1;
 static float zoom = 1.0f;            // mousewheel zoom (ZMIN..ZMAX)
 static float P    = TILE;            // pixels per tile = TILE * zoom (set per frame)
-static int   vcols, vrows;           // visible tile counts this frame (≤ MAXCOLS/ROWS)
+static int   vcols, vrows;           // visible world-tile span this frame (road bounds)
+static int   dragging = 0, drag_px, drag_py;  // left-drag-to-pan ("grab the map")
 
 static void view_metrics(void) {     // recompute P + visible tile span from zoom
     P = TILE * zoom;
-    vcols = (int)(SCREEN_W / P) + 3; if (vcols > MAXCOLS) vcols = MAXCOLS;
-    vrows = (int)(SCREEN_H / P) + 3; if (vrows > MAXROWS) vrows = MAXROWS;
+    vcols = (int)(SCREEN_W / P) + 3;             // world-tile span (road-loop bounds)
+    vrows = (int)(SCREEN_H / P) + 3;
 }
 
 // ── deterministic per-cell hash (worldgen's) ─────────────────────────────────
@@ -128,20 +129,6 @@ static int biome_col(float x) {
     return CLR_LIGHT_GREY;                      // peaks
 }
 static int passable(float x) { return x >= 0.0f && x < 0.4f; }   // road LOS test
-
-// cached colour grid — only regenerated when the base tile / seed / zoom-span moves
-static int colgrid[MAXROWS][MAXCOLS];
-static int cacheX = 0x7fffffff, cacheY, cacheVC, cacheVR; static float cacheSeed, cacheSea;
-static void regen_if_needed(void) {
-    int bx = ifloor(camX), by = ifloor(camY);
-    float sea = sea_sub();                               // water slider moves terrain
-    if (bx == cacheX && by == cacheY && seedZ == cacheSeed && sea == cacheSea
-        && vcols == cacheVC && vrows == cacheVR) return;
-    cacheX = bx; cacheY = by; cacheSeed = seedZ; cacheSea = sea; cacheVC = vcols; cacheVR = vrows;
-    for (int r = 0; r < vrows; r++)
-        for (int c = 0; c < vcols; c++)
-            colgrid[r][c] = biome_col(height_at((float)(bx + c), (float)(by + r)));
-}
 
 // ── POI NODES — at most one per coarse cell, hashed + jittered, on habitable land ─
 // Pure function of (cx,cy): same node falls out wherever/whenever you visit. This is
@@ -301,26 +288,30 @@ static int road_clear(float ax, float ay, float bx, float by) {
     return 1;
 }
 
-static void draw_nodes(void) {
-    // towns (feeder tier) — small red/orange dots
-    int c0 = ifloor(camX / NODE_CS) - 2, c1 = ifloor((camX + vcols) / NODE_CS) + 2;
-    int r0 = ifloor(camY / NODE_CS) - 2, r1 = ifloor((camY + vrows) / NODE_CS) + 2;
-    for (int cx = c0; cx <= c1; cx++)
-        for (int cy = r0; cy <= r1; cy++) {
-            float wx, wy; if (!get_node(cx, cy, &wx, &wy)) continue;
-            int px = sxp(wx), py = syp(wy);
-            circfill(px, py, 3, CLR_BLACK);
-            circfill(px, py, 2, (hash2(cx, cy) & 1) ? CLR_RED : CLR_ORANGE);
-        }
-    // hubs (backbone tier) — bigger white markers, the cities on the spine
+static void draw_nodes(int detail) {
+    // towns (feeder tier) — small red/orange dots; hidden when zoomed far out (LOD)
+    if (detail) {
+        int c0 = ifloor(camX / NODE_CS) - 2, c1 = ifloor((camX + vcols) / NODE_CS) + 2;
+        int r0 = ifloor(camY / NODE_CS) - 2, r1 = ifloor((camY + vrows) / NODE_CS) + 2;
+        for (int cx = c0; cx <= c1; cx++)
+            for (int cy = r0; cy <= r1; cy++) {
+                float wx, wy; if (!get_node(cx, cy, &wx, &wy)) continue;
+                int px = sxp(wx), py = syp(wy);
+                circfill(px, py, 3, CLR_BLACK);
+                circfill(px, py, 2, (hash2(cx, cy) & 1) ? CLR_RED : CLR_ORANGE);
+            }
+    }
+    // hubs (backbone tier) — white markers, the cities on the spine. Shrink them as
+    // we zoom out so they don't swarm into a polka-dot field that buries the highways.
+    int hr = zoom >= 0.45f ? 3 : (zoom >= 0.22f ? 2 : 1);
     int h0 = ifloor(camX / HUB_CS) - 2, h1 = ifloor((camX + vcols) / HUB_CS) + 2;
     int v0 = ifloor(camY / HUB_CS) - 2, v1 = ifloor((camY + vrows) / HUB_CS) + 2;
     for (int cx = h0; cx <= h1; cx++)
         for (int cy = v0; cy <= v1; cy++) {
             float wx, wy; if (!get_hub(cx, cy, &wx, &wy)) continue;
             int px = sxp(wx), py = syp(wy);
-            circfill(px, py, 4, CLR_BLACK);
-            circfill(px, py, 3, CLR_WHITE);
+            circfill(px, py, hr + 1, CLR_BLACK);
+            circfill(px, py, hr, CLR_WHITE);
         }
 }
 
@@ -343,7 +334,7 @@ static void hud(void) {
     snprintf(buf, sizeof buf, "x %d  y %d", (int)cx, (int)cy);
     print(buf, 80, 2, CLR_MEDIUM_GREY);
     if (show_grid) print("[grid]", 160, 2, CLR_DARK_PURPLE);
-    print_centered("\x18\x19\x1a\x1b pan   wheel zoom   SPACE jump   R seed   M setup   G grid",
+    print_centered("drag/\x18\x19\x1a\x1b pan   wheel zoom   SPACE jump   R seed   M setup   G grid",
                    SCREEN_W / 2, SCREEN_H - 9, CLR_DARK_GREY);
 }
 
@@ -353,7 +344,7 @@ static void hud(void) {
 // drag. No separate preview renderer — the whole right of the screen IS the preview.
 static void draw_setup_panel(void) {
     char buf[48];
-    int PW = 96;
+    int PW = PANEL_W;
     fillp(FILL_CHECKER, -1); rectfill(0, 0, PW, SCREEN_H, CLR_BLACK); fillp_reset();
     line(PW, 0, PW, SCREEN_H, CLR_DARK_GREY);
     print("ROADNET", 4, 4, CLR_LIGHT_GREY);
@@ -380,18 +371,19 @@ static void draw_setup_panel(void) {
 
 static void draw_world(void) {
     view_metrics();                                  // P + visible span from zoom
-    regen_if_needed();
-    int bx = ifloor(camX), by = ifloor(camY);
-    int sz = (int)P + 1;                             // +1 so zoomed tiles never gap
-    for (int r = 0; r < vrows; r++)
-        for (int c = 0; c < vcols; c++) {
-            int sx = (int)(((bx + c) - camX) * P), sy = (int)(((by + r) - camY) * P);
-            rectfill(sx, sy, sz, sz, colgrid[r][c]);
-        }
+    // terrain — sampled per SCREEN cell, so cost is FIXED at any zoom (no per-tile
+    // buffer → no zoom-out ceiling). seed + water are read live inside height_at.
+    int step = 2;
+    for (int sy = 0; sy < SCREEN_H; sy += step)
+        for (int sx = 0; sx < SCREEN_W; sx += step)
+            rectfill(sx, sy, step, step, biome_col(height_at(camX + sx / P, camY + sy / P)));
     if (show_grid) draw_grid_overlay();
-    draw_highways(0); draw_feeders(0);    // all casings first...
-    draw_highways(1); draw_feeders(1);    // ...then all centres (no cross-cover)
-    draw_nodes();
+    // LOD: zoomed far out, drop the minor-road/town tier — show only the highway
+    // skeleton (keeps it legible + the road counts sane across a huge view span).
+    int detail = (zoom >= 0.45f);
+    draw_highways(0); if (detail) draw_feeders(0);    // casings first...
+    draw_highways(1); if (detail) draw_feeders(1);    // ...then centres
+    draw_nodes(detail);
 }
 
 void init(void) {
@@ -417,6 +409,18 @@ void update(void) {
     if (btn(0, BTN_RIGHT) || key('D')) camX += pan;
     if (btn(0, BTN_UP)    || key('W')) camY -= pan;
     if (btn(0, BTN_DOWN)  || key('S')) camY += pan;
+
+    // left-drag to pan ("grab the map"). In setup mode only right of the panel, so
+    // the sliders keep the left edge. Convert screen-px delta → world tiles via P.
+    int pan_ok = (mode == 1) || (mouse_x() > PANEL_W);
+    if (mouse_pressed(MOUSE_LEFT) && pan_ok) { dragging = 1; drag_px = mouse_x(); drag_py = mouse_y(); }
+    if (!mouse_down(MOUSE_LEFT)) dragging = 0;
+    if (dragging) {
+        float pp = TILE * zoom;
+        camX -= (mouse_x() - drag_px) / pp;
+        camY -= (mouse_y() - drag_py) / pp;
+        drag_px = mouse_x(); drag_py = mouse_y();
+    }
 
     if (keyp(KEY_SPACE)) {                       // deterministic jump to fresh scenery
         jumpN += 1.0f;
