@@ -1,6 +1,6 @@
 # roadnet — a spline arterial network over the heightmap (design)
 
-**Status: rungs 1–3 + bridges done (2026-06-14).** A fresh testbed cart
+**Status: rungs 1–3 + bridges + magnifier done (2026-06-14).** A fresh testbed cart
 ([`tools/carts/roadnet.c`](../../tools/carts/roadnet.c)) for the one thing
 [`procgen-places.md`](procgen-places.md) explicitly parked as **"the wall"**:
 **arced / non-axis-aligned roads in a deterministic, infinite world.** This doc is
@@ -144,6 +144,34 @@ continental view reads as a road network rather than a polka-dot field. `vcols/v
 (the visible world-tile span) is still recomputed per frame for the road-loop bounds.
 **Left-drag pans** ("grab the map" — screen-px delta ÷ P → world tiles); in the setup
 panel it's gated to `mouse_x > PANEL_W` so it doesn't fight the sliders.
+
+## The magnifier — a window into the level below (the L2 harness)
+
+**The map is L0; the game is L2.** roadnet draws the region map (highways, cities as
+marks) but a GTA-style game is played at **street scale** — interior streets, zoned
+blocks, parks, parking, the football field. That detail can't live at map resolution
+(millions of streets, pointless to compute zoomed out), so it's a **separate, finer
+generation anchored to the map data**: the big roads are the *same* data at a deeper
+zoom (aligned by construction), and the street level is *new detail grown onto* that
+skeleton — deterministic, so the streets always attach at the same bones.
+
+To build that street level incrementally we don't need the full map↔street mode
+transition yet — we need a **lens**. `draw_loupe()` (toggle **L**) is an inset that
+re-renders the world at the screen-centre point a few zoom levels deeper (`LOUPE_ZOOM`)
+*with the street level layered in*: it temporarily swaps the camera transform to the
+deep zoom centred in the box, `clip()`s to the box, and composes
+`render_terrain()` → `render_streetlevel()` → `render_roads(1)`, then restores the map
+transform. So you see terrain + the **same highways** (aligned) + the interior
+streets/zones the map is too coarse to show.
+
+`render_streetlevel()` is today a **stub** and the canvas for the real work: each
+city/town grows a round built-up footprint (radius by rank) of RCI-zoned blocks
+(`ZONE_COL` R/C/I/G from a land-use noise) split by an interior street grid
+(`STREET_SP`). It's drawn in the *same world coords* as the map, so it aligns with the
+arterials running through it. **This is where L2 gets designed** — real block/lot
+layout, parks, parking, the procplaces RCI model fed by roadnet's rank, building
+footprints for collision, etc. — all iterated live under the lens before any
+street-scale play mode exists.
 
 ## Rungs
 

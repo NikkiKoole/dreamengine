@@ -12,6 +12,7 @@
 //   mouse wheel      zoom in / out (a bit), pivoting on the screen centre
 //   SPACE           deterministic jump to fresh scenery
 //   R               new seed (a fresh, repeatable world)
+//   L               toggle the MAGNIFIER — an inset window into the street level below
 //   M               re-open the setup panel
 //   G               toggle the CELL-BORDER overlay  (the seam test)
 //   H               hide HUD (clean screenshot)
@@ -92,6 +93,7 @@ static float seedZ;                  // noise z-slice = the world's "seed"
 static float jumpN;                  // SPACE counter → deterministic far jumps
 static int   show_grid = 0;          // cell-border overlay (seam test)
 static int   show_hud  = 1;
+static int   show_loupe = 1;         // magnifier inset → the street level below
 static float zoom = 1.0f;            // mousewheel zoom (ZMIN..ZMAX)
 static float P    = TILE;            // pixels per tile = TILE * zoom (set per frame)
 static int   vcols, vrows;           // visible world-tile span this frame (road bounds)
@@ -535,7 +537,7 @@ static void hud(void) {
     snprintf(buf, sizeof buf, "x %d  y %d", (int)cx, (int)cy);
     print(buf, 80, 2, CLR_MEDIUM_GREY);
     if (show_grid) print("[grid]", 160, 2, CLR_DARK_PURPLE);
-    print_centered("drag/\x18\x19\x1a\x1b pan   wheel zoom   SPACE jump   R seed   M setup   G grid",
+    print_centered("drag/\x18\x19\x1a\x1b pan   wheel zoom   SPACE jump   R seed   L loupe   M setup",
                    SCREEN_W / 2, SCREEN_H - 9, CLR_DARK_GREY);
 }
 
@@ -570,21 +572,104 @@ static void draw_setup_panel(void) {
     if (go || keyp(KEY_ENTER)) mode = 1;
 }
 
-static void draw_world(void) {
-    view_metrics();                                  // P + visible span from zoom
-    // terrain — sampled per SCREEN cell, so cost is FIXED at any zoom (no per-tile
-    // buffer → no zoom-out ceiling). seed + water are read live inside height_at.
+// terrain — sampled per SCREEN cell, so cost is FIXED at any zoom (no per-tile buffer
+// → no zoom-out ceiling). seed + water read live inside height_at.
+static void render_terrain(void) {
     int step = 2;
     for (int sy = 0; sy < SCREEN_H; sy += step)
         for (int sx = 0; sx < SCREEN_W; sx += step)
             rectfill(sx, sy, step, step, biome_col(height_at(camX + sx / P, camY + sy / P)));
+}
+
+// the road network layer (grid overlay + highways + feeders + node markers)
+static void render_roads(int detail) {
     if (show_grid) draw_grid_overlay();
-    // LOD: zoomed far out, drop the minor-road/town tier — show only the highway
-    // skeleton (keeps it legible + the road counts sane across a huge view span).
-    int detail = (zoom >= 0.45f);
     draw_highways(0); if (detail) draw_feeders(0);    // casings first...
     draw_highways(1); if (detail) draw_feeders(1);    // ...then centres
     draw_nodes(detail);
+}
+
+// ── STREET LEVEL (the "next level down", seen only through the magnifier) — a STUB:
+// each city/town grows a built-up footprint (size by rank) of RCI-zoned blocks split
+// by a local street grid. Deterministic + drawn in the SAME world coords as the map,
+// so it aligns with the highways running through it. THIS is the canvas for the real
+// L2 algorithms (zones / blocks / parks / parking / lots) we design next. ──────────
+static const int ZONE_COL[4] = { CLR_PEACH, CLR_LIGHT_GREY, CLR_BROWN, CLR_DARK_GREEN }; // R/C/I/G
+#define STREET_SP 3                  // interior-street spacing (world tiles) — a city block
+
+static int ft_radius(int rank) {     // built-up footprint radius (world tiles) by rank
+    return rank == RK_METRO ? 9 : rank == RK_CITY ? 6 : rank == RK_TOWN ? 4 : 2;
+}
+static void zone_footprint(float nx, float ny, int radius) {
+    int x0 = (int)nx - radius, x1 = (int)nx + radius, y0 = (int)ny - radius, y1 = (int)ny + radius;
+    int t = (int)P + 1, half = (int)(P * 0.5f);
+    for (int wy = y0; wy <= y1; wy++)
+        for (int wx = x0; wx <= x1; wx++) {
+            float ddx = wx - nx, ddy = wy - ny;
+            if (ddx*ddx + ddy*ddy > radius*radius) continue;             // round footprint
+            if (!passable(height_at((float)wx, (float)wy))) continue;    // not on water/peak
+            int street = (((wx % STREET_SP) + STREET_SP) % STREET_SP == 0)
+                      || (((wy % STREET_SP) + STREET_SP) % STREET_SP == 0);
+            int col;
+            if (street) col = CLR_DARK_GREY;                             // interior street
+            else {                                                       // a block → RCI zone
+                int lu = (int)(noise2(wx * 0.18f + seedZ * 7, wy * 0.18f + seedZ * 7) * 3.99f);
+                if (lu > 3) lu = 3; if (lu < 0) lu = 0;
+                col = ZONE_COL[lu];
+            }
+            rectfill(sxp((float)wx) - half, syp((float)wy) - half, t, t, col);
+        }
+}
+static void render_streetlevel(void) {
+    int hc0 = ifloor(camX / HUB_CS) - 1, hc1 = ifloor((camX + vcols) / HUB_CS) + 1;
+    int hr0 = ifloor(camY / HUB_CS) - 1, hr1 = ifloor((camY + vrows) / HUB_CS) + 1;
+    for (int cx = hc0; cx <= hc1; cx++)
+        for (int cy = hr0; cy <= hr1; cy++) {
+            float wx, wy; if (!get_hub(cx, cy, &wx, &wy)) continue;
+            zone_footprint(wx, wy, ft_radius(hub_rank(cx, cy)));
+        }
+    int tc0 = ifloor(camX / NODE_CS) - 1, tc1 = ifloor((camX + vcols) / NODE_CS) + 1;
+    int tr0 = ifloor(camY / NODE_CS) - 1, tr1 = ifloor((camY + vrows) / NODE_CS) + 1;
+    for (int cx = tc0; cx <= tc1; cx++)
+        for (int cy = tr0; cy <= tr1; cy++) {
+            float wx, wy; if (!get_node(cx, cy, &wx, &wy)) continue;
+            zone_footprint(wx, wy, ft_radius(town_rank(cx, cy)));
+        }
+}
+
+static void draw_world(void) {
+    view_metrics();
+    render_terrain();
+    render_roads(zoom >= 0.45f);                       // LOD: drop minor tier far out
+}
+
+// ── MAGNIFIER — an inset that re-renders the world at the screen-centre point, a few
+// zoom levels deeper, WITH the street level layered in. "Same data, another zoom":
+// terrain + the very same highways (aligned) + the interior streets/zones the map is
+// too coarse to show. The harness for building L2. ─────────────────────────────────
+#define LOUPE_SZ   116
+#define LOUPE_ZOOM 7.0f
+static void draw_loupe(void) {
+    float ocamX = camX, ocamY = camY, oz = zoom;      // save the map transform
+    float cw = camX + SCREEN_W * 0.5f / P;            // inspected point = screen centre
+    float ch = camY + SCREEN_H * 0.5f / P;
+    int bx = SCREEN_W - LOUPE_SZ - 3, by = SCREEN_H - LOUPE_SZ - 3;
+
+    line(SCREEN_W/2 - 4, SCREEN_H/2, SCREEN_W/2 + 4, SCREEN_H/2, CLR_WHITE);   // map crosshair
+    line(SCREEN_W/2, SCREEN_H/2 - 4, SCREEN_W/2, SCREEN_H/2 + 4, CLR_WHITE);
+
+    zoom = LOUPE_ZOOM; view_metrics();                // deep zoom; P recomputed
+    camX = cw - (bx + LOUPE_SZ * 0.5f) / P;           // centre the inspected point in the box
+    camY = ch - (by + LOUPE_SZ * 0.5f) / P;
+    rectfill(bx - 1, by - 1, LOUPE_SZ + 2, LOUPE_SZ + 2, CLR_WHITE);   // frame
+    clip(bx, by, LOUPE_SZ, LOUPE_SZ);
+    render_terrain();
+    render_streetlevel();                             // the level below (stub)
+    render_roads(1);                                  // the SAME highways, aligned, on top
+    clip(0, 0, 0, 0);
+
+    camX = ocamX; camY = ocamY; zoom = oz; view_metrics();   // restore the map
+    print("STREET", bx + 3, by + 3, CLR_WHITE);
 }
 
 void init(void) {
@@ -632,11 +717,13 @@ void update(void) {
     if (keyp('R')) { zoom = 1.0f; view_metrics(); camX = SPAWN_X - vcols / 2.0f; camY = SPAWN_Y - vrows / 2.0f; seedZ += 0.37f; jumpN = 0; }
     if (keyp('G')) show_grid = !show_grid;
     if (keyp('H')) show_hud  = !show_hud;
+    if (keyp('L')) show_loupe = !show_loupe;     // magnifier into the street level
     if (keyp('M')) mode = 0;                     // re-open the setup panel
 }
 
 void draw(void) {
     draw_world();                                // the live preview, always
+    if (show_loupe) draw_loupe();                // ...with a window into the level below
     if (mode == 0) draw_setup_panel();
     else if (show_hud) hud();
 }
