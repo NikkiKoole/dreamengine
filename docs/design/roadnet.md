@@ -184,8 +184,11 @@ but with the intensity axis *anchored to roadnet's cities* instead of a free noi
 
 It's drawn in the *same world coords* as the map, so it aligns with the arterials
 running through it (pan the crosshair across a city → downtown → suburb → farm in the
-lens). **Decisions:** concentric (not patchy) — the mix knob is a later add; industrial
-fringe + water harbours; farm ring between suburb and wild.
+lens). To avoid a bullseye, `urbanity()` **domain-warps** the query point (every band
+becomes an organic blob, not a circle) and farmland is **patchy** (a noise leaves
+countryside gaps via `Z_NONE`) rather than a solid ring. **Decisions:** concentric
+gradient (the patchy "mix" knob is a later add); industrial fringe + water harbours;
+farm patches between suburb and wild.
 
 **Next (L2 blocks):** turn a zone *tile* into actual contents — lots, building
 footprints (collision-ready), parks/football field, parking, farm fields — each a

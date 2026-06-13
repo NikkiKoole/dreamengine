@@ -637,9 +637,13 @@ static void gather_cities(void) {
     }
 }
 static float urbanity(float wx, float wy) {          // 0..1, max bump over nearby cities
+    // DOMAIN WARP — perturb the query point so the bumps (and every zone band) come out
+    // as organic blobs, not perfect concentric circles.
+    float ax = wx + (noise2(wx*0.045f + 11, wy*0.045f + 11) - 0.5f) * 16.0f;
+    float ay = wy + (noise2(wx*0.045f + 37, wy*0.045f + 37) - 0.5f) * 16.0f;
     float u = 0;
     for (int i=0; i<gn; i++) {
-        float dx=wx-gnx[i], dy=wy-gny[i], d=fsqrt(dx*dx+dy*dy)/gnr[i];
+        float dx=ax-gnx[i], dy=ay-gny[i], d=fsqrt(dx*dx+dy*dy)/gnr[i];
         if (d < 1.0f) { float f=(1.0f-d); f=f*f*gnw[i]; if (f>u) u=f; }
     }
     return u;
@@ -647,13 +651,17 @@ static float urbanity(float wx, float wy) {          // 0..1, max bump over near
 static int water_near(float wx, float wy) {          // any water within ~2 tiles (harbor test)
     return height_at(wx+2,wy)<0 || height_at(wx-2,wy)<0 || height_at(wx,wy+2)<0 || height_at(wx,wy-2)<0;
 }
+#define Z_NONE (-1)                  // "leave the terrain showing" (countryside gap)
 static int zone_of(float wx, float wy, float U) {    // assumes U >= U_FARM (built/cultivated)
     if (U >= U_LIGHT && noise2(wx*0.5f+seedZ*3, wy*0.5f+seedZ*3) > 0.80f) return Z_PARK;
     if (noise2(wx*0.12f+seedZ*5, wy*0.12f+seedZ*5) > 0.62f) {     // industrial noise
         int nw = water_near(wx, wy);
         if (U < U_MED || nw) return nw ? Z_HARBOR : Z_IND;        // fringe industry / harbour
     }
-    if (U < U_LIGHT) return Z_FARM;                               // cultivated ring
+    if (U < U_LIGHT) {                                            // peri-urban band → PATCHY farms,
+        return noise2(wx*0.09f+seedZ*9, wy*0.09f+seedZ*9) < 0.45f // not a solid ring: gaps stay
+             ? Z_NONE : Z_FARM;                                   // wild countryside (terrain shows)
+    }
     float j = (noise2(wx*0.08f-seedZ, wy*0.08f-seedZ) - 0.5f) * 0.18f;   // jitter the core edge
     return (U + j >= U_COM) ? Z_COM : Z_RES;
 }
@@ -667,6 +675,7 @@ static void render_streetlevel(void) {
             if (U < U_FARM) continue;                            // wild → leave terrain showing
             if (!passable(height_at(wx, wy))) continue;          // never pave water/peak
             int z = zone_of(wx, wy, U);
+            if (z == Z_NONE) continue;                           // countryside gap → terrain shows
             int col = ZONE_COL[z];
             if (z==Z_RES || z==Z_COM || z==Z_IND || z==Z_HARBOR) {   // built-up → cut streets in
                 float fx = wx - STREET_SP*ifloor(wx/STREET_SP);
