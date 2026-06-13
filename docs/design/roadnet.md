@@ -177,8 +177,17 @@ panel it's gated to `mouse_x > PANEL_W` so it doesn't fight the sliders.
    a dashed yellow **centre-line** on big roads (phase 1, only when zoomed in). Node
    markers size by rank (metro > city > town > hamlet). **Landmarks (gas / hospital /
    gun shop) deferred to rung 4** — they're gameplay destinations, not map character,
-   so they want sloop's context. *(True min-distance spacing & valley-following are
-   still-open refinements that pair naturally with this rung.)*
+   so they want sloop's context.
+   - **Spacing** *(done)* — **priority suppression**: each town candidate (density gate
+     only, so it's pure-hash and cheap) is dropped if a higher-priority town candidate
+     sits within R=1 cell; priority = rank-then-hash, so towns absorb adjacent hamlets
+     and the survivors are blue-noise spaced. Metros de-cluster the same way but by
+     **demotion** (a metro near a stronger metro becomes a city) so the backbone keeps
+     all its nodes and stays connected. Both pure functions of cell coords → seam-true.
+   - **Valley-following** *(done)* — a clear link bows toward the lower of its two sides
+     at the midpoint (`VALLEY_*`), so roads sag into valleys / hug coasts instead of
+     climbing; reverts to straight if the bias would run into water/peak. Lives in
+     `link_path()`, world-space, so render and future `road_at()` agree.
 4. **Fill the node** — drop procplaces' tile city into a POI footprint where the
    arterials enter. The two carts meet; `road_at()` becomes the shared query seam
    for sloop.
@@ -193,7 +202,7 @@ leaves the **hooks** so v2 is an extension, not a rewrite:
 | v2 feature | the seam left for it | rule |
 |---|---|---|
 | **obstacle avoidance** | ✅ *done in rung 2* — `link_path()` bows the curve around impassable terrain and verifies passability | callers (render + future `road_at()`) never change — **one path function, both paths call it** (procgen-places' "one wrong turn to avoid") |
-| **valley-following** (roads *prefer* low/flat ground, not just avoid water) | a cost term inside `link_path()`'s bend search | extends the existing bend logic, doesn't change the seam |
+| **valley-following** (roads *prefer* low/flat ground, not just avoid water) | ✅ *done (rung 3)* — clear links bow toward the lower midpoint side (`VALLEY_*`) inside `link_path()` | extends the bend logic, doesn't change the seam |
 | **bridges** | ✅ *done (rung 2.5)* — a short water gap (≤ `MAX_BRIDGE`) is bridged: over-water samples tagged in `lp_br`, drawn as a distinct deck | a link over a narrow river crosses instead of dropping; wide open water still drops (ferries/long bridges much later) |
 | **tunnels / carving / embankments / Z-slope** | same per-sample height tag | **deferred hard** — likely doesn't map to top-down 2D; do not let it shape rung-1/2 structure |
 | **sloop collision (`road_at`)** | sloop calls `link_path()` for the *same* geometry it sees | the locality contract guarantees screen == collision |

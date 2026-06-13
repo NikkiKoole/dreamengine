@@ -45,10 +45,13 @@
 // BRIDGE a short water gap (river/strait, ≤ MAX_BRIDGE; drawn as a distinct deck) →
 // BEND around the obstacle on land; drops only if none works. Roads never draw over
 // water *except* a tagged bridge span. Tunnels / valley-following stay v2.
-// Rung 3 = RANK + ROAD CLASS: each node hashes to a rank (hamlet/town/city/metro,
-// high ranks rare → cities feel spaced out), and a link's class is f(its endpoints'
-// ranks) — motorway/highway/arterial/street/dirt — driving width, colour, and a
-// dashed centre-line on the big roads. Markers size by rank too. (Landmarks = later.)
+// Rung 3 = RANK + ROAD CLASS: each node hashes to a rank (hamlet/town/city/metro),
+// and a link's class is f(its endpoints' ranks) — motorway/highway/arterial/street/
+// dirt — driving width, colour, and a dashed centre-line on the big roads; markers
+// size by rank. SPACING: priority suppression (a stronger town/metro candidate within
+// R suppresses/demotes its neighbours) → blue-noise distribution, still pure-hash and
+// seam-true. VALLEY-BIAS: a clear link bows toward the lower side at its midpoint, so
+// roads sag into valleys / hug coasts (reverts if it would hit water). (Landmarks = later.)
 // ============================================================================
 
 #define TILE 4                                  // screen px per world tile at zoom 1
@@ -135,12 +138,65 @@ static int biome_col(float x) {
 }
 static int passable(float x) { return x >= 0.0f && x < 0.4f; }   // road LOS test
 
-// ── POI NODES — at most one per coarse cell, hashed + jittered, on habitable land ─
-// Pure function of (cx,cy): same node falls out wherever/whenever you visit. This is
-// worldgen's city_at(), kept as the network's node placement.
-static int get_node(int cx, int cy, float *wx, float *wy) {
+// ── RANK + SPACING — every node gets a deterministic rank; rare high ranks PLUS
+// priority suppression give blue-noise spacing (no two strong nodes adjacent). All
+// pure functions of cell coords → seam-true. A road's CLASS is f(endpoint ranks). ──
+enum { RK_HAMLET, RK_TOWN, RK_CITY, RK_METRO };
+enum { CL_MOTORWAY, CL_HIGHWAY, CL_ARTERIAL, CL_STREET, CL_DIRT };
+
+static int town_rank(int cx, int cy) {                   // feeder node: town / hamlet
+    unsigned h = hash2(cx * 1900385059u + 61, cy * 2120969693u + 17);
+    return (h % 100u < 35u) ? RK_TOWN : RK_HAMLET;
+}
+// a town CANDIDATE exists here (density gate only — no terrain, so suppression is cheap)
+static int town_present(int cx, int cy) {
     unsigned h = hash2(cx * 2654435761u + 17, cy * 40503u + 91);
-    if (h % 100u >= (unsigned)town_pct()) return 0;      // town-density slider
+    return (h % 100u) < (unsigned)town_pct();
+}
+// suppression priority: higher rank wins, hash breaks ties (cell folded in → no ties)
+static unsigned town_prio(int cx, int cy) {
+    unsigned h = hash2(cx * 2654435761u + 17, cy * 40503u + 91);
+    return ((unsigned)town_rank(cx, cy) << 28)
+         | ((h ^ ((unsigned)cx * 2246822519u + (unsigned)cy * 3266489917u)) & 0x0fffffffu);
+}
+
+// METRO de-clustering: a metro candidate demotes to a city if a higher-priority metro
+// candidate sits within R cells — so big cities never bunch up. Keeps the node (the
+// backbone stays dense/connected); only the *rank* changes.
+static int hub_rank(int cx, int cy) {
+    unsigned h = hash2(cx * 915488749u + 31, cy * 147645773u + 7);
+    if (h % 100u >= 15u) return RK_CITY;                 // not even a metro candidate
+    for (int a = cx - 2; a <= cx + 2; a++)
+        for (int b = cy - 2; b <= cy + 2; b++) {
+            if (a == cx && b == cy) continue;
+            unsigned g = hash2(a * 915488749u + 31, b * 147645773u + 7);
+            if (g % 100u < 15u && g > h) return RK_CITY; // a stronger metro nearby → demote
+        }
+    return RK_METRO;
+}
+
+// style per road class: ribbon radius, casing colour, centre colour, has centre-line
+typedef struct { int r, casing, centre, mark; } RStyle;
+static const RStyle RS[5] = {
+    /* MOTORWAY */ { 4, CLR_DARKER_GREY, CLR_LIGHT_GREY,  1 },
+    /* HIGHWAY  */ { 3, CLR_DARKER_GREY, CLR_LIGHT_GREY,  1 },
+    /* ARTERIAL */ { 2, CLR_DARK_GREY,   CLR_LIGHT_GREY,  0 },
+    /* STREET   */ { 2, CLR_DARK_GREY,   CLR_MEDIUM_GREY, 0 },
+    /* DIRT     */ { 1, CLR_BROWN,       CLR_BROWN,       0 },
+};
+
+// ── POI NODES — one per cell, with PRIORITY SUPPRESSION for blue-noise spacing (a
+// town drops if a higher-priority town candidate is adjacent — R=1 min distance).
+// Pure function of (cx,cy); the suppression scan is hash-only (cheap), one height_at.
+static int get_node(int cx, int cy, float *wx, float *wy) {
+    if (!town_present(cx, cy)) return 0;                  // density slider
+    unsigned p = town_prio(cx, cy);
+    for (int a = cx - 1; a <= cx + 1; a++)               // min-distance spacing (R=1)
+        for (int b = cy - 1; b <= cy + 1; b++) {
+            if (a == cx && b == cy) continue;
+            if (town_present(a, b) && town_prio(a, b) > p) return 0;   // a stronger neighbour wins
+        }
+    unsigned h = hash2(cx * 2654435761u + 17, cy * 40503u + 91);
     int j = jit(NODE_CS);                                // wiggle slider × cell
     float jx = (float)((int)((h >> 7)  % (2*j+1)) - j);
     float jy = (float)((int)((h >> 15) % (2*j+1)) - j);
@@ -166,32 +222,6 @@ static int get_hub(int cx, int cy, float *wx, float *wy) {
     return 1;
 }
 
-// ── RANK (rung 3) — every node gets a deterministic rank; the rare high ranks are
-// what make big cities feel spaced out (rarity ≈ spacing, no Poisson pass needed).
-// A road's CLASS is then just f(its endpoints' ranks) — pure functions both ends, so
-// the class is identical from either chunk → still seam-true. ─────────────────────
-enum { RK_HAMLET, RK_TOWN, RK_CITY, RK_METRO };
-enum { CL_MOTORWAY, CL_HIGHWAY, CL_ARTERIAL, CL_STREET, CL_DIRT };
-
-static int hub_rank(int cx, int cy) {                    // backbone node: city / metro
-    unsigned h = hash2(cx * 915488749u + 31, cy * 147645773u + 7);
-    return (h % 100u < 15u) ? RK_METRO : RK_CITY;        // metros are rare
-}
-static int town_rank(int cx, int cy) {                   // feeder node: town / hamlet
-    unsigned h = hash2(cx * 1900385059u + 61, cy * 2120969693u + 17);
-    return (h % 100u < 35u) ? RK_TOWN : RK_HAMLET;
-}
-
-// style per road class: ribbon radius, casing colour, centre colour, has centre-line
-typedef struct { int r, casing, centre, mark; } RStyle;
-static const RStyle RS[5] = {
-    /* MOTORWAY */ { 4, CLR_DARKER_GREY, CLR_LIGHT_GREY,  1 },
-    /* HIGHWAY  */ { 3, CLR_DARKER_GREY, CLR_LIGHT_GREY,  1 },
-    /* ARTERIAL */ { 2, CLR_DARK_GREY,   CLR_LIGHT_GREY,  0 },
-    /* STREET   */ { 2, CLR_DARK_GREY,   CLR_MEDIUM_GREY, 0 },
-    /* DIRT     */ { 1, CLR_BROWN,       CLR_BROWN,       0 },
-};
-
 // world tile → screen px (centre of tile) — P = TILE*zoom, set per frame
 static int sxp(float wx) { return (int)((wx - camX) * P + P * 0.5f); }
 static int syp(float wy) { return (int)((wy - camY) * P + P * 0.5f); }
@@ -213,6 +243,9 @@ static const int DIR[4][2] = {{1,0},{0,1},{1,1},{1,-1}};
 #define MAXBEND      26.0f          // furthest a road will detour sideways (tiles)
 #define MAX_BRIDGE   10.0f          // longest WATER span a road will bridge (tiles);
                                     // wider water = a real barrier (road drops)
+#define VALLEY_D     6.0f           // valley-bias: how far sideways to probe (tiles)
+#define VALLEY_K     40.0f          // ...how strongly height diff pulls the road
+#define VALLEY_MAX   5.0f           // ...capped detour toward lower ground (tiles)
 static float lp_x[LINK_SAMPLES + 1], lp_y[LINK_SAMPLES + 1];   // last link_path() result
 static int   lp_br[LINK_SAMPLES + 1];   // per-sample: 1 = this span is a BRIDGE (over water)
 
@@ -258,9 +291,24 @@ static int link_path(float c0x, float c0y, float ax, float ay,
     float ux = dx/len, uy = dy/len, perpx = -uy, perpy = ux;
     int peak, maxw;
 
-    // 1. straight-ish base curve already clear? (most links)
+    // 1. base curve clear? then add a gentle VALLEY bias — bend toward the lower of the
+    //    two sides at the midpoint, so roads sag into valleys / hug coasts instead of
+    //    climbing. Pure fn of terrain → seam-true; reverts if the bias hits water/peak.
     build_curve(c0x, c0y, ax, ay, bx, by, c3x, c3y, 0, perpx, perpy);
     if (classify_curve(&peak, &maxw)) {
+        float mx, my;
+        catmull(c0x, ax, bx, c3x, 0.5f, &mx);
+        catmull(c0y, ay, by, c3y, 0.5f, &my);
+        float hp = height_at(mx + perpx*VALLEY_D, my + perpy*VALLEY_D);
+        float hn = height_at(mx - perpx*VALLEY_D, my - perpy*VALLEY_D);
+        float vb = (hn - hp) * VALLEY_K;                 // + = the +perp side is lower
+        if (vb >  VALLEY_MAX) vb =  VALLEY_MAX;
+        if (vb < -VALLEY_MAX) vb = -VALLEY_MAX;
+        if (vb > 0.5f || vb < -0.5f) {
+            build_curve(c0x, c0y, ax, ay, bx, by, c3x, c3y, vb, perpx, perpy);
+            if (!classify_curve(&peak, &maxw))           // biased curve hit terrain → revert
+                build_curve(c0x, c0y, ax, ay, bx, by, c3x, c3y, 0, perpx, perpy);
+        }
         for (int i = 0; i <= LINK_SAMPLES; i++) lp_br[i] = 0;
         return LINK_SAMPLES + 1;
     }
