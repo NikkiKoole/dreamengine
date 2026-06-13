@@ -132,6 +132,32 @@ static const int SCREAM_OFF[SCREAM_VOICES] = { -9, -2, 7 }; // wide pitch spread
 static const float V_VOFF[SCREAM_VOICES]  = { -0.22f, 0.00f, 0.22f }; // dark / mid / bright vowel
 static const float V_QBASE[SCREAM_VOICES] = {  0.28f, 0.52f, 0.80f }; // broad / mid / sharp peaks
 
+// the oscillator under the formant — toggle with W. Each mode is a per-voice wave
+// triple; the formant + per-voice vowel/q still shape them on top.
+#define N_WAVEMODE 5
+static const char *WAVEMODE_LAB[N_WAVEMODE] = { "MIX", "SAW", "SQR", "TRI", "AIR" };
+static const int   WAVEMODE[N_WAVEMODE][SCREAM_VOICES] = {
+    { INSTR_SAW,    INSTR_SAW, INSTR_SQUARE },  // MIX - the default blend (rich + a reedy kid)
+    { INSTR_SAW,    INSTR_SAW, INSTR_SAW    },  // SAW - rich & buzzy throughout
+    { INSTR_SQUARE, INSTR_SQUARE, INSTR_SQUARE },// SQR - hollow & reedy
+    { INSTR_TRI,    INSTR_TRI, INSTR_SQUARE },  // TRI - soft, hooty (kid stays bright)
+    { INSTR_NOISE,  INSTR_SAW, INSTR_NOISE  },  // AIR - breathy/windy, one tonal voice
+};
+static int wave_mode = 0;
+
+// (re)configure the three scream slots (5..7) for the current wave mode. instrument()
+// resets the slot, so we re-apply formant/lfo/drive/tune too. Per-voice timing, wobble,
+// drive and detune are fixed — only the oscillator changes with the W toggle.
+static void setup_scream_voices(void) {
+    const int *w = WAVEMODE[wave_mode];
+    instrument(5, w[0], 20, 140, 6, 200); instrument_formant(5, 0.08f, 0.28f, 0.7f);
+    instrument_lfo(5, 0, LFO_PITCH, 5.0f, 0.45f); instrument_drive(5, 0.14f); instrument_tune(5, -0.08f);
+    instrument(6, w[1], 18, 140, 6, 200); instrument_formant(6, 0.30f, 0.52f, 0.7f);
+    instrument_lfo(6, 0, LFO_PITCH, 6.4f, 0.50f); instrument_drive(6, 0.10f);
+    instrument(7, w[2], 22, 130, 6, 190); instrument_formant(7, 0.52f, 0.80f, 0.7f);
+    instrument_lfo(7, 0, LFO_PITCH, 7.6f, 0.42f); instrument_drive(7, 0.04f); instrument_tune(7, 0.10f);
+}
+
 // ── live scream knobs (toggle with V) ─────────────────────────────────────────
 // data-driven: address kv[] through this enum, never raw indices (CLAUDE.md).
 enum { K_VOL, K_PITCH, K_SWEEP, K_VOWEL, K_OPEN, K_SPREAD, K_MIX, K_SENS, K_RING, K_MURMUR, K_COUNT };
@@ -746,6 +772,7 @@ static void handle_input(void) {
     if (keyp('M')) { closed = !closed; recompute(); init_bodies(); silence_scream(); }
     if (keyp('V')) show_knobs = !show_knobs;           // live scream-tuning knob panel
     if (keyp('T')) { scream_test = !scream_test; if (!scream_test) silence_scream(); }  // audition tone
+    if (keyp('W')) { wave_mode = (wave_mode + 1) % N_WAVEMODE; setup_scream_voices(); silence_scream(); }  // cycle voice wave
     if (keyp('K')) wood = !wood;                       // construction: wood / steel
     if (keyp('C')) ride = !ride;                       // POV ride-cam
     if (keyp(KEY_SPACE)) is_paused = !is_paused;
@@ -761,16 +788,10 @@ void init(void) {
     pan_law(PAN_POWER);   // even loudness as clacks/screams sweep the stereo field (positional audio)
 
     // three scream voices (slots 5..7), each a DIFFERENT mouth through the real
-    // 4-bandpass formant filter: a low throaty saw, an open mid saw, a bright sharp
-    // square — different wobble, drive and detune so they're a few people, not one.
-    // Pitch/vowel/q/mix are pushed live per frame from the V-panel knobs; the values
-    // here are just the idle defaults before the first scream.
-    instrument(5, INSTR_SAW,    20, 140, 6, 200); instrument_formant(5, 0.08f, 0.28f, 0.7f);
-    instrument_lfo(5, 0, LFO_PITCH, 5.0f, 0.45f); instrument_drive(5, 0.14f); instrument_tune(5, -0.08f);
-    instrument(6, INSTR_SAW,    18, 140, 6, 200); instrument_formant(6, 0.30f, 0.52f, 0.7f);
-    instrument_lfo(6, 0, LFO_PITCH, 6.4f, 0.50f); instrument_drive(6, 0.10f);
-    instrument(7, INSTR_SQUARE, 22, 130, 6, 190); instrument_formant(7, 0.52f, 0.80f, 0.7f);
-    instrument_lfo(7, 0, LFO_PITCH, 7.6f, 0.42f); instrument_drive(7, 0.04f); instrument_tune(7, 0.10f);
+    // 4-bandpass formant filter: different wobble, drive and detune so they're a few
+    // people, not one. The oscillator is the W-toggle's wave mode; pitch/vowel/q/mix
+    // are pushed live per frame from the V-panel knobs.
+    setup_scream_voices();
 
     // scream-tuning knob defaults (toggle the panel with V): low base pitch, a wide
     // low→high sweep, soft and gradual — your starting point, then tweak by ear.
@@ -1093,7 +1114,7 @@ void draw(void) {
         print("hold B/S/H/F while drawing:", x, y, CLR_LIGHT_GREY);            y += 9;
         print(" boost / slow / hoist / flip", x, y, CLR_LIGHT_GREY);           y += 9;
         print("C ride  M mode  K wood/steel", x, y, CLR_LIGHT_GREY);           y += 9;
-        print("V scream knobs  T test scream", x, y, CLR_LIGHT_GREY);          y += 9;
+        print("V knobs  T test  W voice wave", x, y, CLR_LIGHT_GREY);           y += 9;
         print("N new SPACE pause up/dn carts", x, y, CLR_LIGHT_GREY);          y += 9;
         print("? or TAB to hide", x, y, CLR_LIGHT_GREY);
     } else if (ride) {
@@ -1117,6 +1138,10 @@ void draw(void) {
                   excite, scr_volmax(), (int)scr_lowmidi(), (int)scr_range()),
               86, 220, CLR_LIGHT_GREY);
         ui_begin();
+        // WAVE (also key W) — cycle the oscillator under the formant
+        if (ui_button(SCREEN_W - 132, 217, 60, 11, str("WAVE %s", WAVEMODE_LAB[wave_mode]))) {
+            wave_mode = (wave_mode + 1) % N_WAVEMODE; setup_scream_voices(); silence_scream();
+        }
         // TEST (also key T) — auto-sweeps a scream quiet→loud so you tune by ear, no ride
         if (ui_button(SCREEN_W - 66, 217, 58, 11, scream_test ? "TEST ON" : "TEST")) {
             scream_test = !scream_test; if (!scream_test) silence_scream();
