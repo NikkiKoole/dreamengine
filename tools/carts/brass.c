@@ -28,6 +28,7 @@
 // slide with one finger while a note drones. Desktop mouse = one pointer.
 
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <math.h>
 
 #define I_BRASS 5
@@ -78,11 +79,9 @@ static float slide_pitch = -1.0f;  // current dragged float midi, or -1 when rel
 static bool  sliding = false;
 
 // per-finger pointer table — a finger blows a pad, drags a slider, or grips the slide
-#define NPTR 10
-#define NOID (-999)
 enum { PTR_IDLE, PTR_DRAG, PTR_BLOW, PTR_SLIDE };
-typedef struct { int id, mode, k; } Ptr;
-static Ptr ptr[NPTR];
+typedef struct { int id, mode, k; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];
 
 // layout
 #define PAD_W    34
@@ -223,7 +222,7 @@ static void set_preset(int p) {
 }
 
 void init(void) {
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     for (int b = 0; b < NPAD; b++) { midi_of[b] = degree(SCALE_MAJOR, 4, b); handle_of[b] = -1; }  // brass register
     knob[3] = 0.45f;       // a singing default slide for mono legato
     knob[5] = 0.0f;        // mute open (full bell) by default
@@ -254,14 +253,11 @@ void update(void) {
     // touch: grip the slide, blow a pad (held until lift), or drag a slider
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1 };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                          // pool full (>PTR_MAX fingers)
+        if (fresh) {
+            *p = (Ptr){ id, PTR_IDLE, -1 };
             if (point_in_box(tx, ty, SCREEN_W - 92, 2, 88, 12)) { autoplay = !autoplay; continue; }
             if (point_in_box(tx, ty, SCREEN_W - 152, 2, 50, 12)) { mono = !mono; all_notes_off(); continue; }
             if (ty >= PRE_Y - 2 && ty < PRE_Y + 12)
@@ -282,13 +278,13 @@ void update(void) {
             slide_move(tx);
         }
     }
-    for (int i = 0; i < touch_ended_count(); i++)
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) {
-                if (ptr[j].mode == PTR_BLOW && ptr[j].k >= 0) note_stop(ptr[j].k);
-                if (ptr[j].mode == PTR_SLIDE) slide_release();
-                ptr[j].id = NOID;
-            }
+    for (int i = 0; i < touch_ended_count(); i++) {
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (!p) continue;
+        if (p->mode == PTR_BLOW && p->k >= 0) note_stop(p->k);
+        if (p->mode == PTR_SLIDE) slide_release();
+        p->id = PTR_NONE;
+    }
 
     // autoplay: a slow legato fanfare. POLY blows a fresh note each step; MONO drives the one
     // voice with SLIDES (the feature on show) whenever the player isn't holding a key or sliding.

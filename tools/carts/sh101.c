@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <math.h>
 #include <string.h>
 
@@ -117,18 +118,16 @@ static int    show_help = 0;
 // ride other faders, lean on the bender — all at once. The desktop mouse
 // arrives as one synthetic finger, same code path; the wheel stays a
 // desktop-only bonus on hover.
-#define NPTR 10
-#define NOID (-999)
 typedef struct {
-    int id;        // touch id, NOID = slot free
+    int id;        // touch id, PTR_NONE = slot free
     int widget;    // 0 = free, fader/knob id, 98 = keyboard, 99 = bender
     int cx, cy;    // current position, refreshed each frame
     int m0y;       // y at capture
     float v0;      // widget value at capture
     int midi;      // note this finger is sounding (keyboard), or NONE
     int fresh;     // landed this frame
-} Ptr;
-static Ptr ptrs[NPTR];
+} Ptr;             // id MUST be first (pointer.h)
+static Ptr ptrs[PTR_MAX];
 static int mx, my;             // mouse position — hover highlights + wheel only
 
 static void key_up(int midi);  // fwd (touch-end releases notes)
@@ -136,33 +135,27 @@ static void key_up(int midi);  // fwd (touch-end releases notes)
 // sync the pointer table with the engine's touch list: refresh positions,
 // admit new fingers (fresh), release whatever lifted fingers were doing
 static void ptrs_begin_frame(void) {
-    for (int j = 0; j < NPTR; j++) ptrs[j].fresh = 0;
+    for (int j = 0; j < PTR_MAX; j++) ptrs[j].fresh = 0;
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptrs[j].id == id) { p = &ptrs[j]; break; }
-            if (ptrs[j].id == NOID && !freeP) freeP = &ptrs[j];
-        }
-        if (!p) {
-            if (!freeP) continue;
-            p = freeP;
-            *p = (Ptr){ id, 0, 0, 0, 0, 0.0f, NONE, 1 };
-        }
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptrs, id, &fresh);
+        if (!p) continue;
+        if (fresh) *p = (Ptr){ id, 0, 0, 0, 0, 0.0f, NONE, 1 };
         p->cx = touch_x(i); p->cy = touch_y(i);
     }
-    for (int i = 0; i < touch_ended_count(); i++)
-        for (int j = 0; j < NPTR; j++)
-            if (ptrs[j].id == touch_ended_id(i)) {
-                if (ptrs[j].midi != NONE) key_up(ptrs[j].midi);
-                ptrs[j].id = NOID;
-            }
+    for (int i = 0; i < touch_ended_count(); i++) {
+        Ptr *p = PTR_FIND(ptrs, touch_ended_id(i));
+        if (!p) continue;
+        if (p->midi != NONE) key_up(p->midi);
+        p->id = PTR_NONE;
+    }
 }
 
 // a fresh, uncommitted finger inside this box — the widget capture test
 static Ptr *grab_fresh(int x, int y, int w, int h) {
-    for (int j = 0; j < NPTR; j++)
-        if (ptrs[j].id != NOID && ptrs[j].fresh && ptrs[j].widget == 0 &&
+    for (int j = 0; j < PTR_MAX; j++)
+        if (ptrs[j].id != PTR_NONE && ptrs[j].fresh && ptrs[j].widget == 0 &&
             ptrs[j].cx >= x && ptrs[j].cx < x + w &&
             ptrs[j].cy >= y && ptrs[j].cy < y + h)
             return &ptrs[j];
@@ -460,8 +453,8 @@ static int in_box(int x, int y, int w, int h) {
 static float ui_fader(int id, int x, int y, int h, float val, int capcol, int ticks, int gw) {
     Ptr *g = grab_fresh(x - gw, y - 8, gw * 2, h + 16);
     if (g) { g->widget = id; g->m0y = g->cy; g->v0 = val; }
-    for (int j = 0; j < NPTR; j++)
-        if (ptrs[j].id != NOID && ptrs[j].widget == id)
+    for (int j = 0; j < PTR_MAX; j++)
+        if (ptrs[j].id != PTR_NONE && ptrs[j].widget == id)
             val = clamp(ptrs[j].v0 + (ptrs[j].m0y - ptrs[j].cy) / (float)h, 0.0f, 1.0f);
     if (in_box(x - 7, y, 15, h) && mouse_wheel() != 0)
         val = clamp(val + mouse_wheel() * 0.04f, 0.0f, 1.0f);
@@ -484,8 +477,8 @@ static float ui_fader(int id, int x, int y, int h, float val, int capcol, int ti
 static float ui_knob(int id, int x, int y, int r, float val, int detents) {
     Ptr *g = grab_fresh(x - r - 6, y - r - 6, r * 2 + 12, r * 2 + 12);
     if (g) { g->widget = id; g->m0y = g->cy; g->v0 = val; }
-    for (int j = 0; j < NPTR; j++)
-        if (ptrs[j].id != NOID && ptrs[j].widget == id)
+    for (int j = 0; j < PTR_MAX; j++)
+        if (ptrs[j].id != PTR_NONE && ptrs[j].widget == id)
             val = clamp(ptrs[j].v0 + (ptrs[j].m0y - ptrs[j].cy) / 60.0f, 0.0f, 1.0f);
     if (in_box(x - r - 2, y - r - 2, r * 2 + 4, r * 2 + 4) && mouse_wheel() != 0)
         val = clamp(val + mouse_wheel() * 0.04f, 0.0f, 1.0f);
@@ -625,7 +618,7 @@ void init(void) {
     define_slots();
     memset(&prev_p, 0xFF, sizeof prev_p);   // force first sync_slots
     for (int i = 0; i < NKMAP; i++) kmap_midi[i] = NONE;
-    for (int j = 0; j < NPTR; j++) ptrs[j].id = NOID;
+    PTR_CLEAR(ptrs);
 }
 
 void update(void) {
@@ -822,8 +815,8 @@ void draw(void) {
         Ptr *g = grab_fresh(bx - 2, by, bw + 6, bh);
         if (g) g->widget = 99;
         bend = 0.0f;                                  // springs back untouched
-        for (int j = 0; j < NPTR; j++)
-            if (ptrs[j].id != NOID && ptrs[j].widget == 99)
+        for (int j = 0; j < PTR_MAX; j++)
+            if (ptrs[j].id != PTR_NONE && ptrs[j].widget == 99)
                 bend = clamp((bcy - ptrs[j].cy) / (float)range, -1.0f, 1.0f);
         rectfill(bx + bw / 2 - 1, by, 2, bh, CLR_BLACK);
         int ty = bcy - (int)(bend * range);
@@ -849,9 +842,9 @@ void draw(void) {
     }
     // per-finger keys: a fresh finger sounds its key; sliding onto another
     // key hands the note over (down-then-up = legato, so AUTO porta glides)
-    for (int j = 0; j < NPTR; j++) {
+    for (int j = 0; j < PTR_MAX; j++) {
         Ptr *p = &ptrs[j];
-        if (p->id == NOID) continue;
+        if (p->id == PTR_NONE) continue;
         if (p->fresh && p->widget == 0) {
             int m = key_at(p->cx, p->cy);
             if (m != NONE) { p->widget = 98; p->midi = m; key_down(m); }

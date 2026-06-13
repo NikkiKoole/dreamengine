@@ -24,6 +24,7 @@
 // Mouse + touch both work — every contact is its own pointer. The mouse is merged in explicitly.
 
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include "fxicons.h"      // shared effect icons + colours (also used by the epiano)
 #include <math.h>
 
@@ -227,6 +228,11 @@ static void apply_fx(void) {
     fx_order(0, kinds, n);   // the chain order IS the insert order (Increment A)
 }
 
+// ── per-contact pointer pool ── (declared before init so init() can PTR_CLEAR it)
+enum { PTR_IDLE, PTR_KNOB, PTR_PICK, PTR_DRAGSLOT, PTR_DRAGPAL, PTR_SCROLL };
+typedef struct { int id, mode, slot, knob, cat, prevY, x, y; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];
+
 void init(void) {
     instrument(I_GTR, INSTR_GUITAR, 1, 0, 7, 1200);
     instrument_harmonics(I_GTR, 0.55f);
@@ -239,6 +245,7 @@ void init(void) {
     instrument_timbre(I_MUTE, 0.95f);
     instrument_morph(I_MUTE, 0.92f);
     build_strings();
+    PTR_CLEAR(ptr);   // a free slot's .id must be PTR_NONE (no longer relies on zero-init)
     bpm(100);
     // a tasteful starting chain (CHORUS + TREMOLO ringing); the rest wait in the palette
     chain_insert(C_BIT, 0); chain[0].on = false;
@@ -286,12 +293,7 @@ static void pick_string(int s, int px) {
     }
 }
 
-// ── per-contact pointer pool ──
-#define NPTR 10
-#define NOID (-999)
-enum { PTR_IDLE, PTR_KNOB, PTR_PICK, PTR_DRAGSLOT, PTR_DRAGPAL, PTR_SCROLL };
-typedef struct { int id, mode, slot, knob, cat, prevY, x, y; } Ptr;
-static Ptr ptr[NPTR];
+// (per-contact pointer pool is declared above init(), where it's PTR_CLEAR'd)
 
 // screen x of chain pedal i (may be off-screen); the slot under a point, or -1
 static int ped_screen_x(int i) { return CHAIN_X0 + i * PITCH - (int)scroll_x; }
@@ -345,9 +347,9 @@ void update(void) {
 
     bool overflow = max_scroll() > 0;
 
-    int cid[NPTR], cxp[NPTR], cyp[NPTR], nc = 0;
-    for (int i = 0; i < touch_count() && nc < NPTR; i++) { cid[nc] = touch_id(i); cxp[nc] = touch_x(i); cyp[nc] = touch_y(i); nc++; }
-    if (mouse_down(MOUSE_LEFT) && nc < NPTR) {
+    int cid[PTR_MAX], cxp[PTR_MAX], cyp[PTR_MAX], nc = 0;
+    for (int i = 0; i < touch_count() && nc < PTR_MAX; i++) { cid[nc] = touch_id(i); cxp[nc] = touch_x(i); cyp[nc] = touch_y(i); nc++; }
+    if (mouse_down(MOUSE_LEFT) && nc < PTR_MAX) {
         int mxp = mouse_x(), myp = mouse_y(), dup = 0;
         for (int i = 0; i < nc; i++) { int dx = cxp[i] - mxp, dy = cyp[i] - myp; if (dx >= -2 && dx <= 2 && dy >= -2 && dy <= 2) dup = 1; }
         if (!dup) { cid[nc] = -100; cxp[nc] = mxp; cyp[nc] = myp; nc++; }
@@ -355,14 +357,11 @@ void update(void) {
 
     for (int i = 0; i < nc; i++) {
         int id = cid[i], tx = cxp[i], ty = cyp[i];
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, -1, -1, ty, tx, ty };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;
+        if (fresh) {
+            *p = (Ptr){ id, PTR_IDLE, -1, -1, -1, ty, tx, ty };
 
             // 1. the chain (always live, palette open or not)
             if (ty >= PED_Y && ty < PED_Y + PED_H) {
@@ -407,11 +406,11 @@ void update(void) {
         }
         p->x = tx; p->y = ty;
     }
-    for (int j = 0; j < NPTR; j++) {
-        if (ptr[j].id == NOID) continue;
+    for (int j = 0; j < PTR_MAX; j++) {
+        if (ptr[j].id == PTR_NONE) continue;
         int present = 0;
         for (int i = 0; i < nc; i++) if (cid[i] == ptr[j].id) { present = 1; break; }
-        if (!present) { commit_drop(&ptr[j]); ptr[j].id = NOID; }
+        if (!present) { commit_drop(&ptr[j]); ptr[j].id = PTR_NONE; }
     }
 
     if (dirty) { apply_fx(); dirty = 0; }
@@ -509,8 +508,8 @@ static void draw_guitar(void) {
         else { int dx = SX0 + 6 + f * FRET_W; if (dx > STRUMX - 16) dx = STRUMX - 16; circfill(dx, y, 2, CLR_DARK_RED); pset(dx - 1, y - 1, CLR_PEACH); }
     }
     font(FONT_TINY); print_centered("STRUM", (STRUMX + SX1) / 2, by + bh - 7, CLR_DARK_BROWN); font(FONT_NORMAL);
-    for (int j = 0; j < NPTR; j++)
-        if (ptr[j].id != NOID && ptr[j].mode == PTR_PICK)
+    for (int j = 0; j < PTR_MAX; j++)
+        if (ptr[j].id != PTR_NONE && ptr[j].mode == PTR_PICK)
             trifill(ptr[j].x - 3, ptr[j].y - 4, ptr[j].x + 3, ptr[j].y - 4, ptr[j].x, ptr[j].y + 4, CLR_WHITE);
     for (int i = 0; i < NSHAPE; i++) {
         int x = SHAPE_X(i); bool on = (i == sel_shape);
@@ -541,7 +540,7 @@ void draw(void) {
     // a chain pedal being dragged is LIFTED out of the row (the rest close up), so the caret lines
     // up with where it will actually land
     int lift = -1;
-    for (int j = 0; j < NPTR; j++) if (ptr[j].id != NOID && ptr[j].mode == PTR_DRAGSLOT) { lift = chain_index(ptr[j].cat); break; }
+    for (int j = 0; j < PTR_MAX; j++) if (ptr[j].id != PTR_NONE && ptr[j].mode == PTR_DRAGSLOT) { lift = chain_index(ptr[j].cat); break; }
     int shown = chain_n - (lift >= 0 ? 1 : 0);
 
     // the chain (clipped to its viewport so half-scrolled pedals don't bleed over the bars)
@@ -560,9 +559,9 @@ void draw(void) {
 
     // drop caret — where the dragged pedal would land if released now (only while over the chain).
     // Drawn unclipped, x nudged inside the viewport, so the first/last gap is fully visible.
-    for (int j = 0; j < NPTR; j++) {
+    for (int j = 0; j < PTR_MAX; j++) {
         Ptr *q = &ptr[j];
-        if (q->id == NOID || (q->mode != PTR_DRAGSLOT && q->mode != PTR_DRAGPAL) || q->y >= PED_Y + PED_H) continue;
+        if (q->id == PTR_NONE || (q->mode != PTR_DRAGSLOT && q->mode != PTR_DRAGPAL) || q->y >= PED_Y + PED_H) continue;
         int gx = CHAIN_X0 + drop_index(q) * PITCH - (int)scroll_x;
         if (gx < CHAIN_X0 + 2) gx = CHAIN_X0 + 2; if (gx > VIEW_R - 2) gx = VIEW_R - 2;
         rectfill(gx - 1, PED_Y, 3, PED_H, CLR_LIME_GREEN);
@@ -583,7 +582,7 @@ void draw(void) {
     else              draw_guitar();
 
     // drag ghost (on top of everything)
-    for (int j = 0; j < NPTR; j++)
-        if (ptr[j].id != NOID && (ptr[j].mode == PTR_DRAGSLOT || ptr[j].mode == PTR_DRAGPAL))
+    for (int j = 0; j < PTR_MAX; j++)
+        if (ptr[j].id != PTR_NONE && (ptr[j].mode == PTR_DRAGSLOT || ptr[j].mode == PTR_DRAGPAL))
             draw_chip(ptr[j].cat, ptr[j].x - 22, ptr[j].y - 13, 44, 26, true);
 }

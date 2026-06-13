@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include "ui.h"
 #include <math.h>
 
@@ -95,10 +96,8 @@ static float k_filter = 0.5f;          // the DJ filter — bipolar: 0.5 = open,
 static bool  orderSwapped = false;     // CRUSH after eq (default) vs before
 
 // per-finger grid paint (the drummachine.c sweep pattern)
-#define NPTR 10
-#define NOID (-999)
-typedef struct { int id, paint, lastR, lastC; } Ptr;
-static Ptr ptr[NPTR];
+typedef struct { int id, paint, lastR, lastC; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];
 
 static void play_row(int r);
 
@@ -176,7 +175,7 @@ void init() {
 
     sidechain_key(SL_KICK, 0, 1.0f);   // the kick IS the sidechain trigger (key 0) — drives the real PUMP
 
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
 }
 
 // Re-apply the master effects, but ONLY when a knob actually moved. Reconfiguring
@@ -263,14 +262,11 @@ void update() {
     // ── touch/mouse: tap a cell to toggle, drag across to paint ──
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i), r, c;
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {
-            if (!freeP || !cell_rc(tx, ty, &r, &c)) continue; // outside grid → the rack owns it
-            p = freeP;
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                                 // pool full (>PTR_MAX fingers)
+        if (fresh) {
+            if (!cell_rc(tx, ty, &r, &c)) { p->id = PTR_NONE; continue; } // outside grid → the rack owns it
             *p = (Ptr){ id, !grid[r][c], r, c };
             set_cell(r, c, p->paint);
         } else if (cell_rc(tx, ty, &r, &c) && (r != p->lastR || c != p->lastC)) {
@@ -278,9 +274,10 @@ void update() {
             set_cell(r, c, p->paint);
         }
     }
-    for (int i = 0; i < touch_ended_count(); i++)
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) {
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
 #ifdef DE_TRACE
     watch("tempo",    "%d", tempo);

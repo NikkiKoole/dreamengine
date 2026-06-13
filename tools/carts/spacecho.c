@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -54,11 +55,9 @@ static bool  show_help;
 static int   last16 = -1, playhead = 0;
 
 // per-finger pointer table — every finger drags its own knob or plays the keys
-#define NPTR 10
-#define NOID (-999)
 enum { PTR_IDLE, PTR_KNOB, PTR_KEY };
-typedef struct { int id, mode, k, lastY, semi; } Ptr;
-static Ptr ptr[NPTR];              // .id == NOID → slot free
+typedef struct { int id, mode, k, lastY, semi; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];           // .id == PTR_NONE → slot free
 static float vu = 0.0f;            // cosmetic echo-level meter
 static float tape_ph = 0.0f;       // tape-loop animation phase
 static int   thrown = -1;          // step whose hit was thrown into the echo (flash)
@@ -115,7 +114,7 @@ static const int  POOL[5] = { 0, 3, 5, 7, 10 };
 
 void init(void) {
     bpm(74);
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     apply_voice();
     apply_bus();
 }
@@ -173,14 +172,11 @@ void update(void) {
     // hover + wheel below still nudges knobs on desktop)
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {                                      // finger just landed
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, ty, -1 };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                              // pool full (>PTR_MAX fingers)
+        if (fresh) {                                   // finger just landed
+            *p = (Ptr){ id, PTR_IDLE, -1, ty, -1 };
             for (int k = 0; k < NK; k++) {
                 int dx = tx - KX[k], dy = ty - KY;
                 if (dx * dx + dy * dy <= (KR + 3) * (KR + 3)) { p->mode = PTR_KNOB; p->k = k; }
@@ -202,9 +198,10 @@ void update(void) {
         }
         p->lastY = ty;
     }
-    for (int i = 0; i < touch_ended_count(); i++)      // lifted fingers free their slot
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) {    // lifted fingers free their slot
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
     float wh = mouse_wheel();
     if (wh != 0.0f)

@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <stdio.h>
 #include <math.h>
 
@@ -93,11 +94,9 @@ static bool  show_help;
 
 // per-finger pointer table — every finger drags its own knob, the slider,
 // or draws in the roll (the desktop mouse = one synthetic finger)
-#define NPTR 10
-#define NOID (-999)
 enum { PTR_IDLE, PTR_KNOB, PTR_SLIDER, PTR_ROLL };
-typedef struct { int id, mode, k, lastY; } Ptr;
-static Ptr ptr[NPTR];         // .id == NOID → slot free
+typedef struct { int id, mode, k, lastY; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];      // .id == PTR_NONE → slot free
 
 // ── knob value mappings ──────────────────────────────────────────────────
 static int cut_hz(void)  { return (int)(60.0f * powf(2.0f, knob[K_CUT] * 0.06f)); } // 60..3840
@@ -153,7 +152,7 @@ static void load_preset(void) {
 static void all_off(void) { if (h >= 0) { note_off(h); h = -1; } prev_slide = false; }
 
 void init(void) {
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     define_voice();
     load_preset();
 }
@@ -213,14 +212,11 @@ void update(void) {
     // (the desktop mouse arrives as one synthetic finger) ─────────────────
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {                                      // finger just landed
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, ty };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                              // pool full (>PTR_MAX fingers)
+        if (fresh) {                                   // finger just landed
+            *p = (Ptr){ id, PTR_IDLE, -1, ty };
             for (int k = 0; k < NK; k++) {
                 int dx = tx - KX[k], dy = ty - KY;
                 if (dx * dx + dy * dy <= (KR + 3) * (KR + 3)) { p->mode = PTR_KNOB; p->k = k; }
@@ -268,9 +264,10 @@ void update(void) {
         }
         p->lastY = ty;
     }
-    for (int i = 0; i < touch_ended_count(); i++)      // lifted fingers free their slot
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) {    // lifted fingers free their slot
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
     // ── knobs: hover + wheel still works on desktop ──────────────────────
     float wh = mouse_wheel();

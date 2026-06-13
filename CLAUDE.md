@@ -92,7 +92,7 @@ eventually2/
 │       │               #   field int id). The layer BELOW ui.h — for carts whose
 │       │               #   fingers drive bespoke targets (grab a string to bend,
 │       │               #   sweep bars/keys, pick open space), NOT widgets. Never
-│       │               #   re-copy the Ptr/NPTR/NOID loop again (pluck, mallet)
+│       │               #   re-copy the Ptr/NPTR/NOID loop again (15 carts use it)
 │       ├── improv.h    #   melodic improvisation for the radio stations (auto-solo)
 │       ├── radio.h     #   radio-station chrome (chassis, seeded-song plumbing,
 │       │               #   draggable rad_knob_int/_sel/_float control knobs)

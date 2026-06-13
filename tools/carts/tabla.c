@@ -25,6 +25,7 @@
 // pads for a roll, hold a slider with one finger while the groove plays. Desktop mouse = one.
 
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <math.h>
 
 #define I_MEM 5
@@ -65,11 +66,9 @@ static Ripple rip[NRIP];
 static float head_pulse = 0.0f;   // whole-head flash on a strike
 
 // per-finger pointer table — each finger drags a slider or drums/sweeps pads
-#define NPTR 10
-#define NOID (-999)
 enum { PTR_IDLE, PTR_DRAG, PTR_SWEEP };
-typedef struct { int id, mode, k, prevX; } Ptr;
-static Ptr ptr[NPTR];          // .id == NOID → slot free
+typedef struct { int id, mode, k, prevX; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];       // .id == PTR_NONE → slot free
 
 static int km(int b) { return midi_of[b] + oct * 12; }
 
@@ -126,7 +125,7 @@ static void set_preset(int p) {
 }
 
 void init(void) {
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     // a tuned low pentatonic ladder across the pads — tabla/tom territory
     for (int b = 0; b < NPAD; b++) midi_of[b] = degree(SCALE_PENTA_MIN, 2, b);
     set_preset(0);
@@ -155,14 +154,11 @@ void update(void) {
 
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, tx };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                          // pool full (>PTR_MAX fingers)
+        if (fresh) {
+            *p = (Ptr){ id, PTR_IDLE, -1, tx };
             if (point_in_box(tx, ty, SCREEN_W - 92, 2, 88, 12)) { autoplay = !autoplay; continue; }
             if (ty >= PAD_Y + PAD_H + 2 && ty < PAD_Y + PAD_H + 16) {
                 for (int q = 0; q < 5; q++)
@@ -190,9 +186,10 @@ void update(void) {
             p->prevX = tx;
         }
     }
-    for (int i = 0; i < touch_ended_count(); i++)
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) {
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
     // autoplay: a hand-percussion groove — accents on the down/up, ghost strokes between,
     // an occasional flam for life. pads index the tuned ladder.

@@ -24,6 +24,7 @@
 // a run, hold a slider with another finger while the chord rings. Desktop mouse = one finger.
 
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <math.h>
 
 #define I_PD  5
@@ -57,11 +58,9 @@ static int   sel = 0;
 static bool  autoplay = true;
 
 // per-finger pointer table — each finger independently drags a slider or plays/sweeps keys
-#define NPTR 10
-#define NOID (-999)
 enum { PTR_IDLE, PTR_DRAG, PTR_SWEEP };
-typedef struct { int id, mode, k, prevX; } Ptr;
-static Ptr ptr[NPTR];          // .id == NOID → slot free
+typedef struct { int id, mode, k, prevX; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];       // .id == PTR_NONE → slot free
 static int chord_rx = -1;
 static int cur_preset = 0;
 static int apos = 0;
@@ -167,7 +166,7 @@ static void set_preset(int p) {
 }
 
 void init(void) {
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     for (int b = 0; b < NKEY; b++) midi_of[b] = degree(SCALE_MAJOR, 4, b);
     set_preset(0);
     bpm(96);
@@ -195,14 +194,11 @@ void update(void) {
 
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, tx };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                          // pool full (>PTR_MAX fingers)
+        if (fresh) {
+            *p = (Ptr){ id, PTR_IDLE, -1, tx };
             if (point_in_box(tx, ty, SCREEN_W - 92, 2, 88, 12)) { autoplay = !autoplay; continue; }
             if (ty >= KEY_Y + KEY_H + 2 && ty < KEY_Y + KEY_H + 16) {
                 for (int q = 0; q < 5; q++)
@@ -235,9 +231,10 @@ void update(void) {
             p->prevX = tx;
         }
     }
-    for (int i = 0; i < touch_ended_count(); i++)
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) {
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
     // autoplay: a CZ noodle — a min7 stab on the downbeat, a line between
     if (autoplay && every(1)) {

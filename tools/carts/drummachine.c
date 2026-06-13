@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 
 // drum machine — a 16-step sequencer that shows off the sound API.
 //
@@ -57,10 +58,8 @@ static void play_row(int r);          // defined below; set_cell auditions throu
 
 // per-finger paint state: a touch lands, decides paint = !cell, then drags it
 // across the grid (each finger independent — the mallet.c sweep pattern)
-#define NPTR 10
-#define NOID (-999)
-typedef struct { int id, paint, lastR, lastC; } Ptr;
-static Ptr ptr[NPTR];
+typedef struct { int id, paint, lastR, lastC; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];
 
 // bottom transport buttons (also driven by the arrow keys). Geometry is shared
 // by the tapp() hit-test in update() and the drawing in draw().
@@ -132,7 +131,7 @@ void init() {
         for (int c = 0; c < STEPS; c++)
             grid[r][c] = (PRESET[r][c] == 'x');
 
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
 }
 
 void update() {
@@ -174,14 +173,11 @@ void update() {
     // (the mouse arrives as one virtual finger, so this covers it too)
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i), r, c;
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {                                  // finger just landed
-            if (!freeP || !cell_rc(tx, ty, &r, &c)) continue;   // outside grid → buttons own it
-            p = freeP;
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                          // pool full (>PTR_MAX fingers)
+        if (fresh) {                               // finger just landed
+            if (!cell_rc(tx, ty, &r, &c)) { p->id = PTR_NONE; continue; }   // outside grid → buttons own it
             *p = (Ptr){ id, !grid[r][c], r, c };   // paint = the inverse of what we touched
             set_cell(r, c, p->paint);
         } else if (cell_rc(tx, ty, &r, &c) && (r != p->lastR || c != p->lastC)) {
@@ -189,9 +185,10 @@ void update() {
             set_cell(r, c, p->paint);
         }
     }
-    for (int i = 0; i < touch_ended_count(); i++)  // lifted fingers free their slot
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) {  // lifted fingers free their slot
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
 #ifdef DE_TRACE
     int lit = 0;

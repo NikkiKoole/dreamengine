@@ -19,6 +19,7 @@
 // thing. The desktop mouse arrives as one synthetic finger, same code path.
 
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <math.h>
 #include <stdio.h>
 
@@ -62,11 +63,9 @@ static int   apos = 0;
 
 // per-finger pointer table — each finger lands, rolls across fields, lifts,
 // all independently (the desktop mouse = one synthetic finger)
-#define NPTR 10
-#define NOID (-999)
 enum { Z_NONE = -3, Z_SHOULDER = -2, Z_DING = -1 };   // .cur >= 0 → ring field
-typedef struct { int id, cur; } Ptr;
-static Ptr ptr[NPTR];
+typedef struct { int id, cur; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];
 
 static int gate_ms(void) { return 4500; }   // long ring; release keeps it unchopped
 
@@ -129,7 +128,7 @@ void init(void) {
         fx[i] = CX + (int)(cosf((float)FANG[i] * 3.14159f / 180.0f) * RING_R);
         fy[i] = CY + (int)(sinf((float)FANG[i] * 3.14159f / 180.0f) * RING_R);
     }
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     bpm(84);
     glow[1] = 0.7f; glow[4] = 0.9f; dglow = 0.5f;   // a lively first frame
 }
@@ -146,15 +145,12 @@ void update(void) {
     // the right panel rows pick pans · the top-right label toggles autoplay
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                           // pool full (>PTR_MAX fingers)
         float off;
-        if (!p) {                                   // finger just landed
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, Z_NONE };
+        if (fresh) {                                // finger just landed
+            *p = (Ptr){ id, Z_NONE };
             if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) {
                 autoplay = !autoplay;
                 continue;
@@ -178,9 +174,10 @@ void update(void) {
                 p->cur = z;
         }
     }
-    for (int i = 0; i < touch_ended_count(); i++)   // lifted fingers free their slot
-        for (int j = 0; j < NPTR; j++)
-            if (ptr[j].id == touch_ended_id(i)) ptr[j].id = NOID;
+    for (int i = 0; i < touch_ended_count(); i++) { // lifted fingers free their slot
+        Ptr *p = PTR_FIND(ptr, touch_ended_id(i));
+        if (p) p->id = PTR_NONE;
+    }
 
     // autoplay: a two-handed noodle around the zigzag — neighbors are consonant,
     // so a wandering pattern with grace doublets sounds played, not random

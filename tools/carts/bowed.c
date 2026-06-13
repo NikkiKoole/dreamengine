@@ -26,6 +26,7 @@
 // MULTITOUCH: every finger is its own bow — rub a drone with one hand, pluck a melody with the other.
 
 #include "studio.h"
+#include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include <math.h>
 
 #define I_STR 5    // the bowed (arco) engine
@@ -97,11 +98,9 @@ static void load_preset(int p) {
     apply_knobs();
 }
 
-#define NPTR 10
-#define NOID (-999)
 enum { PTR_IDLE, PTR_KNOB, PTR_STR };
-typedef struct { int id, mode, k, s, prevX, prevY; float held_t, moved; } Ptr;
-static Ptr ptr[NPTR];
+typedef struct { int id, mode, k, s, prevX, prevY; float held_t, moved; } Ptr;   // id MUST be first (pointer.h)
+static Ptr ptr[PTR_MAX];
 
 #define KNOB_W    96
 #define KNOB_TOP  (SCREEN_H - 28)
@@ -124,7 +123,7 @@ void init(void) {
     instrument_timbre(I_PIZ, 0.42f);                  // pluck brightness — warm finger, not a bright pick
     eng_tune(I_PIZ, 0, 1.0f);                         // FLAG this slot pizzicato
     for (int s = 0; s < NSTR; s++) hnd[s] = -1;
-    for (int i = 0; i < NPTR; i++) ptr[i].id = NOID;
+    PTR_CLEAR(ptr);
     build_strings();
     apply_knobs();
     bpm(84);
@@ -156,14 +155,11 @@ void update(void) {
     // touch: each finger rubs a string (bow), taps a string (pizz), or drags a slider
     for (int i = 0; i < touch_count(); i++) {
         int id = touch_id(i), tx = touch_x(i), ty = touch_y(i);
-        Ptr *p = 0, *freeP = 0;
-        for (int j = 0; j < NPTR; j++) {
-            if (ptr[j].id == id) { p = &ptr[j]; break; }
-            if (ptr[j].id == NOID && !freeP) freeP = &ptr[j];
-        }
-        if (!p) {                                      // finger just landed
-            if (!freeP) continue;
-            p = freeP; *p = (Ptr){ id, PTR_IDLE, -1, -1, tx, ty, 0.0f, 0.0f };
+        bool fresh;
+        Ptr *p = PTR_ACQUIRE(ptr, id, &fresh);
+        if (!p) continue;                              // pool full (>PTR_MAX fingers)
+        if (fresh) {                                   // finger just landed
+            *p = (Ptr){ id, PTR_IDLE, -1, -1, tx, ty, 0.0f, 0.0f };
             if (point_in_box(tx, ty, SCREEN_W - 112, 2, 108, 12)) { autoplay = !autoplay; continue; }
             for (int k = 0; k < 3; k++)
                 if (point_in_box(tx, ty, KNOB_X(k) - 2, KNOB_TOP - 6, KNOB_W + 4, 18)) {
@@ -190,7 +186,7 @@ void update(void) {
         p->prevX = tx; p->prevY = ty;
     }
     // fingers that lifted: a quick low-movement press = a TAP → pizzicato; otherwise lift the bow
-    for (int j = 0; j < NPTR; j++) if (ptr[j].id != NOID) {
+    for (int j = 0; j < PTR_MAX; j++) if (ptr[j].id != PTR_NONE) {
         bool live = false;
         for (int i = 0; i < touch_count(); i++) if (touch_id(i) == ptr[j].id) { live = true; break; }
         if (!live) {
@@ -200,7 +196,7 @@ void update(void) {
                 bow_off(s);
                 if (tap) pizz(s, 6);                   // a flick = pizzicato pluck
             }
-            ptr[j].id = NOID;
+            ptr[j].id = PTR_NONE;
         }
     }
 
