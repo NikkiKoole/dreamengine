@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "ui.h"
 #include <stdio.h>
 
 // ============================================================================
@@ -124,7 +125,48 @@ static float excite = 0;                // jerk-fed excitement envelope → driv
 static float prev_vel, prev_g = 1;      // last frame's speed / g-load (for accel + jerk)
 static int   warmup = 0;                // frames to ignore jerk after a (re)start
 static int   scream_h[SCREAM_VOICES] = { -1, -1, -1 };   // held note handles (-1 = silent)
-static const int SCREAM_OFF[SCREAM_VOICES] = { -3, 1, 6 }; // pitch spread → a crowd, not unison
+static const int SCREAM_OFF[SCREAM_VOICES] = { -9, -2, 7 }; // wide pitch spread → low/mid/high voices
+
+// each voice is a DIFFERENT mouth/filter, not one shared vowel — a dark broad
+// throat, an open mid, a bright sharp kid. Knobs scale/shift these live.
+static const float V_VOFF[SCREAM_VOICES]  = { -0.22f, 0.00f, 0.22f }; // dark / mid / bright vowel
+static const float V_QBASE[SCREAM_VOICES] = {  0.28f, 0.52f, 0.80f }; // broad / mid / sharp peaks
+
+// ── live scream knobs (toggle with V) ─────────────────────────────────────────
+// data-driven: address kv[] through this enum, never raw indices (CLAUDE.md).
+enum { K_VOL, K_PITCH, K_SWEEP, K_VOWEL, K_OPEN, K_SPREAD, K_MIX, K_SENS, K_RING, K_MURMUR, K_COUNT };
+static float kv[K_COUNT];
+static const char *klab[K_COUNT] = { "VOL","PIT","SWP","VOW","OPN","SPR","MIX","SEN","RNG","MUR" };
+static const char *kdesc[K_COUNT] = {
+    "VOL  overall loudness of the screams",
+    "PIT  base pitch - lower = deeper voices",
+    "SWP  how far pitch climbs low->high on a scare",
+    "VOW  vowel colour: dark OO ... bright EE",
+    "OPN  how much the vowel opens when scared",
+    "SPR  how different the 3 voices sound",
+    "MIX  formant amount: raw saw ... fully vocal",
+    "SEN  how easily a jolt sets off a scream",
+    "RNG  how long each scream lingers",
+    "MUR  gentle background crowd at speed",
+};
+static bool  show_knobs = false;
+static bool  scream_test = false;   // audition the sound, decoupled from the ride (T)
+static float test_t = 0;            // test-sweep phase, seconds
+#define EXCITE_FULL 0.55f           // the excite value treated as a full-drama scream
+
+// kv[] (0..1) → engine units. One place, so the panel and the audio never drift.
+static int   scr_volmax(void)  { return 1 + (int)(kv[K_VOL] * 6.0f + 0.5f); }   // peak vol 1..7
+static float scr_lowmidi(void) { return 42.0f + kv[K_PITCH] * 30.0f; }          // base pitch 42..72
+static float scr_range(void)   { return kv[K_SWEEP] * 40.0f; }                  // low→high sweep, semis
+static float scr_center(void)  { return kv[K_VOWEL] * 0.85f; }                  // vowel centre
+static float scr_open(void)    { return kv[K_OPEN] * 0.6f; }                    // vowel opens w/ excite
+static float scr_spread(void)  { return 0.3f + kv[K_SPREAD] * 1.4f; }           // voice-to-voice variety
+static float scr_mix(void)     { return kv[K_MIX]; }                            // formant dry..wet
+static float scr_decay(void)   { return 0.80f + kv[K_RING] * 0.18f; }           // ring-out 0.80..0.98
+static float scr_gain(void)    { return 0.008f + kv[K_SENS] * 0.052f; }         // jolt → excite gain
+static float scr_murmur(float sp) {                                             // speed-fed presence floor
+    return clamp((sp - 110.0f) / 130.0f, 0, 1) * (kv[K_MURMUR] * 0.40f);        // ramps in over 110..240 px/s
+}
 
 static int ground_y(void) { return SCREEN_H - GROUND_PAD; }
 
@@ -425,45 +467,87 @@ static void update_gforce(Body *lead, float dt) {
     // which decays, so the scream fires on the transition and rings out.
     float jerk = (gforce - prev_g) / dt; if (jerk < 0) jerk = -jerk;
     prev_g = gforce;
-    excite *= 0.84f;                                    // shorter ring-out
+    excite *= scr_decay();                              // RNG knob: ring-out → how long the crowd lingers
     if (warmup > 0) { warmup--; return; }               // ignore the settling transient
-    float pump = clamp((jerk - 10.0f) * 0.06f, 0, 1);   // high bar → only the real jolts
-    if (pump > excite) excite = pump;
+    // gradated pump: a small jolt is a yelp, only the very biggest plunge reaches a
+    // full-throated scream — so excite spreads across 1/2/3 voices instead of always
+    // slamming to max. And EASE the rise (lerp, don't snap) so a scream swells in
+    // rather than blasting — that sudden jump to full was the "too loud" hit.
+    float pump = clamp((jerk - 6.0f) * scr_gain(), 0, 1);   // SEN knob: how readily a jolt screams
+    if (pump > excite) excite = lerp(excite, pump, 0.5f);
+    // a faint murmur floor when the train is really moving — keeps a gentle one-voice
+    // crowd alive between jolts (the coaster is never dead-silent at speed)
+    float sp = lead->vel < 0 ? -lead->vel : lead->vel;
+    float murmur = scr_murmur(sp);                      // MUR knob: continuous presence at speed
+    if (murmur > excite) excite = murmur;
 }
 
 static float scream_base[SCREAM_VOICES];   // rolled vowel floor per voice (the relaxed mouth shape)
 static float scream_q[SCREAM_VOICES];      // rolled peak sharpness per voice
+static float vexc[SCREAM_VOICES];          // each voice's OWN excitement envelope (independent length)
+static float vdec[SCREAM_VOICES];          // each voice's OWN decay rate, rolled per scream
 
 // roll a fresh vowel for a scream voice on its onset: a per-voice base (a U/O→A→E→I
 // spread so the crowd isn't unison) jittered a little so no two screams match, plus a
 // random peak sharpness. Stored — the vowel then OPENS with excitement in update_scream.
 static void scream_vowel_roll(int i) {
-    static const float base[SCREAM_VOICES] = { 0.30f, 0.45f, 0.60f };
-    scream_base[i] = clamp(base[i] + rnd_float_between(-0.12f, 0.12f), 0.0f, 1.0f);
-    scream_q[i]    = rnd_float_between(0.55f, 0.78f);
+    float spread = scr_spread();
+    // per-voice vowel = centre + this voice's own offset (scaled by SPREAD) + jitter,
+    // so the three are genuinely different mouths, not one vowel in unison.
+    scream_base[i] = clamp(scr_center() + V_VOFF[i] * spread + rnd_float_between(-0.06f, 0.06f), 0.0f, 1.0f);
+    // each voice keeps its own peak sharpness (broad throat .. sharp kid), jittered.
+    scream_q[i]    = clamp(V_QBASE[i] + rnd_float_between(-0.05f, 0.05f), 0.12f, 0.95f);
 }
 
-// the crowd scream rides the EXCITEMENT (driven by jerk): it kicks in on a jolt,
-// glides its pitch with the intensity, and fades as `excite` decays. More voices
-// join on bigger jolts — a little bump is one yelp, a big plunge is the whole car.
+// the crowd scream. A jolt LIGHTS UP voices (more on a bigger scare), but each
+// voice then rides its OWN envelope (vexc[i]) with its OWN decay rate (vdec[i]) —
+// so after the scare they tail off raggedly, some quick yelps, some long wails,
+// instead of all cutting together. A fresh, bigger jolt re-energises an ongoing one.
 static void update_scream(float sp, float pan) {
-    int want = 0;
-    if (excite > 0.18f && sp > 50)
-        want = 1 + (excite > 0.35f) + (excite > 0.55f);  // 1..3 voices by intensity
-    float midi = 69 + excite * 15;
-    int vol = 1 + (int)(excite * 1.2f); if (vol > 2) vol = 2;   // soft; layering carries it
+    // TEST mode: drive excite with a slow 0→full→0 sweep so you hear the whole
+    // dynamic (quiet yelp → full scream) hands-free while tuning, with no ride needed.
+    if (scream_test) {
+        test_t += dt();
+        float ph = test_t / 3.0f; ph -= (float)(int)ph;            // 0..1 over 3s
+        float tri = ph < 0.5f ? ph * 2.0f : (1.0f - ph) * 2.0f;    // 0..1..0
+        excite = tri * 0.62f;
+        sp = 200; pan = 0;                                          // force audible & centred
+    }
+
+    int want = 0;                                        // how many voices a fresh jolt lights up
+    if (excite > 0.12f && sp > 50)
+        want = 1 + (excite > 0.25f) + (excite > 0.42f);  // TRIGGER keys off raw excite
+
+    int   volmax  = scr_volmax();
+    float openAmt = scr_open(), mix = scr_mix(), lowm = scr_lowmidi(), rng = scr_range();
     for (int i = 0; i < SCREAM_VOICES; i++) {
-        if (i < want) {
-            float m = midi + SCREAM_OFF[i];
-            if (scream_h[i] < 0) { scream_vowel_roll(i); scream_h[i] = note_on((int)m, 5 + i, vol); note_glide(scream_h[i], 130); }
-            else { note_pitch(scream_h[i], m); note_vol(scream_h[i], vol); }
-            // the vowel OPENS as excitement climbs — a rider goes "ah… AAAH/eee" the
-            // scarier it gets. Safe to re-push per frame: formant is a coefficient update.
-            float vowel = clamp(scream_base[i] + excite * 0.45f, 0.0f, 1.0f);
-            instrument_formant(5 + i, vowel, scream_q[i], 0.9f);
+        bool wanted = (i < want);
+        if (wanted && scream_h[i] < 0) {                 // fresh onset → roll this voice's character
+            scream_vowel_roll(i);
+            vdec[i] = rnd_float_between(0.86f, 0.965f);           // OWN fade rate → varied length
+            vexc[i] = excite + rnd_float_between(0.0f, 0.15f);    // OWN peak    → varied intensity
+            scream_h[i] = note_on((int)(lowm + SCREAM_OFF[i]), 5 + i, 1);
+            note_glide(scream_h[i], 130);
+        } else if (wanted && scream_h[i] >= 0 && excite > vexc[i]) {
+            vexc[i] = lerp(vexc[i], excite, 0.5f);       // a fresh, bigger jolt re-energises this voice
+        }
+
+        if (scream_h[i] >= 0) {
+            vexc[i] *= vdec[i];                          // independent decay — the source of varied length
+            if (vexc[i] < 0.10f && !wanted) { note_off(scream_h[i]); scream_h[i] = -1; continue; }
+            // EXPRESSION keys off this voice's OWN normalised drama 0..1 (raw excite
+            // lives in a narrow low band, so normalising gives SWP/OPN/VOL full authority).
+            float drama = clamp((vexc[i] - 0.10f) / (EXCITE_FULL - 0.10f), 0.0f, 1.0f);
+            float m   = lowm + drama * rng + SCREAM_OFF[i];      // sweeps wide low→high, per voice
+            int   vol = 1 + (int)(drama * (volmax - 1) + 0.5f); if (vol > volmax) vol = volmax; if (vol < 1) vol = 1;
+            note_pitch(scream_h[i], m);
+            note_vol(scream_h[i], vol);
+            // the vowel OPENS as this voice's drama climbs — "ah… AAAH". Each voice keeps
+            // its own peak sharpness (scream_q). Per-frame formant push is a cheap
+            // coefficient update (no buffer churn), so the knobs apply live.
+            float vowel = clamp(scream_base[i] + drama * openAmt, 0.0f, 1.0f);
+            instrument_formant(5 + i, vowel, scream_q[i], mix);
             note_pan(scream_h[i], pan);                  // the crowd screams from the train's screen position
-        } else if (scream_h[i] >= 0) {
-            note_off(scream_h[i]); scream_h[i] = -1;
         }
     }
 }
@@ -530,6 +614,9 @@ static void update_coaster(float dt) {
     watch("vel", "%.1f", lead->vel);
     watch("g", "%.2f", gforce);
     watch("excite", "%.2f", excite);
+    watch("v0", "%.2f", scream_h[0] >= 0 ? vexc[0] : 0.0f);
+    watch("v1", "%.2f", scream_h[1] >= 0 ? vexc[1] : 0.0f);
+    watch("v2", "%.2f", scream_h[2] >= 0 ? vexc[2] : 0.0f);
 #endif
 }
 
@@ -600,7 +687,10 @@ static void handle_input(void) {
         return;
     }
 
-    if (mouse_pressed(MOUSE_LEFT)) {
+    // the knob panel owns the bottom strip — don't start a track under it
+    bool over_panel = show_knobs && my >= 216;
+
+    if (mouse_pressed(MOUSE_LEFT) && !over_panel) {
         int near = (n_pts > 1 && !drawing) ? nearest_point(mx, my, 9) : -1;
         if (near >= 0) {
             drag_idx = near;                 // grab a point to reshape
@@ -654,6 +744,8 @@ static void handle_input(void) {
     }
 
     if (keyp('M')) { closed = !closed; recompute(); init_bodies(); silence_scream(); }
+    if (keyp('V')) show_knobs = !show_knobs;           // live scream-tuning knob panel
+    if (keyp('T')) { scream_test = !scream_test; if (!scream_test) silence_scream(); }  // audition tone
     if (keyp('K')) wood = !wood;                       // construction: wood / steel
     if (keyp('C')) ride = !ride;                       // POV ride-cam
     if (keyp(KEY_SPACE)) is_paused = !is_paused;
@@ -668,17 +760,22 @@ static void handle_input(void) {
 void init(void) {
     pan_law(PAN_POWER);   // even loudness as clacks/screams sweep the stereo field (positional audio)
 
-    // three faked scream voices (slots 5..7) — each routed through the real
-    // 4-bandpass formant (vowel) filter so they read as open "aah/eee" voices,
-    // each a different default vowel, wobble rate and detune so together they're
-    // a few people not one. The vowel is re-rolled per scream onset (scream_vowel_roll).
-    // Kept soft; layering does the rest.
-    instrument(5, INSTR_SAW,    20, 140, 6, 200); instrument_formant(5, 0.45f, 0.65f, 0.9f);
-    instrument_lfo(5, 0, LFO_PITCH, 5.5f, 0.45f); instrument_drive(5, 0.18f); instrument_tune(5, -0.08f);
-    instrument(6, INSTR_SAW,    18, 140, 6, 200); instrument_formant(6, 0.65f, 0.65f, 0.9f);
-    instrument_lfo(6, 0, LFO_PITCH, 6.4f, 0.50f); instrument_drive(6, 0.22f);
-    instrument(7, INSTR_SQUARE, 22, 130, 6, 190); instrument_formant(7, 0.85f, 0.65f, 0.9f);
-    instrument_lfo(7, 0, LFO_PITCH, 7.2f, 0.42f); instrument_drive(7, 0.12f); instrument_tune(7, 0.10f);
+    // three scream voices (slots 5..7), each a DIFFERENT mouth through the real
+    // 4-bandpass formant filter: a low throaty saw, an open mid saw, a bright sharp
+    // square — different wobble, drive and detune so they're a few people, not one.
+    // Pitch/vowel/q/mix are pushed live per frame from the V-panel knobs; the values
+    // here are just the idle defaults before the first scream.
+    instrument(5, INSTR_SAW,    20, 140, 6, 200); instrument_formant(5, 0.08f, 0.28f, 0.7f);
+    instrument_lfo(5, 0, LFO_PITCH, 5.0f, 0.45f); instrument_drive(5, 0.14f); instrument_tune(5, -0.08f);
+    instrument(6, INSTR_SAW,    18, 140, 6, 200); instrument_formant(6, 0.30f, 0.52f, 0.7f);
+    instrument_lfo(6, 0, LFO_PITCH, 6.4f, 0.50f); instrument_drive(6, 0.10f);
+    instrument(7, INSTR_SQUARE, 22, 130, 6, 190); instrument_formant(7, 0.52f, 0.80f, 0.7f);
+    instrument_lfo(7, 0, LFO_PITCH, 7.6f, 0.42f); instrument_drive(7, 0.04f); instrument_tune(7, 0.10f);
+
+    // scream-tuning knob defaults (toggle the panel with V): low base pitch, a wide
+    // low→high sweep, soft and gradual — your starting point, then tweak by ear.
+    kv[K_VOL]=0.18f; kv[K_PITCH]=0.43f; kv[K_SWEEP]=0.50f; kv[K_VOWEL]=0.35f; kv[K_OPEN]=0.47f;
+    kv[K_SPREAD]=0.60f; kv[K_MIX]=0.70f; kv[K_SENS]=0.27f; kv[K_RING]=0.72f; kv[K_MURMUR]=0.53f;
 
     int N = 64;
     float cx = SCREEN_W / 2.0f, cy = 138, rx = 205, ry = 76;
@@ -706,6 +803,7 @@ void update(void) {
     if (is_paused) { silence_scream(); return; }
     float dt_ = dt(); if (dt_ > 0.05f) dt_ = 0.05f;
     if (closed) update_coaster(dt_); else update_slide(dt_);
+    if (scream_test && !closed) update_scream(0, 0);   // test audible in slide mode too
     tick_parts(dt_);
 }
 
@@ -995,6 +1093,7 @@ void draw(void) {
         print("hold B/S/H/F while drawing:", x, y, CLR_LIGHT_GREY);            y += 9;
         print(" boost / slow / hoist / flip", x, y, CLR_LIGHT_GREY);           y += 9;
         print("C ride  M mode  K wood/steel", x, y, CLR_LIGHT_GREY);           y += 9;
+        print("V scream knobs  T test scream", x, y, CLR_LIGHT_GREY);          y += 9;
         print("N new SPACE pause up/dn carts", x, y, CLR_LIGHT_GREY);          y += 9;
         print("? or TAB to hide", x, y, CLR_LIGHT_GREY);
     } else if (ride) {
@@ -1005,4 +1104,40 @@ void draw(void) {
     rectfill(HELP_BX, HELP_BY, HELP_BW, HELP_BH, show_help ? CLR_YELLOW : CLR_BROWNISH_BLACK);
     rect(HELP_BX, HELP_BY, HELP_BW, HELP_BH, CLR_LIGHT_GREY);
     print("?", HELP_BX + 4, HELP_BY + 3, show_help ? CLR_BROWNISH_BLACK : CLR_WHITE);
+
+    // ── live scream-tuning knob panel (toggle V) ──────────────────────────────
+    if (show_knobs) {
+        int x0 = 24, step = 46, cy = 248, mx = mouse_x(), my = mouse_y(), hov = -1;
+        rectfill(6, 216, SCREEN_W - 12, 54, CLR_BROWNISH_BLACK);
+        rect    (6, 216, SCREEN_W - 12, 54, CLR_DARK_GREY);
+        font(FONT_SMALL);
+        print("SCREAM TUNE", 12, 220, CLR_LIGHT_YELLOW);
+        // live readout of the mapped engine values — these are the "good params"
+        print(str("excite %.2f  vol<=%d  base %d  sweep %d st",
+                  excite, scr_volmax(), (int)scr_lowmidi(), (int)scr_range()),
+              86, 220, CLR_LIGHT_GREY);
+        ui_begin();
+        // TEST (also key T) — auto-sweeps a scream quiet→loud so you tune by ear, no ride
+        if (ui_button(SCREEN_W - 66, 217, 58, 11, scream_test ? "TEST ON" : "TEST")) {
+            scream_test = !scream_test; if (!scream_test) silence_scream();
+        }
+        for (int i = 0; i < K_COUNT; i++) {
+            int cx = x0 + i * step;
+            if (point_in_box(mx, my, cx - 14, cy - 16, 28, 34)) hov = i;
+            print(str("%d", (int)(kv[i] * 100 + 0.5f)), cx - 5, cy - 17, CLR_MEDIUM_GREY);
+            ui_knob(&kv[i], cx, cy, klab[i]);
+        }
+        ui_end();
+        // hover tooltip — the param table, one line at a time
+        if (hov >= 0) {
+            int tw = text_width(kdesc[hov]) + 8, ty = 203;
+            int tx = x0 + hov * step - tw / 2;
+            if (tx < 6) tx = 6;
+            if (tx > SCREEN_W - 6 - tw) tx = SCREEN_W - 6 - tw;
+            rectfill(tx, ty, tw, 11, CLR_DARKER_GREY);
+            rect    (tx, ty, tw, 11, CLR_LIGHT_GREY);
+            print(kdesc[hov], tx + 4, ty + 3, CLR_WHITE);
+        }
+        font(FONT_NORMAL);
+    }
 }
