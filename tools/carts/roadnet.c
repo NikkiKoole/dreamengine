@@ -75,6 +75,11 @@ static float P_town_dens  = 0.444f;  // town presence        → 0..90 %
 static float P_jitter     = 0.6f;    // node wiggle off-grid → 0..~0.45·cell
 static float P_diag       = 0.25f;   // diagonal shortcuts   → 0..100% of quads (no X)
 static float P_sea        = 0.5f;    // sea level            → subtract 0.30..0.60
+// L2 (street-level, seen in the magnifier):
+static float P_citysize   = 0.333f;  // city radius          → 0.5..2.0×
+static float P_downtown   = 0.375f;  // downtown core size
+static float P_farms      = 0.5f;    // farmland density
+static float P_blocks     = 0.25f;   // city-block size (street spacing)
 
 static int   hub_cs(void)   { return 12 + (int)(P_hub_space  * 48); }   // 12..60
 static int   node_cs(void)  { return 6  + (int)(P_town_space * 24); }   // 6..30
@@ -558,14 +563,17 @@ static void draw_setup_panel(void) {
                                 "wiggle", "diag", "water" };
     float *pp[7] = { &P_hub_space, &P_town_space, &P_hub_dens, &P_town_dens,
                      &P_jitter, &P_diag, &P_sea };
-    for (int i = 0; i < 7; i++) ui_slider(pp[i], 4, 16 + i * 12, 88, L[i]);
-    int roll = ui_button(4, 104, 88, 14, "ROLL");
-    int go   = ui_button(4, 122, 88, 16, "EXPLORE \x10");
+    for (int i = 0; i < 7; i++) ui_slider(pp[i], 4, 16 + i * 11, 88, L[i]);
+    print("CITY (loupe)", 4, 95, CLR_MEDIUM_GREY);             // L2 knobs (street level)
+    static const char *L2[4] = { "city size", "downtown", "farms", "blocks" };
+    float *pp2[4] = { &P_citysize, &P_downtown, &P_farms, &P_blocks };
+    for (int i = 0; i < 4; i++) ui_slider(pp2[i], 4, 102 + i * 11, 88, L2[i]);
+    int roll = ui_button(4, 148, 88, 13, "ROLL");
+    int go   = ui_button(4, 163, 88, 15, "EXPLORE \x10");
     ui_end();
 
     snprintf(buf, sizeof buf, "seed #%u", (unsigned)(seedZ * 1000) % 100000u);
-    print(buf, 4, 144, CLR_MEDIUM_GREY);
-    print("drag = re-roll live", 4, SCREEN_H - 9, CLR_DARKER_GREY);
+    print(buf, 4, 181, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 
     if (roll) seedZ += 0.37f;                    // fresh world, same params
@@ -608,14 +616,18 @@ static const int ZONE_COL[6] = {
     CLR_DARK_GREY,   // HARBOR — docks on the water
     CLR_DARK_GREEN,  // PARK   — green space (the football field lives here, block stage)
 };
-#define STREET_SP 3                  // interior-street spacing (world tiles) — a city block
 #define U_FARM  0.12f                // U thresholds: below = wild countryside (terrain)
 #define U_LIGHT 0.30f                // farm ring ends / suburb begins
 #define U_MED   0.55f                // industrial-fringe ceiling
-#define U_COM   0.75f                // downtown commercial core
+
+// L2 panel knobs (defaults reproduce the tuned look):
+static float citysize_mul(void) { return 0.5f + P_citysize * 1.5f; }   // 0.5..2.0× radius
+static float u_com(void)        { return 0.90f - P_downtown * 0.40f; } // downtown core size (low = big)
+static float farm_gate(void)    { return 0.15f + P_farms * 0.60f; }    // farmland vs countryside
+static int   street_sp(void)    { return 2 + (int)(P_blocks * 4); }    // 2..6 — city-block size
 
 static float rank_weight(int r) { return r==RK_METRO?1.0f : r==RK_CITY?0.78f : r==RK_TOWN?0.52f : 0.34f; }
-static float rank_cityR(int r)  { return r==RK_METRO?22.f : r==RK_CITY?14.f  : r==RK_TOWN?8.f   : 4.f;   }
+static float rank_cityR(int r)  { float b = r==RK_METRO?22.f : r==RK_CITY?14.f : r==RK_TOWN?8.f : 4.f; return b * citysize_mul(); }
 
 // nearby city nodes gathered once per loupe frame (so urbanity() is a short loop)
 #define MAXCITY 160
@@ -659,11 +671,11 @@ static int zone_of(float wx, float wy, float U) {    // assumes U >= U_FARM (bui
         if (U < U_MED || nw) return nw ? Z_HARBOR : Z_IND;        // fringe industry / harbour
     }
     if (U < U_LIGHT) {                                            // peri-urban band → PATCHY farms,
-        return noise2(wx*0.09f+seedZ*9, wy*0.09f+seedZ*9) < 0.45f // not a solid ring: gaps stay
+        return noise2(wx*0.09f+seedZ*9, wy*0.09f+seedZ*9) < farm_gate()  // not a solid ring: gaps stay
              ? Z_NONE : Z_FARM;                                   // wild countryside (terrain shows)
     }
     float j = (noise2(wx*0.08f-seedZ, wy*0.08f-seedZ) - 0.5f) * 0.18f;   // jitter the core edge
-    return (U + j >= U_COM) ? Z_COM : Z_RES;
+    return (U + j >= u_com()) ? Z_COM : Z_RES;
 }
 static void render_streetlevel(void) {
     gather_cities();
@@ -678,8 +690,9 @@ static void render_streetlevel(void) {
             if (z == Z_NONE) continue;                           // countryside gap → terrain shows
             int col = ZONE_COL[z];
             if (z==Z_RES || z==Z_COM || z==Z_IND || z==Z_HARBOR) {   // built-up → cut streets in
-                float fx = wx - STREET_SP*ifloor(wx/STREET_SP);
-                float fy = wy - STREET_SP*ifloor(wy/STREET_SP);
+                int sp = street_sp();
+                float fx = wx - sp*ifloor(wx/sp);
+                float fy = wy - sp*ifloor(wy/sp);
                 if (fx < 0.5f || fy < 0.5f) col = CLR_DARKER_GREY;
             }
             rectfill(sx, sy, step, step, col);

@@ -190,6 +190,12 @@ countryside gaps via `Z_NONE`) rather than a solid ring. **Decisions:** concentr
 gradient (the patchy "mix" knob is a later add); industrial fringe + water harbours;
 farm patches between suburb and wild.
 
+**Live knobs:** the setup panel has a **CITY (loupe)** group of four L2 sliders —
+*city size* (`citysize_mul`, scales the urbanity radius), *downtown* (`u_com`, core
+size), *farms* (`farm_gate`, farmland vs countryside), *blocks* (`street_sp`, block
+size). Like the map sliders they're `P_*` floats read live, so the loupe re-zones as
+you drag. (Lower-bang knobs — industry/park density, warp strength — left hardcoded.)
+
 **Next (L2 blocks):** turn a zone *tile* into actual contents — lots, building
 footprints (collision-ready), parks/football field, parking, farm fields — each a
 function of `(block coords, zone)`. Street grid should align to the arterials. Then
