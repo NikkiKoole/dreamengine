@@ -386,6 +386,16 @@
     ]
   },
   {
+    "title": "monochord",
+    "description": "One string, no frets — your FINGERS are the bridges, and the LENGTH of each segment IS its pitch (a string halved sounds an octave higher). The gesture behind the đàn bầu, the diddley bow, slide guitar, and Pythagoras's monochord. DRAG on the string to place/move a bridge; with two fingers the segment BETWEEN them sounds — spread apart = lower, squeeze together = higher. FLICK across the string (from above/below) to PLUCK the segment you cross — pluck outside the bridges for the short 'wrong-side' overtone, pluck several segments for a chord on one string. A PD oscillator, so a ringing note GLIDES as you slide a bridge (the đàn bầu bend). Faint ticks mark the just-intonation points (1/2 octave, 2/3 fifth, 3/4 fourth). SPACE plucks the open string. Two bridges at once needs a touchscreen/multitouch trackpad; the desktop mouse is one finger. An experiment in fretting-by-finger-position (built on pointer.h).",
+    "file": "monochord.cart.png",
+    "kind": [
+      "instrument",
+      "toy",
+      "probe"
+    ]
+  },
+  {
     "title": "otamatone",
     "description": "The little face-on-a-stem toy, built entirely from the HELD NOTE api. DRAG the vertical stem to play — one sustained voice (note_on) whose pitch chases your finger up and down the fretless ribbon (note_pitch + note_glide for the signature slurp). Hold SPACE (or right-click) to squeeze the mouth open: that sweeps a resonant lowpass from a muffled 'mm' to a bright 'aah' (note_cutoff), and the pixel mouth opens to match. Wiggle while you slide for hand vibrato. Q toggles fretless ↔ snap-to-pentatonic.",
     "file": "otamatone.cart.png",

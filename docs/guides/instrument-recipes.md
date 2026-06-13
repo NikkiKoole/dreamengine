@@ -176,6 +176,7 @@ plus its own ADSR.
 | pd/sweep-pad | pd.c | A500 D620 R700 S4 · h0.69 t0.38 m0.95 | Resonant triangle, full-sweep DCW — the classic Casio "wowww" pad. |
 | pd/cz-pluck | pd.c | A0 D300 R220 S0 · h0.31 t0.72 m0.80 | Tight pulse, hard DCW snap, no sustain — plucky percussive. |
 | pd/pdbass | pdbass.c | A2 D150 S4 R220 · h0.20 m0.40 · t = TIMBRE slider 0→1 (clean→buzzy), live | A playable CZ bass on a string fingerboard. Sustains while held so SLIDES ring; INSTR_PD glides both ways (the bowed upright can't) → true smooth up/down slide + signed pull-bend. The one slider sweeps the distortion macro live. |
+| pd/monochord | monochord.c | A2 D1500 S0 R300 · h0.50 t0.42 m0.50 | A plucked one-string: instant attack, long decay so it rings, sustain 0. Picked **per pitch from segment length** (no fixed key); INSTR_PD glides both ways so a ringing note bends as the bridge slides (the đàn bầu). |
 
 > **Cross-ref:** italo's `pd/soaring-lead` and addis's `pd/synth-horn` are the station-side
 > PD voices — `pd/soaring-lead` mirrors `pd/reso-lead`, `pd/synth-horn` mirrors

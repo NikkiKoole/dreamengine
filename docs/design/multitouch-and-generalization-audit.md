@@ -85,9 +85,11 @@ multiple carts, ranked by how strong the de-duplication case is:
 fully adopted 2026-06-14.** Header built (`PTR_CLEAR`/`PTR_ACQUIRE`/`PTR_FIND` over a cart-defined
 struct whose first field is `int id`) and adopted across **all 15 instrument carts** that carried
 the hand-rolled pool: pluck, mallet, tabla, handpan, fm, pd, bowed, guitar, brass, spacecho,
-pedalboard, drummachine, tb303, groovebox, sh101. (Adopting it surfaced + fixed a latent bug in
-`pedalboard`, whose pool was never cleared — its slots relied on zero-init, so no slot was ever
-`== NOID`.)
+pedalboard, drummachine, tb303, groovebox, sh101. (`pedalboard` was a special case: its pool was
+declared *after* `init()` and had no explicit clear — it self-cleared via the per-frame release
+"present-scan" freeing the zero-init slots on frame 1, so input worked. Adoption moved the decl
+above `init()` and added an explicit `PTR_CLEAR` — a tidy-up, **verified behavior-equivalent**:
+a scripted pedal-drag drops `chain_n` 5→4 identically before and after.)
 The same construct appears verbatim across **15+ carts**: a `Ptr` struct (`id`/`mode`/…),
 `NPTR=10`, and a per-frame loop over `touch_count()`. Records call it out as identical or
 near-identical in: **pluck, mallet** ("identical pattern to pluck.c"), **tabla** ("nearly
@@ -183,6 +185,18 @@ coda firing (**say, voxpad**), param indexing (**voxlab, voxab, vox4**). **vox4*
 5. **upright/pdbass double-stops** — needs a second engine voice; scope as a voice-model change,
    not an input tweak.
 6. Everything in the weak list waits for a third adopter.
+
+### Spin-off: fretting-by-finger (the `monochord` probe → a string fretboard)
+
+The multitouch-strings thread (ranks 1/8, upright/pdbass) opened a broader idea: model the
+string *for real* instead of abstracting chords behind buttons (the way `pedalboard` does). The
+atomic test shipped as **`monochord`** (2026-06-14, a `pointer.h` probe): one string, fingers
+are movable bridges, segment length = pitch — the đàn bầu / diddley bow / monochord gesture, on a
+PD oscillator so a held note glides as a bridge slides. **If the gesture proves fun** (the open
+by-ear question — see [`probe-carts.md`](probe-carts.md)), the payoff is a **string fretboard**:
+N strings of it side by side + a strum rake, where a chord is *emergent finger geometry*, not a
+lookup. Touch-ceiling caveat: a full 6-finger chord + strum exceeds the iPhone 5-touch cap, so
+the fretboard leans desktop/iPad; the probe itself stays ≤3 fingers (testable everywhere).
 
 ---
 
