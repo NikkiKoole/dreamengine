@@ -1,6 +1,6 @@
 # roadnet — a spline arterial network over the heightmap (design)
 
-**Status: rungs 1–2 done (2026-06-14).** A fresh testbed cart
+**Status: rungs 1–2 + bridges done (2026-06-14).** A fresh testbed cart
 ([`tools/carts/roadnet.c`](../../tools/carts/roadnet.c)) for the one thing
 [`procgen-places.md`](procgen-places.md) explicitly parked as **"the wall"**:
 **arced / non-axis-aligned roads in a deterministic, infinite world.** This doc is
@@ -159,11 +159,15 @@ panel it's gated to `mouse_x > PANEL_W` so it doesn't fight the sliders.
    impassable terrain**, and **verifies every sample sits on passable land** before
    returning (so a road is never drawn over water/peak — strictly better than rung 1,
    which checked only the straight line then drew a curve that could clip water). The
-   bend grows until the whole path clears; a genuinely **boxed-in** link returns 0 and
-   drops (bridges are v2). One function, world-space samples → render *and* future
-   `road_at()` read the identical geometry. *(Drivability corner-clamp — trackgen's
-   relax — folds into the same function when sloop starts driving; deferred till then,
-   it's meaningless without a car.)*
+   bend grows until the whole path clears. **Bridges (rung 2.5):** before bending,
+   `link_path()` checks the blockage — a short **water** gap (≤ `MAX_BRIDGE` tiles, a
+   river/strait, no peak in it) is **bridged** instead: the straight curve is kept and
+   its over-water samples are tagged (`lp_br`) so the renderer draws a distinct deck;
+   only a peak or *wide* water falls through to the land-detour bend, and only a fully
+   boxed-in link drops. Priority straight → bridge → bend → drop. One function,
+   world-space samples → render *and* future `road_at()` read the identical geometry.
+   *(Drivability corner-clamp — trackgen's relax — folds into the same function when
+   sloop starts driving; deferred till then, it's meaningless without a car.)*
 3. **POI typing** — nodes get a kind (town / fuel / landmark…), Poisson-ish minimum
    spacing so they're not uniformly one-per-cell; **road class** (path → local →
    avenue → arterial → highway, per procgen-places' table) chosen by the rank of the
@@ -183,7 +187,7 @@ leaves the **hooks** so v2 is an extension, not a rewrite:
 |---|---|---|
 | **obstacle avoidance** | ✅ *done in rung 2* — `link_path()` bows the curve around impassable terrain and verifies passability | callers (render + future `road_at()`) never change — **one path function, both paths call it** (procgen-places' "one wrong turn to avoid") |
 | **valley-following** (roads *prefer* low/flat ground, not just avoid water) | a cost term inside `link_path()`'s bend search | extends the existing bend logic, doesn't change the seam |
-| **bridges** | the per-sample loop already queries `height_at` at each sample; tag a sample whose height < water level as `bridge`, render differently | a link over water becomes a bridge instead of being dropped |
+| **bridges** | ✅ *done (rung 2.5)* — a short water gap (≤ `MAX_BRIDGE`) is bridged: over-water samples tagged in `lp_br`, drawn as a distinct deck | a link over a narrow river crosses instead of dropping; wide open water still drops (ferries/long bridges much later) |
 | **tunnels / carving / embankments / Z-slope** | same per-sample height tag | **deferred hard** — likely doesn't map to top-down 2D; do not let it shape rung-1/2 structure |
 | **sloop collision (`road_at`)** | sloop calls `link_path()` for the *same* geometry it sees | the locality contract guarantees screen == collision |
 

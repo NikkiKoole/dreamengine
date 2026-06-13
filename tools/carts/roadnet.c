@@ -30,7 +30,7 @@
 // Real road networks are connected, so we split into two tiers — the "Main Rib":
 //   • HIGHWAYS — hubs on a COARSE lattice (HUB_CS), each linked to its neighbour
 //     hubs. A lattice graph is connected by construction → one spine spans the
-//     world (broken only by water — honest; bridges are v2).
+//     world (short water crossed by bridges; only WIDE open water breaks it).
 //   • MINOR ROADS — every town links to its nearest hub (a feeder onto the spine)
 //     AND to its nearest other town (a local road). So clusters chain together and
 //     a town far from a hub still connects via town→town→…→hub — not everything
@@ -41,9 +41,10 @@
 // passable / hash2 / ifloor. New here: the node tangents + the Hermite ribbon.
 //
 // Rung 1 = THE SEAM TEST (pan across a cell border, toggle G; the same curve draws
-// from either side). Rung 2 = TERRAIN-AWARE ROUTING: link_path() BENDS a link around
-// water/peaks and verifies every sample sits on passable land (so a road never crosses
-// water); only a boxed-in link drops. Bridges / tunnels / valley-following stay v2.
+// from either side). Rung 2 = TERRAIN-AWARE ROUTING: link_path() tries straight →
+// BRIDGE a short water gap (river/strait, ≤ MAX_BRIDGE; drawn as a distinct deck) →
+// BEND around the obstacle on land; drops only if none works. Roads never draw over
+// water *except* a tagged bridge span. Tunnels / valley-following stay v2.
 // ============================================================================
 
 #define TILE 4                                  // screen px per world tile at zoom 1
@@ -180,15 +181,17 @@ static const int DIR[4][2] = {{1,0},{0,1},{1,1},{1,-1}};
 
 #define LINK_SAMPLES 20             // world-space samples per link (collision-ready)
 #define MAXBEND      26.0f          // furthest a road will detour sideways (tiles)
+#define MAX_BRIDGE   10.0f          // longest WATER span a road will bridge (tiles);
+                                    // wider water = a real barrier (road drops)
 static float lp_x[LINK_SAMPLES + 1], lp_y[LINK_SAMPLES + 1];   // last link_path() result
+static int   lp_br[LINK_SAMPLES + 1];   // per-sample: 1 = this span is a BRIDGE (over water)
 
 static int passable_at(float x, float y) { return passable(height_at(x, y)); }
 
-// Sample the base Catmull-Rom (c0,a,b,c3) into lp_, plus a perpendicular BOW of size
-// `bend` that peaks at the middle (sin window) — the terrain detour. Returns 1 only if
-// EVERY sample sits on passable land (so a road is never drawn over water/peak).
-static int build_path(float c0x, float c0y, float ax, float ay, float bx, float by,
-                      float c3x, float c3y, float bend, float perpx, float perpy) {
+// Geometry only: sample the base Catmull-Rom (c0,a,b,c3) into lp_, plus a perpendicular
+// BOW of size `bend` peaking at the middle (sin window) — the terrain detour.
+static void build_curve(float c0x, float c0y, float ax, float ay, float bx, float by,
+                        float c3x, float c3y, float bend, float perpx, float perpy) {
     for (int i = 0; i <= LINK_SAMPLES; i++) {
         float t = (float)i / LINK_SAMPLES, bxv, byv;
         catmull(c0x, ax, bx, c3x, t, &bxv);
@@ -197,62 +200,88 @@ static int build_path(float c0x, float c0y, float ax, float ay, float bx, float 
         lp_x[i] = bxv + perpx * bend * w;
         lp_y[i] = byv + perpy * bend * w;
     }
-    for (int i = 0; i <= LINK_SAMPLES; i++)
-        if (!passable_at(lp_x[i], lp_y[i])) return 0;
-    return 1;
 }
 
-// THE SEAM — the ONE place road geometry is produced. Fills lp_ with the drivable
-// path A→B (shaped by c0/c3), BENT around impassable terrain; returns the sample
-// count, or 0 if no passable route exists (caller drops it — bridges are v2). Both
-// the renderer and the future sloop road_at() read lp_, so they can never disagree.
+// Scan the current lp_ curve. *peak = any impassable HIGH ground (rock/peak — can't
+// bridge those). *maxwater = longest run of WATER samples (bridgeable). Returns 1 if
+// the whole curve is on passable land (no blockage at all).
+static int classify_curve(int *peak, int *maxwater) {
+    *peak = 0; *maxwater = 0; int run = 0, blocked = 0;
+    for (int i = 0; i <= LINK_SAMPLES; i++) {
+        float h = height_at(lp_x[i], lp_y[i]);
+        if (passable(h)) { run = 0; continue; }
+        blocked++;
+        if (h >= 0.4f) *peak = 1;                    // rock/peak → not bridgeable
+        else { run++; if (run > *maxwater) *maxwater = run; }   // water run
+    }
+    return blocked == 0;
+}
+
+// THE SEAM — the ONE place road geometry is produced. Fills lp_ (+ lp_br bridge flags)
+// with the drivable path A→B (shaped by c0/c3). Tries, in order: straight; BRIDGE a
+// short water gap; BEND around the obstacle on land. Returns the sample count, or 0 if
+// none works (drop). Both the renderer and the future sloop road_at() read lp_.
 static int link_path(float c0x, float c0y, float ax, float ay,
                      float bx, float by, float c3x, float c3y) {
     float dx = bx - ax, dy = by - ay, len = fsqrt(dx*dx + dy*dy);
     if (len < 0.5f) return 0;
     float ux = dx/len, uy = dy/len, perpx = -uy, perpy = ux;
+    int peak, maxw;
 
     // 1. straight-ish base curve already clear? (most links)
-    if (build_path(c0x, c0y, ax, ay, bx, by, c3x, c3y, 0, perpx, perpy)) return LINK_SAMPLES + 1;
+    build_curve(c0x, c0y, ax, ay, bx, by, c3x, c3y, 0, perpx, perpy);
+    if (classify_curve(&peak, &maxw)) {
+        for (int i = 0; i <= LINK_SAMPLES; i++) lp_br[i] = 0;
+        return LINK_SAMPLES + 1;
+    }
 
-    // 2. find the obstacle's centre along the straight line
+    // 2. blocked only by a SHORT stretch of water (a river/strait)? → BRIDGE it.
+    float spacing = len / LINK_SAMPLES;
+    if (!peak && maxw * spacing <= MAX_BRIDGE) {
+        for (int i = 0; i <= LINK_SAMPLES; i++)
+            lp_br[i] = (height_at(lp_x[i], lp_y[i]) < 0.0f);   // tag the over-water spans
+        return LINK_SAMPLES + 1;
+    }
+
+    // 3. peak, or water too wide to bridge → try to BEND around it on land.
     int steps = (int)(len / 1.5f); if (steps < 2) steps = 2;
-    float sumt = 0; int blocked = 0;
+    float sumt = 0; int nb = 0;
     for (int s = 1; s < steps; s++) {
         float t = (float)s / steps;
-        if (!passable_at(ax + dx*t, ay + dy*t)) { sumt += t; blocked++; }
+        if (!passable_at(ax + dx*t, ay + dy*t)) { sumt += t; nb++; }
     }
-    if (!blocked) return 0;                          // base bowed into terrain but line clear → drop (rare)
-    float tc = sumt / blocked, ox = ax + dx*tc, oy = ay + dy*tc;
-
-    // 3. which side has the nearer passable land?
+    if (!nb) return 0;
+    float tc = sumt / nb, ox = ax + dx*tc, oy = ay + dy*tc;
     float clr = 0; int sgn = 0;
     for (float off = 1.5f; off <= MAXBEND; off += 1.5f) {
         if (passable_at(ox + perpx*off, oy + perpy*off)) { clr = off; sgn =  1; break; }
         if (passable_at(ox - perpx*off, oy - perpy*off)) { clr = off; sgn = -1; break; }
     }
-    if (!sgn) return 0;                              // boxed in (wide water) → drop; v2 bridge
-
-    // 4. grow the bow until the WHOLE path clears
+    if (!sgn) return 0;                              // boxed in → drop
     for (float k = 1.0f; k <= 3.0f; k += 0.5f) {
         float bend = sgn * (clr * k + 2.0f);
         float ab = bend < 0 ? -bend : bend; if (ab > MAXBEND * 1.5f) break;
-        if (build_path(c0x, c0y, ax, ay, bx, by, c3x, c3y, bend, perpx, perpy)) return LINK_SAMPLES + 1;
+        build_curve(c0x, c0y, ax, ay, bx, by, c3x, c3y, bend, perpx, perpy);
+        if (classify_curve(&peak, &maxw)) {
+            for (int i = 0; i <= LINK_SAMPLES; i++) lp_br[i] = 0;
+            return LINK_SAMPLES + 1;
+        }
     }
     return 0;
 }
 
-// Stroke the path in lp_ as overlapping circles, fine enough at any zoom (steps each
-// segment in screen space by the ribbon radius).
-static void stroke_path(int n, int r, int col) {
+// Stroke the path in lp_ as overlapping circles, fine enough at any zoom. Spans tagged
+// as bridges (lp_br) draw in `bcol` so a road over water reads as a bridge.
+static void stroke_path(int n, int r, int col, int bcol) {
     for (int i = 0; i + 1 < n; i++) {
+        int c = (lp_br[i] || lp_br[i+1]) ? bcol : col;     // a span touching water = bridge
         int x0 = sxp(lp_x[i]), y0 = syp(lp_y[i]), x1 = sxp(lp_x[i+1]), y1 = syp(lp_y[i+1]);
         int dx = x1 - x0, dy = y1 - y0;
         int seg = (int)fsqrt((float)(dx*dx + dy*dy));
         int steps = seg / (r > 0 ? r : 1); if (steps < 1) steps = 1;
         for (int s = 0; s <= steps; s++) {
             float t = (float)s / steps;
-            circfill(x0 + (int)(dx*t), y0 + (int)(dy*t), r, col);
+            circfill(x0 + (int)(dx*t), y0 + (int)(dy*t), r, c);
         }
     }
 }
@@ -260,8 +289,9 @@ static void stroke_path(int n, int r, int col) {
 // HIGHWAYS — the connected backbone. Hub lattice, forward-only links, Catmull-Rom
 // shaped by the hubs beyond each span (reflect when absent). phase 0=casing, 1=centre.
 static void draw_highways(int phase) {
-    int col = phase ? CLR_LIGHT_GREY : CLR_DARKER_GREY;
-    int r   = phase ? 2 : 3;
+    int col  = phase ? CLR_LIGHT_GREY : CLR_DARKER_GREY;
+    int bcol = phase ? CLR_WHITE : CLR_BROWN;        // bridge deck: brown casing, white span
+    int r    = phase ? 2 : 3;
     int c0 = ifloor(camX / HUB_CS) - 2, c1 = ifloor((camX + vcols) / HUB_CS) + 2;
     int r0 = ifloor(camY / HUB_CS) - 2, r1 = ifloor((camY + vrows) / HUB_CS) + 2;
     for (int cx = c0; cx <= c1; cx++)
@@ -280,8 +310,8 @@ static void draw_highways(int phase) {
                 float p0x, p0y, p3x, p3y;
                 if (!get_hub(cx - dx, cy - dy, &p0x, &p0y)) { p0x = 2*p1x - p2x; p0y = 2*p1y - p2y; }
                 if (!get_hub(cx + 2*dx, cy + 2*dy, &p3x, &p3y)) { p3x = 2*p2x - p1x; p3y = 2*p2y - p1y; }
-                int np = link_path(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);  // bends around terrain
-                if (np) stroke_path(np, r, col);                            // 0 = no route (v2 bridge)
+                int np = link_path(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);  // bends/bridges terrain
+                if (np) stroke_path(np, r, col, bcol);                       // 0 = no route
             }
         }
 }
@@ -320,8 +350,9 @@ static int nearest_town(float tx, float ty, float *nx, float *ny) {
 // highway. Degree ~1 each, so no criss-cross. Owned by the town; mutual nearest pairs
 // double-draw harmlessly (identical pixels).
 static void draw_feeders(int phase) {
-    int col = phase ? CLR_LIGHT_GREY : CLR_DARK_GREY;
-    int r   = phase ? ROAD_R - 1 : ROAD_R;
+    int col  = phase ? CLR_LIGHT_GREY : CLR_DARK_GREY;
+    int bcol = phase ? CLR_WHITE : CLR_BROWN;        // bridge deck
+    int r    = phase ? ROAD_R - 1 : ROAD_R;
     int m = 5;
     int c0 = ifloor(camX / NODE_CS) - m, c1 = ifloor((camX + vcols) / NODE_CS) + m;
     int r0 = ifloor(camY / NODE_CS) - m, r1 = ifloor((camY + vrows) / NODE_CS) + m;
@@ -331,12 +362,12 @@ static void draw_feeders(int phase) {
             float hx, hy; int np;
             if (nearest_hub(tx, ty, &hx, &hy)) {
                 np = link_path(2*tx - hx, 2*ty - hy, tx, ty, hx, hy, 2*hx - tx, 2*hy - ty);
-                if (np) stroke_path(np, r, col);
+                if (np) stroke_path(np, r, col, bcol);
             }
             float nx, ny;
             if (nearest_town(tx, ty, &nx, &ny)) {
                 np = link_path(2*tx - nx, 2*ty - ny, tx, ty, nx, ny, 2*nx - tx, 2*ny - ty);
-                if (np) stroke_path(np, r, col);
+                if (np) stroke_path(np, r, col, bcol);
             }
         }
 }
