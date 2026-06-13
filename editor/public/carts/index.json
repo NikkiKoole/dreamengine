@@ -1592,6 +1592,15 @@
     "homage": "gtascii (github.com/NikkiKoole/gtascii)"
   },
   {
+    "title": "roadnet",
+    "description": "A SPLINE arterial network over an infinite, deterministic heightmap — the curved, non-axis-aligned roads procgen-places parked as 'the wall' (docs/design/roadnet.md). The crack: a NODE-LATTICE spline is local even though a grown one isn't. Each coarse cell hashes to at most one POI node (on habitable land); a link between two nodes is a Catmull-Rom whose four control points — node(C-d), node(C), node(C+d), node(C+2d) — are every one a pure function of cell coordinates, so any chunk recomputes the identical curve with no global pass. The network is CONNECTED by hierarchy (the 'Main Rib'): white HUBS on a coarse lattice form a continuous highway backbone, and red/orange TOWNS branch into it with feeders to their nearest hub, so nothing is orphaned. It all streams around the camera over layered-noise terrain bands and rivers (worldgen's heightmap); links drop wherever the straight line of land isn't passable, so water cleanly divides regions until v2 bridges. Opens on an INTRO PANEL — a glass strip of sliders (hub gap, town gap, hub/town density, wiggle, diag, water) over the live full-screen world, so dragging a slider re-rolls the world live behind it; ROLL reseeds, EXPLORE dismisses it to pan. Rung 1 of the eventual road layer for sloop's world; sibling to trackgen (the finite single-track cousin). Controls: drag the panel sliders, ROLL / EXPLORE buttons; then arrows / WASD pan, mouse wheel zooms in/out a bit, SPACE jumps to fresh scenery, R new seed, M reopens the panel, G toggles the cell-border overlay (the seam test), H hides the HUD.",
+    "file": "roadnet.cart.png",
+    "kind": [
+      "tech-demo",
+      "generative"
+    ]
+  },
+  {
     "title": "Football Manager",
     "description": "An FC-Mobile-style manager mode: run a club's starting XI on a drag-to-arrange formation pitch, with a bench of spares, switchable 4-4-2 / 4-3-3 shapes, and an out-of-position penalty that makes your shape matter. Wheel and deal in a transfer market against a cash budget — sign a face, sell the deadwood — then hit PLAY MATCH and the engine auto-sims a scoreline from your XI's strength versus the opponent's, ticking the goals up on a scoreboard before slamming home WIN/DRAW/DEFEAT. Other clubs play their own fixtures and the 6-team league table re-sorts live on points and goal difference across a 10-round season; finish top to be champions. Drag players between the pitch and the bench, click 4-4-2 / 4-3-3 to switch shape, click a price to BUY or a value to SELL in the market, and click PLAY MATCH (TAB cycles SQUAD/MARKET/LEAGUE, ENTER plays).",
     "file": "soccermgr.cart.png",

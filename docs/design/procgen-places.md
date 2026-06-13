@@ -122,6 +122,11 @@ warp / cull / jitter goes in a helper that *both* paths call. Set this up now
   can't know it's on a curve without non-local state (paths, splines, anchors),
   which breaks the field model. Probably a separate road-*network* pass laid over
   the field, not a tweak. Only if the field model proves insufficient.
+  **→ being attacked in [`roadnet.md`](roadnet.md)** (2026-06-13): the wall is
+  softer for a **node-lattice** spline (control points are pure functions of cell
+  coords, so a curve stays local/seedable even though a *grown* spline wouldn't).
+  roadnet is the separate network pass; this tile city becomes the *fill inside*
+  its POI nodes.
 
 ### v1.5 detail — the "missing" list, triaged
 Most of the wishlist is cheap and local (pure function of "what's at this cell"),
