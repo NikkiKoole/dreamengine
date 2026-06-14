@@ -254,6 +254,31 @@ instrument's WHOLE output in unison — the coherent amp wobble a per-voice `LFO
 > A real clav has **no** tremolo — the `epiano` clav preset sets depth 0 (bypass). Tremolo is the
 > Rhodes/Wurli signature, not a universal EP effect.
 
+## auto-pan — `autopan(rate, depth, shape)` · `instrument_autopan(slot, rate, depth, shape)`
+
+The **stereo sibling of tremolo**: the same amplitude LFO, but applied **antiphase** to L/R, so the
+sound sweeps side to side instead of throbbing in place — the **Rhodes Suitcase stereo vibrato**, the
+auto-pan stompbox, rotary-style motion. The left gain is the plain tremolo gain `1 − depth·(1 − lfo)`,
+the right its complement `1 − depth·lfo` (depth 1 = a channel hits silence = full L↔R). `rate` 0.1–20
+Hz, `depth` 0–1 (0 = off, 1 = full width), `shape` `TREM_SINE` (smooth glide, default) / `TREM_SQUARE`
+(hard ping-pong) / `TREM_TRI` (linear sweep). Only attenuates (never boosts), so the summed level
+never exceeds the dry input. **Its OWN insert (`FX_PAN`), not a mode of tremolo** — so it STACKS with
+`tremolo` on one bus (a fast amplitude throb AND a slow stereo drift at once, two independent LFOs),
+and on the pedalboard it's a real reorderable pedal beside TREMOLO. Master or per-instrument. Dormant
+until depth>0 → non-users byte-identical. (Verified: a centered mono source reads correlation +1.0;
+with auto-pan, 0.33 / −1.78 dB mono-fold = real width, and a slow sweep swings the balance ±0.56 dB.)
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| Suitcase stereo vibrato | `instrument_autopan(I_EP, 3.0f+spd*4.0f, 0.35f+dep*0.55f, TREM_SINE)` | the Rhodes Suitcase L↔R sway — the whole instrument incl. the tine tails pans coherently | `epiano` (VIBE pedal) |
+| slow stereo drift | `autopan(0.4f, 0.8f, TREM_SINE)` | a wide, lazy wash across the mix — great stacked under a `tremolo` throb | `pedalboard` (AUTOPAN) |
+| hard ping-pong | `autopan(4.0f, 1.0f, TREM_SQUARE)` | the sound jumps L/R/L/R — a rhythmic stutter-pan | `pedalboard` (AUTOPAN, WAV→square) |
+
+> **Why not a flag on `tremolo()`?** Because then a bus could only ever throb OR pan, never both, and a
+> "separate function, same state" API would *look* combinable but silently isn't. A distinct `FX_PAN`
+> insert is the honest, composable form — two LFOs, two pedals. See
+> [`../design/effects-bus-architecture.md`](../design/effects-bus-architecture.md) §0.
+
 ## phaser — `phaser(rate, depth, feedback, mix, stages)` · `instrument_phaser(slot, …)`
 
 A chain of allpass filters swept by an LFO carves moving NOTCHES in the spectrum — the **70s

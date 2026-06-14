@@ -981,6 +981,48 @@ static void fx_set_tremolo(int b, float rate, float depth, int shape) {
     trem_used[b] = (depth > 0.0f);   // depth 0 = off (identity gain), like mix 0 elsewhere
 }
 
+// ── auto-pan — the tremolo LFO applied ANTIPHASE to L/R: a stereo sweep (Rhodes suitcase vibrato /
+// rotary-style motion). gL is the plain tremolo gain `1 − depth·(1 − mod)`; gR is its complement
+// `1 − depth·mod`, so as the LFO rises the level shifts to the LEFT and as it falls to the RIGHT
+// (depth 1 = a channel hits silence = full L↔R pan). Its OWN insert (FX_PAN) + OWN LFO state — so it
+// stacks with tremolo on one bus (a fast throb AND a slow stereo drift at once), the whole reason it
+// isn't a mode of tremolo. Reuses the TREM_SHAPE_* shapes. Only attenuates (never boosts), so the
+// summed level never exceeds the dry input — no added clip risk. Dormant until autopan()/
+// instrument_autopan() with depth>0 → non-users byte-identical.
+static float pan_rate [SOUND_FX_BUSES];   // LFO rate Hz
+static float pan_depth[SOUND_FX_BUSES];   // pan depth 0..1 (1 = full L↔R)
+static int   pan_shape[SOUND_FX_BUSES];   // TREM_SHAPE_*
+static float pan_phase[SOUND_FX_BUSES];   // LFO phase 0..1
+static bool  pan_used [SOUND_FX_BUSES];
+static void pan_process(int b, float *mixL, float *mixR) {
+    float phase = pan_phase[b];
+    float mod;
+    switch (pan_shape[b]) {
+        case TREM_SHAPE_SQUARE:
+            mod = phase < 0.5f ? 1.0f : 0.0f;
+            break;
+        case TREM_SHAPE_TRI:
+            mod = phase < 0.5f ? phase * 4.0f - 1.0f : 3.0f - phase * 4.0f;
+            mod = mod * 0.5f + 0.5f;
+            break;
+        default: // sine
+            mod = 0.5f + 0.5f * sinf(phase * 6.2831853f);
+            break;
+    }
+    pan_phase[b] += pan_rate[b] * (1.0f / (float)SOUND_SAMPLE_RATE);
+    if (pan_phase[b] >= 1.0f) pan_phase[b] -= 1.0f;
+    float gL = 1.0f - pan_depth[b] * (1.0f - mod);   // L full at the LFO peak
+    float gR = 1.0f - pan_depth[b] * mod;            // R full at the LFO trough (antiphase)
+    *mixL *= gL; *mixR *= gR;
+}
+static void fx_set_autopan(int b, float rate, float depth, int shape) {
+    if (rate  < 0.1f)  rate  = 0.1f;  if (rate  > 20.0f) rate  = 20.0f;
+    if (depth < 0.0f)  depth = 0.0f;  if (depth > 1.0f)  depth = 1.0f;
+    if (shape < 0 || shape > TREM_SHAPE_TRI) shape = TREM_SHAPE_SINE;
+    pan_rate[b] = rate; pan_depth[b] = depth; pan_shape[b] = shape;
+    pan_used[b] = (depth > 0.0f);   // depth 0 = off (identity gain), like tremolo
+}
+
 // ── phaser — cascaded allpass chain swept by an LFO (the 70s Rhodes / Small Stone swirl) ─────────
 // A VERBATIM port of navkit's bus processPhaser: N first-order allpass stages in series, all sharing
 // one LFO-swept coefficient (coeff = 0.5 + lfo·depth·0.4, navkit's 0.1..0.9 range), with feedback
@@ -1151,9 +1193,9 @@ static void fx_set_leslie(int b, int speed, float drive, float balance, float do
 // bus is byte-identical to the old hardcoded ladder. Each step still gates on its _used[b] flag,
 // so the default-order case is the same work as before.
 #define N_PEDALS  (FX_CRUSH + 1)            // the 8 reorderable PEDALS (FX_TREM..FX_CRUSH) — the default chain
-#define N_INSERTS (FX_FILTER + 1)           // array size / max chain length: 8 pedals + FX_FORMANT + FX_FILTER (both pedals) + FX_REVERB (reverb-bus only)
+#define N_INSERTS (FX_PAN + 1)              // array size / max chain length: 8 pedals + FX_FORMANT + FX_FILTER + FX_PAN (all pedals) + FX_REVERB (reverb-bus only)
 static int insert_order  [SOUND_FX_BUSES][N_INSERTS];   // per-bus visit list (kept distinct from the fx_order() API)
-static int insert_order_n[SOUND_FX_BUSES];  // populated slot count (default N_PEDALS = the 8 pedals; FX_REVERB only on a reverb-bus)
+static int insert_order_n[SOUND_FX_BUSES];  // populated slot count (default = 8 pedals + formant + filter + pan; FX_REVERB only on a reverb-bus)
 // dispatch ONE insert by kind on bus b, in place. The _used[b] gate keeps dormant inserts free.
 static void apply_insert(int kind, int b, float *L, float *R) {
     switch (kind) {
@@ -1167,6 +1209,7 @@ static void apply_insert(int kind, int b, float *L, float *R) {
         case FX_CRUSH:   if (crush_used[b])  crush_process(b, L, R);   break;
         case FX_FORMANT: if (fmt_used[b])    formant_process(b, L, R); break;
         case FX_FILTER:  if (filt_used[b])   filter_process(b, L, R);  break;
+        case FX_PAN:     if (pan_used[b])    pan_process(b, L, R);     break;
         // FX_REVERB: wet-REPLACE on a reverb-bus (a bus fed only by sends, bus_tank[b] >= 0), so any
         // inserts AFTER it in the chain chew on the wet tail (reverb→bitcrush). On any other bus
         // (master / a pedalboard's bus, bus_tank[b] == -1) it's a no-op pass-through — never zeroes a real mix.
@@ -1275,6 +1318,8 @@ typedef enum {
     SR_SIDECHAIN_KEY= 73,   // a=slot, b=key, c=send*1000 — route a slot into a sidechain trigger key
     SR_GLUE         = 74,   // a=victim_bus, b=amount*1000, c=attack_ms, e0=release_ms — bus comp (self-keyed, no trigger)
     SR_FILTER       = 75,   // a=mode, b=cutoff_hz, c=resonance*1000 — THE master resonant filter (DJ filter), bus 0
+    SR_AUTOPAN      = 76,   // a=rate*1000, b=depth*1000, c=shape — THE master auto-pan (bus 0, antiphase tremolo)
+    SR_INSTR_AUTOPAN= 77,   // a=slot, b=rate*1000, c=depth*1000, e0=shape — auto-pan on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3949,6 +3994,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_tremolo(b, r.b / 1000.0f, r.c / 1000.0f, r.e0);
+    } else if (r.kind == SR_AUTOPAN) {      // master auto-pan (bus 0): a=rate*1000, b=depth*1000, c=shape
+        fx_set_autopan(0, r.a / 1000.0f, r.b / 1000.0f, r.c);
+    } else if (r.kind == SR_INSTR_AUTOPAN) {// per-instrument: a=slot, b=rate*1000, c=depth*1000, e0=shape
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_autopan(b, r.b / 1000.0f, r.c / 1000.0f, r.e0);
     } else if (r.kind == SR_PHASER) {       // master phaser (bus 0): a=rate, b=depth, c=fb(signed), e0=mix (×1000), e1=stages
         fx_set_phaser(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1);
     } else if (r.kind == SR_INSTR_PHASER) { // per-instrument: a=slot, b=rate, c=depth, e0=fb(signed), e1=mix (×1000), e2=stages
@@ -4953,6 +5004,17 @@ void instrument_tremolo(int slot, float rate, float depth, int shape) {
     sound_push_ctrl(SR_INSTR_TREMOLO, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), shape, 0, 0);
 }
 
+// ── auto-pan: the tremolo LFO run ANTIPHASE on L/R — the stereo sweep (its own insert, stacks with tremolo) ──
+
+void autopan(float rate, float depth, int shape) {
+    sound_push_ctrl(SR_AUTOPAN, (int)(rate * 1000.0f), (int)(depth * 1000.0f), shape, 0, 0, 0);
+}
+
+void instrument_autopan(int slot, float rate, float depth, int shape) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_AUTOPAN, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), shape, 0, 0);
+}
+
 // ── phaser: THE master phaser (LFO-swept allpass chain — the 70s Rhodes / Small Stone swirl) ──
 
 void phaser(float rate, float depth, float feedback, float mix, int stages) {
@@ -5197,7 +5259,8 @@ static void sound_init(void) {
         for (int s = 0; s < N_PEDALS; s++) insert_order[b][s] = s;   // default insert order = the 8 pedals, canonical (identity)
         insert_order[b][N_PEDALS]     = FX_FORMANT;                  // + formant as the 9th pedal (dormant until formant() → byte-identical)
         insert_order[b][N_PEDALS + 1] = FX_FILTER;                   // + filter as the 10th pedal (dormant until filter() → byte-identical)
-        insert_order_n[b] = N_PEDALS + 2;                            // FX_REVERB is never in the default chain — reverb_bus() places it
+        insert_order[b][N_PEDALS + 2] = FX_PAN;                      // + auto-pan as the 11th pedal (dormant until autopan() → byte-identical)
+        insert_order_n[b] = N_PEDALS + 3;                            // FX_REVERB is never in the default chain — reverb_bus() places it
     }
 
     // user waves default to a sine, so playing INSTR_USER* before wave_set isn't silence

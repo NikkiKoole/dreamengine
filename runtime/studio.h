@@ -457,6 +457,13 @@ void instrument_formant(int slot, float vowel, float q, float mix);     // forma
 void tremolo(float rate, float depth, int shape);                       // rate 0.1..20 Hz, depth 0..1 (0 = off), shape TREM_*. THE master tremolo
 void instrument_tremolo(int slot, float rate, float depth, int shape);  // tremolo on just this slot (auto-grabs a private FX bus)
 
+// auto-pan — the tremolo LFO applied ANTIPHASE to L/R: a stereo sweep that moves the sound side to
+// side (the Rhodes suitcase vibrato; rotary-style motion). It's its OWN insert, so it stacks with
+// tremolo on the same bus — a fast amplitude throb AND a slow stereo drift at once. Reuses the TREM_*
+// shapes: SINE = smooth glide, SQUARE = hard L/R ping-pong, TRI = linear sweep. Master, or per-slot.
+void autopan(float rate, float depth, int shape);                       // rate 0.1..20 Hz, depth 0..1 (0 = off, 1 = full L↔R), shape TREM_*. THE master auto-pan
+void instrument_autopan(int slot, float rate, float depth, int shape);  // auto-pan on just this slot (auto-grabs a private FX bus)
+
 // phaser — a chain of allpass filters swept by an LFO carves moving NOTCHES in the spectrum: the
 // 70s electric-piano / Small Stone swirl (vocal, hollow, "jet-like" but softer than a flanger's
 // metallic comb). stages = how many notches (4 = the classic Phase-90; more = thicker/deeper).
@@ -493,7 +500,8 @@ void glue(int victim_bus, float amount, int attack_ms, int release_ms);  // bus 
 #define FX_REVERB   8   // reverb — ONLY valid on a reverb_bus() send-bus; a no-op on any other bus. Put it first, then FX_* after it for reverb→effect
 #define FX_FORMANT  9   // formant/vowel filter (a reorderable pedal, like the others — in every bus's default chain)
 #define FX_FILTER   10  // resonant filter — the DJ filter (a reorderable pedal, in every bus's default chain)
-void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 11
+#define FX_PAN      11  // auto-pan — antiphase tremolo (a reorderable pedal, in every bus's default chain)
+void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 12
 
 // leslie — a rotary-speaker cabinet (a spinning treble HORN + bass DRUM): the organ's voice. The
 // horn adds pitch wobble (Doppler) + a swirling volume; the two rotors spin at independent speeds

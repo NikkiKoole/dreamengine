@@ -59,11 +59,22 @@ same amplitude LFO applied **antiphase** to L/R instead of in-phase. So it's bes
 mode/shape of the existing `tremolo` insert, not a whole new pedal — one constant + a few lines, and
 the TREMOLO pedal gains a stereo toggle.
 
+> **✅ Auto-pan SHIPPED 2026-06-14 — and this "mode of tremolo" call was REVERSED.** It shipped as its
+> OWN insert (`FX_PAN`=11, `autopan()`/`instrument_autopan()`), *not* a mode/flag on tremolo. Reason: a
+> shared-state mode can run only ONE of {throb, pan} per bus at a time, and a "separate function, shared
+> state" API would *look* combinable but silently isn't (last-call-wins). A distinct insert with its own
+> LFO state is the honest, composable form — tremolo + auto-pan can both ring on one bus (a fast throb
+> AND a slow stereo drift), two real reorderable pedals. The DSP is still shared in spirit (antiphase
+> tremolo), but **shared code ≠ shared state**; the can't-have-both cost decided it. Cheap (gated →
+> byte-identical; the 4-bit `fx_order` packing had room). Showcases: `epiano` VIBE, `pedalboard` AUTOPAN.
+> Ledger: [`audio-notes.md`](audio-notes.md) §17.16. So the principle below still holds — *check if it's
+> a mode first* — but "is it a mode?" must weigh whether the two need to **coexist**, not just share math.
+
 **Worked examples (the epiano machines, 2026-06):**
 
 | want | verdict | why |
 |---|---|---|
-| **stereo auto-pan** (Rhodes Suitcase vibrato) | **real bus effect** (a stereo mode of `tremolo`) | you want it as a pedal AND it pans the whole output incl. the tail — the per-voice `LFO_PAN` recipe can't be an insert |
+| **stereo auto-pan** (Rhodes Suitcase vibrato) | **real bus effect** — shipped as its OWN `FX_PAN` insert (✅ above; *not* a tremolo mode, so it coexists with tremolo) | you want it as a pedal AND it pans the whole output incl. the tail — the per-voice `LFO_PAN` recipe can't be an insert |
 | **Dyno** (bright Rhodes) | **recipe of existing pedals** | = `chorus` + `eq` presence — both are *already* rostered bus effects/pedals; no new effect |
 | **bark / dig-in** | **recipe** (per-instrument) | it's the engine `morph` macro on one voice; never a pedal |
 

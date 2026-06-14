@@ -17,8 +17,8 @@
 //   + a BARK knob on every machine (the pickup driven hard — read live on ringing notes).
 //
 // The pedal icons + colours come from runtime/fxicons.h (the pedalboard's exact visual language).
-// VIBE's icon is a TEMPORARY rectangle — it becomes the real auto-pan pedal once that bus effect
-// lands; today the sway is LFO_PAN (swap the one instrument_lfo call below for the pedal then).
+// VIBE drives the real bus auto-pan (instrument_autopan = antiphase tremolo); its icon is a custom
+// L↔R sway drawn for this cart (the effect has no standard stompbox icon — ep_icon() draws it).
 //
 // controls: white A S D F G H J K · black W E . T Y U · Z/X octave · 1/2/3 machine · tap pedals/
 //           footswitches · drag knobs · SLIDE across the keys for glissando · M autoplay. Multitouch.
@@ -51,7 +51,7 @@ static int machine = M_RHODES;
 // this cart (VIBE/DYNO/BUZZ/MUTE — machine-specific, not standard pedals; never borrow an icon from
 // an effect a pedal isn't based on). The custom kinds are negative; ep_icon() draws them.
 #define ICON_NONE (-1)
-#define ICON_PAN  (-2)   // VIBE — stereo vibrato (TEMP rectangle until the real auto-pan pedal lands)
+#define ICON_PAN  (-2)   // VIBE — stereo vibrato; custom L↔R sway icon (the real bus auto-pan has no stock stompbox icon)
 #define ICON_DYNO (-3)   // DYNO — the bright "sheen" mod
 #define ICON_BUZZ (-4)   // BUZZ — reed overdrive growl
 #define ICON_MUTE (-5)   // MUTE — the D6 damper
@@ -204,8 +204,10 @@ static void apply_machine(void) {
     }
     apply_slot(); apply_wah(); apply_trem(); apply_phaser();
 
-    // RHODES VIBE — stereo vibrato (auto-pan). LFO_PAN now; → the auto-pan PEDAL when it ships.
-    instrument_lfo(I_EP, 1, LFO_PAN, 3.0f + ped_k[0][0][0] * 4.0f, suitcase ? (0.35f + ped_k[0][0][1] * 0.55f) : 0.0f);
+    // RHODES VIBE — the Suitcase stereo vibrato: the real bus auto-pan (antiphase tremolo), so the
+    // whole Rhodes incl. the ringing tine tails sways L↔R coherently (the per-voice LFO_PAN stand-in
+    // this replaced couldn't — there each note had its own phase). SPD = rate, DEP = sweep width.
+    instrument_autopan(I_EP, 3.0f + ped_k[0][0][0] * 4.0f, suitcase ? (0.35f + ped_k[0][0][1] * 0.55f) : 0.0f, TREM_SINE);
     // RHODES DYNO — lush stereo chorus (bypassed at mix 0). EQ presence ONLY when on, so a clean
     // machine is NEVER routed through an EQ (that was the character-killer — it dulled the bell).
     instrument_chorus(I_EP, 0.6f, 0.35f + ped_k[0][1][0] * 0.4f, dyno ? 0.55f : 0.0f);

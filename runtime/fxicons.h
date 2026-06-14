@@ -24,6 +24,7 @@ static int fx_body(int kind) {
         case FX_WAH:     return CLR_DARK_PURPLE;
         case FX_REVERB:  return CLR_DARK_BLUE;
         case FX_FORMANT: return CLR_BROWN;
+        case FX_PAN:     return CLR_DARK_GREY;
         default:         return CLR_DARKER_GREY;
     }
 }
@@ -39,6 +40,7 @@ static int fx_accent(int kind) {
         case FX_WAH:     return CLR_MAUVE;
         case FX_REVERB:  return CLR_INDIGO;
         case FX_FORMANT: return CLR_LIGHT_PEACH;
+        case FX_PAN:     return CLR_LIGHT_YELLOW;
         default:         return CLR_LIGHT_GREY;
     }
 }
@@ -54,6 +56,7 @@ static const char *fx_name(int kind) {
         case FX_WAH:     return "WAH";
         case FX_REVERB:  return "REVERB";
         case FX_FORMANT: return "VOWEL";
+        case FX_PAN:     return "AUTOPAN";
         default:         return "FX";
     }
 }
@@ -104,6 +107,11 @@ static void fx_icon(int kind, int cx, int cy, int col, int bg) {
             line(cx + dx, cy - h, cx + dx, cy + h, col);
         }
         circ(cx, cy, 2, bg);                                 // a darker opening so it reads as a mouth
+    } else if (kind == FX_PAN) {                             // a double-headed L↔R sweep arrow
+        line(cx - 13, cy, cx + 13, cy, col);                 // the pan axis
+        line(cx - 13, cy, cx - 8, cy - 4, col); line(cx - 13, cy, cx - 8, cy + 4, col);   // ◄ left head
+        line(cx + 13, cy, cx + 8, cy - 4, col); line(cx + 13, cy, cx + 8, cy + 4, col);   // ► right head
+        circfill(cx, cy, 2, col);                            // the sound, sweeping along it
     } else {                                                 // REVERB — expanding rings (the bloom)
         for (int i = 1; i <= 3; i++) circ(cx, cy, i * 3, col);
         pset(cx, cy, col);

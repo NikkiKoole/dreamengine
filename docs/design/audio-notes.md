@@ -1401,6 +1401,23 @@ v1, document it on the panel.
     homage — over a self-playing house loop, with a live response curve + a breakdown→riser→DROP BUILD;
     verified open-vs-closed: closed-LP peak −0.06→−5.58 dBFS, crest 11.4→7.2 dB). House-radio retrofit still pending.
 
+16. **Auto-pan (stereo)** — the tremolo LFO applied **antiphase** to L/R: the stereo sweep (Rhodes
+    Suitcase vibrato, the auto-pan stompbox). **✓ SHIPPED 2026-06-14.** `autopan(rate, depth, shape)`
+    (master) **and** `instrument_autopan(slot, …)` (per-instrument aux bus). gL = the plain tremolo gain
+    `1 − depth·(1 − mod)`, gR = its complement `1 − depth·mod` → the level shifts L on the LFO peak, R on
+    the trough; reuses the `TREM_SHAPE_*` shapes. **Its OWN insert (`FX_PAN`=11), NOT a mode of tremolo** —
+    own LFO state, so it stacks with `tremolo` on one bus (a throb AND a stereo drift at once) and is a
+    distinct reorderable pedal. The design call **reverses** effects-bus-architecture §0's earlier "make
+    it a mode of tremolo": a shared-state mode can't run alongside tremolo, and a "separate function /
+    shared state" API would falsely *look* combinable — a distinct insert is the honest, composable form.
+    `SR_AUTOPAN`=76 / `SR_INSTR_AUTOPAN`=77; `pan_used`-gated → dormant carts byte-identical (`N_INSERTS`
+    grew to FX_PAN+1, the 4-bit `fx_order` packing already had room). 0015 angle: it cleared the gate as a
+    real bus effect (passed the pedalboard test) the same way tremolo did; the only question was mode-vs-
+    own-kind, decided own-kind by the can't-have-both cost. Verified: a centered mono source reads
+    correlation +1.0; with auto-pan, 0.33 / −1.78 dB mono-fold = real width, and a 0.5 Hz sweep swings the
+    balance ±0.56 dB symmetrically. **Showcases: `epiano`** (the RHODES VIBE pedal — replaced its per-voice
+    `LFO_PAN` stand-in) **and `pedalboard`** (the AUTOPAN pedal, beside TREMOLO in the palette).
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 
