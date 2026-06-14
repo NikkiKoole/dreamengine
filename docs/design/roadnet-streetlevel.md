@@ -100,3 +100,24 @@ as buildings-to-be) — the access streets + footprints are what we build into i
 1. Build the **access-street tier** into the BLOCK loupe (finer lattice, connects to parent).
 2. **Footprints** + `building_at()` (the collision seam).
 3. **Rung 4** — sloop at L3: the car drives the access streets, collides with footprints.
+
+## Starting point for next session (the concrete first move + two hooks)
+
+**First move:** add `CL_ACCESS` and a finer street tier in `grid_at()` (a sub-lattice of
+`block_sp`, e.g. `block_sp/2`), gated so it only *draws* at L3 depth. Build it into the
+BLOCK loupe, bake, iterate — then footprints.
+
+Two hooks that aren't obvious from the rest of the doc:
+
+- **Zoom is the LOD signal.** During a lens render `zoom` is set to that lens's value
+  (`LOUPE_ZOOM` vs `LOUPE2_ZOOM`), so `render_streetlevel`/`grid_at` can gate the access
+  tier on `zoom >= LOUPE2_ZOOM` — no new plumbing needed, just read `zoom`. (This is the
+  "tier-by-zoom = draw gate" rule, concretely.)
+- **The BLOCK loupe centres on the screen crosshair**, which at spawn sits over green —
+  so the lens looks empty until you **pan over a city core**. For baking a screenshot that
+  shows L3 content, position the camera over a dense city first (or temporarily nudge
+  `SPAWN_X/Y`), and enlarge `LOUPE2_SZ` for inspection (restore before committing, like the
+  `LOUPE_SZ` dev-bake dance).
+
+Everything else (the seams, the LOD stack, open decisions) is above; the handoff's
+"Next time" list has the ordered plan. No loose state outside these docs.
