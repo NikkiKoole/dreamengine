@@ -637,8 +637,13 @@ pure pedalboard cart work. Update [`effects-recipes.md`](../guides/effects-recip
 
 ## Increment F — multiple INSTANCES of one insert per bus (two EQs, two delays)
 
-**Status: SHIPPED for EQ (2026-06-14) — the general mechanism is in; EQ is the first kind wired to use
-it.** A per-slot INSTANCE rides in `SR_FX_ORDER`'s spare `e1`/`e2` ints (4 bits/slot, parallel to the
+**Status: SHIPPED for EQ + crush + tape + filter (2026-06-14). The general mechanism is in; EQ was
+first, then crush/tape/filter — which retired the LO-FI bus lock** (the LO-FI macro now drives crush/
+tape/filter INSTANCE 1, the standalone BITCRUSH/TAPE/FILTER pedals stay on instance 0, so they coexist;
+`pedal_locked`'s LO-FI branch is gone — only the FUZZ↔amp lock remains, pending an `FX_DRIVE` insert).
+Each kind has `*_INST=2`; `crush_inst`/`tape_inst`/`filter_inst` set the 2nd instance (mirroring
+`eq_inst`). Tape's 2nd instance carries its own buffer (~64 KB). Below: how the general mechanism works
+(EQ is the worked example). A per-slot INSTANCE rides in `SR_FX_ORDER`'s spare `e1`/`e2` ints (4 bits/slot, parallel to the
 kind packing in `b`/`e0`); the audio side carries `insert_inst[bus][slot]` alongside `insert_order`,
 and `apply_insert(kind, inst, b, L, R)` dispatches it. Carts tag a slot with the macro
 `FX_INST(kind, inst)` in `fx_order()` (plain `FX_*` = instance 0 = byte-identical to before). EQ state

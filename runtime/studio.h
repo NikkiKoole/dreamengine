@@ -433,6 +433,7 @@ void instrument_flanger(int slot, float rate, float depth, float feedback, float
 // tape — vintage analog warmth over the whole mix: wow (slow pitch drift) + flutter (fast warble)
 // + saturation (warm soft-clip + HF rolloff). Master, or per-instrument (lo-fi just the drums).
 void tape(float wow, float flutter, float saturation);                  // wow/flutter/sat 0..1 (0,0,0 = off). defaults 0.3/0.2/0.4
+void tape_inst(int instance, float wow, float flutter, float saturation); // tape on a 2nd master INSTANCE (0..1) — pair with FX_INST(FX_TAPE, instance)
 void instrument_tape(int slot, float wow, float flutter, float saturation);  // tape on just this slot
 
 // auto-wah — a resonant bandpass that OPENS with how hard you play (an envelope follower on the
@@ -447,6 +448,7 @@ void instrument_wah_lfo(int slot, float rate_hz, float resonance, float mix);  /
 // = bit depth (low = gnarlier steps), rate = sample-hold downsampling 1..64x (high = more
 // aliasing whine), mix 0..1 (0 = off). Defaults 8 / 4 / 1.0.
 void crush(float bits, float rate, float mix);                          // THE master bitcrush, on the whole mix
+void crush_inst(int instance, float bits, float rate, float mix);       // bitcrush on a 2nd master INSTANCE (0..1) — pair with FX_INST(FX_CRUSH, instance) in fx_order() for two crushers in one chain
 void instrument_crush(int slot, float bits, float rate, float mix);     // bitcrush on just this slot (auto-grabs a private FX bus)
 
 // EQ — 3-band tone: BOOST or cut LOW (<~80 Hz) / MID (~80 Hz–6 kHz) / HIGH (>~6 kHz). The ONLY
@@ -498,6 +500,7 @@ void instrument_phaser(int slot, float rate, float depth, float feedback, float 
 // breakdown, open it back up (crank resonance for the scream) on the build. THE electronic-music
 // gesture. A reorderable insert (FX_FILTER); unlike the buffer effects it's cheap to sweep every frame.
 void filter(int mode, float cutoff_hz, float resonance);   // mode FILTER_LOW/HIGH/BAND/NOTCH (FILTER_OFF = bypass), cutoff 20..~20000 Hz (ride it live), resonance 0..1 (the peak/scream). THE master filter
+void filter_inst(int instance, int mode, float cutoff_hz, float resonance);  // filter on a 2nd master INSTANCE (0..1) — pair with FX_INST(FX_FILTER, instance) for filter A/B in one chain
 
 // sidechain & bus compression — DYNAMICS on the SUMMED signal (not a per-voice insert): the
 // "pumping" duck and the glue. sidechain() ducks a victim bus's level whenever a TRIGGER fires,

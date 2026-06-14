@@ -456,14 +456,12 @@ these as a macro pedal / preset, not a new `FX_*` kind.
 | **amp / cab** | `drive` + `eq` (cab voicing) + `glue` (power-amp sag) | a guitar amp's voice — the Increment E output stage; one VOICING knob swaps the bundle (clean→chime→crunch→hi-gain→lo-fi). The 5 voicings live in `runtime/ampcab.h` (shared table) | `combo` (the playable combo amp), `pedalboard` (the pinned CABINET slot: none/amp/Leslie) |
 | **Dyno Rhodes** | `chorus` + `eq` presence | the bright stereo Rhodes sheen | `epiano` (DYNO) |
 
-> **The macro caveat (`pedalboard` LO-FI):** a macro drives **three shared master-bus inserts** at once.
-> Because there's one crush / tape / filter on bus 0, LO-FI and the standalone **BITCRUSH / TAPE / FILTER**
-> can't both be **on** at once. They may sit in the chain together freely — the conflict is resolved at the
-> **on-switch**: a pedal is *locked* (drawn dimmed with a `LOCK` footswitch, can't switch on) while a
-> conflicting pedal is currently on (`pedal_locked()`); turn that one off and this frees up. So no dead
-> pedal silently overridden — you simply can't light both sides. (Internally LO-FI still runs last in
-> `apply_fx` and `fx_order` dedupes, as belt-and-suspenders.) This one-instance limit is the same one
-> [Increment F](../design/effects-bus-architecture.md) would lift.
+> **The `pedalboard` LO-FI macro** drives three master-bus inserts (crush + tape + filter) at once.
+> Since [Increment F](../design/effects-bus-architecture.md) (2026-06-14) it runs them on **instance 1**
+> (`crush_inst(1,…)`/`tape_inst(1,…)`/`filter_inst(1,…)` + `FX_INST(FX_*,1)` in the chain), while the
+> standalone **BITCRUSH / TAPE / FILTER** pedals stay on instance 0 — so **LO-FI and the standalones can
+> now be on at the same time** (the old `pedal_locked` grey-out is gone). Two of the same effect in one
+> chain, exactly what F enables.
 
 ---
 

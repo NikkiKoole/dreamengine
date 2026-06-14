@@ -182,9 +182,9 @@ static bool pedal_on(int cat) { int i = chain_index(cat); return i >= 0 && chain
 // just LOCKED (can't switch on, drawn dimmed) while a conflicting pedal is currently on; turn that
 // one off and this frees up. The conflict is on-state, not chain membership (no dead pedals).
 static bool pedal_locked(int cat) {
-    if (cat == C_LOFI) return pedal_on(C_BIT) || pedal_on(C_TAP) || pedal_on(C_FIL);
-    if (cat == C_BIT || cat == C_TAP || cat == C_FIL) return pedal_on(C_LOFI);
-    if (cat == C_FUZZ) return cab_tenant == CAB_AMP;   // the amp cabinet owns the slot's one drive stage
+    // LO-FI vs BITCRUSH/TAPE/FILTER no longer lock — Increment F gives LO-FI its own crush/tape/filter
+    // INSTANCE (1), so it coexists with the standalone pedals (instance 0).
+    if (cat == C_FUZZ) return cab_tenant == CAB_AMP;   // FUZZ still locks: the amp cabinet owns the one per-voice drive stage (needs FX_DRIVE, a separate step)
     return false;
 }
 static int  content_w(void)      { return chain_n * PITCH; }
@@ -319,11 +319,17 @@ static void apply_fx(void) {
             case C_DLY: echo_insert((int)(20.0f + k[0] * 1480.0f), k[1], k[2], act ? k[3] : 0.0f); break;  // TIM 20..1500ms, FB, TON, MIX (off = bypass)
             case C_GRN: grains(20.0f + k[0] * 480.0f, 2.0f + k[1] * 48.0f, 0.8f, 0.4f, 0.3f, act ? k[2] : 0.0f);  // SIZE 20..500ms, DENS 2..50/s, MIX (off = bypass); pos/scatter/fb fixed
                         grains_freeze(act && k[3] > 0.5f); break;                                            // FRZ knob = freeze toggle (loop the captured buffer)
-            case C_LOFI:  // the macro: AMT crunches bits + adds sample-rate + tape sat; WOW warbles; TON darkens. Drives 3 shared inserts — only when ON (the standalone categories reassert OFF otherwise), so it OVERRIDES a stacked BITCRUSH/TAPE/FILTER rather than fighting it (runs last in this loop).
+            case C_LOFI:  // the macro: AMT crunches bits + adds sample-rate + tape sat; WOW warbles; TON darkens.
+                // Increment F: drives crush/tape/filter INSTANCE 1, so it COEXISTS with standalone
+                // BITCRUSH/TAPE/FILTER (instance 0) — no lock. Off-branch turns its instance off.
                 if (act) {
-                    crush(16.0f - k[0] * 9.0f, 1.0f + k[0] * 5.0f, 0.45f + k[0] * 0.45f);   // 16→7 bits, gentle downsample, blended in
-                    tape(k[1] * 0.7f, k[1] * 0.5f, 0.2f + k[0] * 0.5f);                      // WOW = warble; AMT = saturation
-                    filter(FILTER_LOW, 700.0f * powf(16.0f, k[2]), 0.2f);                    // TON = cutoff: dark muffle → open
+                    crush_inst(1, 16.0f - k[0] * 9.0f, 1.0f + k[0] * 5.0f, 0.45f + k[0] * 0.45f);  // 16→7 bits, gentle downsample, blended in
+                    tape_inst(1, k[1] * 0.7f, k[1] * 0.5f, 0.2f + k[0] * 0.5f);                     // WOW = warble; AMT = saturation
+                    filter_inst(1, FILTER_LOW, 700.0f * powf(16.0f, k[2]), 0.2f);                   // TON = cutoff: dark muffle → open
+                } else {
+                    crush_inst(1, 8.0f, 4.0f, 0.0f);          // mix 0 = off
+                    tape_inst(1, 0.0f, 0.0f, 0.0f);           // off
+                    filter_inst(1, FILTER_OFF, 0.0f, 0.0f);   // bypass
                 }
                 break;
         }
@@ -331,7 +337,7 @@ static void apply_fx(void) {
     int kinds[NCAT + 2], n = 0;   // +2: the LO-FI macro can add up to 3 kinds from its 1 slot
     for (int i = 0; i < chain_n; i++) {
         int cat = chain[i].cat;
-        if (cat == C_LOFI) { kinds_add(kinds, &n, FX_CRUSH); kinds_add(kinds, &n, FX_TAPE); kinds_add(kinds, &n, FX_FILTER); }
+        if (cat == C_LOFI) { kinds_add(kinds, &n, FX_INST(FX_CRUSH, 1)); kinds_add(kinds, &n, FX_INST(FX_TAPE, 1)); kinds_add(kinds, &n, FX_INST(FX_FILTER, 1)); }   // instance 1: coexists with standalone
         else if (cat == C_EQ2) kinds_add(kinds, &n, FX_INST(FX_EQ, 1));   // 2nd EQ instance, distinct from FX_EQ
         else { int kd = CAT[cat].kind; if (kd >= 0) kinds_add(kinds, &n, kd); }
     }

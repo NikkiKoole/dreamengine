@@ -672,44 +672,45 @@ static void flanger_process(int b, float *mixL, float *mixR) {
 #define TAPE_WOW_DEPTH   200.0f     // samples (±4.5ms)
 #define TAPE_FLUT_RATE   6.0f       // Hz — fast warble
 #define TAPE_FLUT_DEPTH  40.0f      // samples (±0.9ms)
-static float tape_bufL[SOUND_FX_BUSES][TAPE_BUF_LEN];
-static float tape_bufR[SOUND_FX_BUSES][TAPE_BUF_LEN];
-static int   tape_widx[SOUND_FX_BUSES];
-static float tape_wph [SOUND_FX_BUSES];    // wow LFO phase
-static float tape_fph [SOUND_FX_BUSES];    // flutter LFO phase
-static float tape_lpL [SOUND_FX_BUSES];    // HF-rolloff one-pole state (L)
-static float tape_lpR [SOUND_FX_BUSES];    // … (R)
-static float tape_wow [SOUND_FX_BUSES];
-static float tape_flut[SOUND_FX_BUSES];
-static float tape_sat [SOUND_FX_BUSES];
-static bool  tape_used[SOUND_FX_BUSES];
+#define TAPE_INST 2                        // Increment F: tape instances per bus (LO-FI vs standalone TAPE) — each carries its own buffer (~32KB/bus total)
+static float tape_bufL[SOUND_FX_BUSES][TAPE_INST][TAPE_BUF_LEN];
+static float tape_bufR[SOUND_FX_BUSES][TAPE_INST][TAPE_BUF_LEN];
+static int   tape_widx[SOUND_FX_BUSES][TAPE_INST];
+static float tape_wph [SOUND_FX_BUSES][TAPE_INST];    // wow LFO phase
+static float tape_fph [SOUND_FX_BUSES][TAPE_INST];    // flutter LFO phase
+static float tape_lpL [SOUND_FX_BUSES][TAPE_INST];    // HF-rolloff one-pole state (L)
+static float tape_lpR [SOUND_FX_BUSES][TAPE_INST];    // … (R)
+static float tape_wow [SOUND_FX_BUSES][TAPE_INST];
+static float tape_flut[SOUND_FX_BUSES][TAPE_INST];
+static float tape_sat [SOUND_FX_BUSES][TAPE_INST];
+static bool  tape_used[SOUND_FX_BUSES][TAPE_INST];
 
-static void tape_process(int b, float *mixL, float *mixR) {
-    float sat = tape_sat[b];
+static void tape_process(int b, int i, float *mixL, float *mixR) {
+    float sat = tape_sat[b][i];
     float L = *mixL, R = *mixR;
     if (sat > 0.0f) {                               // warm saturation (normalized: sat 0 = unity)
         float g = 1.0f + sat * 2.0f, ng = tanhf(g);
         L = tanhf(L * g) / ng;
         R = tanhf(R * g) / ng;
     }
-    int widx = tape_widx[b];
-    tape_bufL[b][widx] = L;                          // write the (saturated) signal to tape
-    tape_bufR[b][widx] = R;
-    tape_widx[b] = (widx + 1) % TAPE_BUF_LEN;
-    if (tape_wow[b] > 0.0f || tape_flut[b] > 0.0f) { // wow + flutter pitch warble (one shared transport)
-        tape_wph[b] += TAPE_WOW_RATE  / (float)SOUND_SAMPLE_RATE; if (tape_wph[b] >= 1.0f) tape_wph[b] -= 1.0f;
-        tape_fph[b] += TAPE_FLUT_RATE / (float)SOUND_SAMPLE_RATE; if (tape_fph[b] >= 1.0f) tape_fph[b] -= 1.0f;
-        float mod = sinf(tape_wph[b] * 6.2831853f) * tape_wow[b]  * TAPE_WOW_DEPTH
-                  + sinf(tape_fph[b] * 6.2831853f) * tape_flut[b] * TAPE_FLUT_DEPTH;
+    int widx = tape_widx[b][i];
+    tape_bufL[b][i][widx] = L;                       // write the (saturated) signal to tape
+    tape_bufR[b][i][widx] = R;
+    tape_widx[b][i] = (widx + 1) % TAPE_BUF_LEN;
+    if (tape_wow[b][i] > 0.0f || tape_flut[b][i] > 0.0f) { // wow + flutter pitch warble (one shared transport)
+        tape_wph[b][i] += TAPE_WOW_RATE  / (float)SOUND_SAMPLE_RATE; if (tape_wph[b][i] >= 1.0f) tape_wph[b][i] -= 1.0f;
+        tape_fph[b][i] += TAPE_FLUT_RATE / (float)SOUND_SAMPLE_RATE; if (tape_fph[b][i] >= 1.0f) tape_fph[b][i] -= 1.0f;
+        float mod = sinf(tape_wph[b][i] * 6.2831853f) * tape_wow[b][i]  * TAPE_WOW_DEPTH
+                  + sinf(tape_fph[b][i] * 6.2831853f) * tape_flut[b][i] * TAPE_FLUT_DEPTH;
         float rp = (float)widx - TAPE_BASE_DELAY + mod;
         while (rp < 0.0f) rp += TAPE_BUF_LEN;
         while (rp >= TAPE_BUF_LEN) rp -= TAPE_BUF_LEN;
-        L = moddel_hermite(tape_bufL[b], TAPE_BUF_LEN, rp);   // shared transport → same read pos L/R
-        R = moddel_hermite(tape_bufR[b], TAPE_BUF_LEN, rp);
+        L = moddel_hermite(tape_bufL[b][i], TAPE_BUF_LEN, rp);   // shared transport → same read pos L/R
+        R = moddel_hermite(tape_bufR[b][i], TAPE_BUF_LEN, rp);
     }
     float k = 1.0f - 0.45f * sat;                   // HF rolloff: k=1 (transparent) → 0.55 (warm) as sat rises
-    tape_lpL[b] += k * (L - tape_lpL[b]); L = tape_lpL[b];
-    tape_lpR[b] += k * (R - tape_lpR[b]); R = tape_lpR[b];
+    tape_lpL[b][i] += k * (L - tape_lpL[b][i]); L = tape_lpL[b][i];
+    tape_lpR[b][i] += k * (R - tape_lpR[b][i]); R = tape_lpR[b][i];
     *mixL = L; *mixR = R;
 }
 
@@ -729,42 +730,43 @@ static void fx_set_flanger(int b, float rate, float depth, float fb, float mix) 
     flg_rate[b] = rate; flg_depth[b] = depth; flg_fb[b] = fb; flg_mix[b] = mix;
     flg_used[b] = true;
 }
-static void fx_set_tape(int b, float wow, float flut, float sat) {
+static void fx_set_tape(int b, int i, float wow, float flut, float sat) {
     if (wow < 0.0f)  wow  = 0.0f; if (wow > 1.0f)  wow  = 1.0f;
     if (flut < 0.0f) flut = 0.0f; if (flut > 1.0f) flut = 1.0f;
     if (sat < 0.0f)  sat  = 0.0f; if (sat > 1.0f)  sat  = 1.0f;
-    tape_wow[b] = wow; tape_flut[b] = flut; tape_sat[b] = sat;
-    tape_used[b] = true;
+    tape_wow[b][i] = wow; tape_flut[b][i] = flut; tape_sat[b][i] = sat;
+    tape_used[b][i] = true;
 }
 
 // ── bitcrush — lo-fi quantizer: bit-depth reduction (floor to 2^bits levels) + sample-rate
 // reduction (sample-and-hold every `rate` samples). navkit processBitcrusher, made stereo and
 // per-bus. Cheap + stateless-ish (just the held sample + a counter). Dormant until first crush().
-static float crush_bits [SOUND_FX_BUSES];  // bit depth 1..16
-static float crush_rate [SOUND_FX_BUSES];  // sample-hold downsample factor 1..64
-static float crush_mix  [SOUND_FX_BUSES];  // dry/wet 0..1
-static float crush_holdL[SOUND_FX_BUSES];  // last sampled value (L)
-static float crush_holdR[SOUND_FX_BUSES];  // … (R)
-static int   crush_cnt  [SOUND_FX_BUSES];  // sample counter for rate reduction
-static bool  crush_used [SOUND_FX_BUSES];
-static void crush_process(int b, float *mixL, float *mixR) {
+#define CRUSH_INST 2                       // Increment F: crush instances per bus (LO-FI vs standalone BITCRUSH)
+static float crush_bits [SOUND_FX_BUSES][CRUSH_INST];  // bit depth 1..16
+static float crush_rate [SOUND_FX_BUSES][CRUSH_INST];  // sample-hold downsample factor 1..64
+static float crush_mix  [SOUND_FX_BUSES][CRUSH_INST];  // dry/wet 0..1
+static float crush_holdL[SOUND_FX_BUSES][CRUSH_INST];  // last sampled value (L)
+static float crush_holdR[SOUND_FX_BUSES][CRUSH_INST];  // … (R)
+static int   crush_cnt  [SOUND_FX_BUSES][CRUSH_INST];  // sample counter for rate reduction
+static bool  crush_used [SOUND_FX_BUSES][CRUSH_INST];
+static void crush_process(int b, int i, float *mixL, float *mixR) {
     float dryL = *mixL, dryR = *mixR;
-    if (++crush_cnt[b] >= (int)crush_rate[b]) {        // sample-rate reduction: re-sample every `rate`
-        crush_cnt[b] = 0;
-        float levels = powf(2.0f, crush_bits[b]);      // bit-depth reduction: quantize to 2^bits steps
-        crush_holdL[b] = floorf(*mixL * levels + 0.5f) / levels;   // round-to-nearest (symmetric): no DC
-        crush_holdR[b] = floorf(*mixR * levels + 0.5f) / levels;   // bias, and a decaying tail fades to 0
+    if (++crush_cnt[b][i] >= (int)crush_rate[b][i]) {  // sample-rate reduction: re-sample every `rate`
+        crush_cnt[b][i] = 0;
+        float levels = powf(2.0f, crush_bits[b][i]);   // bit-depth reduction: quantize to 2^bits steps
+        crush_holdL[b][i] = floorf(*mixL * levels + 0.5f) / levels;   // round-to-nearest (symmetric): no DC
+        crush_holdR[b][i] = floorf(*mixR * levels + 0.5f) / levels;   // bias, and a decaying tail fades to 0
     }
-    float mix = crush_mix[b];
-    *mixL = dryL * (1.0f - mix) + crush_holdL[b] * mix;
-    *mixR = dryR * (1.0f - mix) + crush_holdR[b] * mix;
+    float mix = crush_mix[b][i];
+    *mixL = dryL * (1.0f - mix) + crush_holdL[b][i] * mix;
+    *mixR = dryR * (1.0f - mix) + crush_holdR[b][i] * mix;
 }
-static void fx_set_crush(int b, float bits, float rate, float mix) {
+static void fx_set_crush(int b, int i, float bits, float rate, float mix) {
     if (bits < 1.0f) bits = 1.0f; if (bits > 16.0f) bits = 16.0f;
     if (rate < 1.0f) rate = 1.0f; if (rate > 64.0f) rate = 64.0f;
     if (mix < 0.0f)  mix  = 0.0f; if (mix > 1.0f)  mix  = 1.0f;
-    crush_bits[b] = bits; crush_rate[b] = rate; crush_mix[b] = mix;
-    crush_used[b] = (mix > 0.0f);   // mix 0 = off (like chorus/flanger/wah)
+    crush_bits[b][i] = bits; crush_rate[b][i] = rate; crush_mix[b][i] = mix;
+    crush_used[b][i] = (mix > 0.0f);   // mix 0 = off (like chorus/flanger/wah)
 }
 
 // ── auto-wah — a resonant bandpass SWEPT BY AN ENVELOPE FOLLOWER on the bus signal ──
@@ -839,49 +841,50 @@ static void fx_set_wah_lfo(int b, float rate, float res, float mix) {
 // (Zavalishin) in a selectable mode (LP/HP/BP/notch), cutoff + resonance set by the cart and RIDDEN
 // live (the build-up / breakdown sweep). Per-channel state → preserves stereo. Cheap to re-call every
 // frame (just stores 3 values — unlike the buffer effects, sweeping it live is fine). filt_used-gated.
-static int   filt_mode[SOUND_FX_BUSES];     // FILTER_LOW / HIGH / BAND / NOTCH
-static float filt_cut [SOUND_FX_BUSES];     // cutoff Hz
-static float filt_res [SOUND_FX_BUSES];     // resonance 0..1 (peak height / the scream)
-static float filt_ic1L[SOUND_FX_BUSES], filt_ic2L[SOUND_FX_BUSES];   // TPT integrator state, L
-static float filt_ic1R[SOUND_FX_BUSES], filt_ic2R[SOUND_FX_BUSES];   //                        R
-static bool  filt_used[SOUND_FX_BUSES];
+#define FILT_INST 2                         // Increment F: filter instances per bus (filter A/B; LO-FI vs standalone)
+static int   filt_mode[SOUND_FX_BUSES][FILT_INST];     // FILTER_LOW / HIGH / BAND / NOTCH
+static float filt_cut [SOUND_FX_BUSES][FILT_INST];     // cutoff Hz
+static float filt_res [SOUND_FX_BUSES][FILT_INST];     // resonance 0..1 (peak height / the scream)
+static float filt_ic1L[SOUND_FX_BUSES][FILT_INST], filt_ic2L[SOUND_FX_BUSES][FILT_INST];   // TPT integrator state, L
+static float filt_ic1R[SOUND_FX_BUSES][FILT_INST], filt_ic2R[SOUND_FX_BUSES][FILT_INST];   //                        R
+static bool  filt_used[SOUND_FX_BUSES][FILT_INST];
 
-static void filter_process(int b, float *mixL, float *mixR) {
-    float freq = filt_cut[b];
+static void filter_process(int b, int i, float *mixL, float *mixR) {
+    float freq = filt_cut[b][i];
     if (freq < 20.0f) freq = 20.0f;
     if (freq > SOUND_SAMPLE_RATE * 0.45f) freq = SOUND_SAMPLE_RATE * 0.45f;
     float g  = tanf(3.14159265f * freq / (float)SOUND_SAMPLE_RATE);
-    float k  = 2.0f - 2.0f * filt_res[b] * 0.99f;       // small k = resonant peak
+    float k  = 2.0f - 2.0f * filt_res[b][i] * 0.99f;       // small k = resonant peak
     float a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    int   m  = filt_mode[b];
+    int   m  = filt_mode[b][i];
     // L channel
     float in = *mixL;
-    float v3 = in - filt_ic2L[b];
-    float v1 = a1 * filt_ic1L[b] + a2 * v3;
-    float v2 = filt_ic2L[b] + a2 * filt_ic1L[b] + a3 * v3;
-    filt_ic1L[b] = 2.0f * v1 - filt_ic1L[b];
-    filt_ic2L[b] = 2.0f * v2 - filt_ic2L[b];
-    if (filt_ic1L[b] >  4.0f) filt_ic1L[b] =  4.0f; if (filt_ic1L[b] < -4.0f) filt_ic1L[b] = -4.0f;
-    if (filt_ic2L[b] >  4.0f) filt_ic2L[b] =  4.0f; if (filt_ic2L[b] < -4.0f) filt_ic2L[b] = -4.0f;
+    float v3 = in - filt_ic2L[b][i];
+    float v1 = a1 * filt_ic1L[b][i] + a2 * v3;
+    float v2 = filt_ic2L[b][i] + a2 * filt_ic1L[b][i] + a3 * v3;
+    filt_ic1L[b][i] = 2.0f * v1 - filt_ic1L[b][i];
+    filt_ic2L[b][i] = 2.0f * v2 - filt_ic2L[b][i];
+    if (filt_ic1L[b][i] >  4.0f) filt_ic1L[b][i] =  4.0f; if (filt_ic1L[b][i] < -4.0f) filt_ic1L[b][i] = -4.0f;
+    if (filt_ic2L[b][i] >  4.0f) filt_ic2L[b][i] =  4.0f; if (filt_ic2L[b][i] < -4.0f) filt_ic2L[b][i] = -4.0f;
     *mixL = (m == FILTER_HIGH) ? in - k * v1 - v2 : (m == FILTER_BAND) ? v1
           : (m == FILTER_NOTCH) ? in - k * v1 : v2;     // v2 = lowpass (default)
     // R channel
     in = *mixR;
-    v3 = in - filt_ic2R[b];
-    v1 = a1 * filt_ic1R[b] + a2 * v3;
-    v2 = filt_ic2R[b] + a2 * filt_ic1R[b] + a3 * v3;
-    filt_ic1R[b] = 2.0f * v1 - filt_ic1R[b];
-    filt_ic2R[b] = 2.0f * v2 - filt_ic2R[b];
-    if (filt_ic1R[b] >  4.0f) filt_ic1R[b] =  4.0f; if (filt_ic1R[b] < -4.0f) filt_ic1R[b] = -4.0f;
-    if (filt_ic2R[b] >  4.0f) filt_ic2R[b] =  4.0f; if (filt_ic2R[b] < -4.0f) filt_ic2R[b] = -4.0f;
+    v3 = in - filt_ic2R[b][i];
+    v1 = a1 * filt_ic1R[b][i] + a2 * v3;
+    v2 = filt_ic2R[b][i] + a2 * filt_ic1R[b][i] + a3 * v3;
+    filt_ic1R[b][i] = 2.0f * v1 - filt_ic1R[b][i];
+    filt_ic2R[b][i] = 2.0f * v2 - filt_ic2R[b][i];
+    if (filt_ic1R[b][i] >  4.0f) filt_ic1R[b][i] =  4.0f; if (filt_ic1R[b][i] < -4.0f) filt_ic1R[b][i] = -4.0f;
+    if (filt_ic2R[b][i] >  4.0f) filt_ic2R[b][i] =  4.0f; if (filt_ic2R[b][i] < -4.0f) filt_ic2R[b][i] = -4.0f;
     *mixR = (m == FILTER_HIGH) ? in - k * v1 - v2 : (m == FILTER_BAND) ? v1
           : (m == FILTER_NOTCH) ? in - k * v1 : v2;
 }
-static void fx_set_filter(int b, int mode, float cutoff, float res) {
-    if (mode == FILTER_OFF) { filt_used[b] = false; return; }   // OFF = bypass → byte-identical
+static void fx_set_filter(int b, int i, int mode, float cutoff, float res) {
+    if (mode == FILTER_OFF) { filt_used[b][i] = false; return; }   // OFF = bypass → byte-identical
     if (res < 0.0f) res = 0.0f; if (res > 1.0f) res = 1.0f;
-    filt_mode[b] = mode; filt_cut[b] = cutoff; filt_res[b] = res;
-    filt_used[b] = true;
+    filt_mode[b][i] = mode; filt_cut[b][i] = cutoff; filt_res[b][i] = res;
+    filt_used[b][i] = true;
 }
 
 // ── formant filter — vowel resonance, the "push any sound through a voice" effect ──
@@ -1383,11 +1386,11 @@ static void apply_insert(int kind, int inst, int b, float *L, float *R) {
         case FX_CHORUS:  if (cho_used[b])    chorus_process(b, L, R);  break;
         case FX_PHASER:  if (phaser_used[b]) phaser_process(b, L, R);  break;
         case FX_FLANGER: if (flg_used[b])    flanger_process(b, L, R); break;
-        case FX_TAPE:    if (tape_used[b])   tape_process(b, L, R);    break;
-        case FX_EQ:      if (eq_used[b][inst]) eq_process(b, inst, L, R); break;   // Increment F: per-instance EQ
-        case FX_CRUSH:   if (crush_used[b])  crush_process(b, L, R);   break;
+        case FX_TAPE:    if (tape_used[b][inst])  tape_process(b, inst, L, R);  break;   // Increment F: per-instance
+        case FX_EQ:      if (eq_used[b][inst])    eq_process(b, inst, L, R);    break;   // Increment F: per-instance EQ
+        case FX_CRUSH:   if (crush_used[b][inst]) crush_process(b, inst, L, R); break;   // Increment F: per-instance
         case FX_FORMANT: if (fmt_used[b])    formant_process(b, L, R); break;
-        case FX_FILTER:  if (filt_used[b])   filter_process(b, L, R);  break;
+        case FX_FILTER:  if (filt_used[b][inst]) filter_process(b, inst, L, R); break;   // Increment F: per-instance
         case FX_PAN:     if (pan_used[b])    pan_process(b, L, R);     break;
         case FX_RINGMOD: if (rm_used[b])     rm_process(b, L, R);      break;
         case FX_ECHO:    if (echo_ins_used && b == 0) echo_ins_process(L, R); break;  // in-line delay, master-only (single buffer)
@@ -1510,6 +1513,9 @@ typedef enum {
     SR_GRAINS_FREEZE       = 83,   // a=on (0/1) — freeze the master granular capture buffer (live toggle, no DSP reconfigure)
     SR_INSTR_GRAINS_FREEZE = 84,   // a=slot, b=on (0/1) — freeze one instrument's granular buffer
     SR_EQ_INST      = 85,   // a=instance, b=low_db*1000, c=mid_db*1000, e0=high_db*1000 — master EQ on a given INSTANCE (Increment F; instance 0 == SR_EQ)
+    SR_CRUSH_INST   = 86,   // a=instance, b=bits*100, c=rate*100, e0=mix*1000 — master bitcrush on a given INSTANCE
+    SR_TAPE_INST    = 87,   // a=instance, b=wow*1000, c=flut*1000, e0=sat*1000 — master tape on a given INSTANCE
+    SR_FILTER_INST  = 88,   // a=instance, b=mode, c=cutoff_hz, e0=res*1000 — master filter on a given INSTANCE
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -4128,9 +4134,9 @@ static void sound_fire_req(SoundReq r) {
         int fx = r.b;
         float a = r.c / 1000.0f, b = r.e0 / 1000.0f, c = r.e1 / 1000.0f;
         switch (fx) {                         // configure the insert on this bus (params per effect)
-            case FX_CRUSH:  fx_set_crush(bus, a, b, c); break;   // bits, rate, mix (mix 0 = off)
+            case FX_CRUSH:  fx_set_crush(bus, 0, a, b, c); break;   // bits, rate, mix (mix 0 = off)
             case FX_EQ:     fx_set_eq(bus, 0, a, b, c); break;   // low, mid, high dB (instance 0)
-            case FX_TAPE:   fx_set_tape(bus, a, b, c);  break;   // wow, flutter, saturation
+            case FX_TAPE:   fx_set_tape(bus, 0, a, b, c);  break;   // wow, flutter, saturation
             case FX_CHORUS: fx_set_chorus(bus, a, b, c); break;  // rate, depth, mix (mix 0 = off)
             default: return;                  // only these 4 make sense (+fit 3 params) on a reverb tail
         }
@@ -4195,11 +4201,11 @@ static void sound_fire_req(SoundReq r) {
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_flanger(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f);
     } else if (r.kind == SR_TAPE) {         // master tape (bus 0): a=wow, b=flutter, c=sat (×1000)
-        fx_set_tape(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
+        fx_set_tape(0, 0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_TAPE) {   // per-instrument: a=slot, b=wow, c=flutter, e0=sat (×1000)
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
-        if (b >= 1) fx_set_tape(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
+        if (b >= 1) fx_set_tape(b, 0, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
     } else if (r.kind == SR_WAH) {          // master auto-wah (bus 0): a=sens, b=res, c=mix (×1000)
         fx_set_wah(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_WAH) {    // per-instrument: a=slot, b=sens, c=res, e0=mix (×1000)
@@ -4254,15 +4260,21 @@ static void sound_fire_req(SoundReq r) {
         }
         insert_order_n[bus] = n;
     } else if (r.kind == SR_BITCRUSH) {     // master bitcrush (bus 0): a=bits*100, b=rate*100, c=mix*1000
-        fx_set_crush(0, r.a / 100.0f, r.b / 100.0f, r.c / 1000.0f);
+        fx_set_crush(0, 0, r.a / 100.0f, r.b / 100.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_BITCRUSH) { // per-instrument: a=slot, b=bits*100, c=rate*100, e0=mix*1000
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
-        if (b >= 1) fx_set_crush(b, r.b / 100.0f, r.c / 100.0f, r.e0 / 1000.0f);
+        if (b >= 1) fx_set_crush(b, 0, r.b / 100.0f, r.c / 100.0f, r.e0 / 1000.0f);
     } else if (r.kind == SR_EQ) {           // master EQ (bus 0), instance 0: a=low_db*1000, b=mid_db*1000, c=high_db*1000
         fx_set_eq(0, 0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_EQ_INST) {      // master EQ (bus 0), instance r.a (Increment F): b=low_db*1000, c=mid_db*1000, e0=high_db*1000
         fx_set_eq(0, r.a, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
+    } else if (r.kind == SR_CRUSH_INST) {   // master bitcrush (bus 0), instance r.a: b=bits*100, c=rate*100, e0=mix*1000
+        fx_set_crush(0, r.a, r.b / 100.0f, r.c / 100.0f, r.e0 / 1000.0f);
+    } else if (r.kind == SR_TAPE_INST) {    // master tape (bus 0), instance r.a: b=wow*1000, c=flut*1000, e0=sat*1000
+        fx_set_tape(0, r.a, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
+    } else if (r.kind == SR_FILTER_INST) {  // master filter (bus 0), instance r.a: b=mode, c=cutoff_hz, e0=res*1000
+        fx_set_filter(0, r.a, r.b, (float)r.c, r.e0 / 1000.0f);
     } else if (r.kind == SR_INSTR_EQ) {     // per-instrument, instance 0: a=slot, b=low_db*1000, c=mid_db*1000, e0=high_db*1000
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
@@ -4299,7 +4311,7 @@ static void sound_fire_req(SoundReq r) {
         sc[vb].rel    = 1.0f - expf(-1.0f / (rel * 0.001f * (float)SOUND_SAMPLE_RATE));
         sc[vb].used   = (amount > 0.0005f);
     } else if (r.kind == SR_FILTER) {       // a=mode, b=cutoff_hz, c=res*1000 — master resonant filter (bus 0)
-        fx_set_filter(0, r.a, (float)r.b, r.c / 1000.0f);
+        fx_set_filter(0, 0, r.a, (float)r.b, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_PAN) {    // a=slot, b=pan*1000 (signed)
         int slot = r.a;
         if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
@@ -5156,6 +5168,9 @@ void glue(int victim_bus, float amount, int attack_ms, int release_ms) {
 void filter(int mode, float cutoff_hz, float resonance) {
     sound_push_ctrl(SR_FILTER, mode, (int)cutoff_hz, (int)(resonance * 1000.0f), 0, 0, 0);
 }
+void filter_inst(int instance, int mode, float cutoff_hz, float resonance) {   // master filter on a 2nd INSTANCE (Increment F) — pair with FX_INST(FX_FILTER, instance)
+    sound_push_ctrl(SR_FILTER_INST, instance, mode, (int)cutoff_hz, (int)(resonance * 1000.0f), 0, 0);
+}
 
 // add an effect AFTER the reverb on tank N's bus (effects-after-reverb — reverb→crush/eq/tape).
 // fx = FX_CRUSH/FX_EQ/FX_TAPE/FX_CHORUS; a/b/c are that effect's own params (×1000 packed, same
@@ -5193,6 +5208,9 @@ void instrument_flanger(int slot, float rate, float depth, float feedback, float
 void tape(float wow, float flutter, float saturation) {
     sound_push_ctrl(SR_TAPE, (int)(wow * 1000.0f), (int)(flutter * 1000.0f), (int)(saturation * 1000.0f), 0, 0, 0);
 }
+void tape_inst(int instance, float wow, float flutter, float saturation) {   // master tape on a 2nd INSTANCE (Increment F) — pair with FX_INST(FX_TAPE, instance)
+    sound_push_ctrl(SR_TAPE_INST, instance, (int)(wow * 1000.0f), (int)(flutter * 1000.0f), (int)(saturation * 1000.0f), 0, 0);
+}
 
 void instrument_tape(int slot, float wow, float flutter, float saturation) {
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
@@ -5225,6 +5243,9 @@ void instrument_wah_lfo(int slot, float rate_hz, float resonance, float mix) {
 
 void crush(float bits, float rate, float mix) {
     sound_push_ctrl(SR_BITCRUSH, (int)(bits * 100.0f), (int)(rate * 100.0f), (int)(mix * 1000.0f), 0, 0, 0);
+}
+void crush_inst(int instance, float bits, float rate, float mix) {   // master bitcrush on a 2nd INSTANCE (Increment F) — pair with FX_INST(FX_CRUSH, instance)
+    sound_push_ctrl(SR_CRUSH_INST, instance, (int)(bits * 100.0f), (int)(rate * 100.0f), (int)(mix * 1000.0f), 0, 0);
 }
 
 void instrument_crush(int slot, float bits, float rate, float mix) {
@@ -5530,21 +5551,27 @@ static void sound_init(void) {
         cho_rate[b] = 1.5f; cho_depth[b] = 0.4f; cho_mix[b] = 0.5f; cho_used[b] = false;
         flg_widx[b] = 0; flg_phase[b] = 0.0f;
         flg_rate[b] = 0.3f; flg_depth[b] = 0.7f; flg_fb[b] = 0.7f; flg_mix[b] = 0.5f; flg_used[b] = false;
-        tape_widx[b] = 0; tape_wph[b] = 0.0f; tape_fph[b] = 0.0f; tape_lpL[b] = 0.0f; tape_lpR[b] = 0.0f;
-        tape_wow[b] = 0.3f; tape_flut[b] = 0.2f; tape_sat[b] = 0.4f; tape_used[b] = false;
+        for (int i = 0; i < TAPE_INST; i++) {
+            tape_widx[b][i] = 0; tape_wph[b][i] = 0.0f; tape_fph[b][i] = 0.0f; tape_lpL[b][i] = 0.0f; tape_lpR[b][i] = 0.0f;
+            tape_wow[b][i] = 0.3f; tape_flut[b][i] = 0.2f; tape_sat[b][i] = 0.4f; tape_used[b][i] = false;
+        }
         wah_env[b] = 0.0f; wah_ic1[b] = 0.0f; wah_ic2[b] = 0.0f;
         wah_sens[b] = 0.3f + 0.5f * 4.7f; wah_res[b] = 0.5f; wah_mix[b] = 0.7f; wah_used[b] = false;
         wah_lfo_rate[b] = 0.0f; wah_lfo_phase[b] = 0.0f;   // follower mode until fx_set_wah_lfo()
-        crush_bits[b] = 8.0f; crush_rate[b] = 4.0f; crush_mix[b] = 1.0f;
-        crush_holdL[b] = 0.0f; crush_holdR[b] = 0.0f; crush_cnt[b] = 0; crush_used[b] = false;
+        for (int i = 0; i < CRUSH_INST; i++) {
+            crush_bits[b][i] = 8.0f; crush_rate[b][i] = 4.0f; crush_mix[b][i] = 1.0f;
+            crush_holdL[b][i] = 0.0f; crush_holdR[b][i] = 0.0f; crush_cnt[b][i] = 0; crush_used[b][i] = false;
+        }
         for (int i = 0; i < EQ_INST; i++) {
             eq_low_g[b][i] = 1.0f; eq_mid_g[b][i] = 1.0f; eq_high_g[b][i] = 1.0f;
             eq_loL[b][i] = 0.0f; eq_loR[b][i] = 0.0f; eq_hiL[b][i] = 0.0f; eq_hiR[b][i] = 0.0f; eq_used[b][i] = false;
         }
         for (int i = 0; i < 4; i++) { fmt_freq[b][i] = 700.0f; fmt_k[b][i] = 0.2f; fmt_amp[b][i] = 0.0f; fmt_ic1[b][i] = 0.0f; fmt_ic2[b][i] = 0.0f; }
         fmt_mix[b] = 0.0f; fmt_used[b] = false;   // dormant; fx_set_formant() fills the bands from the vowel table
-        filt_mode[b] = FILTER_LOW; filt_cut[b] = 8000.0f; filt_res[b] = 0.3f;
-        filt_ic1L[b] = filt_ic2L[b] = filt_ic1R[b] = filt_ic2R[b] = 0.0f; filt_used[b] = false;
+        for (int i = 0; i < FILT_INST; i++) {
+            filt_mode[b][i] = FILTER_LOW; filt_cut[b][i] = 8000.0f; filt_res[b][i] = 0.3f;
+            filt_ic1L[b][i] = filt_ic2L[b][i] = filt_ic1R[b][i] = filt_ic2R[b][i] = 0.0f; filt_used[b][i] = false;
+        }
         for (int s = 0; s < N_PEDALS; s++) insert_order[b][s] = s;   // default insert order = the 8 pedals, canonical (identity)
         insert_order[b][N_PEDALS]     = FX_FORMANT;                  // + formant as the 9th pedal (dormant until formant() → byte-identical)
         insert_order[b][N_PEDALS + 1] = FX_FILTER;                   // + filter as the 10th pedal (dormant until filter() → byte-identical)
