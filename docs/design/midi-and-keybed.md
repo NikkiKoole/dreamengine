@@ -319,12 +319,14 @@ Still open: full keybed.h adoption for mt70/sh101, `solo.h` MIDI-snap (smart-scr
 free-MIDI), the other ribbons (upright/pdbass/spacecho/musicalsaw), velocity on the
 keybed exceptions, a native device-name toast.
 
-**Open — MIDI velocity curve (noticed playing epiano, 2026-06-12).** keybed.h maps MIDI
-velocity **linearly** (`(vel*7)/127` in `keybed_update`), while the computer keyboard is a
-fixed `kb_vel` (6/7). So MIDI and QWERTY *sound different*: normal MIDI playing (~mezzo)
-lands around vol 4–5 — quieter/mellower than the constant QWERTY 6, and you have to bash
-the keys to reach the full bright tone. That difference is velocity expression working (a
-feature), but the linear curve sits too low for comfortable playing. To revisit: replace
-the linear map with a gentler curve (typical presses reach ~6–7 without slamming), in
-`keybed_update` — one change, applies to every keybed cart at once. Decide then whether
-QWERTY should stay fixed-6 or pick up a default that matches the curve's centre.
+**Resolved — MIDI velocity curve (2026-06-14).** keybed.h now maps MIDI velocity through a
+**concave power curve** — `v = round(7·(vel/127)^γ)` with `γ = KEYBED_MIDI_VEL_GAMMA` (default
+`0.55`, overridable per cart before the include) — replacing the old linear `(vel*7)/127` that
+sat too low (normal mezzo playing landed ~vol 3–4, quieter/mellower than the constant QWERTY 6).
+The curve lifts the mid-range so comfortable playing reaches ~vol 5–6 like the typed keys, while
+soft stays soft and a hard hit still reaches 7 — the standard synth/sampler velocity-curve fix.
+One change in `keybed_update`, applies to every keybed cart at once. QWERTY/touch stay fixed at
+`kb_vel` 6 (no per-key velocity to curve). Note: the original "epiano sounds wrong over MIDI"
+report that surfaced this was ultimately a *second app grabbing the MIDI input* (the engine path
+is byte-identical for MIDI vs QWERTY — verified via the harness); the curve is a genuine,
+independent improvement to the linear map, kept on its own merits.

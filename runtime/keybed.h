@@ -36,6 +36,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h>     // powf — the MIDI velocity curve
 
 #ifndef KEYBED_OCT_DOWN
 #define KEYBED_OCT_DOWN 'Z'
@@ -51,6 +52,9 @@
 #ifndef KEYBED_BLACK_KEYS
 #define KEYBED_BLACK_KEYS "WE TYU OP"   // aligned to whites: C# D# (gap) F# G# A# (gap) C# D#
 #endif
+#ifndef KEYBED_MIDI_VEL_GAMMA
+#define KEYBED_MIDI_VEL_GAMMA 0.55f   // MIDI velocity curve exponent: <1 = concave (lifts the mid-range
+#endif                                // so normal playing isn't quiet/dull); 1.0 = the old linear map
 
 // the piano pattern within an octave
 static const int KB_WSEMI[7] = { 0, 2, 4, 5, 7, 9, 11 };       // white-key semitones
@@ -203,13 +207,15 @@ static int kb_qwerty_midi(char c) {
 static void keybed_update(void) {
     for (int k = 0; k < 128; k++) if (kb_glow[k] > 0) kb_glow[k] *= 0.88f;   // decay here so custom-draw carts get it too
 
-    // 1. MIDI keyboard — absolute notes + velocity
-    //    OPEN (design/midi-and-keybed.md "MIDI velocity curve"): this LINEAR map sits
-    //    too low — normal playing lands ~vol 4-5, quieter/mellower than the fixed-6
-    //    QWERTY, so MIDI and typed keys sound different. Revisit with a gentler curve.
+    // 1. MIDI keyboard — absolute notes + velocity, through a CONCAVE velocity curve.
+    //    A linear (mv*7)/127 sits too low: most playing lands ~vol 3-4, quieter & mellower
+    //    than the fixed-6 QWERTY/touch. The gamma<1 power curve lifts the mid-range (mf ~vol
+    //    5-6, like the keys) while soft stays soft and hard hits 7 — the standard synth/
+    //    sampler velocity-curve fix. Tune via KEYBED_MIDI_VEL_GAMMA.
     int mn, mv, t;
     while ((t = midi_get(&mn, &mv)) != 0) {
-        if (t > 0) { int v = (mv * 7) / 127; kb_press(mn, KB_MIDI, v < 1 ? 1 : v); }
+        if (t > 0) { int v = (int)(7.0f * powf(mv / 127.0f, KEYBED_MIDI_VEL_GAMMA) + 0.5f);
+                     kb_press(mn, KB_MIDI, v < 1 ? 1 : v > 7 ? 7 : v); }
         else         kb_release(mn, KB_MIDI);
     }
 
