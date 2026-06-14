@@ -981,33 +981,37 @@ static void draw_world(void) {
     render_roads(zoom >= 0.45f);                       // LOD: drop minor tier far out
 }
 
-// ── MAGNIFIER — an inset that re-renders the world at the screen-centre point, a few
-// zoom levels deeper, WITH the street level layered in. "Same data, another zoom":
-// terrain + the very same highways (aligned) + the interior streets/zones the map is
-// too coarse to show. The harness for building L2. ─────────────────────────────────
-#define LOUPE_SZ   116
-#define LOUPE_ZOOM 4.0f             // ~7 world tiles across the box — a district close-up
-static void draw_loupe(void) {
-    float ocamX = camX, ocamY = camY, oz = zoom;      // save the map transform
+// ── MAGNIFIERS — insets that re-render the screen-centre point a few zoom levels deeper,
+// WITH the street level layered in. "Same data, another zoom": terrain + the very same
+// highways (aligned) + the interior streets/zones the map is too coarse to show. Two
+// nested lenses now: STREET = L2 district view, BLOCK = the deeper L3 harness (where the
+// access streets + footprints + sloop's car will live — see roadnet-streetlevel.md).
+#define LOUPE_SZ    116            // L2 district lens
+#define LOUPE_ZOOM  4.0f           // ~7 world tiles across — a district close-up
+#define LOUPE2_SZ   78             // L3 block lens (the deeper "all the way down" view)
+#define LOUPE2_ZOOM 9.0f           // ~3 world tiles across — individual lots/footprints
+static void draw_loupe_at(int bx, int by, int sz, float lz, const char *label) {
+    float ocamX = camX, ocamY = camY, oz = zoom;      // save the current transform
     float cw = camX + SCREEN_W * 0.5f / P;            // inspected point = screen centre
     float ch = camY + SCREEN_H * 0.5f / P;
-    int bx = SCREEN_W - LOUPE_SZ - 3, by = SCREEN_H - LOUPE_SZ - 3;
-
+    zoom = lz; view_metrics();                        // deep zoom; P recomputed
+    camX = cw - (bx + sz * 0.5f) / P;                 // centre the inspected point in the box
+    camY = ch - (by + sz * 0.5f) / P;
+    rectfill(bx - 1, by - 1, sz + 2, sz + 2, CLR_WHITE);   // frame
+    clip(bx, by, sz, sz);
+    render_terrain();
+    render_streetlevel(bx, by, sz);                   // owns the road surface in the lens
+    draw_nodes(1);                                    // + just the city markers
+    clip(0, 0, 0, 0);
+    camX = ocamX; camY = ocamY; zoom = oz; view_metrics();   // restore
+    print(label, bx + 3, by + 3, CLR_WHITE);
+}
+static void draw_loupe(void) {
     line(SCREEN_W/2 - 4, SCREEN_H/2, SCREEN_W/2 + 4, SCREEN_H/2, CLR_WHITE);   // map crosshair
     line(SCREEN_W/2, SCREEN_H/2 - 4, SCREEN_W/2, SCREEN_H/2 + 4, CLR_WHITE);
-
-    zoom = LOUPE_ZOOM; view_metrics();                // deep zoom; P recomputed
-    camX = cw - (bx + LOUPE_SZ * 0.5f) / P;           // centre the inspected point in the box
-    camY = ch - (by + LOUPE_SZ * 0.5f) / P;
-    rectfill(bx - 1, by - 1, LOUPE_SZ + 2, LOUPE_SZ + 2, CLR_WHITE);   // frame
-    clip(bx, by, LOUPE_SZ, LOUPE_SZ);
-    render_terrain();
-    render_streetlevel(bx, by, LOUPE_SZ);             // the level below — owns the road surface here:
-    draw_nodes(1);                                    // streets/lots/carved arterials + just city markers
-    clip(0, 0, 0, 0);
-
-    camX = ocamX; camY = ocamY; zoom = oz; view_metrics();   // restore the map
-    print("STREET", bx + 3, by + 3, CLR_WHITE);
+    draw_loupe_at(SCREEN_W - LOUPE_SZ - 3, SCREEN_H - LOUPE_SZ - 3,            // STREET, bottom-right
+                  LOUPE_SZ, LOUPE_ZOOM, "STREET");
+    draw_loupe_at(SCREEN_W - LOUPE2_SZ - 3, 3, LOUPE2_SZ, LOUPE2_ZOOM, "BLOCK"); // BLOCK, top-right
 }
 
 void init(void) {

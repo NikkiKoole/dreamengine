@@ -91,17 +91,31 @@ hard one), rivers+bridges ✅, RCI zones ✅, street-level blocks/roads/fields �
 driving (sloop), building collision + footprints, landmarks-as-gameplay, the map↔street
 mode transition, tunnels/carving (parked, may not fit 2D top-down).
 
+## The L3 realization (2026-06-14) — a level was missing
+Looking at the district loupe: built-up blocks are solid masses of lots with **no capillary
+streets** — the houses have no road frontage. The road hierarchy stops too early (we have
+highway→arterial→collector→local; the **access tier** is missing), and those finest streets
++ individual footprints only read at a **deeper zoom** than the district loupe. So there's a
+missing level — **L3, the on-the-street view** — and it's *exactly where sloop drives*.
+
+Captured in a new design doc: [`roadnet-streetlevel.md`](roadnet-streetlevel.md) (the gap,
+the explicit LOD stack, the L3 content, and the **seams** that keep it deterministic). The
+build **harness is in**: a second, deeper **"BLOCK" loupe** (top-right inset, ~3 tiles
+across) alongside the district "STREET" loupe — currently shows L2 zoomed in; the access
+streets + footprints get built *into* it next, same playbook as the L2 lens.
+
 ## Next time — where to pick up (recommended order)
-1. **Park contents + the football field** — PARK is the last flat-tint zone; give it a real
-   park (paths, the pitch with markings). Small, visible, finishes the zone-content set.
-2. **Building footprints as collidable rects** — lots are flat colour; draw real footprints
-   (inset + outline) and expose them through `road_at`'s `built` flag as solid rects, so a
-   car can hit a building. This is the bridge to collision.
-3. **Rung 4 — drive it** — wire `road_at()` into **sloop**: a car at street scale querying
-   road/building/zone, plus a **map↔street mode** flip. The leap from viewer to playable.
-4. **Polish backlog**: the in-city **bridge gap** (road_at doesn't pave water + loupe no
-   longer strokes the spline → a bridge shows as a break); promote `U_CORE` (the gradient
-   handoff) and field/lane widths to sliders; snap the district grid-shear to a road.
+1. **L3 access-street tier** — a finer lattice (or cul-de-sac tree) subdividing each L2
+   block so every lot fronts a street; connects to the parent grid, pure-fn, `CL_ACCESS`.
+   Build it into the BLOCK loupe. *(See roadnet-streetlevel.md → seams.)*
+2. **Building footprints + `building_at()`** — lots → real footprint rects (inset/outline/
+   driveway), exposed as a collision seam (the precise version of `road_at`'s `built`).
+3. **Park contents + the football field** — PARK is the last flat-tint zone (small win).
+4. **Rung 4 — drive it** — wire `road_at()` + `building_at()` into **sloop** at L3; the
+   BLOCK lens becomes the car's camera. The leap from viewer to playable.
+5. **Polish backlog**: the in-city **bridge gap** (road_at doesn't pave water + loupe no
+   longer strokes the spline → a bridge shows as a break); promote `U_CORE`/field/lane
+   widths to sliders; snap the district grid-shear to a road; loupe **UI/placement**.
 
 ## How the pieces relate (cousin carts)
 - **`sloop.c`** — the **car physics** (already solved). The eventual consumer; will
