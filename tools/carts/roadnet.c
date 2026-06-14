@@ -996,6 +996,10 @@ static int art_node_at(float x, float y) {
     if (n_art_node >= MAXGNODE) return -1;
     gnode[n_art_node].x=x; gnode[n_art_node].y=y; return n_art_node++;
 }
+static int new_node(float x, float y) {     // append a node (grid/cul-de-sac), no dedup
+    if (nnode >= MAXGNODE) return -1;
+    gnode[nnode].x=x; gnode[nnode].y=y; return nnode++;
+}
 // call AFTER gather_arterials(). node_them = dedup endpoints into a routable node graph (needed
 // for the stitch + car routing; only worth it zoomed in — the dedup is O(n²), and far out there
 // are too many arterials). Far out we skip it: arterials still render fine from their endpoints.
@@ -1101,6 +1105,17 @@ static void graph_collapse_grid(void) {
 #define GRAPH_STREET_PX 16.0f
 #define GRAPH_ACCESS_PX 34.0f
 #define GRAPH_BUILD_PX  44.0f      // footprints only when a block is this wide (they're small)
+// STREET-PATTERN palette, chosen per district by a STABLE hash (gid, not the array index): a
+// suburb district is EITHER the fine access-grid OR sparse collectors + cul-de-sacs — not both.
+// Keyed off gid so it doesn't re-roll on pan; both graph_add_grid (suppress access) and
+// graph_add_culdesacs (add stubs) ask the same question → they agree.
+#define CULDESAC_PCT 45            // share of suburb districts laid out as cul-de-sacs
+static int is_culdesac_district(int ci, int di, int dj) {
+    if (ci < 0) return 0;
+    unsigned g = gid[ci];
+    unsigned h = hash2(di + (int)((g>>3)&0xffffu), dj*7 + (int)((g>>13)&0xffffu));
+    return (h % 100u) < CULDESAC_PCT;
+}
 // ── VECTORISE THE INTRA-CITY GRID into gedge[]/gnode[] over the VISIBLE region (LOD: street
 // zoom only; far out the grid is sub-pixel and meaningless). The grid is rotated PER DISTRICT
 // (city_grid_coords), so we can't lay one global lattice — we go per gathered city, per
@@ -1137,6 +1152,7 @@ static void graph_add_grid(void) {
             int ka = ifloor(gxmin/hp), ma = ifloor(gymin/hp);
             int nk = ifloor(gxmax/hp) - ka + 1, nm = ifloor(gymax/hp) - ma + 1;
             if (nk > GRID_DI) nk = GRID_DI; if (nm > GRID_DI) nm = GRID_DI;
+            int cds = is_culdesac_district(ci, di, dj);          // this district: cul-de-sac layout?
             static int nid[GRID_DI][GRID_DI];
             // pass 1: node at each (k,m) crossing inside the box that validates as grid road
             for (int a=0;a<nk;a++) for (int b=0;b<nm;b++) {
@@ -1146,6 +1162,7 @@ static void graph_add_grid(void) {
                 if (ex<ex0||ex>ex1||ey<ey0||ey>ey1) continue;        // belongs to a neighbour district
                 float wx = nx+ex, wy = ny+ey; int cls;
                 if (!is_grid_road(wx, wy, &cls)) continue;
+                if (cds && cls==CL_ACCESS) continue;                 // cul-de-sac district: no fine access grid
                 if (nnode < MAXGNODE) { gnode[nnode].x=wx; gnode[nnode].y=wy; nid[a][b]=nnode++; }
             }
             // pass 2: join adjacent nodes whose connecting span is road → edge (with adjacency)
@@ -1184,6 +1201,38 @@ static void graph_stitch(void) {
             if (d < bd) { bd = d; best = a; }
         }
         if (best >= 0) push_gedge(gx, gy, gnode[best].x, gnode[best].y, CL_STREET, EK_CONNECT, g, best);
+    }
+}
+
+// ── STREET-PATTERN #2: CUL-DE-SACS — in cul-de-sac districts the fine access-grid is suppressed
+// (graph_add_grid above), leaving sparse collectors; here we fill those districts with dead-end
+// residential lanes branching off the collectors at intervals, alternating sides. Each stub roots
+// ON its collector (drivable) and dead-ends inside the block — every house still fronts a road.
+// Pure fn of the stub root (deterministic, seam-true); buildings follow for free (EK_GRID edges).
+// Call AFTER the stitch. (Routing note: stubs attach geometrically; explicit edge-split for
+// adjacency is a refinement, not needed until the router runs.)
+static void graph_add_culdesacs(void) {
+    float dsp = block_sp() * DISTRICT_BLK;
+    int base = nedge;                                       // only sprout off pre-existing edges
+    for (int e=0; e<base && nedge<MAXGEDGE-1 && nnode<MAXGNODE-2; e++) {
+        if (gedge[e].kind!=EK_GRID || gedge[e].cls!=CL_STREET) continue;   // off collectors only
+        float x0=gedge[e].x0, y0=gedge[e].y0, dx=gedge[e].x1-x0, dy=gedge[e].y1-y0;
+        float L=fsqrt(dx*dx+dy*dy); if (L < block_sp()*0.7f) continue;
+        float ux=dx/L, uy=dy/L, px=-uy, py=ux;                             // perp
+        int n = (int)(L / (block_sp()*1.3f)); if (n<1) n=1;               // a stub every ~1.3 blocks
+        for (int j=0; j<n && nedge<MAXGEDGE-1 && nnode<MAXGNODE-2; j++) {
+            float t=(j+0.5f)/n, bx=x0+dx*t, by=y0+dy*t;
+            float u=urbanity(bx,by); if (u<U_LIGHT || u>=U_MED) continue;  // suburb (sets dom_i)
+            int di=ifloor((bx-gnx[dom_i])/dsp), dj=ifloor((by-gny[dom_i])/dsp);
+            if (!is_culdesac_district(dom_i, di, dj)) continue;            // only in cul-de-sac districts
+            unsigned h=hash2(ifloor(bx*8.0f), ifloor(by*8.0f));
+            int side = (h&1) ? 1 : -1;                                     // alternate sides
+            float len=block_sp()*(1.2f + (h>>4 & 3)*0.35f);               // 1.2..2.25 blocks deep
+            float ex=bx+px*side*len, ey=by+py*side*len;
+            if (!passable(height_at(ex,ey))) continue;
+            int rN=new_node(bx,by), eN=new_node(ex,ey); if (rN<0||eN<0) break;
+            push_gedge(bx,by, ex,ey, CL_ACCESS, EK_GRID, rN, eN);          // the cul-de-sac stub
+        }
     }
 }
 
@@ -1320,7 +1369,7 @@ static void draw_graph_view(void) {
     float bpx = block_sp() * P;                          // on-screen size of one city block (px)
     int street = (bpx >= GRAPH_STREET_PX);
     build_graph(street);                                  // arterials → gedge[] (noded only at street zoom)
-    if (street) { graph_add_grid(); graph_stitch(); }    // grid + on-ramps onto arterials
+    if (street) { graph_add_grid(); graph_stitch(); graph_add_culdesacs(); }   // grid + on-ramps + cul-de-sacs
     render_terrain();
     fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();  // dim
     for (int i = 0; i < nedge; i++) {                    // EDGES — vector centre-lines, class-coloured

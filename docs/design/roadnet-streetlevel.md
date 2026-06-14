@@ -185,17 +185,23 @@ as buildings-to-be) — the access streets + footprints are what we build into i
 7. **Rung 4** — sloop at L3: drives the graph (route/lane-keep via `gedge[]`/`gnode[]` + `coff`),
    stays on the surface via `road_at()`, collides with `building_at()`. The GRAPH view is its camera.
 
-## Future direction — a per-district STREET-PATTERN PALETTE
-Now that buildings follow the graph and the stitch connects local roads to the backbone, the
-*layout generator is swappable*: a district can be filled by any pattern that emits **connected
-edges**, and population + reachability come for free. Plan a **palette chosen per district by a
-hash** (the zone field decides which are plausible): **grid** (have it, axis or rotated) →
-**cul-de-sac / loops-and-lollipops** (suburb — the biggest realism win over uniform grid) →
-**organic / warped** (exurb, hardest to keep deterministic). The load-bearing rules each new
-generator must obey: **(1)** pure-fn of its district cell + bounded inside it (no global growth),
-**(2)** connect to the bounding collector/arterial (lean on the stitch), **(3)** own its interior,
-share only boundary roads (so district seams stay clean). Build the stitch's polish first, then
-add cul-de-sacs as pattern #2.
+## STREET-PATTERN PALETTE (per district, by stable hash)
+The layout generator is now **swappable per district** — `is_culdesac_district(ci,di,dj)` (keyed
+on the stable `gid`) picks the pattern, and population + reachability come for free since buildings
+follow whatever edges are emitted. Patterns so far:
+- **Grid** (axis or rotated) — the default; the fine access-grid fills the district.
+- ✅ **Cul-de-sac** (pattern #2, 2026-06-15) — in a cul-de-sac district the fine access-grid is
+  **suppressed** (`graph_add_grid` skips `CL_ACCESS` crossings there), leaving sparse collectors;
+  `graph_add_culdesacs()` then fills it with dead-end residential lanes branching off the
+  collectors at intervals (alternating sides), each rooting on its collector (drivable) and
+  dead-ending inside the block. Pure-fn of the stub root → deterministic; houses follow.
+  *Refinements:* cul-de-sac **bulbs** (the turning circle), and explicit edge-split at the stub
+  root for routing adjacency (geometric attach for now — fine until the router runs).
+- ⛔ **Organic / warped** (pattern #3, exurb) — the hardest to keep deterministic; later.
+
+The load-bearing rules each generator obeys: **(1)** pure-fn of its district cell, bounded inside
+it (no global growth), **(2)** connect to the bounding collector/arterial (lean on the stitch),
+**(3)** own its interior, share only boundary roads (clean district seams).
 
 ## Starting point for next session (the concrete first move + two hooks)
 
