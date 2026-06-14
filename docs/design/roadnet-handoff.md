@@ -74,9 +74,10 @@ note) that has nothing to do with roadnet.
   **lots**, grid aligned to arterials (`city_dir`/`align`), arterials **carved through**
   (class-aware), the **outskirts gradient** (occupancy thinning + ribbon development), and
   **Voronoi farm fields** (crops + hedgerows). All readable via the **`road_at()` seam**
-  (now with a `built` flag). Still ⛔: **park contents** (the football field — PARK is still
-  flat tint), building **footprints** drawn as *collidable rects* (lots are colour only),
-  parking lots, landmarks.
+  (now with a `built` flag). **Access-street tier added 2026-06-14** (`CL_ACCESS`, the L3
+  finer lanes bisecting suburban blocks — see the L3 realization below). Still ⛔: **park
+  contents** (the football field — PARK is still flat tint), building **footprints** drawn as
+  *collidable rects* (lots are colour only), parking lots, landmarks.
 - **L3 car + collision + play** — ⛔ not built, **but `road_at()` now exists** — the seam
   sloop will drive on. Wiring it in is rung 4 (the next leap).
 
@@ -105,11 +106,13 @@ across) alongside the district "STREET" loupe — currently shows L2 zoomed in; 
 streets + footprints get built *into* it next, same playbook as the L2 lens.
 
 ## Next time — where to pick up (recommended order)
-1. **L3 access-street tier** — a finer lattice (or cul-de-sac tree) subdividing each L2
-   block so every lot fronts a street; connects to the parent grid, pure-fn, `CL_ACCESS`.
-   Build it into the BLOCK loupe. *(See roadnet-streetlevel.md → seams.)*
-2. **Building footprints + `building_at()`** — lots → real footprint rects (inset/outline/
-   driveway), exposed as a collision seam (the precise version of `road_at`'s `built`).
+1. ✅ **L3 access-street tier** (DONE 2026-06-14) — `ST_ACCESS`/`CL_ACCESS`: half-pitch
+   (`block_sp/2`) lanes that bisect the suburban blocks (where locals are suppressed) so
+   every lot fronts a street; pure-fn, flows through `grid_at`→`road_at`, draw-gated to the
+   BLOCK loupe via `zoom >= LOUPE2_ZOOM`. *(See roadnet-streetlevel.md → "What's built".)*
+2. **Building footprints + `building_at()`** — *next move*. Lots → real footprint rects
+   (inset/outline/driveway toward the fronting access lane), exposed as a collision seam
+   (the precise version of `road_at`'s `built`).
 3. **Park contents + the football field** — PARK is the last flat-tint zone (small win).
 4. **Rung 4 — drive it** — wire `road_at()` + `building_at()` into **sloop** at L3; the
    BLOCK lens becomes the car's camera. The leap from viewer to playable.

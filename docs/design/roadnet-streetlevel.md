@@ -1,8 +1,23 @@
 # roadnet L3 — the on-the-street level (design seed, 2026-06-14)
 
-**Status: design + harness only.** The deeper **"BLOCK" loupe** (a second, finer inset)
-is in as the build harness — UI/placement provisional. The L3 *content* (residential
-streets, footprints) is specified here but **not built yet**.
+**Status: access-street tier BUILT (2026-06-14); footprints next.** The deeper **"BLOCK"
+loupe** (a second, finer inset) is in as the build harness — UI/placement provisional.
+The first L3 content — the **access / residential street tier** (`CL_ACCESS`) — is now
+built (see "What's built" below). The remaining L3 content (individual building
+footprints + `building_at()`, park contents) is specified here but **not built yet**.
+
+## What's built (2026-06-14) — the access-street tier
+The suburb ring (`U_LIGHT ≤ U < U_MED`) had its local streets suppressed, so its blocks
+were 4× the core's and interior lots had no frontage. `street_axis()` now adds an
+**`ST_ACCESS`** tier there: half-pitch (`block_sp/2`) lanes that bisect those big blocks so
+every lot fronts a street. The new road class **`CL_ACCESS`** (enum tail — stays
+`> CL_ARTERIAL` so it gets no centre-line, no renumbering) flows through `grid_at()` →
+`GR_ACCESS` → `road_at()` (`r.cls = CL_ACCESS`) → the renderer (narrow `CLR_DARKER_GREY`
+lane, no sidewalk). It is **draw-gated to the BLOCK lens** via `zoom >= LOUPE2_ZOOM`
+(hoisted to the top of the file so `street_axis` can read it): the dense core keeps only
+its locals, the suburb shows the access grid, and the STREET lens (zoom 4) shows neither —
+exactly the tier-by-zoom draw-gate rule below, with zero new plumbing. Verified by baking
+the BLOCK lens over a suburb point with `CL_ACCESS` temporarily painted a vivid colour.
 
 Related: [`roadnet.md`](roadnet.md) (L0–L2: the map + district street level),
 [`roadnet-handoff.md`](roadnet-handoff.md) (where the work stands),
@@ -97,17 +112,25 @@ as buildings-to-be) — the access streets + footprints are what we build into i
   question, deferred. (Today: a separate fixed BLOCK inset.)
 
 ## Next
-1. Build the **access-street tier** into the BLOCK loupe (finer lattice, connects to parent).
-2. **Footprints** + `building_at()` (the collision seam).
-3. **Rung 4** — sloop at L3: the car drives the access streets, collides with footprints.
+1. ✅ **Access-street tier** built into the BLOCK loupe (`ST_ACCESS`/`CL_ACCESS`, half-pitch
+   lanes bisecting suburban blocks, draw-gated on `zoom >= LOUPE2_ZOOM`). See "What's built".
+2. **Footprints** + `building_at()` (the collision seam) — *the next move*. Lots are still
+   flat colour; turn each into a footprint rect (setback/yard + outline + driveway toward its
+   fronting access lane), exposed as `building_at(wx,wy) → {solid, lot id}` (the precise
+   version of `road_at`'s `built` flag; screen == collision, same as `road_at`).
+3. **Park contents** (the football field) — PARK is the last flat-tint zone (small win).
+4. **Rung 4** — sloop at L3: the car drives the access streets, collides with footprints.
 
 ## Starting point for next session (the concrete first move + two hooks)
 
-**First move:** add `CL_ACCESS` and a finer street tier in `grid_at()` (a sub-lattice of
-`block_sp`, e.g. `block_sp/2`), gated so it only *draws* at L3 depth. Build it into the
-BLOCK loupe, bake, iterate — then footprints.
+**First move (DONE 2026-06-14):** ~~add `CL_ACCESS` and a finer street tier in `grid_at()`~~ —
+built; see "What's built". **The new first move is footprints + `building_at()`** (item 2 in
+"Next"): turn each built lot into a footprint rect fronting its access lane, exposed as a
+collision seam. Build it into the BLOCK loupe the same way (bake over a suburb point — reuse
+the temp init/`LOUPE2_SZ` dance below — iterate, revert before committing).
 
-Two hooks that aren't obvious from the rest of the doc:
+Two hooks that aren't obvious from the rest of the doc (still apply — they're how the access
+tier got built, and the same playbook for footprints):
 
 - **Zoom is the LOD signal.** During a lens render `zoom` is set to that lens's value
   (`LOUPE_ZOOM` vs `LOUPE2_ZOOM`), so `render_streetlevel`/`grid_at` can gate the access

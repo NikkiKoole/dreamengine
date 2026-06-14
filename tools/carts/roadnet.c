@@ -105,6 +105,10 @@ static int   show_grid = 0;          // cell-border overlay (seam test)
 static int   show_hud  = 1;
 static int   show_loupe = 1;         // magnifier inset → the street level below
 static float zoom = 1.0f;            // mousewheel zoom (ZMIN..ZMAX)
+// Lens zoom levels (declared here so the street grid can use LOUPE2_ZOOM as the L3
+// draw-gate; the matching LOUPE*_SZ pixel sizes live in the magnifier block below).
+#define LOUPE_ZOOM  4.0f             // STREET lens — ~7 world tiles across (a district close-up)
+#define LOUPE2_ZOOM 9.0f             // BLOCK  lens — ~3 world tiles across (lots/access streets)
 static float P    = TILE;            // pixels per tile = TILE * zoom (set per frame)
 static int   vcols, vrows;           // visible world-tile span this frame (road bounds)
 static int   dragging = 0, drag_px, drag_py;  // left-drag-to-pan ("grab the map")
@@ -154,7 +158,9 @@ static int passable(float x) { return x >= 0.0f && x < 0.4f; }   // road LOS tes
 // priority suppression give blue-noise spacing (no two strong nodes adjacent). All
 // pure functions of cell coords → seam-true. A road's CLASS is f(endpoint ranks). ──
 enum { RK_HAMLET, RK_TOWN, RK_CITY, RK_METRO };
-enum { CL_MOTORWAY, CL_HIGHWAY, CL_ARTERIAL, CL_STREET, CL_DIRT };
+enum { CL_MOTORWAY, CL_HIGHWAY, CL_ARTERIAL, CL_STREET, CL_DIRT, CL_ACCESS };
+// CL_ACCESS = the finest tier (L3 residential lanes carved by the street grid, never the
+// arterial cache) — kept last so it stays > CL_ARTERIAL (no centre-line) without renumbering.
 
 static int town_rank(int cx, int cy) {                   // feeder node: town / hamlet
     unsigned h = hash2(cx * 1900385059u + 61, cy * 2120969693u + 17);
@@ -716,23 +722,42 @@ static int zone_of(float wx, float wy, float U) {    // assumes U >= U_FARM (bui
 // and the local urbanity, so it's seam-true and the future road_at() reads the same
 // geometry. Block DENSITY falls out of U: downtown gets the full local grid, the suburb
 // only its avenues — block size emerges, it isn't a flag.
-enum { ST_NONE, ST_LOCAL, ST_AVENUE };
+// Tier order = priority (ACCESS narrowest .. AVENUE widest); ST_NONE=0 < ST_ACCESS.
+enum { ST_NONE, ST_ACCESS, ST_LOCAL, ST_AVENUE };
 static int street_axis(float coord, float U, float *adist) {
     float sp = block_sp();
     int k = ifloor(coord / sp + 0.5f);                    // nearest line index
     float d = coord - k * sp; *adist = d < 0 ? -d : d;
     if (k % 4 == 0) return (U >= U_LIGHT) ? ST_AVENUE : ST_NONE;   // the grid's bigger streets
-    return (U >= U_MED) ? ST_LOCAL : ST_NONE;                      // locals only in the dense core
+    if (U >= U_MED) return ST_LOCAL;                               // locals only in the dense core
+    // L3 ACCESS tier — where locals are suppressed (the suburb) the blocks are huge and
+    // interior lots have no frontage. Bisect them with half-pitch residential lanes so every
+    // lot fronts a street. Draw-gated to the BLOCK lens (zoom>=LOUPE2_ZOOM): the lens sets
+    // `zoom` to its value, so "generate at this zoom" == "what this lens draws" (no determinism
+    // risk — see roadnet-streetlevel.md, the tier-by-zoom-is-a-draw-gate rule).
+    if (zoom >= LOUPE2_ZOOM && U >= U_LIGHT) {
+        float sp2 = sp * 0.5f;
+        int k2 = ifloor(coord / sp2 + 0.5f);
+        float d2 = coord - k2 * sp2; if (d2 < 0) d2 = -d2;
+        if (k2 & 1) { *adist = d2; return ST_ACCESS; }    // odd half-line = mid-block access lane
+    }
+    return ST_NONE;
 }
-enum { GR_NONE, GR_ROAD, GR_WALK };                       // a built-up tile: lot / street / sidewalk
+enum { GR_NONE, GR_ROAD, GR_WALK, GR_ACCESS };            // a built-up tile: lot / street / sidewalk / access lane
 static int grid_at(float gx, float gy, float U) {
     float dv, dh;
     int cv = street_axis(gx, U, &dv), ch = street_axis(gy, U, &dh);
-    float hwv = (cv == ST_AVENUE) ? 0.22f : 0.13f;        // road half-width, in world tiles
-    float hwh = (ch == ST_AVENUE) ? 0.22f : 0.13f;
+    float hwv = (cv == ST_AVENUE) ? 0.22f : (cv == ST_ACCESS) ? 0.09f : 0.13f;  // half-width (tiles)
+    float hwh = (ch == ST_AVENUE) ? 0.22f : (ch == ST_ACCESS) ? 0.09f : 0.13f;
     float sw = 0.07f;                                     // sidewalk band just outside the kerb
-    if ((cv != ST_NONE && dv < hwv) || (ch != ST_NONE && dh < hwh)) return GR_ROAD;
-    if ((cv != ST_NONE && dv < hwv+sw) || (ch != ST_NONE && dh < hwh+sw)) return GR_WALK;
+    int rv = (cv != ST_NONE && dv < hwv);                 // on the vertical street?
+    int rh = (ch != ST_NONE && dh < hwh);                 // on the horizontal street?
+    if (rv || rh) {                                       // any local/avenue here = STREET; access-only = ACCESS
+        int wide = (rv && cv > ST_ACCESS) || (rh && ch > ST_ACCESS);
+        return wide ? GR_ROAD : GR_ACCESS;
+    }
+    // sidewalks border the wider streets only (access lanes are bare residential frontage)
+    if ((cv > ST_ACCESS && dv < hwv+sw) || (ch > ST_ACCESS && dh < hwh+sw)) return GR_WALK;
     return GR_NONE;
 }
 // roof / ground colour for one building lot inside a block (sub-block hash grid)
@@ -934,7 +959,9 @@ static RoadHit road_at(float wx, float wy) {
     // local street grid (built-up zones only)
     if (!r.on_road && (r.zone==Z_RES||r.zone==Z_COM||r.zone==Z_IND||r.zone==Z_HARBOR)) {
         float gx, gy; city_grid_coords(wx, wy, &gx, &gy);
-        if (grid_at(gx, gy, r.urb) == GR_ROAD) { r.on_road = 1; r.cls = CL_STREET; }
+        int g = grid_at(gx, gy, r.urb);
+        if      (g == GR_ROAD)   { r.on_road = 1; r.cls = CL_STREET; }
+        else if (g == GR_ACCESS) { r.on_road = 1; r.cls = CL_ACCESS; }   // L3 residential lane
     }
     if (r.on_road) return r;
     // built vs open: COM/IND are the dense core (always built); RES/FARM thin via occupancy
@@ -956,7 +983,9 @@ static void render_streetlevel(int bx, int by, int sz) {        // bounds = the 
             RoadHit h = road_at(wx, wy);                          // SAME query the consumer calls
             int col;
             if (h.on_road) {                                     // class-aware road surface
-                col = (h.cls == CL_DIRT) ? CLR_BROWN : CLR_DARK_GREY;       // dirt vs paved
+                col = (h.cls == CL_DIRT)   ? CLR_BROWN          // unpaved inter-town road
+                    : (h.cls == CL_ACCESS) ? CLR_DARKER_GREY    // narrow residential lane (L3)
+                    :                        CLR_DARK_GREY;     // paved street/arterial
                 if (h.cls <= CL_ARTERIAL && h.coff >= 0 && h.coff < 0.08f)  // big roads get a centre-line
                     col = CLR_YELLOW;
             }
@@ -988,10 +1017,8 @@ static void draw_world(void) {
 // highways (aligned) + the interior streets/zones the map is too coarse to show. Two
 // nested lenses now: STREET = L2 district view, BLOCK = the deeper L3 harness (where the
 // access streets + footprints + sloop's car will live — see roadnet-streetlevel.md).
-#define LOUPE_SZ    116            // L2 district lens
-#define LOUPE_ZOOM  4.0f           // ~7 world tiles across — a district close-up
-#define LOUPE2_SZ   78             // L3 block lens (the deeper "all the way down" view)
-#define LOUPE2_ZOOM 9.0f           // ~3 world tiles across — individual lots/footprints
+#define LOUPE_SZ    116            // L2 district lens   (LOUPE_ZOOM  defined up top)
+#define LOUPE2_SZ   78             // L3 block lens      (LOUPE2_ZOOM defined up top)
 static void draw_loupe_at(int bx, int by, int sz, float lz, const char *label) {
     float ocamX = camX, ocamY = camY, oz = zoom;      // save the current transform
     float cw = camX + SCREEN_W * 0.5f / P;            // inspected point = screen centre
