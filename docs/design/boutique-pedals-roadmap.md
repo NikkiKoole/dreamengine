@@ -1,0 +1,133 @@
+# Boutique-pedal roadmap — squeezing the most out of the "$400 pedal" lists
+
+Two crowd-sourced lists of "highest bang-for-buck boutique pedals to clone in C" landed
+(Shallow Water, Microcosm, MOOD, Generation Loss, Polymoon, Klon, Sun Face, Univibe,
+Shimmer, Red Panda Particle). This is the plan for harvesting them.
+
+**The key insight:** almost every pedal on both lists collapses onto **two missing engine
+primitives**. Build those two brain-pieces and the pedals fall out cheaply on top. Everything
+else, we already ship. So this roadmap is ordered by *primitive*, not by *pedal* — each primitive
+is a multiplier that unlocks a cluster.
+
+See also: [`effects-recipes.md`](../guides/effects-recipes.md) (the cookbook each new effect
+must land a row in), [`audio-notes.md §17`](audio-notes.md) (the effect ledger), and
+[`navkit-porting-handoff.md`](../guides/navkit-porting-handoff.md) (the DJ-FX family that
+covers MOOD).
+
+---
+
+## Already on the shelf — DO NOT rebuild
+
+| pedal (list) | what we already have |
+|---|---|
+| Klon transparent OD (B1) | `instrument_drive` + `DRIVE_SOFT` + a parallel dry blend (mix) — same topology. *(Their `fast_tanh` Padé approx is a real CPU win but a micro-opt, not a new effect — see "Side quests".)* |
+| Sun Face germanium fuzz (B2) | `DRIVE_ASYM` is asymmetric clipping; it's already the `pedalboard` FUZZ pedal's germanium mode. |
+| Microcosm / Red Panda Particle granular engine (A2, B5) | `grains` — the capture-buffer + Hanning-windowed grain engine, shipped. The lists' own thesis ("a circular buffer + a grain struct = the brain of every $400 digital pedal") is the thing we just built. |
+| Polymoon diffuse delay (A5) | `echo → reverb` approximates it; our reverb is Schroeder (comb + allpass diffusers) already. |
+
+---
+
+## Primitive 1 — a richer modulation source  ⭐ the cheap multiplier
+
+**The gap:** we have *no* clean random / sample-and-hold / non-sine LFO for effects. Tape
+wow/flutter are plain sines (noise-LFO deliberately skipped for `--det`), and the only
+random-walk `drift` we own is baked *inside* instrument voices (reed/brass breath), not exposed
+as a modulator. One small primitive unlocks four pedals.
+
+### Step 1.1 — build the modulation kit (the foundation)
+A tiny set of reusable, **deterministically-seeded** modulation sources in `sound.h` (so
+`--det` / `tune-check` stay reproducible):
+- **random-walk** — slow filtered noise (a low-passed LCG), the "living"/drift source.
+- **sample-and-hold** — a value that jumps at a rate and holds (the stepped random).
+- **optical / incandescent ramp** — an asymmetric LFO shape: slow attack, fast release (the
+  lightbulb throb). Add as an LFO *shape* alongside `TREM_SINE/SQUARE/TRI`.
+
+No user-facing pedal yet — this is the shared building block 1.2–1.5 each consume. Keep it a
+`static` helper block, same spirit as `moddel_hermite` ("write the technique once").
+
+### Step 1.2 — Univibe (A-list #3 / B-list #3)  · effort: XS
+The cheapest possible win: feed the **optical LFO** into the *existing phaser allpass chain*.
+Almost no new DSP — it's a phaser with a different-shaped LFO + the classic 4-stage voicing.
+Ship as a `univibe()` wrapper or a "shape" arg on `phaser()`.
+
+### Step 1.3 — Shallow Water (A-list #1)  · effort: S
+Random-walk modulating a *short* delay line (reuse the chorus/`moddel_hermite` buffer) → the
+warped-tape/water warble. Add the signature **Low Pass Gate**: a lowpass whose cutoff *tracks
+the envelope* (darker as the signal decays) — we have the envelope-follower machinery in
+`wah`/`note_follow`, so this is a recombination, not new math.
+
+### Step 1.4 — Generation Loss "Failure" knob (A-list #4)  · effort: XS
+We **already ship the whole VHS rig** — crush + tape + filter, even the `pedalboard` LO-FI macro
+pedal. The *only* missing spice is the **random tape-catch dropouts** (momentary vol + pitch
+drops), which is just the S&H source gating volume/pitch. Completes a $400 pedal with one small
+modulator. Fold into the LO-FI macro or ship a dedicated `vhs()` recipe.
+
+### Step 1.5 — germanium "living" bias drift (B-list #2)  · effort: XS
+A slow random-walk on the fuzz drive bias so it breathes over time. Tiny nicety on the existing
+FUZZ pedal — do it only if 1.1 is already in.
+
+---
+
+## Primitive 2 — a bus pitch-shifter  ⭐ the trophy
+
+**The gap:** we can retune a *voice* (`instrument_tune`), but can't pitch-shift an arbitrary
+*bus signal*. That's the one genuinely new engine on these lists, and it's the prize.
+
+### Step 2.1 — pitched + reversed grains  · effort: XS  *(independent — can ship anytime)*
+Doesn't actually need the bus pitch-shifter — grain pitch is just resampling the read. Our
+`grains` hard-wires `posInc = 1.0`; make it variable (and allow negative = reverse). That alone
+gets most of Microcosm / Red Panda Particle's glitch-synth palette. **Lowest-effort headroom on
+an engine we already own — a strong early win.**
+
+### Step 2.2 — the pitch-shifter itself  · effort: M
+A granular / overlap-add (PSOLA-ish) pitch-shifter operating on a bus signal. The real build.
+Reference: DaisySP / Signalsmith Stretch for the overlap-add window logic. A/B nothing in navkit
+(navkit has no bus pitch-shift) — so verify by ear + spectral check, not correlation.
+
+### Step 2.3 — Shimmer reverb (B-list #4)  · effort: S *(once 2.2 lands)*
+Octave-up pitch-shift **inside the reverb feedback loop** + a lowpass = the crystalline,
+continuously-ascending tail. The showpiece. Add the "jitter the delay times" trick (uses
+Primitive 1's random source) to de-metallic the FDN. This is the one that makes people go *whoa*.
+
+---
+
+## Primitive-free port — MOOD varispeed (A-list #3)  · effort: S
+
+Independent of both primitives. MOOD's "clock" = varispeed buffer playback (pitch + time shift
+together). This maps **directly onto navkit's already-written `half_speed.h` / `tape_stop.h` /
+`rewind.h`** — the DJ-FX family flagged as untouched in the porting handoff. Ready DSP to port
+verbatim, same playbook as `grains`. The "always listening" half is just `grains`' capture buffer
+(never-stop-recording) which we already have.
+
+---
+
+## Recommended order (by effort→payoff, respecting dependencies)
+
+1. **2.1 pitched/reversed grains** — XS, independent, immediate Microcosm/Particle expansion.
+2. **1.1 modulation kit** — the multiplier; nothing user-facing but everything below rides it.
+3. **1.2 Univibe** — XS, reuses the phaser whole.
+4. **1.4 Generation Loss dropout** — XS, completes the VHS rig we already have.
+5. **1.3 Shallow Water** — S, a new characterful effect + the LPG.
+6. **2.2 pitch-shifter → 2.3 Shimmer** — M then S, the trophy build.
+7. **MOOD varispeed** — S, a verbatim navkit port whenever it fits.
+8. *(1.5 germanium drift — XS, opportunistic once 1.1 exists.)*
+
+## Per-step repo checklist (every effect, no exceptions)
+- **4-place API wiring**: `studio.h` decl + `sound.h` impl + `studioDocs.js` + `shell.js`, then
+  `gen-tcc-symbols.js` (see CLAUDE.md "Adding a new API function").
+- **SET-AND-HOLD**: configure only on value change (copy `groovebox`'s `apply_fx()`); never 60×/s.
+- **Determinism**: seed every random source so `--det` renders byte-reproducibly; run
+  `tune-check` for anything touching pitch (2.x).
+- **Verify**: `soundcheck` compile-gate + 900-frame tripwire; A/B vs navkit where a reference
+  exists (`navkit-fx-render.c`), else spectral/character check.
+- **Showcase cart** + baked screenshot + `index.json` + `lint-carts`, and **add the pedal to
+  `pedalboard.c`** (it's the serial-insert home) when it's an `FX_*` insert.
+- **Docs**: a row in [`effects-recipes.md`](../guides/effects-recipes.md) + a ledger entry in
+  [`audio-notes.md §17`](audio-notes.md); if ported, update
+  [`navkit-porting-handoff.md`](../guides/navkit-porting-handoff.md).
+
+## Side quests (engineering nits from the lists, not effects)
+- **`fast_tanh` Padé approximation** (B1 tip): if `DRIVE_SOFT`/the soft-clip is ever hot in the
+  profiler, swap `tanhf` for the rational approx. Measure first — only worth it if it shows up.
+- **AC128 transfer-curve LUT** (B2 tip): a lookup table + lerp for a specific germanium curve, if
+  we ever want a *named* vintage fuzz voicing beyond `DRIVE_ASYM`.
