@@ -333,6 +333,16 @@ LOGIC/CHANCE/EUCLID/DIV). What the rack still can't do is **sound dirty** — th
 *engine* gap, not a module gap: see audio-notes §17 (drive → soft-clip → echo bus →
 detune → crush, plus cart-side swing + darker DRUM voices).
 
+**2026-06-15 — the FX rack + a morphing modulator:** the "sound dirty" gap above is closed,
+cart-side. Ten FX modules (VERB/ECHO/DRIVE/CRUSH/WAH/VOWEL/EQ/CLOUD dual-mode + SAT/FILT
+master-only) — see "FX modules + per-part routing" above for the pink-cable model. Plus **TIDES**,
+a Mutable-Tides-style morphing LFO / function generator: `freq` + `slope` (peak position: ramp-down
+→ triangle → ramp-up) + `shape` (curve exp→lin→log), shaping `powf(seg, e)` on each half-cycle.
+Free-runs as an LFO; a patched `clk` makes it a one-shot (a curve-controllable AD per trigger), with
+an `eoc` gate at cycle end. The big upgrade over the plain sine LFO. Preset: *Tides* (euclid-triggered
+one-shot shaping a filter pluck). Only sound.h change in the batch was the master saturator
+(`drive_insert`/`FX_DRIVE`, audio-notes §17 item 20); everything else used existing engine calls.
+
 ## Existing carts to not duplicate
 
 - `drummachine.c` — 16-step grid already exists; DRUMS module here is just 4 trigger inputs, no internal sequencer

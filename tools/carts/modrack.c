@@ -35,7 +35,8 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
        MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS,
        MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, MOD_MIX, MOD_CMP, MOD_DIV, MOD_ADSR,
-       MOD_RVB, MOD_ECHO, MOD_DRIVE, MOD_CRUSH, MOD_SAT, MOD_WAH, MOD_VOWEL, MOD_EQ, MOD_FILT, MOD_GRAINS, NTYPE };   // RVB..GRAINS = FX (see apply_master_fx). dual-mode except SAT/FILT (master-only)
+       MOD_RVB, MOD_ECHO, MOD_DRIVE, MOD_CRUSH, MOD_SAT, MOD_WAH, MOD_VOWEL, MOD_EQ, MOD_FILT, MOD_GRAINS,
+       MOD_TIDES, NTYPE };   // RVB..GRAINS = FX (see apply_master_fx). TIDES = a morphing LFO / function gen (CV)
 enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT, FMT_DIV, FMT_PCT, FMT_DRIVE };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
@@ -154,6 +155,11 @@ ModType TYPES[NTYPE] = {
     // POOL-LIMITED: master + one part at a time (a 2nd patched CLOUD won't get a bus).
     [MOD_GRAINS]= { "CLOUD", CLR_LIGHT_PEACH, 5, 6, 2, {{2,false,30,60,"cv"},{3,false,4,16,"in"}},
                     3, {{"size",20,400,120,12,30,FMT_INT},{"dens",4,60,16,30,30,FMT_INT},{"mix",0,1,0.5f,48,30,FMT_F1}} },
+    // TIDES — a morphing LFO/function generator (Mutable Tides). freq=rate, slope=peak position
+    // (ramp-down → triangle → ramp-up), shape=curve (exp→lin→log). 'clk' patched = a one-shot
+    // (shaped AD env per trigger); unpatched = free-running LFO. cv out + an eoc gate at cycle end.
+    [MOD_TIDES] = { "TIDES", CLR_MEDIUM_GREEN, 5, 6, 3, {{0,false,10,60,"clk"},{2,true,30,60,"cv"},{0,true,50,60,"eoc"}},
+                    3, {{"freq",0.05f,10,1,12,26,FMT_F1},{"slope",0,1,0.5f,30,26,FMT_F1},{"shape",0,1,0.5f,48,26,FMT_F1}} },
 };
 // knob-index names for the multi-knob sound modules — MUST stay in the same order as the
 // knob arrays in TYPES[] above. Use these instead of raw numbers in eval/presets: a
@@ -175,6 +181,7 @@ enum { VWK_VOW, VWK_Q, VWK_MIX };                                  // MOD_VOWEL 
 enum { EQK_LO, EQK_MID, EQK_HI };                                  // MOD_EQ knobs
 enum { FLK_MODE, FLK_CUT, FLK_RES };                               // MOD_FILT knobs
 enum { GRK_SIZE, GRK_DENS, GRK_MIX };                              // MOD_GRAINS knobs
+enum { TDK_FREQ, TDK_SLOPE, TDK_SHAPE };                           // MOD_TIDES knobs
 
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -217,6 +224,7 @@ const char *HELP[NTYPE][3] = {
     [MOD_EQ]     = { "3-band EQ (tone). lo/mid/hi = boost or cut", "in dB (the only BOOST in the rack). cv->hi", "(brightness). Patch a ~ in = EQ just that part." },
     [MOD_FILT]   = { "DJ filter: sweep the WHOLE mix. mode=lp/hp/", "bp/nt, cut=cutoff, res=peak. Patch an LFO/ENV", "into cv to SWEEP the cutoff (the build/drop)." },
     [MOD_GRAINS] = { "Granular CLOUD: sprays grains of the recent", "past. size=grain len, dens=grains/sec, mix=wet.", "~ in = cloud one part (pool: master + 1 part)." },
+    [MOD_TIDES]  = { "Tidal mod: a morphing LFO. freq=rate, slope=", "ramp<->saw shape, shape=exp/lin/log curve. Patch", "clk = one-shot env per trigger; eoc fires at end." },
 };
 
 // ── module instances + cables ──
@@ -706,10 +714,26 @@ void preset_filterjam(void) {    // the DJ FILTER swept by an LFO over the whole
     add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
     add_cable(lf, 0, fl, 0);   // LFO → FILT cv = the cutoff sweep on the whole mix
 }
+void preset_tides(void) {        // TIDES as a SHAPEABLE filter envelope: euclid triggers a one-shot,
+                                 // slope/shape morph the pluck (snappy exp pluck → slow log swell)
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK,  bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
+    int td = spawn(MOD_TIDES,  bayx(2), bayy(2)), tm = spawn(MOD_TURING, bayx(3), bayy(3));
+    int qt = spawn(MOD_QUANT,  bayx(4), bayy(4)), vo = spawn(MOD_VOICE,  bayx(5), bayy(5));
+    int dr = spawn(MOD_DRUM,   bayx(6), bayy(6));
+    mod[ck].param[0] = 110; mod[eu].param[0] = 4; mod[eu].param[1] = 8;
+    mod[td].param[TDK_FREQ] = 3.0f; mod[td].param[TDK_SLOPE] = 0.15f; mod[td].param[TDK_SHAPE] = 0.3f;  // fast, snappy rise, exp = a pluck
+    mod[tm].param[0] = 0.3f; mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[vo].param[VK_CUT] = 350; mod[vo].param[VK_RES] = 7; mod[vo].param[VK_WAV] = 0;
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, vo, 0); add_cable(eu, 1, td, 0);   // euclid gates the note + triggers TIDES
+    add_cable(td, 1, vo, 2);                                                      // TIDES cv → VOICE filter = the shaped pluck
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1);
+    add_cable(ck, 0, dr, 0); add_cable(ck, 2, dr, 2);
+}
 
-const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad", "PD reso", "Organ jam", "Space dub", "Sat bus", "Split FX", "Filter jam" };
-void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad, preset_pdreso, preset_organ, preset_spacedub, preset_satbus, preset_splitfx, preset_filterjam };
-#define NPRESET 30
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad", "PD reso", "Organ jam", "Space dub", "Sat bus", "Split FX", "Filter jam", "Tides" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad, preset_pdreso, preset_organ, preset_spacedub, preset_satbus, preset_splitfx, preset_filterjam, preset_tides };
+#define NPRESET 31
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[8]; } SaveMod;
@@ -1121,6 +1145,32 @@ void eval_mod(int mi) {
             }
             m->state[0] = g;
             m->jackval[1] = clamp(m->state[2], 0, 1);
+            break; }
+        case MOD_TIDES: {   // morphing LFO / one-shot function gen (Mutable Tides)
+            float freq  = m->param[TDK_FREQ];
+            float slope = clamp(m->param[TDK_SLOPE], 0.02f, 0.98f);   // peak position in the cycle
+            float e     = powf(4.0f, (0.5f - m->param[TDK_SHAPE]) * 2.0f);   // shape: exp(>1)..lin(1)..log(<1)
+            bool  trig_patched = cable_into(mi, 0) >= 0;
+            float trig = read_in(mi, 0);
+            m->jackval[2] = 0;   // eoc low by default
+            if (trig_patched) {  // ONE-SHOT: a rising edge fires a single shaped cycle, then idle
+                if (trig > 0.5f && m->state[2] <= 0.5f) { m->state[0] = 0; m->state[1] = 1; }
+                m->state[2] = trig;
+                if (m->state[1] > 0.5f) {
+                    m->state[0] += freq * dt();
+                    if (m->state[0] >= 1.0f) { m->state[0] = 0; m->state[1] = 0; m->jackval[2] = 1; m->state[3] = 0; }   // EOC → idle
+                }
+            } else {             // FREE-RUN LFO: phase loops, eoc pulses each wrap
+                m->state[0] += freq * dt();
+                if (m->state[0] >= 1.0f) { m->state[0] -= 1.0f; m->jackval[2] = 1; m->state[3] = 0; }
+                m->state[1] = 1;
+            }
+            float ph = m->state[0], v;
+            if (m->state[1] < 0.5f)   v = 0;                                      // idle (one-shot done)
+            else if (ph < slope)      v = powf(ph / slope, e);                    // rise 0→1
+            else                      v = powf(1.0f - (ph - slope) / (1.0f - slope), e);   // fall 1→0
+            m->jackval[1] = clamp(v, 0, 1);
+            m->state[3] += 1;
             break; }
     }
 }
@@ -1571,6 +1621,9 @@ void draw_extras(int mi) {
                           rectfill(x + 8, y + 46, W - 16, 3, CLR_BLACK); rectfill(x + 8, y + 46, (int)(c * (W - 16)), 3, CLR_TRUE_BLUE); break; }
         case MOD_GRAINS:{ float w = clamp(m->param[GRK_MIX] + read_in(mi, 0), 0, 1);
                           rectfill(x + 8, y + 46, W - 16, 3, CLR_BLACK); rectfill(x + 8, y + 46, (int)(w * (W - 16)), 3, CLR_LIGHT_PEACH); break; }
+        case MOD_TIDES: meter(x + W - 12, y + 14, 6, 34, m->jackval[1], CLR_MEDIUM_GREEN);   // live output level
+                        if (m->state[3] < 5) circfill(x + 50, y + 50, 3, CLR_WHITE);          // eoc flash
+                        break;
     }
 }
 
