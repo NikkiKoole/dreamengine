@@ -162,8 +162,31 @@ map onto our control-rate engine (cables carry gate/pitch/cv; sound is made by `
 - **green** — gate (0 or 1, acts on rising edge)
 - **yellow** — pitch (MIDI note as float)
 - **cyan** — CV (0..1, modulates parameters)
+- **pink** — audio routing (no value; marks which voice feeds which effect — see "FX modules" below)
 
-Cables draw as a drooping bezier curve. A small bright dot pulses down the cable on each gate or beat. Jacks are 5px circles — hollow = output, filled = input. Type-checked on connect: gate→gate, pitch→pitch, cv→cv only.
+Cables draw as a drooping bezier curve. A small bright dot pulses down the cable on each gate or beat. Jacks are 5px circles — hollow = output, filled = input. Type-checked on connect: gate→gate, pitch→pitch, cv→cv, audio→audio only.
+
+## FX modules + per-part routing (2026-06-14)
+
+VERB / ECHO / DRIVE / CRUSH / SAT effect the sound. They don't sit in a CV patch — they configure
+the engine's FX. Each (except SAT) has a **pink audio-in** jack, and VOICE / MACRO / DRUM each grew
+a **pink audio-out**. The pink cable carries no value; it just says *which part feeds which effect*:
+
+- **Audio-in unpatched → the effect is GLOBAL** (master bus): `reverb_insert` / `echo_insert` /
+  `crush` / `drive_insert` on the whole mix. Only the first unpatched module of a kind drives it;
+  an absent kind is pushed off once (mix 0 = byte-identical). This is the default — existing presets
+  (a loose VERB on "Generative") are unchanged.
+- **Audio-in patched from a source → the effect targets JUST that part**, via the per-instrument API
+  (`instrument_reverb` / `instrument_echo` / `instrument_drive` / `instrument_crush` on the source's
+  slot[s] — `source_slots()` maps a VOICE/MACRO to its one slot, a DRUM to its three). So "crush on
+  the drums, reverb on the voice" is two pink cables (the "Split FX" preset).
+
+Constraint worth knowing: VERB/ECHO are **sends to shared buses**, so two patched reverbs share one
+room *size* (the last-changed wins); DRIVE/CRUSH get **private per-slot buses** (fully independent).
+SAT stays master-only — it's the whole-mix saturator, the deliberate counterpart to per-part DRIVE.
+All of this is cart-side (the per-instrument FX functions already existed); applied in
+`apply_master_fx()`, set-and-hold + change-gated, with a sweep that turns a part's effect off when its
+cable is pulled or its module deleted.
 
 ## Default patch (wired on first open — instant sound)
 

@@ -55,7 +55,7 @@ ModType TYPES[NTYPE] = {
     [MOD_SH]    = { "S&H", CLR_YELLOW, 4, 6, 3, {{2,false,8,60,"in"},{0,false,24,60,"clk"},{2,true,40,60,"cv"}}, 0, {} },
     [MOD_QUANT] = { "QUANT", CLR_GREEN, 5, 6, 2, {{2,false,18,60,"in"},{1,true,42,60,"pit"}},
                    2, {{"scl",0,5.99f,SCALE_PENTA,18,28,FMT_SCALE},{"root",0,11.99f,0,42,28,FMT_NOTE}} },
-    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 7, {{0,false,3,84,"g"},{1,false,13,84,"p"},{2,false,23,84,"f"},{2,false,33,84,"r"},{2,false,43,84,"w"},{2,false,53,84,"a"},{0,false,63,84,"vb"}},
+    [MOD_VOICE] = { "VOICE", CLR_BLUE, 6, 8, 8, {{0,false,3,84,"g"},{1,false,13,84,"p"},{2,false,23,84,"f"},{2,false,33,84,"r"},{2,false,43,84,"w"},{2,false,53,84,"a"},{0,false,63,84,"vb"},{3,true,70,18,"~"}},   // jack 7 = audio out (pink) → patch into an FX module to effect just this voice
                    8, {{"cut",200,2200,700,20,28,FMT_INT},{"res",0,15,6,52,28,FMT_INT},
                        {"pw",0.05f,0.95f,0.5f,12,46,FMT_F1},{"wav",0,8.99f,0,36,46,FMT_WAVE},{"flt",0,3.99f,0,58,46,FMT_FILTER},
                        {"fenv",0,3000,0,14,64,FMT_INT},{"penv",-48,48,0,36,64,FMT_INT},{"denv",0,1,0,58,64,FMT_F1}} },   // vb = VIBE patch point; a = amp/VCA CV; flt = filter mode; denv = duty (PWM) env, square/pulse only
@@ -63,7 +63,7 @@ ModType TYPES[NTYPE] = {
                    2, {{"h",1,8.99f,4,18,26,FMT_INT},{"s",2,16.99f,8,42,26,FMT_INT}} },
     [MOD_ENV]   = { "ENV", CLR_MEDIUM_GREEN, 4, 6, 2, {{0,false,14,60,"g"},{2,true,34,60,"cv"}},
                    2, {{"atk",0.005f,0.5f,0.01f,14,32,FMT_MS},{"dec",0.02f,1,0.25f,34,32,FMT_MS}} },
-    [MOD_DRUM]  = { "DRUM", CLR_DARK_ORANGE, 4, 5, 3, {{0,false,8,48,"k"},{0,false,24,48,"s"},{0,false,40,48,"h"}}, 0, {} },
+    [MOD_DRUM]  = { "DRUM", CLR_DARK_ORANGE, 5, 5, 4, {{0,false,8,48,"k"},{0,false,24,48,"s"},{0,false,40,48,"h"},{3,true,56,30,"~"}}, 0, {} },   // jack 3 = audio out (all 3 drum voices)
     // ── tiny utilities (3x5 = 36x60, LOGIC 4x5 = 48x60) ──
     [MOD_SLEW]  = { "SLEW", CLR_INDIGO, 3, 5, 2, {{2,false,9,48,"in"},{2,true,27,48,"out"}},
                    1, {{"ms",1,500,80,18,32,FMT_INT}} },
@@ -93,7 +93,7 @@ ModType TYPES[NTYPE] = {
     // Plaits-style macro voice (audio-notes §8): eng picks a modeled engine, the three
     // 0..1 macros (har/tmb/mor) mean something different per engine; h/t/m CV inlets ADD
     // to their knobs (full range — patch an ATTN before the inlet to set depth)
-    [MOD_MACRO]   = { "MACRO", CLR_DARK_PURPLE, 6, 8, 6, {{0,false,4,86,"g"},{1,false,16,86,"p"},{2,false,28,86,"h"},{2,false,40,86,"t"},{2,false,52,86,"m"},{0,false,64,86,"vb"}},
+    [MOD_MACRO]   = { "MACRO", CLR_DARK_PURPLE, 6, 8, 7, {{0,false,4,86,"g"},{1,false,16,86,"p"},{2,false,28,86,"h"},{2,false,40,86,"t"},{2,false,52,86,"m"},{0,false,64,86,"vb"},{3,true,70,18,"~"}},   // jack 6 = audio out (pink)
                      7, {{"eng",0,5.99f,0,20,28,FMT_ENGINE},{"har",0,1,0.5f,52,28,FMT_F1},
                          {"tmb",0,1,0.5f,20,48,FMT_F1},{"mor",0,1,0.5f,52,48,FMT_F1},
                          {"drv",0,1,0,14,68,FMT_F1},{"eko",0,1,0,36,68,FMT_F1},{"tun",-12,12,0,58,68,FMT_F1}} },
@@ -122,13 +122,13 @@ ModType TYPES[NTYPE] = {
     // inlet ADDS to the wet/amount knob, so an LFO/ENV/MATHS can sweep a pedal. Applied
     // globally in apply_master_fx() (NOT eval_mod): only the first module of a kind drives
     // the bus; the rest sit dormant. drive is per-voice (slots 5..22), the rest are whole-mix.
-    [MOD_RVB]   = { "VERB", CLR_INDIGO, 4, 6, 1, {{2,false,24,60,"cv"}},
+    [MOD_RVB]   = { "VERB", CLR_INDIGO, 4, 6, 2, {{2,false,24,60,"cv"},{3,false,4,16,"in"}},
                     2, {{"size",0.1f,0.95f,0.6f,14,30,FMT_F1},{"mix",0,1,0.35f,34,30,FMT_F1}} },
-    [MOD_ECHO]  = { "ECHO", CLR_BLUE_GREEN, 5, 6, 1, {{2,false,30,60,"cv"}},
+    [MOD_ECHO]  = { "ECHO", CLR_BLUE_GREEN, 5, 6, 2, {{2,false,30,60,"cv"},{3,false,4,16,"in"}},
                     3, {{"time",40,800,300,12,30,FMT_INT},{"fb",0,0.85f,0.4f,30,30,FMT_F1},{"mix",0,1,0.35f,48,30,FMT_F1}} },
-    [MOD_DRIVE] = { "DRIVE", CLR_BROWN, 4, 6, 1, {{2,false,24,60,"cv"}},
+    [MOD_DRIVE] = { "DRIVE", CLR_BROWN, 4, 6, 2, {{2,false,24,60,"cv"},{3,false,4,16,"in"}},
                     2, {{"amt",0,1,0.4f,14,30,FMT_F1},{"mode",0,3.99f,0,34,30,FMT_DRIVE}} },
-    [MOD_CRUSH] = { "CRUSH", CLR_MAUVE, 4, 6, 1, {{2,false,24,60,"cv"}},
+    [MOD_CRUSH] = { "CRUSH", CLR_MAUVE, 4, 6, 2, {{2,false,24,60,"cv"},{3,false,4,16,"in"}},
                     2, {{"bits",2,16,8,14,30,FMT_INT},{"mix",0,1,0.5f,34,30,FMT_F1}} },
     // SAT = whole-MIX saturation (drive_insert / FX_DRIVE) — unlike DRIVE (per-VOICE, post-filter
     // acid scream), this drives the SUMMED bus so drums + MACRO grit up too: tube glue low, lo-fi
@@ -183,10 +183,10 @@ const char *HELP[NTYPE][3] = {
     [MOD_CMP]    = { "Comparator: gate high while cv in > thr.", "An LFO through it becomes a clock -- thr", "sets the pulse width. CV -> rhythm, no CLOCK." },
     [MOD_DIV]    = { "Clock divider: passes every Nth gate.", "CLOCK only speaks /1 /2 /4 -- DIV adds /3,", "/8, /16... two DIVs = instant polymeter." },
     [MOD_ADSR]   = { "Envelope with SUSTAIN: gate up -> attack,", "decay, then HOLD at sus; gate down ->", "release. Into VOICE 'a' = pads that breathe." },
-    [MOD_RVB]    = { "Master reverb. Adds SPACE to the whole rack.", "size = room, mix = wet. Patch a cv (LFO/ENV)", "into it to swell the wash in and out." },
-    [MOD_ECHO]   = { "Master delay. time = repeat gap, fb = how", "many echoes, mix = wet. Patch a cv -> dub", "throws that bloom and fade. (cv adds to mix.)" },
-    [MOD_DRIVE]  = { "Overdrive on the VOICE synths (not drums/", "MACRO). amt = grit, mode = sft/hrd/fld/asy.", "cv adds to amt -- an ENV makes a dirt pluck." },
-    [MOD_CRUSH]  = { "Master bitcrush: lo-fi digital grunge on the", "whole mix. bits = resolution, mix = blend.", "cv adds to mix -- gate the grit rhythmically." },
+    [MOD_RVB]    = { "Reverb. size=room, mix=wet. Patch a source's", "pink ~ (audio) into 'in' to verb just THAT part;", "unpatched = the whole mix. cv adds to mix." },
+    [MOD_ECHO]   = { "Delay. time=gap, fb=echoes, mix=wet. Patch a", "source's ~ into 'in' = delay just that part;", "unpatched = whole mix. (cv adds to mix.)" },
+    [MOD_DRIVE]  = { "Overdrive (post-filter acid scream). amt=grit,", "mode=sft/hrd/fld/asy. Patch a source ~ into 'in'", "= drive that part; unpatched = all synth voices." },
+    [MOD_CRUSH]  = { "Bitcrush lo-fi grunge. bits=res, mix=blend.", "Patch a source's ~ into 'in' = crush just that", "part; unpatched = the whole mix. cv adds to mix." },
     [MOD_SAT]    = { "Mix-bus SATURATION: drives the WHOLE mix", "(drums + MACRO too, unlike DRIVE). amt=grit,", "mode=sft/hrd/fld/asy, mix=dry/wet. cv->amt." },
 };
 
@@ -642,9 +642,29 @@ void preset_satbus(void) {       // FX showcase: a full beat + acid bass run thr
     add_cable(ck, 0, dr, 0); add_cable(ck, 2, dr, 2);
 }
 
-const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad", "PD reso", "Organ jam", "Space dub", "Sat bus" };
-void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad, preset_pdreso, preset_organ, preset_spacedub, preset_satbus };
-#define NPRESET 28
+void preset_splitfx(void) {      // PINK AUDIO CABLES: bitcrush on JUST the drums, reverb on JUST the
+                                 // voice — two effects, two parts, patched independently (the routing demo)
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK,  bayx(0), bayy(0)), eu = spawn(MOD_EUCLID, bayx(1), bayy(1));
+    int tm = spawn(MOD_TURING, bayx(2), bayy(2)), qt = spawn(MOD_QUANT,  bayx(3), bayy(3));
+    int vo = spawn(MOD_VOICE,  bayx(4), bayy(4)), dr = spawn(MOD_DRUM,   bayx(5), bayy(5));
+    int rv = spawn(MOD_RVB,    bayx(6), bayy(6)), cr = spawn(MOD_CRUSH,  bayx(7), bayy(7));
+    mod[ck].param[0] = 100; mod[eu].param[0] = 3; mod[eu].param[1] = 8;
+    mod[tm].param[0] = 0.3f; mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[vo].param[VK_CUT] = 900; mod[vo].param[VK_RES] = 5; mod[vo].param[VK_WAV] = 2; mod[vo].param[VK_FENV] = 600;
+    mod[rv].param[RVK_SIZE] = 0.78f; mod[rv].param[RVK_MIX] = 0.6f;   // big room, as a SEND on the voice only
+    mod[cr].param[CRK_BITS] = 5;     mod[cr].param[CRK_MIX] = 0.7f;    // gritty drums only
+    // gate/pitch patch (blue/green/yellow)
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0); add_cable(qt, 1, vo, 1); add_cable(ck, 0, vo, 0);
+    add_cable(ck, 0, eu, 0); add_cable(eu, 1, dr, 0); add_cable(ck, 0, dr, 2);
+    // AUDIO patch (pink): VOICE audio-out (jack 7) → VERB in (jack 1); DRUM audio-out (jack 3) → CRUSH in
+    add_cable(vo, 7, rv, 1);
+    add_cable(dr, 3, cr, 1);
+}
+
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad", "PD reso", "Organ jam", "Space dub", "Sat bus", "Split FX" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad, preset_pdreso, preset_organ, preset_spacedub, preset_satbus, preset_splitfx };
+#define NPRESET 29
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[8]; } SaveMod;
@@ -1060,13 +1080,52 @@ void eval_mod(int mi) {
     }
 }
 
-// ── master-bus FX modules — applied once per frame (after the eval loop, so cv jacks are
-// fresh). The bus is GLOBAL: only the FIRST module of a kind drives it; an absent kind gets
-// pushed OFF once (mix 0 = byte-identical clean). SET-AND-HOLD: re-apply ONLY when the value
-// moves, quantized so a cv-swept knob can't flood the request queue (the groovebox apply_fx()
-// pattern). Each module's cv inlet (jack 0) ADDS to its wet/amount knob.
+// ── FX modules — applied once per frame (after the eval loop, so cv jacks are fresh).
+// Two routings, decided by each FX module's AUDIO-IN (pink, jack 1):
+//   • UNPATCHED → it drives the GLOBAL master bus (reverb_insert/echo_insert/crush/drive_insert).
+//     Only the first unpatched module of a kind drives it; absent kind → pushed OFF once.
+//   • PATCHED from a VOICE/MACRO/DRUM audio-out → it effects JUST that part, via the per-instrument
+//     API (instrument_reverb/echo/drive/crush on the source's slot[s]).
+// Either way SET-AND-HOLD: re-apply only when a value moves, quantized so a cv-swept knob can't
+// flood the request queue (the groovebox apply_fx() pattern). cv inlet (jack 0) adds to wet/amount.
 static int q64(float v) { return (int)(clamp(v, 0, 1) * 64 + 0.5f); }
 static int primary_of(int type) { for (int i = 0; i < nmod; i++) if (mod[i].type == type) return i; return -1; }
+
+#define FX_AUDIO_IN 1   // FX modules: jack 0 = cv, jack 1 = audio-in (pink)
+static int kind_index(int t) { return t == MOD_RVB ? 0 : t == MOD_ECHO ? 1 : t == MOD_DRIVE ? 2 : t == MOD_CRUSH ? 3 : -1; }
+// first module of `type` whose audio-in is NOT patched — that one drives the MASTER bus
+static int primary_master(int type) {
+    for (int i = 0; i < nmod; i++) if (mod[i].type == type && cable_into(i, FX_AUDIO_IN) < 0) return i;
+    return -1;
+}
+// the instrument slot(s) a source module feeds: VOICE/MACRO play one slot (its wav/eng knob picks
+// it), DRUM plays the three drum slots. This is how a per-part effect finds its target.
+static int source_slots(int mi, int *slots) {
+    int t = mod[mi].type;
+    if (t == MOD_VOICE) { bool amp = cable_into(mi, 5) >= 0; slots[0] = (amp ? 14 : 5) + (int)mod[mi].param[VK_WAV]; return 1; }
+    if (t == MOD_MACRO) { static const int ES[6] = { 23, 24, 25, 29, 30, 31 }; slots[0] = ES[(int)clamp(mod[mi].param[MK_ENG], 0, 5)]; return 1; }
+    if (t == MOD_DRUM)  { slots[0] = 26; slots[1] = 27; slots[2] = 28; return 3; }
+    return 0;
+}
+// configure / clear one per-part effect on one slot (ki: 0 VERB 1 ECHO 2 DRIVE 3 CRUSH). VERB/ECHO
+// are SENDS to shared buses (size/time are shared across the rack); DRIVE/CRUSH get private per-slot
+// buses (fully independent). reverb()/echo() set the shared bus, instrument_* sets this slot's send.
+static void pfx_apply(int ki, int slot, float a, float b, float c) {
+    switch (ki) {
+        case 0: reverb(a, 0.42f);      instrument_reverb(slot, c); break;   // a=size (shared room), c=send
+        case 1: echo((int)a, b, 0.5f); instrument_echo(slot, c);   break;   // a=time (shared), b=fb, c=send
+        case 2: instrument_drive_mode(slot, (int)b); instrument_drive(slot, a); break;  // a=amt, b=mode
+        default:instrument_crush(slot, a, 6.0f, c); break;                  // a=bits, c=mix (private bus)
+    }
+}
+static void pfx_off(int ki, int slot) {
+    switch (ki) {
+        case 0: instrument_reverb(slot, 0); break;
+        case 1: instrument_echo(slot, 0);   break;
+        case 2: instrument_drive(slot, 0);  break;
+        default:instrument_crush(slot, 8, 1, 0); break;
+    }
+}
 
 void apply_master_fx(void) {
     static int ap_rvb_sz = -1, ap_rvb_mix = -1;
@@ -1074,51 +1133,84 @@ void apply_master_fx(void) {
     static int ap_dr_amt = -1, ap_dr_mode = -1;
     static int ap_cr_bits = -1, ap_cr_mix = -1;
     static int ap_sat_amt = -1, ap_sat_mode = -1, ap_sat_mix = -1;
+    // per-part (pink-cable) state: applied last frame? + last quantized a/b/c, per (kind, slot)
+    static unsigned char fx_on[4][32];
+    static int fx_qa[4][32], fx_qb[4][32], fx_qc[4][32];
+    unsigned char now[4][32]; for (int k = 0; k < 4; k++) for (int s = 0; s < 32; s++) now[k][s] = 0;
     int mi;
 
+    // ===== PER-PART: every FX module whose audio-in is patched effects that source's slot(s) =====
+    for (int i = 0; i < nmod; i++) {
+        int ki = kind_index(mod[i].type); if (ki < 0) continue;
+        int ac = cable_into(i, FX_AUDIO_IN); if (ac < 0) continue;
+        int slots[3], ns = source_slots(cable[ac].sm, slots); if (ns == 0) continue;
+        float cv = read_in(i, 0);   // cv inlet still adds to the wet/amount
+        float a, b, c;
+        switch (ki) {
+            case 0:  a = mod[i].param[RVK_SIZE]; b = 0; c = clamp(mod[i].param[RVK_MIX] + cv, 0, 1); break;
+            case 1:  a = mod[i].param[ECK_TIME]; b = mod[i].param[ECK_FB]; c = clamp(mod[i].param[ECK_MIX] + cv, 0, 1); break;
+            case 2:  a = clamp(mod[i].param[DRK_AMT] + cv, 0, 1); b = (int)clamp(mod[i].param[DRK_MODE], 0, 3); c = 0; break;
+            default: a = mod[i].param[CRK_BITS]; b = 0; c = clamp(mod[i].param[CRK_MIX] + cv, 0, 1); break;
+        }
+        int qa = (int)(a * 100), qb = (int)(b * 100), qc = (int)(c * 100);
+        for (int j = 0; j < ns; j++) {
+            int s = slots[j]; if (s < 0 || s >= 32) continue;
+            now[ki][s] = 1;
+            if (!fx_on[ki][s] || fx_qa[ki][s] != qa || fx_qb[ki][s] != qb || fx_qc[ki][s] != qc) {
+                pfx_apply(ki, s, a, b, c);
+                fx_qa[ki][s] = qa; fx_qb[ki][s] = qb; fx_qc[ki][s] = qc;
+            }
+        }
+    }
+    // sweep: a (kind, slot) on last frame but not now (cable pulled / module deleted / re-pointed)
+    // gets turned OFF once, so a part never keeps an orphaned effect.
+    for (int k = 0; k < 4; k++) for (int s = 0; s < 32; s++) {
+        if (fx_on[k][s] && !now[k][s]) { pfx_off(k, s); fx_qa[k][s] = fx_qb[k][s] = fx_qc[k][s] = -99999; }
+        fx_on[k][s] = now[k][s];
+    }
+
+    // ===== MASTER: an UNPATCHED FX module of each kind drives the whole mix (as before) =====
     // VERB — master reverb insert (FX_REVERB in the init() chain; mix 0 = bypass dry)
-    if ((mi = primary_of(MOD_RVB)) >= 0) {
+    if ((mi = primary_master(MOD_RVB)) >= 0) {
         float size = mod[mi].param[RVK_SIZE];
         float mix  = clamp(mod[mi].param[RVK_MIX] + read_in(mi, 0), 0, 1);
         int sq = q64(size), mq = q64(mix);
         if (sq != ap_rvb_sz || mq != ap_rvb_mix) { reverb_insert(size, 0.42f, mix); ap_rvb_sz = sq; ap_rvb_mix = mq; }
     } else if (ap_rvb_mix != -1) { reverb_insert(0.5f, 0.42f, 0); ap_rvb_sz = ap_rvb_mix = -1; }
 
-    // ECHO — master delay insert (FX_ECHO in the chain). tone fixed 0.5; cv adds to mix.
-    if ((mi = primary_of(MOD_ECHO)) >= 0) {
+    // ECHO — master delay insert. tone fixed 0.5; cv adds to mix.
+    if ((mi = primary_master(MOD_ECHO)) >= 0) {
         int   tms = (int)mod[mi].param[ECK_TIME];
         float fb  = mod[mi].param[ECK_FB];
         float mix = clamp(mod[mi].param[ECK_MIX] + read_in(mi, 0), 0, 1);
-        int tq = tms / 8, fq = q64(fb), mq = q64(mix);   // time quantized to 8ms steps
+        int tq = tms / 8, fq = q64(fb), mq = q64(mix);
         if (tq != ap_ec_t || fq != ap_ec_fb || mq != ap_ec_mix) { echo_insert(tms, fb, 0.5f, mix); ap_ec_t = tq; ap_ec_fb = fq; ap_ec_mix = mq; }
     } else if (ap_ec_mix != -1) { echo_insert(200, 0, 0.5f, 0); ap_ec_t = ap_ec_fb = ap_ec_mix = -1; }
 
-    // DRIVE — PER-VOICE overdrive on the subtractive synth slots (5..22), post-filter so the
-    // resonance screams into it (the 303/acid interaction). NOT drums (26-28) or MACRO engines
-    // (23-25/29-31, which MACRO drives itself every frame — co-driving would fight). Looped +
-    // change-gated (cheap, correct); amt coarse-quantized to 16 so a cv sweep over 18 slots
-    // stays easy on the queue. Held VOICE notes pick the change up live via note_drive.
-    if ((mi = primary_of(MOD_DRIVE)) >= 0) {
+    // DRIVE — master = all subtractive VOICE slots (5..22), post-filter (the 303/acid scream). NOT
+    // drums or MACRO. Skips any slot a per-part DRIVE already claims this frame. amt coarse-quantized
+    // to 16 so a cv sweep over 18 slots stays easy on the queue; held VOICE notes update live.
+    if ((mi = primary_master(MOD_DRIVE)) >= 0) {
         float amt = clamp(mod[mi].param[DRK_AMT] + read_in(mi, 0), 0, 1);
         int mode = (int)clamp(mod[mi].param[DRK_MODE], 0, 3);
         int aq = (int)(amt * 16 + 0.5f);
         if (aq != ap_dr_amt || mode != ap_dr_mode) {
-            for (int s = 5; s <= 22; s++) { instrument_drive(s, amt); instrument_drive_mode(s, mode); }
+            for (int s = 5; s <= 22; s++) { if (now[2][s]) continue; instrument_drive(s, amt); instrument_drive_mode(s, mode); }
             for (int v = 0; v < nmod; v++)
                 if (mod[v].type == MOD_VOICE) { int h = (int)mod[v].state[1]; if (h > 0) { note_drive(h, amt); note_drive_mode(h, mode); } }
             ap_dr_amt = aq; ap_dr_mode = mode;
         }
-    } else if (ap_dr_amt != -1) { for (int s = 5; s <= 22; s++) instrument_drive(s, 0); ap_dr_amt = ap_dr_mode = -1; }
+    } else if (ap_dr_amt != -1) { for (int s = 5; s <= 22; s++) if (!now[2][s]) instrument_drive(s, 0); ap_dr_amt = ap_dr_mode = -1; }
 
     // CRUSH — master bitcrush on the whole mix. rate fixed 6 (lo-fi downsample); cv adds to mix.
-    if ((mi = primary_of(MOD_CRUSH)) >= 0) {
+    if ((mi = primary_master(MOD_CRUSH)) >= 0) {
         float bits = mod[mi].param[CRK_BITS];
         float mix  = clamp(mod[mi].param[CRK_MIX] + read_in(mi, 0), 0, 1);
         int bq = (int)bits, mq = q64(mix);
         if (bq != ap_cr_bits || mq != ap_cr_mix) { crush(bits, 6.0f, mix); ap_cr_bits = bq; ap_cr_mix = mq; }
     } else if (ap_cr_mix != -1) { crush(8, 6, 0); ap_cr_bits = ap_cr_mix = -1; }
 
-    // SAT — whole-mix saturation insert (drive_insert / FX_DRIVE). Drives the SUMMED bus, so the
+    // SAT — whole-mix saturation insert (drive_insert / FX_DRIVE). Always master (no audio-in): the
     // drums grit up too — the difference from the per-voice DRIVE module. cv adds to amt.
     if ((mi = primary_of(MOD_SAT)) >= 0) {
         float amt = clamp(mod[mi].param[SATK_AMT] + read_in(mi, 0), 0, 1);
@@ -1155,7 +1247,7 @@ void update(void) {
 }
 
 // ── drawing ──
-int sig_col(int t) { return t == 0 ? CLR_GREEN : t == 1 ? CLR_YELLOW : CLR_BLUE; }
+int sig_col(int t) { return t == 0 ? CLR_GREEN : t == 1 ? CLR_YELLOW : t == 3 ? CLR_PINK : CLR_BLUE; }   // 3 = audio (pink)
 
 int near_col(int x, int y) {
     float d = distance(wmx, wmy, x, y);
@@ -1496,7 +1588,7 @@ void draw_jacks_ss(void) {
         if (jh >= 0) {
             int mi = jh / 8, j2 = jh % 8;
             JackDef jd = TYPES[mod[mi].type].jack[j2];
-            const char *sig = jd.type == 0 ? "gate" : jd.type == 1 ? "pit" : "cv";
+            const char *sig = jd.type == 0 ? "gate" : jd.type == 1 ? "pit" : jd.type == 3 ? "aud" : "cv";
             tip = str("%s %s %s", TYPES[mod[mi].type].name, jd.label, sig);
         } else {
             int kk = -1, km = -1;
