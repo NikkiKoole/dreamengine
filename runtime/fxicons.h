@@ -27,6 +27,7 @@ static int fx_body(int kind) {
         case FX_PAN:     return CLR_DARK_GREY;
         case FX_FILTER:  return CLR_TRUE_BLUE;
         case FX_RINGMOD: return CLR_INDIGO;
+        case FX_ECHO:    return CLR_DARK_PEACH;
         default:         return CLR_DARKER_GREY;
     }
 }
@@ -45,6 +46,7 @@ static int fx_accent(int kind) {
         case FX_PAN:     return CLR_LIGHT_YELLOW;
         case FX_FILTER:  return CLR_BLUE;
         case FX_RINGMOD: return CLR_GREEN;
+        case FX_ECHO:    return CLR_ORANGE;
         default:         return CLR_LIGHT_GREY;
     }
 }
@@ -63,6 +65,7 @@ static const char *fx_name(int kind) {
         case FX_PAN:     return "AUTOPAN";
         case FX_FILTER:  return "FILTER";
         case FX_RINGMOD: return "RINGMOD";
+        case FX_ECHO:    return "DELAY";
         default:         return "FX";
     }
 }
@@ -127,6 +130,11 @@ static void fx_icon(int kind, int cx, int cy, int col, int bg) {
         circ(cx, cy, 7, col);
         line(cx - 5, cy - 5, cx + 5, cy + 5, col);
         line(cx - 5, cy + 5, cx + 5, cy - 5, col);
+    } else if (kind == FX_ECHO) {                            // a hit + trailing repeat taps (the delay echoes)
+        rectfill(cx - 11, cy - 7, 3, 14, col);               // the original hit (a tall bar)
+        circfill(cx - 3, cy, 2, col);                        // repeat 1
+        circfill(cx + 3, cy, 1, col);                        // repeat 2 (smaller)
+        pset(cx + 8, cy, col);                               // repeat 3 (a faint dot)
     } else {                                                 // REVERB — expanding rings (the bloom)
         for (int i = 1; i <= 3; i++) circ(cx, cy, i * 3, col);
         pset(cx, cy, col);

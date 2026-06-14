@@ -388,6 +388,7 @@ void note_drive_mode(int handle, int mode);    // switch a held note's drive wav
 void echo(int time_ms, float feedback, float tone);  // configure the bus: delay 1..2000ms, feedback 0..1.1 (>1 = runaway), tone 0..1 (dark..bright repeats)
 void instrument_echo(int slot, float send);    // how much this slot feeds the bus 0.0..1.0 — 0 = dry (default), 0.15 = slapback, 0.8 = dub throw
 void note_echo(int handle, float x);           // sweep a held note's echo send live, slewed — throw a single phrase into the tail
+void echo_insert(int time_ms, float feedback, float tone, float mix);  // echo as a dry/wet INSERT on the master bus — a REAL reorderable DELAY pedal (put FX_ECHO in fx_order(0,…) to place it). Unlike echo() (a send), its chain position is audible (delay→drive vs drive→delay). time 1..2000ms, feedback 0..1.1, tone 0..1, mix 0..1 (0 = bypass)
 
 // reverb — THE master reverb send: each slot chooses how much to send into it. A real room/hall
 // (a chord blooms into space), not repeating taps like echo. instrument_reverb() alone already
@@ -512,7 +513,8 @@ void glue(int victim_bus, float amount, int attack_ms, int release_ms);  // bus 
 #define FX_FILTER   10  // resonant filter — the DJ filter (a reorderable pedal, in every bus's default chain)
 #define FX_PAN      11  // auto-pan — antiphase tremolo (a reorderable pedal, in every bus's default chain)
 #define FX_RINGMOD  12  // ring modulator — signal × sine carrier (a reorderable pedal, in every bus's default chain)
-void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 13
+#define FX_ECHO     13  // delay/echo INSERT — in-line dry/wet delay (master only, via echo_insert(); place in fx_order(0,…))
+void fx_order(int bus, const int *kinds, int n);   // set a bus's insert order: bus 0 = master, 1.. = an instrument's bus; kinds[] of FX_*, n ≤ 14
 
 // leslie — a rotary-speaker cabinet (a spinning treble HORN + bass DRUM): the organ's voice. The
 // horn adds pitch wobble (Doppler) + a swirling volume; the two rotors spin at independent speeds

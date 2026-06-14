@@ -414,6 +414,39 @@ static float echo_tone_coef   = 0.0f;            // one-pole LP coefficient (set
 static float echo_lp          = 0.0f;            // the loop filter's running state
 static bool  echo_used        = false;           // flips true on first echo API call, never back
 
+// ── delay INSERT (echo_insert) — an IN-LINE dry/wet delay, an honest reorderable pedal ──────────
+// The echo above is a parallel SEND; this is the same tape-delay DSP placed IN the master fx_order
+// chain, so its POSITION matters (delay→drive vs drive→delay). Master-only (one buffer), gated on
+// b==0 in apply_insert. Its OWN buffer so it never collides with the send. Wet ADDS over the full
+// dry (a delay pedal's MIX = repeat level), scaled by mix. Dormant until echo_insert() → byte-identical.
+static float echo_ins_buf[SOUND_ECHO_MAX];
+static int   echo_ins_widx        = 0;
+static float echo_ins_time        = 0.375f * SOUND_SAMPLE_RATE;
+static float echo_ins_time_target = 0.375f * SOUND_SAMPLE_RATE;
+static float echo_ins_fb          = 0.35f;
+static float echo_ins_tone_coef   = 0.0f;
+static float echo_ins_lp          = 0.0f;
+static float echo_ins_mix         = 0.0f;
+static bool  echo_ins_used        = false;
+static void echo_ins_process(float *mixL, float *mixR) {
+    float dstep = (echo_ins_time_target - echo_ins_time) * 0.0003f;   // tape-speed time slew (RE-201 bend)
+    if (dstep >  0.5f) dstep =  0.5f;
+    if (dstep < -0.5f) dstep = -0.5f;
+    echo_ins_time += dstep;
+    float rp = (float)echo_ins_widx - echo_ins_time;
+    if (rp < 0.0f) rp += (float)SOUND_ECHO_MAX;
+    int   r0 = (int)rp, r1 = r0 + 1;
+    if (r1 >= SOUND_ECHO_MAX) r1 = 0;
+    float fr  = rp - (float)r0;
+    float tap = echo_ins_buf[r0] + (echo_ins_buf[r1] - echo_ins_buf[r0]) * fr;
+    echo_ins_lp += (tap - echo_ins_lp) * echo_ins_tone_coef;          // darker each repeat
+    float in = (*mixL + *mixR) * 0.5f;                                // MONO core (v1), like the send + reverb insert
+    echo_ins_buf[echo_ins_widx] = tanhf(in + echo_ins_lp * echo_ins_fb);   // fb >1 self-oscillates into a plateau, not a blowup
+    if (++echo_ins_widx >= SOUND_ECHO_MAX) echo_ins_widx = 0;
+    *mixL += echo_ins_lp * echo_ins_mix;                             // wet repeats sit on top of the full dry
+    *mixR += echo_ins_lp * echo_ins_mix;
+}
+
 // master pan law (stereo.md): PAN_LINEAR (default, center=mix, byte-identical to mono) or
 // PAN_POWER (constant-power, center=-3dB, equal loudness across the sweep). gated so the
 // default never regresses centered carts; only a panning cart that opts in changes output.
@@ -1217,7 +1250,7 @@ static void fx_set_leslie(int b, int speed, float drive, float balance, float do
 // bus is byte-identical to the old hardcoded ladder. Each step still gates on its _used[b] flag,
 // so the default-order case is the same work as before.
 #define N_PEDALS  (FX_CRUSH + 1)            // the 8 reorderable PEDALS (FX_TREM..FX_CRUSH) — the default chain
-#define N_INSERTS (FX_RINGMOD + 1)          // array size / max chain length: 8 pedals + FORMANT + FILTER + PAN + RINGMOD (all pedals) + FX_REVERB (reverb-bus only)
+#define N_INSERTS (FX_ECHO + 1)             // array size / max chain length: 8 pedals + FORMANT + FILTER + PAN + RINGMOD (default chain) + FX_REVERB (reverb-bus) + FX_ECHO (placed via fx_order)
 static int insert_order  [SOUND_FX_BUSES][N_INSERTS];   // per-bus visit list (kept distinct from the fx_order() API)
 static int insert_order_n[SOUND_FX_BUSES];  // populated slot count (default = 8 pedals + formant + filter + pan + ringmod; FX_REVERB only on a reverb-bus)
 // dispatch ONE insert by kind on bus b, in place. The _used[b] gate keeps dormant inserts free.
@@ -1235,6 +1268,7 @@ static void apply_insert(int kind, int b, float *L, float *R) {
         case FX_FILTER:  if (filt_used[b])   filter_process(b, L, R);  break;
         case FX_PAN:     if (pan_used[b])    pan_process(b, L, R);     break;
         case FX_RINGMOD: if (rm_used[b])     rm_process(b, L, R);      break;
+        case FX_ECHO:    if (echo_ins_used && b == 0) echo_ins_process(L, R); break;  // in-line delay, master-only (single buffer)
         // FX_REVERB: wet-REPLACE on a reverb-bus (a bus fed only by sends, bus_tank[b] >= 0), so any
         // inserts AFTER it in the chain chew on the wet tail (reverb→bitcrush). On any other bus
         // (master / a pedalboard's bus, bus_tank[b] == -1) it's a no-op pass-through — never zeroes a real mix.
@@ -1347,6 +1381,7 @@ typedef enum {
     SR_INSTR_AUTOPAN= 77,   // a=slot, b=rate*1000, c=depth*1000, e0=shape — auto-pan on one instrument (auto-bus)
     SR_RINGMOD      = 78,   // a=freq_hz, b=mix*1000 — THE master ring modulator (bus 0)
     SR_INSTR_RINGMOD= 79,   // a=slot, b=freq_hz, c=mix*1000 — ring mod on one instrument (auto-bus)
+    SR_ECHO_INSERT  = 80,   // a=time_ms, b=fb*1000, c=tone*1000, e0=mix*1000 — echo as a dry/wet INSERT on the master bus (in the fx_order chain)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -3985,6 +4020,18 @@ static void sound_fire_req(SoundReq r) {
         rvb_tank[1].mix  = mix;       // <1 = dry+wet blend in the chain (an honest reverb pedal)
         rvb_tank[1].used = true;
         // the cart places FX_REVERB in its fx_order(0, …) list to set the reverb's position in the master chain
+    } else if (r.kind == SR_ECHO_INSERT) {  // a=time_ms, b=fb*1000, c=tone*1000, e0=mix*1000 — master in-line delay INSERT
+        float ms = (float)r.a; if (ms < 1.0f) ms = 1.0f;
+        echo_ins_time_target = ms * (float)SOUND_SAMPLE_RATE / 1000.0f;
+        if (echo_ins_time_target > (float)(SOUND_ECHO_MAX - 4)) echo_ins_time_target = (float)(SOUND_ECHO_MAX - 4);
+        float fb = r.b / 1000.0f; if (fb < 0.0f) fb = 0.0f; if (fb > 1.1f) fb = 1.1f;
+        echo_ins_fb = fb;
+        echo_ins_tone_coef = sound_echo_coef(r.c / 1000.0f);
+        float mix = r.e0 / 1000.0f; if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
+        if (!echo_ins_used && mix > 0.0f) echo_ins_time = echo_ins_time_target;   // snap time when first turning ON — no startup pitch-bend
+        echo_ins_mix  = mix;
+        echo_ins_used = (mix > 0.0f);   // mix 0 = off (dormant → byte-identical), like the other inserts
+        // the cart places FX_ECHO in its fx_order(0, …) list to set the delay's position in the master chain
     } else if (r.kind == SR_CHORUS) {       // master chorus (bus 0): a=rate*1000, b=depth*1000, c=mix*1000
         fx_set_chorus(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_CHORUS) { // per-instrument: a=slot, b=rate*1000, c=depth*1000, e0=mix*1000
@@ -4878,6 +4925,12 @@ void note_echo(int handle, float x) {
     sound_push_ctrl(SR_NOTE_ECHO, (int)(x * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
+// ── delay insert: the in-line dry/wet delay PEDAL (echo as a reorderable FX_ECHO insert) ──
+
+void echo_insert(int time_ms, float feedback, float tone, float mix) {
+    sound_push_ctrl(SR_ECHO_INSERT, time_ms, (int)(feedback * 1000.0f), (int)(tone * 1000.0f), (int)(mix * 1000.0f), 0, 0);
+}
+
 // ── reverb: ONE shared bus with per-slot sends (the first §8.10 effect; decisions/0015) ──
 
 void reverb(float size, float damping) {
@@ -5259,6 +5312,15 @@ static void sound_init(void) {
     echo_tone_coef   = sound_echo_coef(0.5f);
     echo_lp          = 0.0f;
     echo_used        = false;
+    memset(echo_ins_buf, 0, sizeof(echo_ins_buf));
+    echo_ins_widx        = 0;
+    echo_ins_time        = 0.375f * SOUND_SAMPLE_RATE;
+    echo_ins_time_target = echo_ins_time;
+    echo_ins_fb          = 0.35f;
+    echo_ins_tone_coef   = sound_echo_coef(0.5f);
+    echo_ins_lp          = 0.0f;
+    echo_ins_mix         = 0.0f;
+    echo_ins_used        = false;
 
     // reverb tank pool: clean slate (matters for libtcc hot-reload + --det reproducibility).
     // Every tank zeroed; each defaults to size-0.5 feedback / 0.5 damping so a reverb()-before-

@@ -1435,6 +1435,23 @@ v1, document it on the panel.
     appear, RMS −20→−23 dB (the sin×sin power halving), 0 clipped. **Showcase: `pedalboard`** (the RINGMOD
     pedal — FRQ 20..3000 Hz exp + MIX). A dedicated robot-voice/bells cart is the optional fast-follow.
 
+18. **Delay INSERT (`echo_insert`)** — the parallel echo SEND made into an in-line, reorderable DELAY
+    pedal. **✓ SHIPPED 2026-06-14.** `echo_insert(time_ms, feedback, tone, mix)` — the same tape-delay
+    DSP as the `echo()` send (fractional read tap + tape-speed time slew + feedback-through-`tanh` +
+    one-pole tone LP) but on its OWN buffer, placed IN the master `fx_order` chain as `FX_ECHO`=13, so
+    its chain position is audible (delay→drive distorts the repeats; drive→delay = clean echoes of a
+    dirty signal). The same send-vs-insert split `reverb_insert` made for reverb — `echo()` (send) returns
+    clean to master (position cosmetic); `echo_insert()` (insert) is reorderable. **Master-only** (one
+    buffer, gated on `b==0` in `apply_insert`), wet ADDS over full dry at `mix` (a delay pedal's blend, not
+    a crossfade); NOT in the default chain (the cart places `FX_ECHO` via `fx_order(0,…)`, like FX_REVERB).
+    `mix 0` → `echo_ins_used` false → dormant/byte-identical. `SR_ECHO_INSERT`=80, full 4-place wiring +
+    tcc + `fxicons.h` (hit + fading-repeat-dots). Cost: one extra `SOUND_ECHO_MAX` (2s) buffer ≈ 352 KB
+    static `.bss` (0 download; doubles echo memory) — the price of a real in-line delay vs the cosmetic
+    send. Verified: soundcheck compile-gate `ok` + 900-frame tripwire silent + tune-check exit 0; a 120 ms
+    blip leaves a decaying echo train (RMS 0.007 in the 1 s window after the note) where dry is 0.000.
+    **Showcase: `pedalboard`** (the DELAY pedal — TIM 20..1500 ms / FB / TON / MIX). With it the board now
+    carries every rostered `FX_*` insert.
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 

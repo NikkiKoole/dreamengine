@@ -38,7 +38,7 @@
 // ── the effect catalog: every pedal you can drag into the chain ──────────────────────────────
 // kind = the engine FX_* insert kind (its slot in the reorderable chain). Every pedal — REVERB
 // included now (FX_REVERB via reverb_insert) — is a real insert, so chain order is audible.
-enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, C_PAN, C_FIL, C_RNG, NCAT };
+enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, C_PAN, C_FIL, C_RNG, C_DLY, NCAT };
 typedef struct {
     const char *name; int body, accent, kind, nk;
     const char *klabel[MAXK]; float kdef[MAXK];
@@ -57,6 +57,7 @@ static const FxDef CAT[NCAT] = {
     { "AUTOPAN",  CLR_DARK_GREY,     CLR_LIGHT_YELLOW, FX_PAN,     3, { "SPD","DEP","WAV" },   { 0.35f, 0.70f, 0.0f } },
     { "FILTER",   CLR_TRUE_BLUE,     CLR_BLUE,         FX_FILTER,  3, { "CUT","RES","MOD" },   { 0.50f, 0.30f, 0.0f } },
     { "RINGMOD",  CLR_INDIGO,        CLR_GREEN,        FX_RINGMOD, 2, { "FRQ","MIX" },         { 0.30f, 0.80f } },
+    { "DELAY",    CLR_DARK_PEACH,    CLR_ORANGE,       FX_ECHO,    4, { "TIM","FB","TON","MIX" },{ 0.35f, 0.40f, 0.55f, 0.45f } },
 };
 
 // ── the chain: an ordered list of DISTINCT catalog ids, each with its own knobs + on-state ──
@@ -230,6 +231,7 @@ static void apply_fx(void) {
             case C_FIL: { static const int FM[4] = { FILTER_LOW, FILTER_HIGH, FILTER_BAND, FILTER_NOTCH };  // CUT exp 40..18k Hz, MOD picks the mode, off = bypass
                           filter(act ? FM[(int)(k[2] * 3.99f)] : FILTER_OFF, 40.0f * powf(450.0f, k[0]), k[1]); } break;
             case C_RNG: ringmod(20.0f * powf(150.0f, k[0]), act ? k[1] : 0.0f); break;  // FRQ exp 20..3000 Hz
+            case C_DLY: echo_insert((int)(20.0f + k[0] * 1480.0f), k[1], k[2], act ? k[3] : 0.0f); break;  // TIM 20..1500ms, FB, TON, MIX (off = bypass)
         }
     }
     int kinds[NCAT], n = 0;

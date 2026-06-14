@@ -48,7 +48,7 @@ and leave the rest dry. `drive` is the exception — it's a **per-voice** insert
 
 ---
 
-## echo — `echo(time_ms, feedback, tone)` · `instrument_echo(slot, send)` · `note_echo`
+## echo — `echo(time_ms, feedback, tone)` · `instrument_echo(slot, send)` · `note_echo` · insert: `echo_insert(time_ms, feedback, tone, mix)`
 
 THE shared tape-echo bus. `time_ms` 1–2000 (sweep it live → the tail pitch-bends like tape speed),
 `feedback` 0–1.1 (>1.0 self-oscillates into saturation, not a blow-up), `tone` 0–1 (repeats darken).
@@ -62,6 +62,15 @@ Per-slot `send` 0–1 chooses how much each instrument throws into it. **Showcas
 | dynamic room echo | `echo(90+open*300, 0.10f+open*0.30f, 0.35f+open*0.25f)` | echo that opens with the space: corridor→hall driven by one `open` 0..1 | `deeper` |
 | hard feed into a loop | `instrument_echo(PAD, 0.7f)` | a pad fed heavily into a long echo = an evolving wash (the tape-loop trick) | `tapeloop`, `wowflutter` |
 | live delay pedal | `echo(rate_ms(), fb_x(), tone_x())` from knobs | the effect played as the instrument; feedback into the red = self-osc drone | `spacecho`, `tb303` |
+| delay as an in-line INSERT | `echo_insert(time_ms, fb, tone, mix)` + `FX_ECHO` in `fx_order(0,…)` | a real reorderable DELAY pedal whose chain POSITION is audible — `delay→drive` distorts the repeats, `drive→delay` makes clean echoes of a dirty signal | `pedalboard` (DELAY) |
+
+> **`echo()` (send) vs `echo_insert()` (insert).** `echo()` is the shared parallel send — its wet
+> always returns clean to master, so its position in a pedal chain is cosmetic (the same reason
+> `reverb()` got `reverb_insert()`). `echo_insert(time, feedback, tone, mix)` is the same tape-delay
+> DSP placed *in* the master `fx_order` chain (its own buffer, master-only), so reordering it against
+> the other pedals changes the sound. The repeats sit on top of the full dry signal at `mix` level
+> (a delay pedal's blend), `feedback` >1 self-oscillates into tape saturation. Put `FX_ECHO` in your
+> `fx_order(0, …)` list to place it. **Showcase: `pedalboard`** (the DELAY pedal: TIM/FB/TON/MIX).
 
 ## reverb — `reverb(size, damping)` · `instrument_reverb(slot, send)` · `note_reverb`
 
