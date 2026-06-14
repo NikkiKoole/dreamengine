@@ -253,6 +253,7 @@ glue/cohesion, NOT as a substitute for per-voice tone-shaping (which keeps the p
 |---|---|---|---|
 | tube glue | `drive_insert(0.25f, DRIVE_ASYM, 0.5f)` | gentle even-harmonic warmth that fuses a busy mix — the "everything through one amp" cohesion | `modrack` (SAT module) |
 | lo-fi wall | `drive_insert(0.7f+, DRIVE_HARD, 0.85f)` | cranked square-edged crush on the whole bus, drums and all — noise-rock / breakbeat grit | `modrack` (SAT, "Sat bus" preset) |
+| two bus drives (×2) | `drive_insert(...)` (inst 0) + `drive_insert_inst(1, ...)`; chain `{FX_INST(FX_DRIVE,1), …, FX_DRIVE}` | two INDEPENDENT bus drives at different chain spots (Increment F) — an overdrive pedal feeding the amp's own drive (boost → amp stack) | `pedalboard` (the OD pedal + the AMP cabinet) |
 
 ## bitcrush — `crush(bits, rate, mix)` · `instrument_crush(slot, bits, rate, mix)`
 

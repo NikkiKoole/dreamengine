@@ -39,7 +39,7 @@
 // ── the effect catalog: every pedal you can drag into the chain ──────────────────────────────
 // kind = the engine FX_* insert kind (its slot in the reorderable chain). Every pedal — REVERB
 // included now (FX_REVERB via reverb_insert) — is a real insert, so chain order is audible.
-enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, C_PAN, C_FIL, C_RNG, C_DLY, C_LOFI, C_FUZZ, C_GRN, C_EQ2, NCAT };
+enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, C_PAN, C_FIL, C_RNG, C_DLY, C_LOFI, C_FUZZ, C_GRN, C_EQ2, C_OD, NCAT };
 typedef struct {
     const char *name; int body, accent, kind, nk;
     const char *klabel[MAXK]; float kdef[MAXK];
@@ -73,6 +73,9 @@ static const FxDef CAT[NCAT] = {
     // EQ·2 is a SECOND EQ instance (Increment F): same FX_EQ, but tagged FX_INST(FX_EQ,1) in the order
     // and configured via eq_inst(1,…), so you can EQ before AND after a dirt stage (e.g. EQ→CRUSH→EQ·2).
     { "EQ2",      CLR_DARKER_BLUE,   CLR_TRUE_BLUE,    FX_EQ,      3, { "LO","MID","HI" },     { 0.50f, 0.50f, 0.50f } },
+    // OD is a 2nd mix-bus DRIVE (FX_DRIVE instance 1) — an overdrive/boost pedal IN the chain that
+    // coexists with the amp cabinet's drive (instance 0). DRV amount · MODE (soft/asym/hard/fold) · MIX.
+    { "OD",       CLR_DARK_ORANGE,   CLR_PEACH,        FX_DRIVE,   3, { "DRV","MODE","MIX" },  { 0.50f, 0.10f, 1.00f } },
 };
 
 // ── the chain: an ordered list of DISTINCT catalog ids, each with its own knobs + on-state ──
@@ -303,6 +306,7 @@ static void apply_fx(void) {
             case C_BIT: crush(16.0f - k[0] * 14.0f, 1.0f + k[1] * 15.0f, act ? k[2] : 0.0f); break;
             case C_EQ:  if (act) eq((k[0]-0.5f)*24.0f, (k[1]-0.5f)*24.0f, (k[2]-0.5f)*24.0f); else eq(0.0f, 0.0f, 0.0f); break;
             case C_EQ2: if (act) eq_inst(1, (k[0]-0.5f)*24.0f, (k[1]-0.5f)*24.0f, (k[2]-0.5f)*24.0f); else eq_inst(1, 0.0f, 0.0f, 0.0f); break;
+            case C_OD:  drive_insert_inst(1, act ? k[0] : 0.0f, (int)(k[1]*3.99f), act ? k[2] : 0.0f); break;   // 2nd bus drive (FX_DRIVE inst 1); amt/mix 0 = off
             case C_CHO: chorus(0.1f + k[0] * 4.9f, k[1], act ? k[2] : 0.0f); break;
             case C_PHA: phaser(0.1f + k[0] * 9.9f, k[1], (k[2]-0.5f) * 1.8f, act ? k[3] : 0.0f, 4); break;
             case C_FLG: flanger(0.05f + k[0] * 4.95f, k[1], k[2] * 0.95f, act ? k[3] : 0.0f); break;
@@ -340,6 +344,7 @@ static void apply_fx(void) {
         int cat = chain[i].cat;
         if (cat == C_LOFI) { kinds_add(kinds, &n, FX_INST(FX_CRUSH, 1)); kinds_add(kinds, &n, FX_INST(FX_TAPE, 1)); kinds_add(kinds, &n, FX_INST(FX_FILTER, 1)); }   // instance 1: coexists with standalone
         else if (cat == C_EQ2) kinds_add(kinds, &n, FX_INST(FX_EQ, 1));   // 2nd EQ instance, distinct from FX_EQ
+        else if (cat == C_OD)  kinds_add(kinds, &n, FX_INST(FX_DRIVE, 1)); // 2nd bus drive, distinct from the amp's FX_DRIVE (inst 0)
         else { int kd = CAT[cat].kind; if (kd >= 0) kinds_add(kinds, &n, kd); }
     }
     if (cab_tenant == CAB_AMP) kinds_add(kinds, &n, FX_DRIVE);   // the amp cabinet's drive = a bus insert at the END (output stage), so FUZZ (per-voice) sits BEFORE it
@@ -633,6 +638,15 @@ static void fuzz_icon(int cx, int cy, int col) {
     circfill(cx, cy, 2, col);
 }
 
+// OD (FX_DRIVE) — a soft-clipped, flat-topped waveform (saturation).
+static void od_icon(int cx, int cy, int col) {
+    line(cx - 12, cy + 4, cx - 8, cy - 4, col);   // rise
+    line(cx - 8, cy - 4, cx - 2, cy - 4, col);    // flat top (clipped)
+    line(cx - 2, cy - 4, cx + 2, cy + 4, col);    // fall
+    line(cx + 2, cy + 4, cx + 8, cy + 4, col);    // flat bottom (clipped)
+    line(cx + 8, cy + 4, cx + 12, cy - 4, col);   // rise
+}
+
 static void draw_chain_pedal(int i, int x) {
     Slot *sl = &chain[i]; const FxDef *d = &CAT[sl->cat];
     // a conflicting pedal is live → can't switch on (drawn dimmed). FUZZ also dims while still ON under
@@ -646,6 +660,7 @@ static void draw_chain_pedal(int i, int x) {
     print_centered(d->name, cx, PED_Y + 3, sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
     if (d->kind == -1)      lofi_icon(cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY);
     else if (d->kind == -2) fuzz_icon(cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY);
+    else if (d->kind == FX_DRIVE) od_icon(cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY);
     else fx_icon(d->kind, cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY, body);
     int kr = knob_rad(d->nk);
     int lblcol = sl->on ? CLR_LIGHT_PEACH : CLR_DARK_GREY;
@@ -670,6 +685,7 @@ static void draw_chain_pedal(int i, int x) {
             lbl = FN[(int)(sl->k[2] * 3.99f)];
         }
         if (d->kind == -2 && j == 1) lbl = sl->k[1] < 0.5f ? "GER" : "SIL";   // FUZZ MODE: germanium ↔ silicon
+        if (d->kind == FX_DRIVE && j == 1) { static const char *DN[4] = { "SFT","HRD","FLD","ASY" }; lbl = DN[(int)(sl->k[1] * 3.99f)]; }   // OD MODE (DRIVE_SOFT/HARD/FOLD/ASYM)
         if (d->kind == FX_GRAINS && j == 3) lbl = sl->k[3] > 0.5f ? "FRZN" : "LIVE";   // GRAINS FRZ: freeze toggle
         font(FONT_TINY);                                          // label tucked beside the knob (the empty column)
         if (j & 1) print_right(lbl, kx - kr - 2, ky - 2, lblcol);   // right-column knob → label on its left
@@ -690,6 +706,7 @@ static void draw_chip(int cat, int x, int y, int w, int h, bool ghost) {
     rrect(x, y, w, h, 3, ghost ? CLR_WHITE : d->accent);
     if (d->kind == -1)      lofi_icon(x + w / 2, y + 9, d->accent);
     else if (d->kind == -2) fuzz_icon(x + w / 2, y + 9, d->accent);
+    else if (d->kind == FX_DRIVE) od_icon(x + w / 2, y + 9, d->accent);
     else fx_icon(d->kind, x + w / 2, y + 9, d->accent, d->body);
     font(FONT_TINY); print_centered(d->name, x + w / 2, y + h - 6, CLR_WHITE); font(FONT_NORMAL);
 }

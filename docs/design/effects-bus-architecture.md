@@ -654,8 +654,10 @@ became `eq_*[bus][EQ_INST]` (EQ_INST=2); the new `eq_inst(instance, lo, mid, hi)
 `FX_INST(FX_EQ,1)`, so you can run EQ → BITCRUSH → EQ2 (shape the input to the crush vs its output).
 Verified: groovebox render byte-identical pre/post-refactor; A/B proof that the two EQ instances hold
 independent state at independent chain positions (+12 then −12 cancels to dry). **Wiring a SECOND kind
-(filter×2, a 2nd delay, fuzz-into-amp-drive) is now just: bump that kind's state to `[bus][N]`, add an
-instance-aware setter, and dispatch `inst` in `apply_insert` — no encoding change.** The original
+(filter×2, a 2nd delay) is now just: bump that kind's state to `[bus][N]`, add an instance-aware
+setter, and dispatch `inst` in `apply_insert` — no encoding change.** Kinds shipped instance-aware so
+far: EQ, crush, tape, filter, and **drive** (`DRIVE_INST`/`drive_insert_inst` — pedalboard's OD pedal
+is FX_DRIVE inst 1, stacking into the amp cabinet's inst-0 drive). The original
 design notes (kept below) explain the blockers this resolved.
 
 (Historical — the parked design that this shipped:) Prompted by a pedalboard question: *can the

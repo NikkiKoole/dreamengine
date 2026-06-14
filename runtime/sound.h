@@ -776,11 +776,12 @@ static void fx_set_crush(int b, int i, float bits, float rate, float mix) {
 // too). Stateless waveshaping (no buffer), so it runs on any bus. It REUSES the exact DRIVE_*
 // shaper curves from the voice path (drive_shape below = a verbatim copy of that switch) so the
 // character A/Bs against per-voice drive. Dormant until drive_insert() raises mix → byte-identical.
-static float drvins_amt [SOUND_FX_BUSES];   // pre-gain amount 0..1
-static int   drvins_mode[SOUND_FX_BUSES];   // DRIVE_SOFT/HARD/FOLD/ASYM
-static float drvins_mix [SOUND_FX_BUSES];   // dry/wet 0..1
-static bool  drvins_used[SOUND_FX_BUSES];
-static float drvins_dcx [SOUND_FX_BUSES][2], drvins_dcy[SOUND_FX_BUSES][2];   // per-channel DC-blocker (asym injects DC)
+#define DRIVE_INST 2                        // Increment F: bus-drive instances (a 2nd drive in the chain — overdrive pedal INTO amp drive)
+static float drvins_amt [SOUND_FX_BUSES][DRIVE_INST];   // pre-gain amount 0..1
+static int   drvins_mode[SOUND_FX_BUSES][DRIVE_INST];   // DRIVE_SOFT/HARD/FOLD/ASYM
+static float drvins_mix [SOUND_FX_BUSES][DRIVE_INST];   // dry/wet 0..1
+static bool  drvins_used[SOUND_FX_BUSES][DRIVE_INST];
+static float drvins_dcx [SOUND_FX_BUSES][DRIVE_INST][2], drvins_dcy[SOUND_FX_BUSES][DRIVE_INST][2];   // per-channel DC-blocker (asym injects DC)
 
 // the DRIVE_* curves, identical to the per-voice path: g grows from 0 (shape(s·g)/shape(g) → s as
 // g → 0, so amount 0 is a true bypass), normalized by shape(g) so full-scale stays full-scale.
@@ -801,22 +802,22 @@ static float drive_shape(float s, int mode, float dr) {
             return tanhf(s * g) / tanhf(g);
     }
 }
-static void drive_process(int b, float *mixL, float *mixR) {
-    float dr = drvins_amt[b]; if (dr <= 0.001f) return;
-    int mode = drvins_mode[b]; float mix = drvins_mix[b];
+static void drive_process(int b, int i, float *mixL, float *mixR) {
+    float dr = drvins_amt[b][i]; if (dr <= 0.001f) return;
+    int mode = drvins_mode[b][i]; float mix = drvins_mix[b][i];
     float wL = drive_shape(*mixL, mode, dr), wR = drive_shape(*mixR, mode, dr);
     // DC blocker on the wet path (asym is one-sided) — one-pole HP ~7Hz, like the voice path
-    float yL = wL - drvins_dcx[b][0] + 0.999f * drvins_dcy[b][0]; drvins_dcx[b][0] = wL; drvins_dcy[b][0] = yL;
-    float yR = wR - drvins_dcx[b][1] + 0.999f * drvins_dcy[b][1]; drvins_dcx[b][1] = wR; drvins_dcy[b][1] = yR;
+    float yL = wL - drvins_dcx[b][i][0] + 0.999f * drvins_dcy[b][i][0]; drvins_dcx[b][i][0] = wL; drvins_dcy[b][i][0] = yL;
+    float yR = wR - drvins_dcx[b][i][1] + 0.999f * drvins_dcy[b][i][1]; drvins_dcx[b][i][1] = wR; drvins_dcy[b][i][1] = yR;
     *mixL = *mixL * (1.0f - mix) + yL * mix;
     *mixR = *mixR * (1.0f - mix) + yR * mix;
 }
-static void fx_set_drive(int b, float amt, int mode, float mix) {
+static void fx_set_drive(int b, int i, float amt, int mode, float mix) {
     if (amt < 0.0f) amt = 0.0f; if (amt > 1.0f) amt = 1.0f;
     if (mode < 0) mode = 0; if (mode > 3) mode = 3;
     if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
-    drvins_amt[b] = amt; drvins_mode[b] = mode; drvins_mix[b] = mix;
-    drvins_used[b] = (mix > 0.0f && amt > 0.001f);   // mix 0 (or amount 0) = off → byte-identical
+    drvins_amt[b][i] = amt; drvins_mode[b][i] = mode; drvins_mix[b][i] = mix;
+    drvins_used[b][i] = (mix > 0.0f && amt > 0.001f);   // mix 0 (or amount 0) = off → byte-identical
 }
 
 // ── auto-wah — a resonant bandpass SWEPT BY AN ENVELOPE FOLLOWER on the bus signal ──
@@ -1445,7 +1446,7 @@ static void apply_insert(int kind, int inst, int b, float *L, float *R) {
         case FX_RINGMOD: if (rm_used[b])     rm_process(b, L, R);      break;
         case FX_ECHO:    if (echo_ins_used && b == 0) echo_ins_process(L, R); break;  // in-line delay, master-only (single buffer)
         case FX_GRAINS: { int t = grain_tank_of[b]; if (t >= 0 && grain_pool[t].used) grains_process(&grain_pool[t], L, R); } break;
-        case FX_DRIVE:   if (drvins_used[b])  drive_process(b, L, R);   break;   // mix-bus saturation insert (placed via fx_order; reuses the DRIVE_* shapers)
+        case FX_DRIVE:   if (drvins_used[b][inst]) drive_process(b, inst, L, R); break;   // mix-bus saturation insert (per-instance; reuses the DRIVE_* shapers)
         // FX_REVERB: wet-REPLACE on a reverb-bus (a bus fed only by sends, bus_tank[b] >= 0), so any
         // inserts AFTER it in the chain chew on the wet tail (reverb→bitcrush). On any other bus
         // (master / a pedalboard's bus, bus_tank[b] == -1) it's a no-op pass-through — never zeroes a real mix.
@@ -1568,6 +1569,7 @@ typedef enum {
     SR_TAPE_INST    = 87,   // a=instance, b=wow*1000, c=flut*1000, e0=sat*1000 — master tape on a given INSTANCE
     SR_FILTER_INST  = 88,   // a=instance, b=mode, c=cutoff_hz, e0=res*1000 — master filter on a given INSTANCE
     SR_DRIVE_INSERT = 89,   // a=amount*1000, b=mode (DRIVE_*), c=mix*1000 — mix-bus saturation INSERT on the master bus (FX_DRIVE in the fx_order chain)
+    SR_DRIVE_INST   = 90,   // a=instance, b=amount*1000, c=mode, e0=mix*1000 — mix-bus drive on a given INSTANCE (Increment F; instance 0 == SR_DRIVE_INSERT)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -4218,8 +4220,10 @@ static void sound_fire_req(SoundReq r) {
         echo_ins_mix  = mix;
         echo_ins_used = (mix > 0.0f);   // mix 0 = off (dormant → byte-identical), like the other inserts
         // the cart places FX_ECHO in its fx_order(0, …) list to set the delay's position in the master chain
-    } else if (r.kind == SR_DRIVE_INSERT) {  // a=amount*1000, b=mode, c=mix*1000 — mix-bus saturation INSERT (bus 0)
-        fx_set_drive(0, r.a / 1000.0f, r.b, r.c / 1000.0f);
+    } else if (r.kind == SR_DRIVE_INSERT) {  // a=amount*1000, b=mode, c=mix*1000 — mix-bus saturation INSERT (bus 0, instance 0)
+        fx_set_drive(0, 0, r.a / 1000.0f, r.b, r.c / 1000.0f);
+    } else if (r.kind == SR_DRIVE_INST) {     // master drive (bus 0), instance r.a (Increment F): b=amount*1000, c=mode, e0=mix*1000
+        fx_set_drive(0, r.a, r.b / 1000.0f, r.c, r.e0 / 1000.0f);
         // the cart places FX_DRIVE in its fx_order(0, …) list to set the saturator's position in the master chain
     } else if (r.kind == SR_GRAINS) {       // master granular delay (bus 0): a=grain_ms, b=density*100, c=position*1000, e0=scatter*1000, e1=feedback*1000, e2=mix*1000
         fx_set_grains(0, (float)r.a, r.b / 100.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f, r.e2 / 1000.0f);
@@ -5155,6 +5159,9 @@ void echo_insert(int time_ms, float feedback, float tone, float mix) {
 // ── drive insert: MIX-BUS SATURATION — drive the summed master mix as a reorderable FX_DRIVE pedal ──
 void drive_insert(float amount, int mode, float mix) {
     sound_push_ctrl(SR_DRIVE_INSERT, (int)(amount * 1000.0f), mode, (int)(mix * 1000.0f), 0, 0, 0);
+}
+void drive_insert_inst(int instance, float amount, int mode, float mix) {   // mix-bus drive on a 2nd INSTANCE (Increment F) — pair with FX_INST(FX_DRIVE, instance) for two bus drives in one chain
+    sound_push_ctrl(SR_DRIVE_INST, instance, (int)(amount * 1000.0f), mode, (int)(mix * 1000.0f), 0, 0);
 }
 
 // ── grains: granular delay — a capture-and-scatter texture/freeze cloud (navkit port) ──
