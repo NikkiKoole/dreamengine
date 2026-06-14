@@ -4,6 +4,8 @@
 
 // ============================================================================
 // ROADNET  —  a SPLINE arterial network over an infinite heightmap.   (rungs 1-3)
+//   DOCS: start at docs/design/roadnet-handoff.md (orientation + next steps);
+//   design in roadnet.md, the L3 street level in roadnet-streetlevel.md.
 //
 //   intro panel      drag the SLIDERS (world re-rolls live behind the panel),
 //                    ROLL = fresh seed, EXPLORE / ENTER = dismiss the panel

@@ -15,6 +15,8 @@ is the collision==render seam), but the street level is being (re)built natively
 roadnet's own world-tile coords so the whole LOD stack lives in one place.
 
 Related:
+- [`roadnet-handoff.md`](roadnet-handoff.md) — **★ the orientation doc: what's built, the
+  LOD stack, and the next-time plan. Start there when picking roadnet up.**
 - [`roadnet-streetlevel.md`](roadnet-streetlevel.md) — **L3, the on-the-street level**
   (the missing access-street tier + footprints, where sloop will drive). Design + the
   deeper "BLOCK" loupe harness.
