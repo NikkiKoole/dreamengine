@@ -580,6 +580,63 @@ voicings to [`effects-recipes.md`](../guides/effects-recipes.md) (they're recipe
 
 ---
 
+## Increment F — multiple INSTANCES of one insert per bus (two EQs, two delays)
+
+**Status: design only (2026-06-14). Not built — parked.** Prompted by a pedalboard question: *can the
+same pedal appear twice, at different chain positions?* (An EQ **before and after** the drive; two delays
+at different times; a filter A/B.) Today: **no**, and it's worth recording exactly why and what the fix
+would cost, so a future build isn't re-derived.
+
+### F.1 Why it's blocked today (two layers)
+
+- **The cart.** `pedalboard.c` models the chain as **distinct** catalog ids (one `Slot` per effect type,
+  found by `chain_index(cat)`), and the palette won't offer a pedal that's already in the chain. One of
+  each, by construction.
+- **The engine — the real blocker.** Each insert kind has exactly **one state per bus**: `crush_used[bus]`
+  + one config, one `FX_CRUSH` slot. Two crush pedals on the master bus would write the *same* state, so
+  they can't hold different settings; and `fx_order` packs **kind ids** (4 bits each — `SR_FX_ORDER`), not
+  instances, so listing `FX_CRUSH` twice just runs the one insert twice with whatever was written last.
+  (This is also why the LO-FI macro has to *own* crush/tape/filter rather than coexist with standalone
+  ones — same shared single state.)
+
+### F.2 The shape of the fix
+
+Promote insert state from per-**kind**-per-**bus** to per-**instance**:
+
+- Every insert's state array grows a dimension: `crush_used[SOUND_FX_BUSES]` → `[SOUND_FX_BUSES][N_INST]`
+  (same for `cho_*`, `eq_*`, `filt_*`, the delay/echo buffers, …). The `fx_set_*` setters take an
+  instance index; `apply_insert` dispatches `(kind, instance, bus)`.
+- **`fx_order` must carry the instance**, not just the kind. Today it's 4 bits/slot (kinds 0–15); add
+  e.g. 2 instance bits/slot (→ 6 bits/slot, fewer slots per packed int, or a wider/secondary encoding).
+- A new `SR_*` carrying `(bus, kind, instance, params…)` for the per-instance config, and the API/cart
+  surface to address "EQ #2".
+
+### F.3 Cost — the honest part
+
+- **Memory scales with instances for the buffer-heavy kinds.** A 2nd delay/reverb instance is another
+  ~352 KB / ~24 KB *each*; chorus/flanger/tape buffers also multiply. The cheap kinds (eq/filter/crush/
+  trem/pan/ringmod) are just a few floats × instances — nearly free. So a *uniform* N-instance roster is
+  expensive; a **per-kind instance budget** (EQ ×2, filter ×2, delay ×1) is the frugal shape.
+- **Touches every insert + the hot `apply_insert`/`fx_order` path** → a `sound.h` refactor with the full
+  hot-file discipline (compile-gate, tune-check, byte-identical-when-unused via instance 0 = today's
+  behaviour). The packing change is the fiddly bit.
+- **Cart UI**: the pedalboard's distinct-id model + palette must allow duplicates (instance-tagged slots,
+  labels like "EQ·2").
+
+### F.4 The smart first step (if/when it's picked up)
+
+**Build EQ ×2 alone as the proof**, not the whole roster. It's the highest-value duplicate (the classic
+*EQ before AND after distortion* — shape the drive's input vs its output), it's **buffer-free** (a 2nd EQ
+is a handful of floats), and it forces the instance-indexing + packing design in the smallest possible
+slice. If EQ ×2 lands clean, generalise to filter ×2 and a budgeted delay; if it's awkward, the blast
+radius was one effect. Until then, the partial workaround is per-bus routing (one instance on an
+instrument's aux bus, one on master) — limited, not arbitrary serial placement.
+
+**Decision: deferred.** Real, useful (EQ pre/post drive especially), but a genuine insert-layer refactor
+— not worth it until a concrete cart wants it. When picked up, EQ ×2 is the entry point.
+
+---
+
 ## 6. Cost ledger
 
 | Concern | A: reorder | B: multi-reverb | C: reverb-as-bus |
