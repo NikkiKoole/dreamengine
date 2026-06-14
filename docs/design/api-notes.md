@@ -952,6 +952,30 @@ void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color); // fill
 
 Fills the obvious gap between `rect` and freeform shapes. `trifill` uses a scanline rasteriser and accepts any vertex winding order.
 
+#### ⚠️ Gotcha — software fills break up (dotted holes) under a ROTATED camera
+
+**This has bitten twice** (rotating collided cars in `sloop`, then again when `sloop` got a heading-up camera that spins the whole world), so it's worth understanding once.
+
+**Symptom:** a filled shape that looks solid normally develops a regular **dotted lattice of holes** (the background showing through) once the camera is rotated — `camera_ex(x, y, zoom, angle)` with `angle != 0`. The more the rotation, the worse; ~45° is the ugliest.
+
+**Cause — where the fill happens relative to the camera transform.** The engine's "software" fills rasterise in **world coordinates**: they loop over pixels/rows and emit `pset` / `DrawPixel` / `DrawLine` at *world* positions, which the GPU camera matrix then rotates. A per-pixel grid or a stack of 1px scanlines, once rotated, **staircases** — consecutive samples land >1px apart or interleave imperfectly on screen, leaving the lattice. Only primitives that emit **real GPU vertices** get filled by the rasteriser in *screen* space (after the transform) and so stay solid at any angle:
+
+| Stays solid under rotation (GPU vertices)        | Breaks up under rotation (software, world-space) |
+| ------------------------------------------------ | ------------------------------------------------ |
+| `rectfill` / `rect` (`DrawRectangle`)            | `trifill`, `quadfill`, `polyfill` (`poly_fill_cov`) |
+| `rectfill_rot` (`DrawRectanglePro`)              | `ngonfill`, `starfill`                           |
+| `line` (`DrawLine`), `pset` (single dots)        | `circfill`, `ovalfill`, `arc`/`arcfill`/`ring`   |
+| `tritex` (`RL_QUADS` + `rlVertex`)               | `thickline`, and any cart-side scanline fill     |
+
+(`poly_fill_cov` carries an old `// trifill stays GPU` comment — that's **stale**; it's a per-pixel coverage loop today.)
+
+**Fixes, in order of preference:**
+1. **Oriented rectangle → `rectfill_rot(cx, cy, w, h, deg, color)`.** Added for exactly this (cars + the rig in `sloop`). It's `DrawRectanglePro` — two GPU triangles — so it's hole-free at any camera angle. Abutting cells: oversize by ~1px so they overlap and no seam shows between differently-coloured neighbours.
+2. **Keep the fill axis-aligned in world space.** `rectfill` is a GPU quad, so an axis-aligned world rect stays solid even when the camera spins it — only *rotated-in-world* shapes (collided cars, the rig at a heading) need `rectfill_rot`.
+3. **For circles/triangles/arbitrary polys there is no GPU flat-fill yet.** Options: build the shape from `tritex` (point all UVs at one solid sheet pixel), accept it in a low-stakes spot, or render the world layer into an *unrotated* offscreen and rotate the final blit (one texture) instead of rotating the draw calls.
+
+**Carts that rotate the camera — audit these if you touch their drawing** (`grep camera_ex … angle != 0`): `sloop` (fixed), `coaster` (dynamic spin; small `trifill`/`circfill` decorations — minor), `hotline` (constant 2.5° tilt — faint), `worldpointer` (the camera-rotate demo; draws big `circfill`s under the spin — the clearest live example of the lattice).
+
 #### Sprite transparency — `colorkey`
 
 ```c

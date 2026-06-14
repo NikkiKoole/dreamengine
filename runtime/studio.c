@@ -2249,6 +2249,18 @@ void rectfill_rgb(int x, int y, int w, int h, int hex) {
     DrawRectangle(x, y, w, h, (Color){ (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 });
 }
 
+// filled rect centred at (cx,cy), rotated `deg`° — emitted as real GPU geometry (two
+// triangles via DrawRectanglePro), NOT a software scanline/coverage fill. That's the whole
+// point: under a rotated camera_ex() the software fills (trifill/polyfill/thickline) rasterise
+// in world space and the rotation staircases them into a dotted lattice of holes; a GPU quad
+// is filled by the rasteriser in screen space after the transform, so it stays solid at any
+// angle. The pivot is the rect's own centre, so (cx,cy) holds still as it spins.
+void rectfill_rot(int cx, int cy, int w, int h, float deg, int color) {
+    PROF("rectfill_rot");
+    DrawRectanglePro((Rectangle){ (float)cx, (float)cy, (float)w, (float)h },
+                     (Vector2){ w * 0.5f, h * 0.5f }, deg, palette[color % PALETTE_SIZE]);
+}
+
 void bar(int x, int y, int w, int h, float pct, int fill, int bg) {
     PROF("bar");
     if (pct < 0.0f) pct = 0.0f;
@@ -2860,7 +2872,11 @@ void quadfill(int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, in
 // convention). Handles convex AND concave (star points, arbitrary poly);
 // fill, dither and outline all read from it, so the outline is always the
 // boundary ring of the fill — never the lines-meet-fill disagreement the old
-// fan + line() versions had. trifill stays GPU (the 3D hot path).
+// fan + line() versions had.
+// NOTE: this is a SOFTWARE per-pixel fill (in whatever coords the caller passes). Under a
+// rotated camera_ex() the world-space pixel grid staircases into a dotted lattice of holes —
+// trifill/polyfill/ngonfill/starfill all inherit this. For rotated-in-world shapes use a
+// GPU primitive (rectfill / rectfill_rot / tritex). See docs/design/api-notes.md.
 static bool poly_inside(float fx, float fy, const int *xy, int n) {
     bool in = false;
     for (int i = 0, j = n - 1; i < n; j = i++) {

@@ -583,15 +583,25 @@ static float cam_zoom = 1.0f;     // QUANTIZED speed-zoom actually rendered (sna
 static float cam_zoom_smooth = 1.0f;  // the continuously-eased accumulator (quantized into cam_zoom)
 static int   smooth_mode = 1;  //TT  // A/B (V key): 0 off (quantized zoom-out, today) · 1 smooth zoom-out
                                   // (1:1 render + bilinear downscale, no crawl). TEMP scaffolding for the test.
-static int   toast_t = 0;         // frames left to show the mode toast (set on V press)
+// ── heading-up camera (rotates so the rig's travel points UP; eased = the "glide") ──
+static int   cam_head_up = 0;     // 0 = NORTH-UP (grid aligned, today) · 1 = HEADING-UP (travel up). Toggle: C
+static float cam_ang = 0;         // eased camera rotation (deg) actually rendered — lags the heading = the glide
+#define CAM_GLIDE     0.09f       // how fast the heading-up camera eases toward your heading per frame.
+                                  // LOWER = more glide/lag (a hard drift swings the nose fast while the camera
+                                  // trails, so you slide sideways then the world swings round to catch up)
 // ── sense-of-speed camera (eased so it never jitters) ─────────────────────────
-#define CAM_ZOOM_PULL 0.16f       // how far the camera pulls BACK (zooms out) at full speed
-#define CAM_ZOOM_REF  260.0f      // speed (px/s) at which the pull-back maxes out
+#define CAM_ZOOM_PULL 0.34f       // how far the camera pulls BACK (zooms out) at full speed
+#define CAM_ZOOM_REF  420.0f      // speed (px/s) where the pull-back maxes out — set near the supercar's
+                                  // ~300 km/h top (≈417 px/s) so fast rigs zoom out to see further ahead
+                                  // while normal rigs (≤~166 px/s) barely change
 #define CAM_ZOOM_STEP 0.04f       // QUANTIZE the zoom to this grid — a fractional zoom re-rasterizes
                                   // thin world lines (curbs, dashes) every frame it changes (the
                                   // shimmer/"breathing"); snapping to steps holds them rock-steady
                                   // between levels (5 levels over the pull → a few tiny pops, no crawl)
 #define CAM_LEAD      0.34f       // how far ahead the camera leads the rig (world px per px/s of vel)
+#define LEAD_MAX      42.0f       // HARD cap on the lead in SCREEN px — guarantees the rig stays on-screen
+                                  // (and clear of the dashboard) at ANY speed; uncapped, a 300 km/h rig flew
+                                  // ~120 px off-centre and vanished under the dash
 static float t_skid_snd, t_scrape_snd, t_spin_snd;
 static int   is_paused;
 static float wheel_ang;           // eased steering-wheel angle (deg) for the cockpit dial
@@ -887,7 +897,7 @@ static void reset_vehicle(void) {
 
     engine_on = 1; stalled = 0; restart_grace = 0;   // fresh rig starts cranked
     boiler = 0;                                  // steam starts cold → you feel it spool up
-    wheel_ang = 0;
+    wheel_ang = 0; cam_ang = 0;                  // cam_head_up persists (player setting)
     for (int i = 0; i < MAXSKID; i++) skid[i].life = 0;
     for (int i = 0; i < MAXSPARK; i++) spark[i].life = 0;
     world_reset();                              // §9: fresh world — origin chunks regenerate pristine
@@ -999,6 +1009,14 @@ static int gear_req = -99;            // a gear tapped directly in the gate this
 // CENTRE — gauges (display) + the mode buttons
 #define SPD_X    50                   // speed LED readout
 #define SPD_Y    152
+#define CAM_BTN_X 50                  // camera-mode toggle — left half of the strip under the speed LED
+#define CAM_BTN_Y 180
+#define CAM_BTN_W 24
+#define CAM_BTN_H 16
+#define SCL_BTN_X 76                  // scaling toggle (was the V-key debug A/B) — right half
+#define SCL_BTN_Y 180
+#define SCL_BTN_W 24
+#define SCL_BTN_H 16
 #define DIAL_CX  128                  // round RPM tach
 #define DIAL_CY  174
 #define DIAL_R   21
@@ -1084,11 +1102,6 @@ static void handle_input(void) {
         mode = (mode == MODE_DRIVE) ? MODE_BUILD : MODE_DRIVE;
         if (mode == MODE_DRIVE) reset_vehicle();   // drive your current build, fresh
     }
-    if (keyp('V')) {                           // A/B the scaling: OFF <-> SMOOTH zoom-out (V; G is gears)
-        smooth_mode = (smooth_mode + 1) % 2;
-        smooth_zoom(smooth_mode != 0);
-        toast_t = 150;                         // ~2.5s toast so you can see it registered
-    }
     // templates (1-5) load an editable starting rig in either mode
     if (keyp('1')) load_design(0);
     if (keyp('2')) load_design(1);
@@ -1123,6 +1136,14 @@ static void handle_input(void) {
     if (keyp('I') || ctl_hit(BTN_X, IGN_Y, BTN_W, BTN_H)) do_ignition();   // IGN button
     if (keyp('G') || ctl_hit(BTN_X, TRN_Y, BTN_W, BTN_H)) do_trans();      // TRANS button
     if (ctl_hit(BTN_X, BLD_Y, BTN_W, BTN_H)) mode = MODE_BUILD;            // BUILD button
+    if (mode == MODE_DRIVE &&                                              // CAM toggle: north-up / heading-up
+        (keyp('C') || ctl_hit(CAM_BTN_X, CAM_BTN_Y, CAM_BTN_W, CAM_BTN_H)))  // ('C' is caster-select in BUILD)
+        cam_head_up = !cam_head_up;
+    if (mode == MODE_DRIVE &&                                              // SCALE toggle: stepped / smooth zoom-out
+        (keyp('V') || ctl_hit(SCL_BTN_X, SCL_BTN_Y, SCL_BTN_W, SCL_BTN_H))) {
+        smooth_mode = !smooth_mode;
+        smooth_zoom(smooth_mode != 0);
+    }
 
     // --- steering: keyboard / gamepad stay digital; the on-screen WHEEL is now GRABBED
     // and turned (touch + mouse). Grab anywhere on the wheel and sweep around the hub —
@@ -1682,15 +1703,9 @@ void update(void) {
     float dt_ = dt(); if (dt_ > 0.05f) dt_ = 0.05f;
     update_drive(dt_);
 
-    // camera LEADS the rig in the travel direction (you see where you're rushing into —
-    // reads as speed). The lead is HEAVILY low-passed (lead_x/y ease toward vx/vy) so it
-    // doesn't jitter the bright curbs frame-to-frame or snap through the city's 90° corners.
-    lead_x = lerp(lead_x, vx * CAM_LEAD, 0.04f);
-    lead_y = lerp(lead_y, vy * CAM_LEAD, 0.04f);
-    cam_x = lerp(cam_x, sx + lead_x - SCREEN_W / 2.0f, 0.15f);
-    cam_y = lerp(cam_y, sy + lead_y - SCREEN_H / 2.0f, 0.15f);
     // speed-zoom: pull the camera back as you go faster — more world streams through the frame
     // (and you see further ahead). Eased slowly so it never jitters; resets to 1 in BUILD/at rest.
+    // Computed BEFORE the lead so the lead cap below can work in screen space.
     float camspd = fsqrt(vx * vx + vy * vy);
     float zoomTarget = 1.0f - CAM_ZOOM_PULL * clamp(camspd / CAM_ZOOM_REF, 0, 1);
     cam_zoom_smooth = lerp(cam_zoom_smooth, zoomTarget, 0.05f);
@@ -1704,6 +1719,30 @@ void update(void) {
         cam_zoom = ((int)(cam_zoom_smooth / CAM_ZOOM_STEP + 0.5f)) * CAM_ZOOM_STEP;
     }
 
+    // camera LEADS the rig in the travel direction (you see where you're rushing into —
+    // reads as speed). The lead is HEAVILY low-passed (lead_x/y ease toward vx/vy) so it
+    // doesn't jitter the bright curbs frame-to-frame or snap through the city's 90° corners.
+    lead_x = lerp(lead_x, vx * CAM_LEAD, 0.04f);
+    lead_y = lerp(lead_y, vy * CAM_LEAD, 0.04f);
+    // CAP the lead in SCREEN space: past LEAD_MAX the rig would slide off-frame / under the dash
+    // (the 300 km/h disappearing-car bug). Scale the world-space lead so its on-screen length holds.
+    float lsx = lead_x * cam_zoom, lsy = lead_y * cam_zoom, ll = fsqrt(lsx * lsx + lsy * lsy);
+    if (ll > LEAD_MAX) { float k = LEAD_MAX / ll; lead_x *= k; lead_y *= k; }
+    cam_x = lerp(cam_x, sx + lead_x - SCREEN_W / 2.0f, 0.15f);
+    cam_y = lerp(cam_y, sy + lead_y - SCREEN_H / 2.0f, 0.15f);
+
+    // heading-up rotation: spin the world so the rig's heading points UP. Eased toward the
+    // target = the GLIDE — a hard drift swings the nose fast while cam_ang trails, so the rig
+    // slides sideways across the frame, then the world swings round to catch it. NORTH-UP
+    // eases the angle back to 0 (so the toggle itself glides, never snaps).
+    float ang_targ = cam_head_up ? (-90.0f - ang) : 0.0f;
+    float dA = ang_targ - cam_ang;
+    while (dA >  180.0f) dA -= 360.0f;
+    while (dA < -180.0f) dA += 360.0f;
+    cam_ang += dA * CAM_GLIDE;
+    if      (cam_ang >  180.0f) cam_ang -= 360.0f;
+    else if (cam_ang < -180.0f) cam_ang += 360.0f;
+
     world_sync();                  // §9: stream chunks (load/evict) for the new camera
     obstacles_integrate(dt_);      // knocked obstacles tumble away and settle
     collide_obstacles_chain();     // §9f: a moving obstacle shoves the next → chain reaction through the lot
@@ -1714,6 +1753,9 @@ void update(void) {
     watch("vl", "%.1f", vx * (-fwy) + vy * fwx);
     watch("ang", "%.0f", ang);
     watch("angvel", "%.0f", angVel);
+    watch("cam_ang", "%.0f", cam_ang);
+    watch("cam_headup", "%d", cam_head_up);
+    watch("cam_zoom", "%.2f", cam_zoom);
     watch("mass", "%.1f", M);
     watch("I", "%.0f", I);
     watch("front", "%d", frontalCells);
@@ -1770,12 +1812,23 @@ static unsigned hash2(int a, int b) {
     return h;
 }
 
+// world-space HALF-EXTENTS of the on-screen viewport, accounting for BOTH the speed-zoom
+// (cam_zoom<1 shows more world) AND the heading-up rotation (a rotated screen rectangle's
+// axis-aligned bounding box is up to ~1.4× wider). Every draw/stream range widens by this so
+// nothing pops at the screen edges or in the corners when the camera is turned. At cam_ang=0
+// it reduces to the old SCREEN_W/2 / cam_zoom margin (north-up is byte-identical to before).
+static void view_half_extent(float *hw, float *hh) {
+    float ca = af(cos_deg(cam_ang)), sa = af(sin_deg(cam_ang));
+    *hw = (ca * SCREEN_W + sa * SCREEN_H) * 0.5f / cam_zoom;
+    *hh = (sa * SCREEN_W + ca * SCREEN_H) * 0.5f / cam_zoom;
+}
+
 static void draw_ground(void) {
     int step = 32;
-    // when the speed-zoom pulls back (cam_zoom<1) the view shows more world than SCREEN_W/H —
-    // widen the draw range by that margin so the zoomed-out edges aren't left undrawn.
-    int mx = (int)(SCREEN_W * (1.0f / cam_zoom - 1.0f) * 0.5f) + step;
-    int my = (int)(SCREEN_H * (1.0f / cam_zoom - 1.0f) * 0.5f) + step;
+    // widen the draw range so the zoomed-out / rotated edges aren't left undrawn (see helper).
+    float hw, hh; view_half_extent(&hw, &hh);
+    int mx = (int)(hw - SCREEN_W * 0.5f) + step;
+    int my = (int)(hh - SCREEN_H * 0.5f) + step;
     int x0 = ((int)(cam_x - mx) / step - 1) * step;
     int y0 = ((int)(cam_y - my) / step - 1) * step;
     int x1 = (int)cam_x + SCREEN_W + mx;
@@ -2037,8 +2090,9 @@ static int chunk_is_loaded(int cx, int cy) {
 // keep the live ring in sync with the camera: load chunks that entered, evict those that left.
 // Incremental (not a rebuild) so live obstacles keep their un-evicted run-over state across frames.
 static void world_sync(void) {
-    int mx = (int)(SCREEN_W * (1.0f / cam_zoom - 1.0f) * 0.5f) + CHUNK;   // margin ≥ a chunk → no pop
-    int my = (int)(SCREEN_H * (1.0f / cam_zoom - 1.0f) * 0.5f) + CHUNK;
+    float hw, hh; view_half_extent(&hw, &hh);   // widen for zoom + heading-up rotation
+    int mx = (int)(hw - SCREEN_W * 0.5f) + CHUNK;   // margin ≥ a chunk → no pop
+    int my = (int)(hh - SCREEN_H * 0.5f) + CHUNK;
     int x0 = ifloordiv((int)cam_x - mx, CHUNK), x1 = ifloordiv((int)cam_x + SCREEN_W + mx, CHUNK);
     int y0 = ifloordiv((int)cam_y - my, CHUNK), y1 = ifloordiv((int)cam_y + SCREEN_H + my, CHUNK);
     // evict any loaded chunk now outside the ring (compact the list as we go)
@@ -2352,35 +2406,13 @@ static void world_reset(void) {
     nLoaded = 0; wclock = 0; last_hit = 0;
 }
 
-// hole-free fill of a convex quad via HORIZONTAL scanlines: for each pixel row, find where the row enters
-// and leaves the quad and draw one solid horizontal line. Horizontal lines on integer rows tile perfectly,
-// so there are NO gaps at any rotation (unlike sweeping diagonal lines, which staircase and leave a lattice).
-static void fill_quad(float qx[4], float qy[4], int col) {
-    float ymn = qy[0], ymx = qy[0];
-    for (int i = 1; i < 4; i++) { if (qy[i] < ymn) ymn = qy[i]; if (qy[i] > ymx) ymx = qy[i]; }
-    for (int y = (int)ymn; y <= (int)ymx; y++) {
-        float yy = y + 0.5f, xmn = 1e9f, xmx = -1e9f; int hits = 0;
-        for (int e = 0; e < 4; e++) {
-            float ax = qx[e], ay = qy[e], bx = qx[(e + 1) & 3], by = qy[(e + 1) & 3];
-            if ((ay <= yy) == (by <= yy)) continue;       // edge doesn't straddle this row
-            float x = ax + (yy - ay) / (by - ay) * (bx - ax);
-            if (x < xmn) xmn = x; if (x > xmx) xmx = x; hits++;
-        }
-        if (hits >= 2 && xmx >= xmn) line((int)xmn, y, (int)(xmx + 0.5f), y, col);
-    }
-}
-
 // fill an ORIENTED rectangle (centre, forward angle, half-length along forward, half-width).
-// Axis-aligned (the resting parked cars) → a single solid rectfill (fast). Rotated → its 4 corners through
-// the hole-free scanline fill above.
+// Uses the engine's GPU rectfill_rot so it stays HOLE-FREE under the heading-up camera: a
+// software scanline/coverage fill rasterises in world space and the camera rotation staircases
+// it into a dotted lattice (the artifact that showed on rotated/collided cars) — a GPU quad is
+// filled in screen space after the transform, solid at any angle. w = the length (along forward).
 static void fill_orect(float cx_, float cy_, float ang_, float hl, float hwid, int col) {
-    float c = cos_deg(ang_), s = sin_deg(ang_);      // forward unit; lateral = (-s, c)
-    if (af(s) < 0.02f) { rectfill((int)(cx_ - hl), (int)(cy_ - hwid), (int)(hl*2), (int)(hwid*2), col); return; }
-    if (af(c) < 0.02f) { rectfill((int)(cx_ - hwid), (int)(cy_ - hl), (int)(hwid*2), (int)(hl*2), col); return; }
-    float fx = c * hl, fy = s * hl, lx = -s * hwid, ly = c * hwid;   // forward·hl, lateral·hwid
-    float qx[4] = { cx_ + fx + lx, cx_ + fx - lx, cx_ - fx - lx, cx_ - fx + lx };
-    float qy[4] = { cy_ + fy + ly, cy_ + fy - ly, cy_ - fy - ly, cy_ - fy + ly };
-    fill_quad(qx, qy, col);
+    rectfill_rot((int)cx_, (int)cy_, (int)(hl * 2), (int)(hwid * 2), ang_, col);
 }
 
 // draw the live obstacles in world space (called inside the camera transform, under the rig).
@@ -2441,8 +2473,9 @@ static int zone_at(float x, float y) {
 // and (when smashed) stay demolished. draw_course only paints the flat road + fields under them.
 static void draw_course(void) {
     // widen the drawn area to cover the speed-zoom pull-back (see draw_ground)
-    int mx = (int)(SCREEN_W * (1.0f / cam_zoom - 1.0f) * 0.5f) + 4;
-    int my = (int)(SCREEN_H * (1.0f / cam_zoom - 1.0f) * 0.5f) + 4;
+    float vhw, vhh; view_half_extent(&vhw, &vhh);   // widen for zoom + heading-up rotation
+    int mx = (int)(vhw - SCREEN_W * 0.5f) + 4;
+    int my = (int)(vhh - SCREEN_H * 0.5f) + 4;
     int L = (int)cam_x - mx, R = (int)cam_x + SCREEN_W + mx, T = (int)cam_y - my, B = (int)cam_y + SCREEN_H + my;
     cur_zone = zone_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f);
     int p = ZONE_PITCH[cur_zone], hw = ZONE_LANE[cur_zone] / 2;
@@ -2536,13 +2569,11 @@ static int part_col(int p) { return (p == P_ENGINE) ? ENG[eng_kind].col : KIND[p
 // ── vehicle: draw each occupied cell as a rotated quad ───────────────────────
 static void draw_cell(int r, int c, int p) {
     float lx = (c + 0.5f) * CELL - comX, ly = (r + 0.5f) * CELL - comY;
-    float h = CELL * 0.5f;
-    float ax, ay, bx, by, cx2, cy2, dx, dy;
-    rot(lx - h, ly - h, &ax, &ay); rot(lx + h, ly - h, &bx, &by);
-    rot(lx + h, ly + h, &cx2, &cy2); rot(lx - h, ly + h, &dx, &dy);
-    int xy[8] = { (int)ax, (int)ay, (int)bx, (int)by, (int)cx2, (int)cy2, (int)dx, (int)dy };
+    float px, py; rot(lx, ly, &px, &py);                  // cell centre in world (rot spins it by the rig heading)
     int col = dragging[r][c] ? hot_col() : part_col(p);   // scraping cells glow
-    polyfill(xy, 4, col);
+    // GPU rotated quad (not software polyfill) so the rig stays hole-free at any heading under the
+    // spinning camera. +1px so abutting cells overlap a hair — no seam between parts of a different colour.
+    rectfill_rot((int)px, (int)py, (int)CELL + 1, (int)CELL + 1, ang, col);
     if (p == P_CASTER || p == P_DRIVE) {          // a hub dot: grey = swivel caster, orange = powered
         float px, py; rot(lx, ly, &px, &py);
         pset((int)px, (int)py, p == P_DRIVE ? CLR_ORANGE : CLR_LIGHT_GREY);
@@ -2635,6 +2666,11 @@ static void hud(void) {
     snprintf(buf, sizeof buf, "%3.0f", spd * KMH);
     print_scaled(buf, SPD_X + 2, SPD_Y + 4, CLR_GREEN, 2);
     font(FONT_SMALL); print_centered("KM/H", SPD_X + 25, SPD_Y + 20, CLR_MEDIUM_GREY); font(FONT_NORMAL);
+
+    // CAMERA mode toggle (N-UP = grid aligned · H-UP = your travel points up) + the SCALING
+    // A/B (STEP = quantized zoom-out · SMTH = smooth, no crawl) — both tap- and key-toggleable
+    dash_btn(CAM_BTN_X, CAM_BTN_Y, CAM_BTN_W, CAM_BTN_H, cam_head_up ? "H-UP" : "N-UP", "C", cam_head_up, CLR_BLUE);
+    dash_btn(SCL_BTN_X, SCL_BTN_Y, SCL_BTN_W, SCL_BTN_H, smooth_mode ? "SMTH" : "STEP", "V", smooth_mode, CLR_LIME_GREEN);
 
     // RPM — round tach with ticks + a needle (240° sweep, 210°→-30°)
     circfill(DIAL_CX, DIAL_CY, DIAL_R, CLR_DARKER_GREY);
@@ -2860,7 +2896,7 @@ void draw(void) {
     if (mode == MODE_BUILD) { draw_build(); return; }
 
     cls(CLR_DARKER_GREY);                 // asphalt
-    camera_ex((int)cam_x, (int)cam_y, cam_zoom, 0);   // speed-zoom (pulls back at speed)
+    camera_ex((int)cam_x, (int)cam_y, cam_zoom, cam_ang);   // speed-zoom + heading-up rotation
     draw_ground();
     draw_course();
     for (int i = 0; i < MAXSKID; i++)     // tire marks burned into the road
@@ -2876,20 +2912,6 @@ void draw(void) {
         }
     camera(0, 0);
     hud();
-    // TEMP A/B scaffolding (press V to toggle) — remove once we lock the winner in
-    static const char *SM[2] = { "[V] SCALING: OFF (default)", "[V] SCALING: SMOOTH (no crawl)" };
-    rectfill(2, 2, 248, 11, CLR_BLACK);
-    print(SM[smooth_mode], 4, 4, smooth_mode ? CLR_LIME_GREEN : CLR_YELLOW);
-    // toast on toggle — big centred banner, so you can't miss that V did something
-    if (toast_t > 0) {
-        int col = smooth_mode ? CLR_LIME_GREEN : CLR_ORANGE;
-        int bw = 200, bx = SCREEN_W / 2 - bw / 2, by = 26;
-        rectfill(bx, by, bw, 26, CLR_BLACK);
-        rect(bx, by, bw, 26, col);
-        print_centered(smooth_mode ? "SMOOTH SCALING: ON" : "SMOOTH SCALING: OFF", SCREEN_W / 2, by + 5, col);
-        print_centered("(drive fast to see it)", SCREEN_W / 2, by + 15, CLR_LIGHT_GREY);
-        toast_t--;
-    }
 }
 
 void init(void) {
