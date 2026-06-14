@@ -1078,6 +1078,12 @@ static void graph_collapse_grid(void) {
     nedge=nout;
     for (int i=0;i<nedge;i++) gedge[i]=out[i];
 }
+// LOD by ON-SCREEN BLOCK SIZE (px), not raw zoom: a tier is drawn only when its lines are far
+// enough apart to read. Too-dense fine tiers collapse into a smear — so locals appear only when
+// a city block is GRAPH_STREET_PX wide, access lanes (half-pitch) need GRAPH_ACCESS_PX. Below
+// that you see just the clean arterial skeleton (like a map app revealing streets as you zoom).
+#define GRAPH_STREET_PX 16.0f
+#define GRAPH_ACCESS_PX 34.0f
 // ── VECTORISE THE INTRA-CITY GRID into gedge[]/gnode[] over the VISIBLE region (LOD: street
 // zoom only; far out the grid is sub-pixel and meaningless). The grid is rotated PER DISTRICT
 // (city_grid_coords), so we can't lay one global lattice — we go per gathered city, per
@@ -1090,7 +1096,7 @@ static void graph_collapse_grid(void) {
 #define GRID_DI 24                       // max grid-line indices per district axis (incl. access half-pitch)
 static void graph_add_grid(void) {
     float sp = block_sp(), dsp = sp * DISTRICT_BLK, hp = sp * 0.5f;   // hp = access half-pitch
-    int saved = want_access; want_access = 1;
+    int saved = want_access; want_access = (sp * P >= GRAPH_ACCESS_PX);  // LOD: access lanes only when legible
     float wx0 = camX, wy0 = camY, wx1 = camX + vcols, wy1 = camY + vrows;
     for (int ci = 0; ci < gn && nedge < MAXGEDGE; ci++) {
         float nx = gnx[ci], ny = gny[ci], R = gnr[ci] * 1.4f;
@@ -1197,13 +1203,13 @@ static const int GEDGE_COL[6] = {
     CLR_DARK_ORANGE,  // DIRT
     CLR_PINK,         // ACCESS  (residential lane)
 };
-#define GRAPH_STREET_ZOOM 3.0f         // at/above this the intra-city grid is vectorised in too (LOD)
 static void draw_graph_view(void) {
     view_metrics();
     gather_cities();
     gather_arterials();                                  // fills the sg* cache...
     build_graph();                                       // ...arterials packed into gedge[]
-    if (zoom >= GRAPH_STREET_ZOOM) graph_add_grid();     // + the intra-city grid (nodes + edges)
+    float bpx = block_sp() * P;                          // on-screen size of one city block (px)
+    if (bpx >= GRAPH_STREET_PX) graph_add_grid();        // + the intra-city grid (nodes + edges), LOD'd
     render_terrain();
     fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();  // dim
     for (int i = 0; i < nedge; i++) {                    // EDGES — vector centre-lines, class-coloured

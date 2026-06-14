@@ -31,10 +31,13 @@ field-sampled loupe was the bottleneck, not the zoom number):
   all the way down to street level — no more squinting at a 78 px inset. This full-screen
   deep-zoom view **is the eventual sloop street-camera**.
 - **`VIEW_GRAPH`** — a debug view that draws the network as crisp **vector centre-lines**
-  (`line()`, class-coloured: motorway red … dirt orange) at *any* zoom — the proper fix for
-  "see the small roads", since a field paint aliases away when small. Over **dimmed terrain**,
-  with the city-interior **street FIELD layered full-screen** once `zoom ≥ GRAPH_STREET_ZOOM`
-  (so you see the grid/access streets big), and **white node dots at the city anchors**.
+  (`line()`, class-coloured: motorway red … local lime, access pink) + **node dots** over
+  **dimmed terrain** — the proper fix for "see the small roads", since a field paint aliases
+  away when small. **LOD by on-screen block size** (not raw zoom): locals draw only when a city
+  block is ≥ `GRAPH_STREET_PX` (16) wide, access lanes ≥ `GRAPH_ACCESS_PX` (34) — below that you
+  get just the clean arterial skeleton, so no zoom shows a smeared over-dense grid (like a map
+  app revealing streets as you zoom). The same threshold gates extraction (`graph_add_grid` runs
+  only when blocks are legible; `want_access` follows the access threshold).
 - **The road graph** — the **background data layer the car sim navigates** (snap-to-road,
   route, traffic), built from the *same* geometry the field reads (graph == field == screen):
   - **Edges** `RoadEdge gedge[] {x0,y0,x1,y1,cls,n0,n1}` and **nodes** `RoadNode gnode[] {x,y}`.
