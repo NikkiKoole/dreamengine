@@ -498,9 +498,9 @@ gets simpler *and* more correct.** Showcase + acceptance test ready on day one.
 
 ## Increment E — the output stage (4th zone): cabinets — amp/cab · Leslie
 
-**Status: SHIPPED 2026-06-14 — both the standalone amp (`combo`) and the unified pinned CABINET
-slot in `pedalboard.c` (none / guitar amp / Leslie). Only RIG-recall (named full-chain setups)
-remains (Phase 3).** The recipe half (E.3 — drive + EQ-cab + glue, bundled into VOICINGs and pinned
+**Status: SHIPPED 2026-06-14 — the standalone amp (`combo`), the unified pinned CABINET slot in
+`pedalboard.c` (none / guitar amp / Leslie), AND RIG-recall (named full-chain setups). The cab
+story is complete.** The recipe half (E.3 — drive + EQ-cab + glue, bundled into VOICINGs and pinned
 like leslie) lives in the shared header `runtime/ampcab.h` (`AMP_VC[]` + `ampcab_apply()`), used by
 both carts. `combo` is the standalone amp (play `INSTR_GUITAR` through 5 voicings); `pedalboard`'s
 pinned CABINET slot is the "pick your cabinet" tenant selector (E.2). This was a *routing-shape*
@@ -584,10 +584,14 @@ voicings to [`effects-recipes.md`](../guides/effects-recipes.md) (they're recipe
 
 ### E.7 The unified CABINET slot in `pedalboard.c` — SHIPPED 2026-06-14
 
-**Status: shipped.** Phase 1 shipped the recipe half as the standalone `combo` cart; Phase 2 shipped
-the unified pinned CABINET slot in `pedalboard.c`. The 5 voicings now live in a shared cart-land
-header **`runtime/ampcab.h`** (`AMP_VC[]` + `ampcab_apply()`), used by *both* `combo` and
-`pedalboard` so they can't drift. **RIG-recall (named full-chain setups) remains Phase 3.**
+**Status: shipped (all of it).** Phase 1 shipped the recipe half as the standalone `combo` cart;
+Phase 2 shipped the unified pinned CABINET slot in `pedalboard.c`; Phase 3 shipped RIG-recall. The 5
+voicings live in a shared cart-land header **`runtime/ampcab.h`** (`AMP_VC[]` + `ampcab_apply()`),
+used by *both* `combo` and `pedalboard` so they can't drift. **RIG-recall** is a top-bar `RIGS`
+button → a panel of named "legendary setups" (`RIG[]` in `pedalboard.c`: CLEAN TWANG / JANGLE /
+CRUNCH / HI-GAIN / PSYCH SWIRL→Leslie / LO-FI); tapping one rebuilds the whole board (chain pedals +
+cabinet tenant/voicing) via `apply_rig()`. Rigs use each pedal's default knobs — the cabinet voicing
+carries the character — so the table stays small; tweak after loading.
 
 What shipped (the build notes below are kept as the record):
 

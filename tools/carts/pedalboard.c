@@ -83,6 +83,21 @@ static int   cab_voicing = 2;            // AMP_VC index (CRUNCH)
 static int   cab_speed   = LESLIE_SLOW;  // Leslie rotor speed
 static float cab_k[2]    = { 0.5f, 0.5f }; // amp: GAIN, SAG  ·  leslie: DRIVE, BALANCE
 
+// ── RIG recall (Phase 3): named "legendary setups" that load the WHOLE board at once — which
+// pedals (with their default knobs, all switched on) AND the cabinet tenant/voicing. The cabinet
+// is the centrepiece each rig points at; the pedals just add the era flavour. Tweak after loading.
+static bool rig_open = false;
+typedef struct { const char *name, *sub; int n, cat[4]; int tenant, voicing, speed; float k0, k1; } Rig;
+#define NRIG 6
+static const Rig RIG[NRIG] = {
+    { "CLEAN TWANG", "clean amp - slap + verb", 2, { C_DLY, C_RVB }, CAB_AMP,    0, 0,           0.35f, 0.25f },
+    { "JANGLE",      "chime amp - chorus",      2, { C_CHO, C_RVB }, CAB_AMP,    1, 0,           0.45f, 0.35f },
+    { "CRUNCH",      "plexi crunch - verb",     1, { C_RVB },        CAB_AMP,    2, 0,           0.60f, 0.45f },
+    { "HI-GAIN",     "hot-rod - tight & dry",   0, { 0 },            CAB_AMP,    3, 0,           0.80f, 0.60f },
+    { "PSYCH SWIRL", "phaser into Leslie",      1, { C_PHA },        CAB_LESLIE, 0, LESLIE_SLOW, 0.40f, 0.60f },
+    { "LO-FI",       "broken cassette amp",     1, { C_LOFI },       CAB_AMP,    4, 0,           0.50f, 0.50f },
+};
+
 // ── the fretting hand: real guitar tab ──  standard tuning, E-shape MOVEABLE chords.
 static const int OPEN[NSTR] = { 40, 45, 50, 55, 59, 64 };   // E A D G B E (low→high)
 static const int SHAPE_F[NSHAPE][NSTR] = {
@@ -248,6 +263,20 @@ static void cab_reset_guitar(void) {
     glue(0, 0.0f, 8, 120);
 }
 
+// load a whole RIG: rebuild the chain (listed pedals, on, default knobs) + set the cabinet.
+static void apply_rig(int r) {
+    const Rig *g = &RIG[r];
+    chain_n = 0; scroll_x = 0.0f;
+    for (int i = 0; i < g->n; i++) {
+        chain[i].cat = g->cat[i]; chain[i].on = true;
+        for (int j = 0; j < MAXK; j++) chain[i].k[j] = CAT[g->cat[i]].kdef[j];
+        chain_n++;
+    }
+    cab_tenant = g->tenant; cab_voicing = g->voicing; cab_speed = g->speed;
+    cab_k[0] = g->k0; cab_k[1] = g->k1;
+    clamp_scroll(); dirty = 1;
+}
+
 // push every effect's state to the engine, then set the INSERT ORDER from the chain order.
 // An effect not in the chain (or off) is pushed dry. REVERB is now a real dry/wet INSERT
 // (reverb_insert → FX_REVERB in the chain), so its POSITION is audible — drag it before/after
@@ -392,6 +421,11 @@ static int slot_under(int tx) {
 static int pal_avail(int *out) { int n = 0; for (int c = 0; c < NCAT; c++) if (chain_index(c) < 0) out[n++] = c; return n; }
 static void pal_chip_rect(int a, int *x, int *y) { *x = 5 + (a % PAL_COLS) * 62; *y = PAL_Y + 16 + (a / PAL_COLS) * (PAL_CH + 2); }
 
+// the RIG panel: a 2-column list of "legendary setup" buttons (lower half, when rig_open)
+#define RIG_W 150
+#define RIG_H 26
+static void rig_rect(int r, int *x, int *y) { *x = 6 + (r % 2) * 156; *y = PAL_Y + 16 + (r / 2) * (RIG_H + 4); }
+
 // where a dragged pedal would land in the chain — SHARED by the live caret preview and the actual
 // drop, so what you see is exactly where it goes. DRAGPAL can append (≤ chain_n); reorder can't.
 static int drop_index(Ptr *p) {
@@ -423,7 +457,8 @@ void update(void) {
     for (int i = 0; i < chain_n; i++) if (keyp('1' + i) && (chain[i].on || !pedal_locked(chain[i].cat))) { chain[i].on = !chain[i].on; dirty = 1; }
     if (keyp(KEY_SPACE)) { strum_down(); autoplay = false; }
 
-    if (tapp(4, 2, 56, 11))           palette_open = !palette_open;
+    if (tapp(4, 2, 56, 11))           { palette_open = !palette_open; if (palette_open) rig_open = false; }
+    if (tapp(64, 2, 46, 11))          { rig_open = !rig_open; if (rig_open) palette_open = false; }
     if (tapp(SCREEN_W - 70, 4, 66, 10)) autoplay = !autoplay;
 
     bool overflow = max_scroll() > 0;
@@ -478,8 +513,13 @@ void update(void) {
                 for (int a = 0; a < na; a++) { int cx2, cy2; pal_chip_rect(a, &cx2, &cy2);
                     if (point_in_box(tx, ty, cx2, cy2, PAL_CW, PAL_CH)) { p->mode = PTR_DRAGPAL; p->cat = avail[a]; } }
             }
-            // 4. the guitar (only when palette closed)
-            if (p->mode == PTR_IDLE && !palette_open) {
+            // 3b. rig panel (only when open) — tap a setup to load the whole board, then close
+            if (p->mode == PTR_IDLE && rig_open && ty >= PAL_Y) {
+                for (int r = 0; r < NRIG; r++) { int rx, ry; rig_rect(r, &rx, &ry);
+                    if (point_in_box(tx, ty, rx, ry, RIG_W, RIG_H)) { apply_rig(r); rig_open = false; break; } }
+            }
+            // 4. the guitar (only when no overlay is open)
+            if (p->mode == PTR_IDLE && !palette_open && !rig_open) {
                 for (int i2 = 0; i2 < NSHAPE; i2++) if (point_in_box(tx, ty, SHAPE_X(i2), SHAPE_Y, SHAPE_W, CHORD_H)) set_shape(i2);
                 if (p->mode == PTR_IDLE)
                     for (int i2 = 0; i2 < NROOT; i2++) if (point_in_box(tx, ty, ROOT_X(i2), ROOT_Y, ROOT_W, CHORD_H)) set_root(i2);
@@ -521,6 +561,7 @@ void update(void) {
 
 #ifdef DE_TRACE
     watch("chain_n", "%d", chain_n); watch("pal", "%d", palette_open);
+    watch("cab", "%d", cab_tenant); watch("voicing", "%d", cab_voicing);
 #endif
 }
 
@@ -603,6 +644,24 @@ static void draw_palette(void) {
     for (int a = 0; a < na; a++) { int cx2, cy2; pal_chip_rect(a, &cx2, &cy2); draw_chip(avail[a], cx2, cy2, PAL_CW, PAL_CH, false); }
 }
 
+// the RIG panel: tap a "legendary setup" to load the whole board (pedals + cabinet) at once.
+static void draw_rigs(void) {
+    rectfill(0, PAL_Y, SCREEN_W, SCREEN_H - PAL_Y, CLR_BROWNISH_BLACK);
+    line(0, PAL_Y, SCREEN_W, PAL_Y, CLR_DARK_GREY);
+    font(FONT_TINY);
+    print_centered("RIGS — tap a setup to load the whole board (pedals + cabinet), then tweak", SCREEN_W / 2, PAL_Y + 4, CLR_MEDIUM_GREY);
+    font(FONT_NORMAL);
+    for (int r = 0; r < NRIG; r++) {
+        int rx, ry; rig_rect(r, &rx, &ry);
+        const Rig *g = &RIG[r];
+        int accent = (g->tenant == CAB_AMP) ? AMP_VC[g->voicing].col : CLR_LIGHT_GREY;
+        rrectfill(rx, ry, RIG_W, RIG_H, 3, CLR_DARK_BROWN);
+        rrect(rx, ry, RIG_W, RIG_H, 3, accent);
+        print(g->name, rx + 6, ry + 4, CLR_WHITE);
+        font(FONT_TINY); print(g->sub, rx + 6, ry + 16, CLR_LIGHT_PEACH); font(FONT_NORMAL);
+    }
+}
+
 static void draw_guitar(void) {
     int by = STR_Y0 - 4, bh = (STR_Y(NSTR - 1) + 8) - by;   // clears the scrollbar above; the neck is taller now
     rrectfill(6, by, SCREEN_W - 12, bh, 6, CLR_BLUE_GREEN);
@@ -683,10 +742,14 @@ static void draw_cabinet(void) {
 void draw(void) {
     cls(CLR_BROWNISH_BLACK);
 
-    // top bar — palette toggle (left), AUTO (right)
+    // top bar — PEDALS palette (left), RIGS (next), AUTO (right)
     rrectfill(4, 2, 56, 11, 2, palette_open ? CLR_INDIGO : CLR_DARKER_GREY);
     rrect(4, 2, 56, 11, 2, palette_open ? CLR_WHITE : CLR_DARK_GREY);
-    font(FONT_SMALL); print(palette_open ? "x CLOSE" : "= PEDALS", 9, 4, CLR_WHITE);
+    rrectfill(64, 2, 46, 11, 2, rig_open ? CLR_ORANGE : CLR_DARKER_GREY);
+    rrect(64, 2, 46, 11, 2, rig_open ? CLR_WHITE : CLR_DARK_GREY);
+    font(FONT_SMALL);
+    print(palette_open ? "x CLOSE" : "= PEDALS", 9, 4, CLR_WHITE);
+    print(rig_open ? "x RIGS" : "RIGS", 70, 4, rig_open ? CLR_WHITE : CLR_LIGHT_PEACH);
     print_right(autoplay ? "AUTO: on" : "AUTO: off", SCREEN_W - 6, 5, autoplay ? CLR_LIME_GREEN : CLR_DARK_GREY);
     font(FONT_NORMAL);
 
@@ -733,8 +796,9 @@ void draw(void) {
         rectfill(tx, SB_Y + 1, tw, 3, CLR_LIGHT_GREY);
     }
 
-    if (palette_open) draw_palette();
-    else              draw_guitar();
+    if (palette_open)  draw_palette();
+    else if (rig_open) draw_rigs();
+    else               draw_guitar();
 
     // drag ghost (on top of everything)
     for (int j = 0; j < PTR_MAX; j++)
