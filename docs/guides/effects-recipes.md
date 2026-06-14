@@ -72,7 +72,7 @@ Per-slot `send` 0–1 chooses how much each instrument throws into it. **Showcas
 > (a delay pedal's blend), `feedback` >1 self-oscillates into tape saturation. Put `FX_ECHO` in your
 > `fx_order(0, …)` list to place it. **Showcase: `pedalboard`** (the DELAY pedal: TIM/FB/TON/MIX).
 
-## grains — `grains(grain_ms, density, position, scatter, feedback, mix)` · `instrument_grains(slot, …)` · `grains_freeze(on)` · insert: `FX_GRAINS`
+## grains — `grains(grain_ms, density, position, scatter, feedback, mix)` · `instrument_grains(slot, …)` · `grains_freeze(on)` · `grains_pitch(semitones, spread, reverse)` · insert: `FX_GRAINS`
 
 GRANULAR DELAY (navkit `processGranularDelay`, verbatim). Captures the live signal into a buffer,
 then on a `density` schedule spawns overlapping Hanning-windowed GRAINS that read scattered slices of
@@ -93,6 +93,10 @@ already in-tree). 3 s buffer (navkit's is 5 s). **Showcase: `grains`** (the free
 | self-feeding cloud | `grains(150, 16, 0.85f, 0.4f, 0.85f, 0.6f)` | high feedback re-grains the cloud → an ever-thickening evolving drone | `grains` |
 | pads-only grain (per-instrument) | `instrument_grains(SL_PAD, 200, 20, 0.6f, 0.5f, 0.4f, 0.6f)` | grain the pads while drums/bass stay dry — its own bus | — |
 | reorderable GRAINS pedal | `FX_GRAINS` in `fx_order(0,…)` + `grains(size, dens, 0.8, 0.4, 0.3, mix)` from knobs + `grains_freeze(frz)` | a texture/freeze stompbox whose chain position is audible (grain a fuzzed signal vs fuzz a grained one); FRZ knob loops the buffer | `pedalboard` (GRAINS: SIZE/DENS/MIX/FRZ) |
+| octave-up shimmer | `grains(120,18,0.7,0.4,0.3,0.6)` + `grains_pitch(12, 0.2f, 0)` | the cloud rings an octave above — instant Microcosm/shimmer pad over a held note (call `grains()` first to allocate, then `grains_pitch`) | `grains` |
+| reverse-grain wash | `grains_pitch(0, 0.0f, 1)` | grains play backwards → the classic sucked-in, blooming reverse texture | `grains` |
+| detuned chord-cloud | `grains_pitch(0, 0.6f, 0)` | `spread` scatters each grain's pitch → from unison to a shimmering, chorused cloud with no transpose | `grains` |
+| falling cloud | sweep `grains_pitch(semis--, 0.2f, 0)` live | automate the transpose down for a tape-slow / vinyl-stop dive (true pitch-shift, window length fixed) | — |
 
 > **Stochastic, so A/B by character not samples.** `grains` scatters reads via a seeded LCG and
 > spawns on a timer; with the intentional 3 s (vs navkit 5 s) buffer the `position` math diverges, so

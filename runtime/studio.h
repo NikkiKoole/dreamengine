@@ -401,6 +401,8 @@ void grains(float grain_ms, float density, float position, float scatter, float 
 void instrument_grains(int slot, float grain_ms, float density, float position, float scatter, float feedback, float mix);  // granular cloud on just one instrument (its own bus) — grain the pads while the drums stay dry. Same args + a slot
 void grains_freeze(int on);             // freeze the master granular buffer: stop capturing, loop what's there (1 = frozen, 0 = live). The performance toggle — hold a chord, freeze, play over the cloud
 void instrument_grains_freeze(int slot, int on);  // freeze one instrument's granular buffer (1/0)
+void grains_pitch(float semitones, float spread, int reverse);  // transpose the master grain cloud: semitones -24..24 (12 = octave up), spread 0..1 (random per-grain detune — a shimmer/chord cloud), reverse 1 = grains play backwards. Call grains() first. Sweep live for a falling/rising cloud
+void instrument_grains_pitch(int slot, float semitones, float spread, int reverse);  // transpose one instrument's grain cloud (same args + a slot)
 
 // reverb — THE master reverb send: each slot chooses how much to send into it. A real room/hall
 // (a chord blooms into space), not repeating taps like echo. instrument_reverb() alone already

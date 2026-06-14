@@ -1323,7 +1323,8 @@ typedef struct {
     float  spawnTimer, lastOut;
     unsigned int noiseSeed;
     float  mix, feedback, grainSize, density, position, scatter;   // grainSize ms · density /s · position/scatter 0..1 · feedback 0..0.9
-    bool   freeze, used;
+    float  pitch, pitch_spread;    // grain transpose: semitones -24..24 (0 = unchanged) + random per-grain detune 0..1
+    bool   freeze, used, reverse;  // reverse = grains play backwards through the buffer
 } GrainTank;
 static GrainTank grain_pool[SOUND_GRAIN_TANKS];
 static int8_t    grain_tank_of[SOUND_FX_BUSES];   // bus → pool tank index, or -1 = none (default -1)
@@ -1356,7 +1357,17 @@ static void _grain_spawn(GrainTank *gt) {
     float readStart = (float)gt->writePos - lookback + scatterSamples;
     while (readStart < 0)              readStart += GRAIN_BUF_LEN;
     while (readStart >= GRAIN_BUF_LEN) readStart -= GRAIN_BUF_LEN;
-    g->readPos = readStart; g->posInc = 1.0f; g->envPhase = 0.0f;
+    // pitch: read speed = 2^(semitones/12), with a random per-grain detune (independent LCG draw).
+    // The Hanning window still lasts grainSamples OUTPUT samples (envInc), so the grain covers
+    // ratio×grainSamples input samples — standard granular transpose. reverse = read backwards.
+    gt->noiseSeed = gt->noiseSeed * 1103515245u + 12345u;
+    float det = ((float)((int)((gt->noiseSeed >> 16) & 0xFFFF)) / 32767.5f - 1.0f) * gt->pitch_spread;
+    float ratio = powf(2.0f, (gt->pitch + det) / 12.0f);
+    if (gt->reverse) {
+        readStart += grainSamples;                                    // start at the grain's far end, read back
+        while (readStart >= GRAIN_BUF_LEN) readStart -= GRAIN_BUF_LEN;
+    }
+    g->readPos = readStart; g->posInc = gt->reverse ? -ratio : ratio; g->envPhase = 0.0f;
     g->envInc = 1.0f / grainSamples; g->amp = 1.0f; g->active = true;
 }
 
@@ -1382,6 +1393,7 @@ static void grains_process(GrainTank *gt, float *mixL, float *mixR) {
         wet += moddel_hermite(gt->buf, GRAIN_BUF_LEN, g->readPos) * env * g->amp;
         g->readPos += g->posInc;
         if (g->readPos >= GRAIN_BUF_LEN) g->readPos -= GRAIN_BUF_LEN;
+        if (g->readPos < 0)              g->readPos += GRAIN_BUF_LEN;   // reverse / down-pitch wrap
         g->envPhase += g->envInc;
         if (g->envPhase >= 1.0f) g->active = false;
     }
@@ -1417,6 +1429,18 @@ static void fx_set_grains(int b, float grain_ms, float density, float position, 
 static void fx_set_grains_freeze(int b, bool on) {   // live toggle — does NOT reconfigure DSP (set-and-hold safe)
     int t = grain_tank_of[b];
     if (t >= 0) grain_pool[t].freeze = on;
+}
+
+// transpose the grain cloud: semitones -24..24, per-grain detune spread 0..1, reverse on/off.
+// Modifies an EXISTING tank only (call grains() first to allocate one) — never grabs a pool slot.
+// Per-grain config (read at the next spawn), so cheap to set; safe to sweep live.
+static void fx_set_grains_pitch(int b, float semitones, float spread, bool reverse) {
+    int t = grain_tank_of[b];
+    if (t < 0) return;
+    GrainTank *gt = &grain_pool[t];
+    if (semitones < -24.0f) semitones = -24.0f; if (semitones > 24.0f) semitones = 24.0f;
+    if (spread < 0.0f) spread = 0.0f; if (spread > 1.0f) spread = 1.0f;
+    gt->pitch = semitones; gt->pitch_spread = spread; gt->reverse = reverse;
 }
 
 // ── reorderable insert chain (fx_order) ──────────────────────────────────────────────────────
@@ -1570,6 +1594,8 @@ typedef enum {
     SR_FILTER_INST  = 88,   // a=instance, b=mode, c=cutoff_hz, e0=res*1000 — master filter on a given INSTANCE
     SR_DRIVE_INSERT = 89,   // a=amount*1000, b=mode (DRIVE_*), c=mix*1000 — mix-bus saturation INSERT on the master bus (FX_DRIVE in the fx_order chain)
     SR_DRIVE_INST   = 90,   // a=instance, b=amount*1000, c=mode, e0=mix*1000 — mix-bus drive on a given INSTANCE (Increment F; instance 0 == SR_DRIVE_INSERT)
+    SR_GRAINS_PITCH       = 91,   // a=semitones*100, b=spread*1000, c=reverse(0/1) — transpose the master granular cloud
+    SR_INSTR_GRAINS_PITCH = 92,   // a=slot, b=semitones*100, c=spread*1000, e0=reverse(0/1) — transpose one instrument's granular cloud
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -4247,6 +4273,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_grains_freeze(b, r.b != 0);
+    } else if (r.kind == SR_GRAINS_PITCH) {         // a=semitones*100, b=spread*1000, c=reverse
+        fx_set_grains_pitch(0, r.a / 100.0f, r.b / 1000.0f, r.c != 0);
+    } else if (r.kind == SR_INSTR_GRAINS_PITCH) {   // a=slot, b=semitones*100, c=spread*1000, e0=reverse
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_grains_pitch(b, r.b / 100.0f, r.c / 1000.0f, r.e0 != 0);
     } else if (r.kind == SR_CHORUS) {       // master chorus (bus 0): a=rate*1000, b=depth*1000, c=mix*1000
         fx_set_chorus(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
     } else if (r.kind == SR_INSTR_CHORUS) { // per-instrument: a=slot, b=rate*1000, c=depth*1000, e0=mix*1000
@@ -5182,6 +5214,12 @@ void grains_freeze(int on) {
 void instrument_grains_freeze(int slot, int on) {
     sound_push_ctrl(SR_INSTR_GRAINS_FREEZE, slot, on ? 1 : 0, 0, 0, 0, 0);
 }
+void grains_pitch(float semitones, float spread, int reverse) {
+    sound_push_ctrl(SR_GRAINS_PITCH, (int)(semitones * 100.0f), (int)(spread * 1000.0f), reverse ? 1 : 0, 0, 0, 0);
+}
+void instrument_grains_pitch(int slot, float semitones, float spread, int reverse) {
+    sound_push_ctrl(SR_INSTR_GRAINS_PITCH, slot, (int)(semitones * 100.0f), (int)(spread * 1000.0f), reverse ? 1 : 0, 0, 0);
+}
 
 // ── reverb: ONE shared bus with per-slot sends (the first §8.10 effect; decisions/0015) ──
 
@@ -5602,7 +5640,7 @@ static void sound_init(void) {
     for (int i = 0; i < SOUND_REVERB_TANKS; i++) tank_bus[i] = 0;   // tank → aux bus, 0 = unallocated
     for (int b = 0; b < SOUND_FX_BUSES; b++)     bus_tank[b] = -1;  // bus → tank, -1 = not a reverb-bus
     for (int b = 0; b < SOUND_FX_BUSES; b++)     grain_tank_of[b] = -1;   // bus → grain tank, -1 = none
-    for (int t = 0; t < SOUND_GRAIN_TANKS; t++) { grains_reset(&grain_pool[t]); grain_pool[t].used = false; grain_pool[t].freeze = false; grain_pool[t].noiseSeed = 55555u; }
+    for (int t = 0; t < SOUND_GRAIN_TANKS; t++) { grains_reset(&grain_pool[t]); grain_pool[t].used = false; grain_pool[t].freeze = false; grain_pool[t].noiseSeed = 55555u; grain_pool[t].pitch = 0.0f; grain_pool[t].pitch_spread = 0.0f; grain_pool[t].reverse = false; }
     grain_next = 0; grain_overflow = 0;
 
     // per-bus chorus + flanger + tape inserts (bus 0 master + aux): clean slate (libtcc hot-reload + --det)

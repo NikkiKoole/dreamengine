@@ -1473,6 +1473,14 @@ v1, document it on the panel.
     effect → character match, not sample-identity). **Showcases: `grains`** (the freeze/cloud toy) +
     the **`pedalboard`** GRAINS pedal (`FX_GRAINS` insert: SIZE/DENS/MIX + a discrete FRZ freeze knob;
     position/scatter/feedback fixed to a shimmer-cloud voicing since the pedal has only 4 knobs).
+    **Addendum 2026-06-14 — pitched + reversed grains (building-blocks Block A).** `grains_pitch(semitones,
+    spread, reverse)` + `instrument_grains_pitch` (`SR_GRAINS_PITCH`=91/92): per-grain `posInc =
+    2^(semitones/12)` set at spawn (the Hanning window still lasts `grainSamples` *output* samples, so it's
+    a true transpose, not a speed change), plus a random per-grain detune (`spread`) and a `reverse` flag
+    (negative `posInc`, read from the grain's far end; the read loop gained a `<0` wrap). Turns granular
+    delay into a shimmer/glitch machine. Verified exact: a +12 cloud on a 593 Hz source measured 1186.6 Hz
+    (= 2×, octave perfect; the source's own +17.5¢ shows identically at both octaves). The cheapest item on
+    the boutique-pedals roadmap — headroom on an engine we already owned, no new `FX_*` slot.
 
 20. **Mix-bus saturation (`drive_insert`)** — the per-voice `instrument_drive` (post-filter, §17)
     given a whole-BUS sibling: `drive_insert(amount, mode, mix)` drives the SUMMED master mix as a

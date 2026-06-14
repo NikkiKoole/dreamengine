@@ -28,8 +28,10 @@ static float k_pos   = 0.80f;   // 0..1 → position (0 deep past, 1 live edge)
 static float k_scat  = 0.35f;   // 0..1 → scatter
 static float k_fb    = 0.25f;   // 0..1 → feedback 0..0.9
 static float k_mix   = 0.55f;   // 0..1 → dry/wet
+static int   k_pitch = 0;       // grain transpose, semitones -24..24 (, / . to nudge)
 
 static bool  frozen     = false;
+static bool  reverse    = false;   // R: grains play backwards
 static bool  show_help  = false;
 static int   pad_h[4]   = { -1, -1, -1, -1 };   // held pad note handles
 static int   chord_i    = 0;
@@ -37,6 +39,7 @@ static float retrig     = 0.0f;
 
 // last-applied grain params (SET-AND-HOLD: only re-push grains() when a value moves)
 static float a_size = -1, a_dens = -1, a_pos = -1, a_scat = -1, a_fb = -1, a_mix = -1;
+static int   a_pitch = -999; static bool a_reverse = false;   // last-applied grains_pitch()
 
 // the four chords (MIDI), a soft jazzy pad loop
 static const int CHORD[4][4] = {
@@ -95,6 +98,9 @@ void update(void) {
         frozen = !frozen;
         grains_freeze(frozen ? 1 : 0);
     }
+    if (keyp(',') && k_pitch > -24) k_pitch--;   // transpose the cloud down/up a semitone
+    if (keyp('.') && k_pitch <  24) k_pitch++;
+    if (keyp('R')) reverse = !reverse;            // grains play backwards
 
     // ── auto re-trigger the pad so the cloud always has fresh material (unless frozen) ──
     retrig += dt;
@@ -105,6 +111,11 @@ void update(void) {
     if (gm != a_size || de != a_dens || po != a_pos || sc != a_scat || fb != a_fb || mx != a_mix) {
         grains(gm, de, po, sc, fb, mx);
         a_size = gm; a_dens = de; a_pos = po; a_scat = sc; a_fb = fb; a_mix = mx;
+    }
+    // grains_pitch is a separate setter (grains() must run first to allocate the cloud) — gate it too
+    if (k_pitch != a_pitch || reverse != a_reverse) {
+        grains_pitch((float)k_pitch, 0.2f, reverse ? 1 : 0);   // 0.2 spread = a touch of shimmer
+        a_pitch = k_pitch; a_reverse = reverse;
     }
 
     // ── visual grain swarm ──
@@ -133,10 +144,10 @@ void draw(void) {
         circfill((int)gr[i].x, (int)gr[i].y, t > 0.5f ? 2 : 1, c);
     }
 
-    // current chord
-    char buf[48];
-    snprintf(buf, sizeof buf, "feeding: %s", CHORD_NAME[chord_i]);
-    print(buf, 8, SCREEN_H - 64, CLR_MEDIUM_GREY);
+    // current chord + the grain-transpose readout
+    char buf[64];
+    snprintf(buf, sizeof buf, "feeding: %s   pitch %+d%s", CHORD_NAME[chord_i], k_pitch, reverse ? "  REV" : "");
+    print(buf, 8, SCREEN_H - 64, reverse || k_pitch ? CLR_MAUVE : CLR_MEDIUM_GREY);
 
     // capture bar — sweeps while LIVE, stops when FROZEN (you SEE the write head halt)
     int bw = SCREEN_W - 16;
@@ -157,19 +168,21 @@ void draw(void) {
     ui_slider(&k_mix,  8 + (sw+8)*2, sy + 18, sw, "MIX");
     ui_end();
 
-    print("1-4 chords   F/SPACE freeze   H help", 8, SCREEN_H - 8, CLR_DARK_GREY);
+    font(FONT_SMALL);
+    print("1-4 chords   F/SPACE freeze   ,. pitch   R reverse   H help", 8, SCREEN_H - 7, CLR_DARK_GREY);
+    font(FONT_NORMAL);
 
     if (show_help) {
-        rectfill(20, 24, SCREEN_W - 40, 102, CLR_DARK_BLUE);
-        rect(20, 24, SCREEN_W - 40, 102, CLR_MAUVE);
-        print("grains(): granular delay", 28, 32, CLR_WHITE);
-        print("(ported from navkit)", 28, 42, CLR_DARK_GREY);
-        print("captures audio, replays it as", 28, 56, CLR_LIGHT_GREY);
-        print("scattered grains -> a cloud.", 28, 66, CLR_LIGHT_GREY);
-        print("FREEZE = loop it forever:", 28, 80, CLR_YELLOW);
-        print("chord, freeze, solo over it.", 28, 90, CLR_LIGHT_GREY);
-        print("SCATTER = evolving. FEEDBACK", 28, 104, CLR_LIGHT_GREY);
-        print("= self-feeding cloud.", 28, 114, CLR_LIGHT_GREY);
+        rectfill(20, 22, SCREEN_W - 40, 112, CLR_DARK_BLUE);
+        rect(20, 22, SCREEN_W - 40, 112, CLR_MAUVE);
+        print("grains(): granular delay", 28, 30, CLR_WHITE);
+        print("(ported from navkit)", 28, 40, CLR_DARK_GREY);
+        print("captures audio, replays it as", 28, 52, CLR_LIGHT_GREY);
+        print("scattered grains -> a cloud.", 28, 62, CLR_LIGHT_GREY);
+        print("FREEZE = loop it forever:", 28, 76, CLR_YELLOW);
+        print("chord, freeze, solo over it.", 28, 86, CLR_LIGHT_GREY);
+        print("SCATTER=evolve  FB=self-feed", 28, 100, CLR_LIGHT_GREY);
+        print(",. = pitch   R = reverse", 28, 114, CLR_MAUVE);
     }
 }
 
