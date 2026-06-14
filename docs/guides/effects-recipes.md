@@ -426,11 +426,12 @@ these as a macro pedal / preset, not a new `FX_*` kind.
 
 > **The macro caveat (`pedalboard` LO-FI):** a macro drives **three shared master-bus inserts** at once.
 > Because there's one crush / tape / filter on bus 0, LO-FI and the standalone **BITCRUSH / TAPE / FILTER**
-> pedals would fight over the same insert — so the board **mutually excludes** them: while LO-FI is in the
-> chain those three grey out in the palette (and can't be dragged in), and vice-versa (`cat_blocked()`).
-> That keeps the board honest — no dead pedal silently overridden by the macro. (Internally LO-FI still
-> runs last in `apply_fx` and the `fx_order` list dedupes, as belt-and-suspenders.) This one-instance
-> limit is the same one [Increment F](../design/effects-bus-architecture.md) would lift.
+> can't both be **on** at once. They may sit in the chain together freely — the conflict is resolved at the
+> **on-switch**: a pedal is *locked* (drawn dimmed with a `LOCK` footswitch, can't switch on) while a
+> conflicting pedal is currently on (`pedal_locked()`); turn that one off and this frees up. So no dead
+> pedal silently overridden — you simply can't light both sides. (Internally LO-FI still runs last in
+> `apply_fx` and `fx_order` dedupes, as belt-and-suspenders.) This one-instance limit is the same one
+> [Increment F](../design/effects-bus-architecture.md) would lift.
 
 ---
 

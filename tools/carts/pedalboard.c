@@ -136,19 +136,21 @@ static void build_strings(void) {
 
 // ── chain helpers ──
 static int  chain_index(int cat) { for (int i = 0; i < chain_n; i++) if (chain[i].cat == cat) return i; return -1; }
-// LO-FI is a macro over crush+tape+filter (one insert each per bus), so it can't coexist with the
-// standalone BITCRUSH/TAPE/FILTER pedals — they'd fight over the same insert. They mutually exclude:
-// while LO-FI is in the chain those three grey out in the palette, and vice-versa (no dead pedals).
-static bool cat_blocked(int cat) {
-    if (cat == C_LOFI) return chain_index(C_BIT) >= 0 || chain_index(C_TAP) >= 0 || chain_index(C_FIL) >= 0;
-    if (cat == C_BIT || cat == C_TAP || cat == C_FIL) return chain_index(C_LOFI) >= 0;
+static bool pedal_on(int cat) { int i = chain_index(cat); return i >= 0 && chain[i].on; }
+// LO-FI (a macro over crush+tape+filter) and the standalone BITCRUSH/TAPE/FILTER share one insert
+// each per bus, so only ONE side can be ON at a time. Both may live in the chain freely — a pedal is
+// just LOCKED (can't switch on, drawn dimmed) while a conflicting pedal is currently on; turn that
+// one off and this frees up. The conflict is on-state, not chain membership (no dead pedals).
+static bool pedal_locked(int cat) {
+    if (cat == C_LOFI) return pedal_on(C_BIT) || pedal_on(C_TAP) || pedal_on(C_FIL);
+    if (cat == C_BIT || cat == C_TAP || cat == C_FIL) return pedal_on(C_LOFI);
     return false;
 }
 static int  content_w(void)      { return chain_n * PITCH; }
 static float max_scroll(void)    { float m = (float)(content_w() - VIEW_W); return m < 0 ? 0 : m; }
 static void clamp_scroll(void)   { float m = max_scroll(); if (scroll_x < 0) scroll_x = 0; if (scroll_x > m) scroll_x = m; }
 static void chain_insert(int cat, int at) {
-    if (chain_n >= NCAT || chain_index(cat) >= 0 || cat_blocked(cat)) return;
+    if (chain_n >= NCAT || chain_index(cat) >= 0) return;
     if (at < 0) at = 0; if (at > chain_n) at = chain_n;
     for (int i = chain_n; i > at; i--) chain[i] = chain[i - 1];
     chain[at].cat = cat; chain[at].on = true;
@@ -379,7 +381,7 @@ static void commit_drop(Ptr *p) {
 void update(void) {
     for (int i = 0; i < NSHAPE; i++) if (keyp(SHAPE_KEY[i])) set_shape(i);
     for (int i = 0; i < NROOT;  i++) if (keyp(ROOT_KEY[i]))  set_root(i);
-    for (int i = 0; i < chain_n; i++) if (keyp('1' + i)) { chain[i].on = !chain[i].on; dirty = 1; }
+    for (int i = 0; i < chain_n; i++) if (keyp('1' + i) && (chain[i].on || !pedal_locked(chain[i].cat))) { chain[i].on = !chain[i].on; dirty = 1; }
     if (keyp(KEY_SPACE)) { strum_down(); autoplay = false; }
 
     if (tapp(4, 2, 56, 11))           palette_open = !palette_open;
@@ -411,7 +413,7 @@ void update(void) {
                     int hitk = -1;                                        // a generous fat-finger box per staggered knob
                     for (int j = 0; j < nk; j++)
                         if (point_in_box(tx, ty, knob_cx(px, j) - 11, knob_cy(j, nk) - 7, 22, 14)) { hitk = j; break; }
-                    if (point_in_box(tx, ty, px + 8, PED_Y + 57, PED_W - 16, 14)) { chain[s].on = !chain[s].on; dirty = 1; }
+                    if (point_in_box(tx, ty, px + 8, PED_Y + 57, PED_W - 16, 14) && (chain[s].on || !pedal_locked(chain[s].cat))) { chain[s].on = !chain[s].on; dirty = 1; }
                     else if (hitk >= 0) { p->mode = PTR_KNOB; p->slot = s; p->knob = hitk; }
                     else { p->mode = PTR_DRAGSLOT; p->slot = s; p->cat = chain[s].cat; }   // anywhere else = drag handle
                 }
@@ -422,7 +424,7 @@ void update(void) {
             if (p->mode == PTR_IDLE && palette_open && ty >= PAL_Y) {
                 int avail[NCAT], na = pal_avail(avail);
                 for (int a = 0; a < na; a++) { int cx2, cy2; pal_chip_rect(a, &cx2, &cy2);
-                    if (point_in_box(tx, ty, cx2, cy2, PAL_CW, PAL_CH) && !cat_blocked(avail[a])) { p->mode = PTR_DRAGPAL; p->cat = avail[a]; } }
+                    if (point_in_box(tx, ty, cx2, cy2, PAL_CW, PAL_CH)) { p->mode = PTR_DRAGPAL; p->cat = avail[a]; } }
             }
             // 4. the guitar (only when palette closed)
             if (p->mode == PTR_IDLE && !palette_open) {
@@ -483,13 +485,15 @@ static void lofi_icon(int cx, int cy, int col) {
 
 static void draw_chain_pedal(int i, int x) {
     Slot *sl = &chain[i]; const FxDef *d = &CAT[sl->cat];
+    bool locked = !sl->on && pedal_locked(sl->cat);   // a conflicting pedal is live → can't switch on
     int cx = x + PED_W / 2;
-    rrectfill(x, PED_Y, PED_W, PED_H, 4, d->body);
+    int body = locked ? CLR_BROWNISH_BLACK : d->body;  // dark body = disabled (vs a colored off pedal)
+    rrectfill(x, PED_Y, PED_W, PED_H, 4, body);
     rrect(x, PED_Y, PED_W, PED_H, 4, sl->on ? d->accent : CLR_DARKER_GREY);
     font(FONT_SMALL);
     print_centered(d->name, cx, PED_Y + 3, sl->on ? CLR_WHITE : CLR_MEDIUM_GREY);
     if (d->kind < 0) lofi_icon(cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY);
-    else fx_icon(d->kind, cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY, d->body);
+    else fx_icon(d->kind, cx, ILLU_CY, sl->on ? d->accent : CLR_DARKER_GREY, body);
     int kr = knob_rad(d->nk);
     int lblcol = sl->on ? CLR_LIGHT_PEACH : CLR_DARK_GREY;
     for (int j = 0; j < d->nk; j++) {
@@ -520,20 +524,18 @@ static void draw_chain_pedal(int i, int x) {
     circfill(x + 7, PED_Y + 63, 2, sl->on ? CLR_LIME_GREEN : CLR_DARKER_GREY);
     rrectfill(x + 12, PED_Y + 58, PED_W - 20, 12, 2, CLR_BROWNISH_BLACK);
     rrect(x + 12, PED_Y + 58, PED_W - 20, 12, 2, CLR_DARK_GREY);
+    if (locked) { font(FONT_TINY); print_centered("LOCK", x + 12 + (PED_W - 20) / 2, PED_Y + 61, CLR_DARK_GREY); font(FONT_NORMAL); }
 }
 
-// a small palette chip / drag-ghost: the icon + a name, no knobs. `blocked` = greyed/inert (a macro
-// conflict — e.g. BITCRUSH while LO-FI is in the chain): can't be dragged in, shown dimmed.
-static void draw_chip(int cat, int x, int y, int w, int h, bool ghost, bool blocked) {
+// a small palette chip / drag-ghost: the icon + a name, no knobs. Any pedal can be added freely now —
+// the LO-FI/component conflict is handled at the on-switch (pedal_locked), not the palette.
+static void draw_chip(int cat, int x, int y, int w, int h, bool ghost) {
     const FxDef *d = &CAT[cat];
-    int body = blocked ? CLR_BROWNISH_BLACK : d->body;
-    int edge = blocked ? CLR_DARK_GREY : (ghost ? CLR_WHITE : d->accent);
-    int icon = blocked ? CLR_DARK_GREY : d->accent;
-    rrectfill(x, y, w, h, 3, body);
-    rrect(x, y, w, h, 3, edge);
-    if (d->kind < 0) lofi_icon(x + w / 2, y + 9, icon);
-    else fx_icon(d->kind, x + w / 2, y + 9, icon, body);
-    font(FONT_TINY); print_centered(d->name, x + w / 2, y + h - 6, blocked ? CLR_DARK_GREY : CLR_WHITE); font(FONT_NORMAL);
+    rrectfill(x, y, w, h, 3, d->body);
+    rrect(x, y, w, h, 3, ghost ? CLR_WHITE : d->accent);
+    if (d->kind < 0) lofi_icon(x + w / 2, y + 9, d->accent);
+    else fx_icon(d->kind, x + w / 2, y + 9, d->accent, d->body);
+    font(FONT_TINY); print_centered(d->name, x + w / 2, y + h - 6, CLR_WHITE); font(FONT_NORMAL);
 }
 
 static void draw_palette(void) {
@@ -543,7 +545,7 @@ static void draw_palette(void) {
     print_centered("drag a pedal UP into the chain  ·  drag a chain pedal DOWN here to remove", SCREEN_W / 2, PAL_Y + 4, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
     int avail[NCAT], na = pal_avail(avail);
-    for (int a = 0; a < na; a++) { int cx2, cy2; pal_chip_rect(a, &cx2, &cy2); draw_chip(avail[a], cx2, cy2, PAL_CW, PAL_CH, false, cat_blocked(avail[a])); }
+    for (int a = 0; a < na; a++) { int cx2, cy2; pal_chip_rect(a, &cx2, &cy2); draw_chip(avail[a], cx2, cy2, PAL_CW, PAL_CH, false); }
 }
 
 static void draw_guitar(void) {
@@ -648,5 +650,5 @@ void draw(void) {
     // drag ghost (on top of everything)
     for (int j = 0; j < PTR_MAX; j++)
         if (ptr[j].id != PTR_NONE && (ptr[j].mode == PTR_DRAGSLOT || ptr[j].mode == PTR_DRAGPAL))
-            draw_chip(ptr[j].cat, ptr[j].x - 22, ptr[j].y - 13, 44, 26, true, false);
+            draw_chip(ptr[j].cat, ptr[j].x - 22, ptr[j].y - 13, 44, 26, true);
 }
