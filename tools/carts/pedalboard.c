@@ -251,10 +251,10 @@ void init(void) {
     build_strings();
     PTR_CLEAR(ptr);   // a free slot's .id must be PTR_NONE (no longer relies on zero-init)
     bpm(100);
-    // a tasteful starting chain (CHORUS + TREMOLO ringing); the rest wait in the palette
+    // a tasteful starting chain (only TREMOLO ringing); the rest sit in the chain, off
     chain_insert(C_BIT, 0); chain[0].on = false;
     chain_insert(C_EQ, 1);  chain[1].on = false;
-    chain_insert(C_CHO, 2);
+    chain_insert(C_CHO, 2); chain[2].on = false;
     chain_insert(C_TRM, 3);
     chain_insert(C_RVB, 4); chain[4].on = false;
     apply_fx();
