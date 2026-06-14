@@ -3,6 +3,7 @@
 #define KEYBED_WHITE_KEYS "ASDFGHJKL"   // 9 whites = an octave + a bit
 #define KEYBED_BLACK_KEYS "WE TYU OP"   // C# D# (gap) F# G# A# (gap) C#
 #include "keybed.h"      // the shared polyphonic keybed: touch + mouse + QWERTY + MIDI
+#include "ampcab.h"      // the shared amp/cab voicing table (also used by pedalboard's CABINET slot)
 
 // ── COMBO ──────────────────────────────────────────────────────────────────────────────────────
 // A vintage combo amp you plug a guitar straight into. This is the "cab story" (effects-bus
@@ -28,15 +29,7 @@
 
 #define I_GTR 5
 
-// ── the voicings: each is a complete amp/cab bundle ──
-typedef struct { const char *name; int mode; float drive; float lo, mid, hi; float glue; float timbre; int col; } Voicing;
-static const Voicing VC[5] = {
-    { "CLEAN",   DRIVE_SOFT, 0.08f,  2,-2, 3, 0.15f, 0.75f, CLR_LIGHT_GREY   },
-    { "CHIME",   DRIVE_ASYM, 0.30f,  0, 2, 4, 0.30f, 0.65f, CLR_LIGHT_YELLOW },
-    { "CRUNCH",  DRIVE_ASYM, 0.55f,  3, 2,-2, 0.40f, 0.55f, CLR_ORANGE       },   // = the effects-recipes anchor
-    { "HI-GAIN", DRIVE_HARD, 0.80f,  4,-4, 2, 0.60f, 0.45f, CLR_RED          },
-    { "LO-FI",   DRIVE_FOLD, 0.70f, -3, 4,-6, 0.50f, 0.30f, CLR_MAUVE        },
-};
+// ── the voicings live in runtime/ampcab.h (AMP_VC[], shared with pedalboard's CABINET slot) ──
 static int voicing = 1;     // start on CHIME — pretty, and shows a little glow
 
 // ── the 6 control knobs (0..1) ──
@@ -71,29 +64,15 @@ typedef struct { int id, mode, knob; float grabv; int grabY; } Ptr;   // knob -1
 static Ptr ptr[NPTR];
 
 // ════ the amp: drive + eq + glue, SET-AND-HOLD (reconfiguring every frame churns the bus → stutter) ══
+// SET-AND-HOLD — only called on a knob/voicing change (the knob-drag branch + set_voicing + init),
+// never every frame. Routes through ampcab_apply() so combo and pedalboard apply the same recipe.
 static void apply_amp(void) {
-    static int   aMode = -1, aVoice = -1, aVel = -1;
-    static float aDrive = -1, aLo = -99, aMid = -99, aHi = -99, aGlue = -1;
-    const Voicing *v = &VC[voicing];
-
-    if (voicing != aVoice) {                                   // mode + timbre only change with the voicing
-        instrument_drive_mode(I_GTR, v->mode);
-        instrument_timbre(I_GTR, v->timbre);
-        aMode = v->mode; aVoice = voicing;
-    }
-    float drive = v->drive * (0.30f + 1.4f * kv[K_GAIN]);      // GAIN scales the voicing's base drive
-    if (drive != aDrive) { instrument_drive(I_GTR, drive); aDrive = drive; }
-
+    const AmpVoicing *v = &AMP_VC[voicing];
     float lo = v->lo + (kv[K_BASS]   - 0.5f) * 12.0f;          // tone knobs bend the voicing's EQ (±12dB)
     float mi = v->mid + (kv[K_MID]    - 0.5f) * 12.0f;
     float hi = v->hi + (kv[K_TREBLE] - 0.5f) * 12.0f;
-    if (lo != aLo || mi != aMid || hi != aHi) { instrument_eq(I_GTR, lo, mi, hi); aLo = lo; aMid = mi; aHi = hi; }
-
-    float g = v->glue * kv[K_SAG];                             // SAG = power-amp compression
-    if (g != aGlue) { glue(0, g, 8, 120); aGlue = g; }
-
-    int vel = (int)(kv[K_MASTER] * 7.0f + 0.5f);               // MASTER = how hard you pick in
-    if (vel != aVel) { keybed_velocity(vel); aVel = vel; }
+    ampcab_apply(I_GTR, voicing, kv[K_GAIN], lo, mi, hi, kv[K_SAG]);   // GAIN→drive, SAG→glue
+    keybed_velocity((int)(kv[K_MASTER] * 7.0f + 0.5f));        // MASTER = how hard you pick in
 }
 
 static void set_voicing(int v) { if (v < 0) v = 0; if (v > 4) v = 4; voicing = v; apply_amp(); }
@@ -183,7 +162,7 @@ static void draw_knob(int cx, int cy, int r, float v, const char *label, int acc
 }
 
 void draw(void) {
-    const Voicing *v = &VC[voicing];
+    const AmpVoicing *v = &AMP_VC[voicing];
     cls(CLR_BROWNISH_BLACK);
 
     // ── control panel (tolex face + brass trim) ──
@@ -199,7 +178,7 @@ void draw(void) {
     for (int d = 0; d < 5; d++) {
         float a = (-135.0f + (d / 4.0f) * 270.0f) * 0.0174533f;
         int tx = SX + (int)(sinf(a) * (SR + 4)), ty = SY - (int)(cosf(a) * (SR + 4));
-        pset(tx, ty, d == voicing ? VC[d].col : CLR_DARK_GREY);
+        pset(tx, ty, d == voicing ? AMP_VC[d].col : CLR_DARK_GREY);
     }
     draw_knob(SX, SY, SR, voicing / 4.0f, 0, v->col);
     font(FONT_TINY); print_centered("VOICING", SX, SY + SR + 2, CLR_MEDIUM_GREY); font(FONT_NORMAL);

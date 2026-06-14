@@ -498,14 +498,13 @@ gets simpler *and* more correct.** Showcase + acceptance test ready on day one.
 
 ## Increment E — the output stage (4th zone): cabinets — amp/cab · Leslie
 
-**Status: the amp/cab recipe SHIPPED as a playable cart (2026-06-14, `combo`); the pinned
-pedalboard SLOT + COMP unification remain follow-ups. Leslie is the other tenant.** The recipe
-half (E.3 — drive + EQ-cab + glue, bundled into VOICINGs and pinned like leslie) is proven by
-`tools/carts/combo.c`: a standalone combo amp you play `INSTR_GUITAR` through, five voicings
-(clean→chime→crunch→hi-gain→lo-fi). What's still design-only is the *routing-shape* part below —
-folding amp/cab + Leslie + glue into ONE pinned output-cabinet slot inside `pedalboard.c` (E.2),
-plus a RIG-recall layer. This is a *routing-shape* increment like A/C — it adds a fourth bus zone,
-not a new effect primitive (amps are recipes; see below). Prompted by the pedalboard growing into a real signal
+**Status: SHIPPED 2026-06-14 — both the standalone amp (`combo`) and the unified pinned CABINET
+slot in `pedalboard.c` (none / guitar amp / Leslie). Only RIG-recall (named full-chain setups)
+remains (Phase 3).** The recipe half (E.3 — drive + EQ-cab + glue, bundled into VOICINGs and pinned
+like leslie) lives in the shared header `runtime/ampcab.h` (`AMP_VC[]` + `ampcab_apply()`), used by
+both carts. `combo` is the standalone amp (play `INSTR_GUITAR` through 5 voicings); `pedalboard`'s
+pinned CABINET slot is the "pick your cabinet" tenant selector (E.2). This was a *routing-shape*
+increment like A/C — a fourth bus zone, not a new effect primitive (amps are recipes; see below). Prompted by the pedalboard growing into a real signal
 chain: once a chain gets long, players hit **gain-staging / clipping** ("reverb→bitcrush→vowel clips a
 little"), and a real rig solves that with the thing this zone models — the amp/cab.
 
@@ -583,15 +582,22 @@ can't break bit-repro. The one dependency is `glue` (Increment D, `sound.h`) for
 so build it *after* D lands and the tree is quiet. A contained afternoon. When it ships, add the amp
 voicings to [`effects-recipes.md`](../guides/effects-recipes.md) (they're recipes) and a STATUS note.
 
-### E.7 Phase 2 build plan — the unified CABINET slot in `pedalboard.c`
+### E.7 The unified CABINET slot in `pedalboard.c` — SHIPPED 2026-06-14
+
+**Status: shipped.** Phase 1 shipped the recipe half as the standalone `combo` cart; Phase 2 shipped
+the unified pinned CABINET slot in `pedalboard.c`. The 5 voicings now live in a shared cart-land
+header **`runtime/ampcab.h`** (`AMP_VC[]` + `ampcab_apply()`), used by *both* `combo` and
+`pedalboard` so they can't drift. **RIG-recall (named full-chain setups) remains Phase 3.**
+
+What shipped (the build notes below are kept as the record):
 
 **Phase 1 (shipped 2026-06-14):** the recipe half is proven and playable as the standalone `combo`
 cart (`tools/carts/combo.c`) — `INSTR_GUITAR` + keybed, the five E.4 voicings as `(drive mode, drive
-amount, EQ curve, glue amount)` bundles, pinned like leslie. The voicing table + `apply_amp()`
-set-and-hold there is the reference to lift from.
+amount, EQ curve, glue amount)` bundles, pinned like leslie. The voicing table now lives in
+`runtime/ampcab.h`.
 
-**Phase 2** folds amp/cab **and** Leslie into ONE pinned output-cabinet slot inside `pedalboard.c`,
-making concrete the "pick your cabinet" idea from E.2:
+**Phase 2 (shipped 2026-06-14)** folds amp/cab **and** Leslie into ONE pinned output-cabinet slot
+inside `pedalboard.c`, making concrete the "pick your cabinet" idea from E.2:
 
 ```
 [ pedal chain (reorderable inserts) ] → CABINET → master soft-clip

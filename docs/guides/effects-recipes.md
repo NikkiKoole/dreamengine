@@ -356,6 +356,7 @@ cabinet output stage, not a reorderable pedal). **Showcase: `organ`** (the `L` f
 | overdriven rock organ | `instrument_leslie(I_ORG, LESLIE_FAST, 0.4f, 0.5f, 0.8f, 1.0f)` | cranked tube preamp into a fast horn — the cabinet screams | `organ` |
 | horn-forward | `instrument_leslie(slot, LESLIE_FAST, 0.0f, 0.85f, 1.0f, 1.0f)` | balance toward the treble horn + deep Doppler = maximum shimmer/wobble | (balance pattern) |
 | brake | `instrument_leslie(slot, LESLIE_STOP, …)` | rotors coast to a halt — the static, slightly-doubled "stopped" tone between songs | (stop pattern) |
+| guitar cabinet (master) | `leslie(cab_speed, drive, balance, 0.5f, 1.0f)` | the rotary as a *guitar* cabinet — the Leslie tenant of pedalboard's CABINET slot (it's "pick your cabinet": amp **or** Leslie) | `pedalboard` (CABINET → Leslie) |
 
 > **Leslie vs the recipe:** decision 0015 first refused this as "tremolo + `LFO_PITCH` + drive, a
 > recipe" — then building it proved an LFO can't band-split at a crossover, can't run a delay-line
@@ -394,7 +395,7 @@ not both). **Showcase: `groovebox`** (PUMP + GLUE share the master comp). Effect
 | recipe | call | character | used by |
 |---|---|---|---|
 | the house pump | `sidechain_key(SL_KICK, 0, 1.0f); sidechain(0, 0, 0.6f, 1, 140)` | the whole mix breathes against the four-floor kick — bass/pad duck and bloom across the beat | `groovebox` (PUMP) |
-| gentle bus glue | `glue(0, 0.4f, 8, 150)` | the mix squashed as one lump — drum-bus/master "glue", no trigger | `groovebox` (GLUE), `combo` (the SAG knob = power-amp compression) |
+| gentle bus glue | `glue(0, 0.4f, 8, 150)` | the mix squashed as one lump — drum-bus/master "glue", no trigger | `groovebox` (GLUE), `combo` / `pedalboard` (the amp cabinet's SAG = power-amp compression) |
 | tight pump | `sidechain(0, 0, 0.8f, 1, 90)` | deeper duck + faster recovery — aggressive EDM pump | — |
 
 ---
@@ -421,7 +422,7 @@ these as a macro pedal / preset, not a new `FX_*` kind.
 | combo | = | character | used by |
 |---|---|---|---|
 | **LO-FI / cassette** | `crush` + `tape` (wow/flutter/sat) + `filter` (lowpass roll-off) | the lo-fi-hip-hop / vinyl / bedroom sound: one AMT knob crunches bits + downsamples + saturates, WOW warbles the tape, TON darkens | `pedalboard` (the LO-FI macro pedal) |
-| **amp / cab** | `drive` + `eq` (cab voicing) + `glue` (power-amp sag) | a guitar amp's voice — the Increment E output stage; one VOICING knob swaps the bundle (clean→chime→crunch→hi-gain→lo-fi) | `combo` (the playable combo amp) |
+| **amp / cab** | `drive` + `eq` (cab voicing) + `glue` (power-amp sag) | a guitar amp's voice — the Increment E output stage; one VOICING knob swaps the bundle (clean→chime→crunch→hi-gain→lo-fi). The 5 voicings live in `runtime/ampcab.h` (shared table) | `combo` (the playable combo amp), `pedalboard` (the pinned CABINET slot: none/amp/Leslie) |
 | **Dyno Rhodes** | `chorus` + `eq` presence | the bright stereo Rhodes sheen | `epiano` (DYNO) |
 
 > **The macro caveat (`pedalboard` LO-FI):** a macro drives **three shared master-bus inserts** at once.

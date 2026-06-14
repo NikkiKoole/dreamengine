@@ -26,6 +26,7 @@
 #include "studio.h"
 #include "pointer.h"     // multi-finger pool: PTR_MAX/PTR_NONE + PTR_CLEAR/PTR_ACQUIRE/PTR_FIND
 #include "fxicons.h"      // shared effect icons + colours (also used by the epiano)
+#include "ampcab.h"       // the shared amp/cab voicing table — the CABINET slot's "guitar amp" tenant
 #include <math.h>
 
 #define I_GTR  5
@@ -71,6 +72,17 @@ static float scroll_x  = 0.0f;     // horizontal pan of the chain view
 static bool  palette_open = false;
 static int   dirty     = 1;
 
+// ── the pinned CABINET output stage (Increment E): none / guitar amp / Leslie ──
+// "none" is a true no-op — pedalboard byte-identical to before; the cabinet only colours the output
+// once you opt in. Amp = the AMP_VC bundle (drive+eq+glue on the guitar slot + master glue); Leslie
+// = the rotary cabinet (master leslie). Both run AFTER the insert chain, off the shared insert buses.
+enum { CAB_NONE, CAB_AMP, CAB_LESLIE };
+static int   cab_tenant  = CAB_NONE;
+static int   cab_applied = CAB_NONE;     // last tenant pushed — an untouched session never calls amp/leslie
+static int   cab_voicing = 2;            // AMP_VC index (CRUNCH)
+static int   cab_speed   = LESLIE_SLOW;  // Leslie rotor speed
+static float cab_k[2]    = { 0.5f, 0.5f }; // amp: GAIN, SAG  ·  leslie: DRIVE, BALANCE
+
 // ── the fretting hand: real guitar tab ──  standard tuning, E-shape MOVEABLE chords.
 static const int OPEN[NSTR] = { 40, 45, 50, 55, 59, 64 };   // E A D G B E (low→high)
 static const int SHAPE_F[NSHAPE][NSTR] = {
@@ -103,8 +115,10 @@ static int   apos = 0;
 #define PED_W 54                     // a touch wider — room for the staggered knobs + side labels
 #define PITCH 58
 #define CHAIN_X0 4
-#define VIEW_W  312                  // chain viewport: x 4..316
+#define VIEW_W  254                  // chain viewport: x 4..258 (shrunk to pin the CABINET box at right)
 #define VIEW_R  (CHAIN_X0 + VIEW_W)
+#define CAB_W   54                   // the pinned output-cabinet box (never scrolls) — "the chain plugs into it"
+#define CAB_X   (SCREEN_W - CAB_W - 2)   // = 264; box spans 264..318
 #define SB_Y    (PED_Y + PED_H)      // scrollbar track (only drawn on overflow)
 #define ILLU_CY (PED_Y + 13)         // illustration center — pulled up, padding trimmed
 #define PAL_Y   88                   // palette panel top (when open)
@@ -225,6 +239,15 @@ static void kinds_add(int *kinds, int *n, int kd) {
     kinds[(*n)++] = kd;
 }
 
+// restore the init() guitar baseline (so switching the cabinet OFF un-amps the string)
+static void cab_reset_guitar(void) {
+    instrument_drive_mode(I_GTR, DRIVE_SOFT);
+    instrument_timbre(I_GTR, 0.85f);
+    instrument_drive(I_GTR, 0.18f);
+    instrument_eq(I_GTR, 0.0f, 0.0f, 0.0f);
+    glue(0, 0.0f, 8, 120);
+}
+
 // push every effect's state to the engine, then set the INSERT ORDER from the chain order.
 // An effect not in the chain (or off) is pushed dry. REVERB is now a real dry/wet INSERT
 // (reverb_insert → FX_REVERB in the chain), so its POSITION is audible — drag it before/after
@@ -268,10 +291,26 @@ static void apply_fx(void) {
         else { int kd = CAT[cat].kind; if (kd >= 0) kinds_add(kinds, &n, kd); }
     }
     fx_order(0, kinds, n);   // the chain order IS the insert order (Increment A)
+
+    // ── the pinned CABINET output stage — runs AFTER the inserts, like leslie/soft-clip. It lives on
+    // the guitar SLOT's private bus (instrument_drive/eq) + master glue/leslie, none of which the
+    // pedals touch, so it never collides with the chain (Increment-F is a non-issue here).
+    if (cab_tenant == CAB_AMP) {
+        leslie(LESLIE_STOP, 0.0f, 0.5f, 0.0f, 0.0f);                                   // leslie off
+        const AmpVoicing *a = &AMP_VC[cab_voicing];
+        ampcab_apply(I_GTR, cab_voicing, cab_k[0], a->lo, a->mid, a->hi, cab_k[1]);     // GAIN→drive, SAG→glue, base EQ curve
+    } else if (cab_tenant == CAB_LESLIE) {
+        cab_reset_guitar();
+        leslie(cab_speed, cab_k[0], cab_k[1], 0.5f, 1.0f);                              // SPEED · DRIVE · BALANCE
+    } else if (cab_applied != CAB_NONE) {                                              // none: tear down a prior amp/leslie
+        cab_reset_guitar();
+        leslie(LESLIE_STOP, 0.0f, 0.5f, 0.0f, 0.0f);
+    }
+    cab_applied = cab_tenant;   // a fresh (never-touched) session leaves the guitar exactly as init() set it
 }
 
 // ── per-contact pointer pool ── (declared before init so init() can PTR_CLEAR it)
-enum { PTR_IDLE, PTR_KNOB, PTR_PICK, PTR_DRAGSLOT, PTR_DRAGPAL, PTR_SCROLL };
+enum { PTR_IDLE, PTR_KNOB, PTR_PICK, PTR_DRAGSLOT, PTR_DRAGPAL, PTR_SCROLL, PTR_CABKNOB };
 typedef struct { int id, mode, slot, knob, cat, prevY, x, y; } Ptr;   // id MUST be first (pointer.h)
 static Ptr ptr[PTR_MAX];
 
@@ -405,8 +444,8 @@ void update(void) {
         if (fresh) {
             *p = (Ptr){ id, PTR_IDLE, -1, -1, -1, ty, tx, ty };
 
-            // 1. the chain (always live, palette open or not)
-            if (ty >= PED_Y && ty < PED_Y + PED_H) {
+            // 1. the chain (always live, palette open or not) — only within the (shrunk) viewport
+            if (ty >= PED_Y && ty < PED_Y + PED_H && tx < VIEW_R) {
                 int s = slot_under(tx);
                 if (s >= 0) {
                     int px = ped_screen_x(s); int nk = CAT[chain[s].cat].nk;
@@ -416,6 +455,19 @@ void update(void) {
                     if (point_in_box(tx, ty, px + 8, PED_Y + 57, PED_W - 16, 14) && (chain[s].on || !pedal_locked(chain[s].cat))) { chain[s].on = !chain[s].on; dirty = 1; }
                     else if (hitk >= 0) { p->mode = PTR_KNOB; p->slot = s; p->knob = hitk; }
                     else { p->mode = PTR_DRAGSLOT; p->slot = s; p->cat = chain[s].cat; }   // anywhere else = drag handle
+                }
+            }
+            // 1b. the pinned CABINET box (right of the chain): header taps cycle the tenant, the
+            // selector row steps the voicing/speed, the two knobs drag.
+            if (p->mode == PTR_IDLE && ty >= PED_Y && ty < PED_Y + PED_H && tx >= CAB_X) {
+                if (ty < PED_Y + 13) { cab_tenant = (cab_tenant + 1) % 3; dirty = 1; }           // header → none/amp/leslie
+                else if (cab_tenant != CAB_NONE) {
+                    if (ty < PED_Y + 28) {                                                        // selector row → step
+                        if (cab_tenant == CAB_AMP) cab_voicing = (cab_voicing + 1) % AMPCAB_N;
+                        else                       cab_speed   = (cab_speed + 1) % 3;
+                        dirty = 1;
+                    } else if (point_in_box(tx, ty, CAB_X + 4, PED_Y + 34, CAB_W / 2 - 4, 24)) { p->mode = PTR_CABKNOB; p->knob = 0; }
+                    else if (point_in_box(tx, ty, CAB_X + CAB_W / 2, PED_Y + 34, CAB_W / 2 - 4, 24)) { p->mode = PTR_CABKNOB; p->knob = 1; }
                 }
             }
             // 2. scrollbar
@@ -439,6 +491,9 @@ void update(void) {
             }
         } else if (p->mode == PTR_KNOB) {
             if (p->slot < chain_n) { chain[p->slot].k[p->knob] = clamp(chain[p->slot].k[p->knob] + (p->prevY - ty) * 0.012f, 0.0f, 1.0f); dirty = 1; }
+            p->prevY = ty;
+        } else if (p->mode == PTR_CABKNOB) {
+            cab_k[p->knob] = clamp(cab_k[p->knob] + (p->prevY - ty) * 0.012f, 0.0f, 1.0f); dirty = 1;
             p->prevY = ty;
         } else if (p->mode == PTR_PICK) {
             for (int s = 0; s < NSTR; s++) { int ys = STR_Y(s); if ((p->prevY < ys && ty >= ys) || (p->prevY > ys && ty <= ys)) pick_string(s, tx); }
@@ -593,6 +648,38 @@ static void draw_guitar(void) {
     }
 }
 
+// the pinned CABINET box at the far right (never scrolls): the chain plugs into it. Tenant =
+// none / guitar amp (a voicing) / Leslie; header taps cycle it, the selector row steps, two knobs.
+static void draw_cabinet(void) {
+    int x = CAB_X, cx = x + CAB_W / 2;
+    bool amp = (cab_tenant == CAB_AMP), none = (cab_tenant == CAB_NONE);
+    int accent = amp ? AMP_VC[cab_voicing].col : none ? CLR_DARKER_GREY : CLR_LIGHT_GREY;
+    print(">", VIEW_R + 1, PED_Y + 33, CLR_DARK_GREY);                              // "...into the amp"
+    rrectfill(x, PED_Y, CAB_W, PED_H, 4, none ? CLR_BROWNISH_BLACK : CLR_DARK_BROWN);
+    rrect(x, PED_Y, CAB_W, PED_H, 4, accent);
+    font(FONT_SMALL); print_centered("CABINET", cx, PED_Y + 2, none ? CLR_MEDIUM_GREY : CLR_WHITE); font(FONT_NORMAL);
+    if (none) {
+        font(FONT_TINY); print_centered("(off)", cx, PED_Y + 17, CLR_DARK_GREY);
+        print_centered("tap", cx, PED_Y + 28, CLR_DARKER_GREY); font(FONT_NORMAL);
+        for (int gy = PED_Y + 40; gy < PED_Y + 64; gy += 3) line(x + 6, gy, x + CAB_W - 6, gy, CLR_DARKER_GREY);  // dim grille
+        return;
+    }
+    font(FONT_SMALL);                                                               // selector readout
+    print_centered(amp ? AMP_VC[cab_voicing].name
+                       : cab_speed == LESLIE_STOP ? "STOP" : cab_speed == LESLIE_SLOW ? "SLOW" : "FAST",
+                   cx, PED_Y + 15, accent);
+    font(FONT_NORMAL);
+    int ky = PED_Y + 46, kx0 = x + 15, kx1 = x + CAB_W - 15;
+    const char *l0 = amp ? "GAIN" : "DRV", *l1 = amp ? "SAG" : "BAL";
+    for (int j = 0; j < 2; j++) {
+        int kx = j ? kx1 : kx0;
+        circfill(kx, ky, 6, CLR_BROWNISH_BLACK); circ(kx, ky, 6, accent);
+        float a = (-135.0f + cab_k[j] * 270.0f) * 0.0174533f;
+        line(kx, ky, kx + (int)(sinf(a) * 5), ky - (int)(cosf(a) * 5), CLR_WHITE);
+        font(FONT_TINY); print_centered(j ? l1 : l0, kx, ky + 8, CLR_LIGHT_PEACH); font(FONT_NORMAL);
+    }
+}
+
 void draw(void) {
     cls(CLR_BROWNISH_BLACK);
 
@@ -622,6 +709,8 @@ void draw(void) {
         disp++;
     }
     clip(0, 0, 0, 0);
+
+    draw_cabinet();   // the pinned output cabinet (drawn unclipped, never scrolls)
 
     // drop caret — where the dragged pedal would land if released now (only while over the chain).
     // Drawn unclipped, x nudged inside the viewport, so the first/last gap is fully visible.
