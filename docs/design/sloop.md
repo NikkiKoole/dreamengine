@@ -19,6 +19,15 @@ world built to prove it. Working name **`sloop`** (Dutch *sloop* = demolition /
 scrapping, and English = a boat — both fit a scrap-built rig crossing a wrecked
 land). Alternatives parked under "Name" below; not committed.
 
+**Related — the world the rig will drive:** the procedural world layer now lives in
+[`roadnet.md`](roadnet.md) (cart `tools/carts/roadnet.c`) — an infinite, deterministic
+map of terrain + a connected, terrain-aware, ranked road network, with a magnifier
+into an RCI-zoned street level. Its rung 4 is *"wire `road_at()` into sloop"* — i.e.
+sloop becomes the car that drives roadnet's streets. Start at
+[`roadnet-handoff.md`](roadnet-handoff.md) for where that work stands and the next
+steps. (sloop's own `§9 collidable world` is the in-cart test rig; roadnet is the
+larger world it'll eventually consume.)
+
 ## The idea
 
 Build a vehicle out of parts on a grid — frame, engine, wheels, tank, seats, cargo,

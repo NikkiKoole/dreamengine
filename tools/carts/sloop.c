@@ -26,6 +26,9 @@
 // Same DNA as orbit (one integrator, no lies) and coaster (one physics core, two
 // modes). This rung proves the DRIVE feels right with a hardcoded symmetric rig;
 // rung 2 bolts a BUILD-grid editor onto this exact core (see docs/design/sloop.md).
+// The larger procedural WORLD this rig is meant to drive lives in roadnet
+// (tools/carts/roadnet.c, docs/design/roadnet.md + roadnet-handoff.md): roadnet's
+// rung 4 = wire road_at() into sloop. sloop's own world here is the in-cart test rig.
 //
 // ── why it feels like a car and not an air-hockey puck ───────────────────────
 // The trap with torque-only steering is ice-skating. The cure is TIRE GRIP: each
