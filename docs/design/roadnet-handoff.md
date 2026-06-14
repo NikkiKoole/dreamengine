@@ -1,8 +1,36 @@
-# roadnet — session handoff (2026-06-14)
+# roadnet — session handoff (2026-06-14 → 06-15)
 
 Where the `roadnet` work stands, and how it maps to the original goal. Full design
-detail lives in [`roadnet.md`](roadnet.md); this is the orientation + "what's next"
-for whoever picks it up.
+detail lives in [`roadnet.md`](roadnet.md) (L0–L2) and
+[`roadnet-streetlevel.md`](roadnet-streetlevel.md) (L3 + the road GRAPH — the most
+current, blow-by-blow log); this is the orientation + "what's next" for whoever picks it up.
+
+## TL;DR of the 06-14→15 session — the GRAPH milestone
+We turned roadnet from "a world map with a street-level field" into **a navigable road
+GRAPH with buildings hanging off it**, in this arc (each a commit; detail in
+[`roadnet-streetlevel.md`](roadnet-streetlevel.md)):
+1. **L3 access-street tier** (`CL_ACCESS`) — every suburban lot fronts a street.
+2. **TAB view-switcher** (MAP ↔ GRAPH) + `ZMAX`→12 (main camera flies to street level).
+3. **Road graph** — `build_graph()` → `RoadEdge gedge[]`/`RoadNode gnode[]`; arterials +
+   the **vectorised intra-city grid** with intersection **nodes + adjacency**.
+4. **Drag-flip fix** — district orientation now keyed on a STABLE city id (`gid[]`), not the
+   volatile gather-array index, so the grid no longer re-rolls while panning (it was also
+   silently breaking the pure-fn-of-world-coords contract).
+5. **Degree-2 collapse** — straight lanes = single clean edges; fewer node dots.
+6. **LOD by on-screen block size** — street tiers draw only when legible (killed the smear).
+7. **Buildings-follow-the-graph** — `building_at()` + parcels along edges → reachable BY
+   CONSTRUCTION (the design pivot: buildings are children of the graph, not a lot field).
+8. **Stitch** — grid dead-ends → arterial on-ramps (`EK_CONNECT`); arterials noded → ONE
+   routable component (a route can leave the neighbourhood).
+9. **Street-pattern palette** + **cul-de-sacs** (pattern #2) — a suburb district is grid OR
+   sparse-collectors-plus-cul-de-sacs, chosen per district.
+
+**Open thread we ended on:** the GRAPH view's tiers pop in/out at zoom thresholds (LOD) and
+"roads seem to go away when zooming in." Diagnosed (two bakes) as **mostly intended** (LOD +
+smaller view area shows sparser sub-regions), **not data loss**. Offered but did NOT yet do:
+soften the pops (hysteresis/fade) or shift thresholds. Confirm with the user whether roads
+vanish in the *middle* of a clearly-urban area (that would be a real dropout to chase) vs at
+edges / in countryside (expected).
 
 ## The original question
 
@@ -78,8 +106,13 @@ note) that has nothing to do with roadnet.
   finer lanes bisecting suburban blocks — see the L3 realization below). Still ⛔: **park
   contents** (the football field — PARK is still flat tint), building **footprints** drawn as
   *collidable rects* (lots are colour only), parking lots, landmarks.
-- **L3 car + collision + play** — ⛔ not built, **but `road_at()` now exists** — the seam
-  sloop will drive on. Wiring it in is rung 4 (the next leap).
+- **L3 the navigable graph** — ✅ **built (06-15)**: the road **GRAPH** (`gedge[]`/`gnode[]`,
+  arterials + vectorised grid with nodes/adjacency), **buildings-follow-graph** (`building_at()`,
+  RES so far), the **stitch** (one routable component), and a **cul-de-sac** street pattern. All
+  via the GRAPH view (TAB).
+- **L3 car + collision + play** — ⛔ not built, **but all three seams now exist** — `road_at()`
+  (surface), `building_at()` (collision), `gedge[]`/`gnode[]` (routing). Wiring **sloop** in is
+  rung 4 (the next leap).
 
 **So: we built the *world/map* thoroughly and the *street level* is now real content in a
 lens — blocks, lots, class-aware roads, a proper city→country gradient with fields.** What
@@ -106,29 +139,37 @@ across) alongside the district "STREET" loupe — currently shows L2 zoomed in; 
 streets + footprints get built *into* it next, same playbook as the L2 lens.
 
 ## Next time — where to pick up (recommended order)
-1. ✅ **L3 access-street tier** (DONE 2026-06-14) — `ST_ACCESS`/`CL_ACCESS`: half-pitch
-   (`block_sp/2`) lanes that bisect the suburban blocks (where locals are suppressed) so
-   every lot fronts a street; pure-fn, flows through `grid_at`→`road_at`, draw-gated to the
-   BLOCK loupe via `zoom >= LOUPE2_ZOOM`. *(See roadnet-streetlevel.md → "What's built".)*
-1b. ✅ **View-switcher + road-graph layer** (DONE 2026-06-14) — `TAB` cycles MAP↔GRAPH,
-   `ZMAX` raised 2.5→12 (the main camera flies to street level = the eventual sloop camera),
-   and `build_graph()` packs the visible network into `RoadEdge gedge[]` (arterials, exact;
-   grid/access streets still field). `VIEW_GRAPH` debug-renders the graph as crisp vector
-   centre-lines + node dots over dimmed terrain. *(roadnet-streetlevel.md → "What's built (cont.)".)*
-1c. ✅ **Grid/access streets → graph** (DONE 2026-06-14) — `graph_add_grid()` vectorises the
-   intra-city grid per-city/per-district (rotated frames), placing intersection **nodes** +
-   **edges with adjacency** (`gedge[]`/`gnode[]`), every candidate validated vs `road_at()`
-   (graph ⊆ field); access tier moved onto a `want_access` flag (generation ≠ draw). Routing
-   tidy-ups (stitch grid↔arterials, collapse degree-2 chains) deferred — don't block driving.
-2. **Footprints + `building_at()`** — *next move*. Lots → real footprint rects (inset/outline/
-   driveway toward the fronting access lane), exposed as a collision seam (the precise version
-   of `road_at`'s `built`).
-3. **Park contents + the football field** — PARK is the last flat-tint zone (small win).
-4. **Rung 4 — drive it** — wire `road_at()` + `building_at()` into **sloop** at L3; the
-   BLOCK lens becomes the car's camera. The leap from viewer to playable.
-5. **Polish backlog**: the in-city **bridge gap** (road_at doesn't pave water + loupe no
-   longer strokes the spline → a bridge shows as a break); promote `U_CORE`/field/lane
-   widths to sliders; snap the district grid-shear to a road; loupe **UI/placement**.
+**Done this session (✅):** access tier, TAB view-switcher, road graph (nodes+adjacency),
+drag-flip fix, degree-2 collapse, block-size LOD, buildings-follow-graph, stitch, cul-de-sac
+pattern #2. Full detail + the `gedge[]`/`gnode[]`/`building_at()` API is in
+[`roadnet-streetlevel.md`](roadnet-streetlevel.md) ("What's built" sections + the palette).
+
+**Pick one of these next:**
+1. **Resolve the LOD "vanishing" thread** (the open question above) — quickest is to soften the
+   tier pops (hysteresis or a fade as block-px crosses `GRAPH_STREET_PX`/`ACCESS_PX`/`BUILD_PX`),
+   or just confirm with the user it's expected and move on.
+2. **Rung 4 — DRIVE IT** (the big leap from viewer to playable): wire **sloop** onto the graph
+   at L3 — `road_at()` keeps it on tarmac, `building_at()` is collision, `gedge[]`/`gnode[]` +
+   `coff` give lane-keeping/routing. The GRAPH view is already the car's camera. *This is the
+   payoff of everything above.*
+3. **Finish the building layer**: COM/IND/park buildings (currently RES-only), edge-aligned
+   (rotated) footprints + driveways + cul-de-sac **bulbs**, and **retire the old `lot_*` field
+   render** in the loupes in favour of the graph-driven placement.
+4. **Pattern #3 — organic/warped** districts (exurb); hardest to keep deterministic (see the
+   palette rules in roadnet-streetlevel.md).
+5. **Graph polish for routing**: edge-**split** at stub roots + on-ramp projection (cul-de-sacs
+   and stitch currently attach geometrically — fine until the router runs); on-ramp density.
+6. **Old polish backlog**: the in-city **bridge gap** (road_at doesn't pave water → a bridge
+   shows as a break); promote `U_CORE`/field/lane widths to sliders; loupe **UI/placement**.
+
+## How to SEE it (so the next session isn't lost like this one nearly was)
+The GRAPH view is **explore-mode only**: open roadnet → click **GO** (or ENTER) to leave the
+setup panel → press **TAB** (HUD top-right shows MAP/GRAPH) → **mouse-wheel zoom IN** past the
+LOD thresholds over a city to see grid/cul-de-sacs/buildings. TAB on the setup panel only
+toggles the loupes (a known confusing dead-end). *Heads-up:* the screenshot bake compiles the
+whole engine, so when a parallel agent has `runtime/sound.h` mid-edit the bake fails — retry
+(`node tools/make-cart.js --run …`) until it compiles, or syntax-check the cart alone with
+`clang -fsyntax-only -I runtime -D… tools/carts/roadnet.c` (the cart never includes `sound.h`).
 
 ## How the pieces relate (cousin carts)
 - **`sloop.c`** — the **car physics** (already solved). The eventual consumer; will
