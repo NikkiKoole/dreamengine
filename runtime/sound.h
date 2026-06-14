@@ -588,6 +588,42 @@ static float moddel_hermite(const float *buf, int len, float readPos) {
     float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
     return ((c3 * frac + c2) * frac + c1) * frac + c0;
 }
+
+// ── modulation kit (building-blocks-spec Block B): reusable, deterministically-seeded mod sources ──
+// Internal helpers (like moddel_hermite — "write the technique once"); effects consume them. Each
+// instance carries its own ModState so multiple buses/effects don't share a phase. Seed once at
+// init (LCG, so --det renders byte-reproducibly) — never Date/rand. static inline = no warning when
+// a source has no consumer yet (mod_randwalk/mod_sh await Shallow Water / the VHS dropout).
+typedef struct { unsigned int seed; float val, target, phase; } ModState;
+
+// slow FILTERED random in ~[-1,1]; `rate` Hz = how fast it wanders. The "living"/drift source.
+static inline float mod_randwalk(ModState *m, float rate, float dt) {
+    m->phase += rate * dt;
+    if (m->phase >= 1.0f) {                                            // pick a fresh target each step
+        m->phase -= 1.0f;
+        m->seed = m->seed * 1103515245u + 12345u;
+        m->target = (float)((int)((m->seed >> 16) & 0xFFFF)) / 32767.5f - 1.0f;
+    }
+    m->val += (m->target - m->val) * (4.0f * rate * dt);              // one-pole smooth → filtered, not steppy
+    return m->val;
+}
+// STEPPED random in ~[-1,1]; jumps to a fresh value every 1/rate sec, holds between (sample-&-hold).
+static inline float mod_sh(ModState *m, float rate, float dt) {
+    m->phase += rate * dt;
+    if (m->phase >= 1.0f) {
+        m->phase -= 1.0f;
+        m->seed = m->seed * 1103515245u + 12345u;
+        m->val = (float)((int)((m->seed >> 16) & 0xFFFF)) / 32767.5f - 1.0f;
+    }
+    return m->val;
+}
+// OPTICAL / incandescent LFO SHAPE: phase 0..1 → 0..1, asymmetric (slow brighten, fast dim — the
+// lightbulb throb that makes a Univibe liquid where a sine phaser is even). Caller advances phase.
+static inline float mod_optical(float phase) {
+    return phase < 0.8f ? powf(phase / 0.8f, 0.6f)                    // slow rise over ~80% of the cycle
+                        : 1.0f - (phase - 0.8f) / 0.2f;               // quick fall over the last 20%
+}
+
 // BBD charge-well saturation (navkit bbdSaturate): soft-clips above ±0.7, adding warm even harmonics
 static float cho_bbdsat(float x) {
     if (x >  BBD_CHARGE_SAT) { float e = x - BBD_CHARGE_SAT;  return  BBD_CHARGE_SAT + e / (1.0f + e * 3.0f); }
@@ -1155,6 +1191,7 @@ static float phaser_pvL[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // per-stage allp
 static float phaser_stR[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // … (R)
 static float phaser_pvR[SOUND_FX_BUSES][SOUND_PHASER_STAGES];
 static bool  phaser_used[SOUND_FX_BUSES];
+static bool  phaser_optical[SOUND_FX_BUSES];   // univibe(): drive the sweep with mod_optical instead of a sine
 static float phaser_chan(float in, float coeff, float fb, float mix, int stages, float *st, float *pv) {
     float dry = in;
     float pIn = in + st[stages - 1] * fb;
@@ -1170,7 +1207,8 @@ static float phaser_chan(float in, float coeff, float fb, float mix, int stages,
 static void phaser_process(int b, float *mixL, float *mixR) {
     phaser_phase[b] += phaser_rate[b] * (1.0f / (float)SOUND_SAMPLE_RATE);
     if (phaser_phase[b] >= 1.0f) phaser_phase[b] -= 1.0f;
-    float lfo = sinf(phaser_phase[b] * 6.2831853f);
+    float lfo = phaser_optical[b] ? (mod_optical(phaser_phase[b]) * 2.0f - 1.0f)   // univibe: asymmetric bulb throb
+                                  : sinf(phaser_phase[b] * 6.2831853f);            // phaser: even sine sweep
     float coeff = 0.5f + lfo * phaser_depth[b] * 0.4f;   // navkit: cCenter 0.5 ± lfo·depth·cRange(0.4)
     int stages = phaser_stages[b];
     float fb = phaser_fb[b], mix = phaser_mix[b];
@@ -1185,7 +1223,20 @@ static void fx_set_phaser(int b, float rate, float depth, float feedback, float 
     if (stages < 2) stages = 2; if (stages > SOUND_PHASER_STAGES) stages = SOUND_PHASER_STAGES;
     phaser_rate[b] = rate; phaser_depth[b] = depth; phaser_fb[b] = feedback;
     phaser_mix[b] = mix; phaser_stages[b] = stages;
+    phaser_optical[b] = false;       // phaser() = sine sweep; univibe() flips this true
     phaser_used[b] = (mix > 0.0f);   // mix 0 = off, like chorus/flanger/tremolo
+}
+
+// univibe: the phaser's allpass chain swept by the OPTICAL LFO (mod_optical) instead of a sine —
+// the liquid, asymmetric "bulb throb". Classic 4-stage, no feedback (photocell phase shift). Shares
+// the FX_PHASER insert (already in every bus's default chain), so no chain wiring needed.
+static void fx_set_univibe(int b, float rate, float depth, float mix) {
+    if (rate  < 0.0f) rate  = 0.0f; if (rate  > 10.0f) rate  = 10.0f;
+    if (depth < 0.0f) depth = 0.0f; if (depth > 1.0f)  depth = 1.0f;
+    if (mix   < 0.0f) mix   = 0.0f; if (mix   > 1.0f)  mix   = 1.0f;
+    phaser_rate[b] = rate; phaser_depth[b] = depth; phaser_fb[b] = 0.0f;
+    phaser_mix[b] = mix; phaser_stages[b] = 4; phaser_optical[b] = true;
+    phaser_used[b] = (mix > 0.0f);
 }
 
 // ── Leslie — rotary speaker (the organ's spinning horn+drum cabinet) ─────────────────────────────
@@ -1596,6 +1647,8 @@ typedef enum {
     SR_DRIVE_INST   = 90,   // a=instance, b=amount*1000, c=mode, e0=mix*1000 — mix-bus drive on a given INSTANCE (Increment F; instance 0 == SR_DRIVE_INSERT)
     SR_GRAINS_PITCH       = 91,   // a=semitones*100, b=spread*1000, c=reverse(0/1) — transpose the master granular cloud
     SR_INSTR_GRAINS_PITCH = 92,   // a=slot, b=semitones*100, c=spread*1000, e0=reverse(0/1) — transpose one instrument's granular cloud
+    SR_UNIVIBE       = 93,   // a=rate*1000, b=depth*1000, c=mix*1000 — THE master univibe (bus 0): the phaser swept by the optical LFO
+    SR_INSTR_UNIVIBE = 94,   // a=slot, b=rate*1000, c=depth*1000, e0=mix*1000 — univibe on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -4333,6 +4386,12 @@ static void sound_fire_req(SoundReq r) {
         if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
         int b = fx_bus_for(r.a);
         if (b >= 1) fx_set_phaser(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f, r.e2);
+    } else if (r.kind == SR_UNIVIBE) {      // master univibe (bus 0): a=rate, b=depth, c=mix (×1000) — phaser in optical mode
+        fx_set_univibe(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
+    } else if (r.kind == SR_INSTR_UNIVIBE) { // per-instrument: a=slot, b=rate, c=depth, e0=mix (×1000)
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) fx_set_univibe(b, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f);
     } else if (r.kind == SR_LESLIE) {       // master Leslie (bus 0): a=speed, b=drive, c=balance, e0=doppler, e1=mix (×1000 except speed)
         fx_set_leslie(0, r.a, r.b / 1000.0f, r.c / 1000.0f, r.e0 / 1000.0f, r.e1 / 1000.0f);
     } else if (r.kind == SR_INSTR_LESLIE) { // per-instrument: a=slot, b=speed, c=drive, e0=balance, e1=doppler, e2=mix
@@ -5424,6 +5483,15 @@ void phaser(float rate, float depth, float feedback, float mix, int stages) {
 void instrument_phaser(int slot, float rate, float depth, float feedback, float mix, int stages) {
     if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
     sound_push_ctrl(SR_INSTR_PHASER, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(feedback * 1000.0f), (int)(mix * 1000.0f), stages);
+}
+
+// ── univibe: the phaser swept by the OPTICAL LFO (mod_optical) — the liquid 60s vibe/chorus ──
+void univibe(float rate, float depth, float mix) {
+    sound_push_ctrl(SR_UNIVIBE, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(mix * 1000.0f), 0, 0, 0);
+}
+void instrument_univibe(int slot, float rate, float depth, float mix) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_UNIVIBE, slot, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(mix * 1000.0f), 0, 0);
 }
 
 // ── Leslie: THE master rotary speaker (spinning horn+drum cabinet — the organ's voice) ──

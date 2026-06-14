@@ -387,6 +387,29 @@ travel), `feedback` −0.95..0.95 (resonance around the notches), `mix` 0–1 (*
 > Rhodes/Small Stone) and a flanger is a swept COMB with delay (metallic, jet-like — needs a rich
 > source). For an electric piano, reach for the phaser.
 
+## univibe — `univibe(rate, depth, mix)` · `instrument_univibe(slot, …)`
+
+The 60s photocell VIBE (Univibe / Shin-ei) — the **same 4-stage allpass chain as the phaser, but
+swept by the OPTICAL LFO** (`mod_optical`, the modulation-kit shape) instead of a sine. A lightbulb
+glued to a photocell glows *slowly bright then snaps dim*, so the sweep is **asymmetric and liquid**
+where a sine phaser is even and clinical — that asymmetry is the whole sound (Machine Gun / Bridge of
+Sighs). Classic **4-stage, no feedback** (it's photocell phase shift). `rate` 0–10 Hz, `depth` 0–1,
+`mix` 0–1 (0 = off; like the phaser, 0.5 is deepest — notches form in the dry+wet sum). **Shares the
+`FX_PHASER` insert** — don't run `phaser()` and `univibe()` on the same bus. First consumer of the
+modulation kit (boutique-pedals roadmap Primitive 1). **Showcase: `univibe`** (with a `P` A/B toggle
+vs the sine phaser, and a throbbing lamp + live LFO-curve so you SEE the asymmetry).
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| slow organ vibe | `univibe(4.0f, 0.7f, 0.5f)` | the liquid 60s throb on a held organ/chord bed | `univibe` |
+| deep slow swirl | `univibe(0.6f, 1.0f, 0.5f)` | very slow, wide — a hypnotic asymmetric sweep that evolves with the music | `univibe` |
+| per-part vibe | `instrument_univibe(I_ORGAN, 5.0f, 0.8f, 0.5f)` | vibe just the organ/EP, leave the rhythm dry | — |
+
+> **Univibe vs phaser:** identical DSP, different LFO. The phaser's sine sweep is symmetric; the
+> univibe's optical sweep eases up and drops fast. On chords/organ the vibe feels *liquid* and
+> *vocal*; the phaser feels *even* and *mechanical*. The `univibe` cart's `P` toggle A/Bs them at
+> matched rate/depth so you hear only the LFO-shape difference.
+
 ## leslie — `leslie(speed, drive, balance, doppler, mix)` · `instrument_leslie(slot, …)`
 
 THE rotary-speaker cabinet — the organ's voice. A spinning treble **HORN** (pitch wobble via a

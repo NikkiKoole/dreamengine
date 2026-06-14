@@ -499,6 +499,12 @@ void instrument_ringmod(int slot, float freq_hz, float mix);            // ring 
 void phaser(float rate, float depth, float feedback, float mix, int stages);                       // rate 0..10 Hz, depth 0..1, feedback -0.95..0.95, mix 0..1 (0 = off), stages 2..8. THE master phaser
 void instrument_phaser(int slot, float rate, float depth, float feedback, float mix, int stages);  // phaser on just this slot (auto-grabs a private FX bus)
 
+// univibe — the 60s photocell vibe: the phaser's allpass chain swept by an OPTICAL LFO (slow-bright,
+// fast-dim "bulb throb") instead of a sine — liquid + asymmetric where the phaser is even. Classic
+// 4-stage, no feedback. Shares the phaser insert (don't run both on one bus). Lush on organ/EP/chords.
+void univibe(float rate, float depth, float mix);                 // rate 0..10 Hz (throb speed), depth 0..1 (sweep), mix 0..1 (0 = off). THE master univibe. try 4/0.7/0.5
+void instrument_univibe(int slot, float rate, float depth, float mix);  // univibe on just this slot (auto-grabs a private FX bus)
+
 // filter — a sweepable resonant FILTER on the whole mix: the DJ-filter / build-up sweep. A plain
 // state-variable filter (low/high/band/notch) you RIDE live — close it to a muffled thump on the
 // breakdown, open it back up (crank resonance for the scream) on the build. THE electronic-music

@@ -1496,6 +1496,19 @@ v1, document it on the panel.
     tripwire silent; a clean→hard-drive switch mid-render jumps RMS 0.18→0.89 (the wall-of-fuzz fills the
     waveform). **Showcase: `modrack`'s SAT module** (whole-mix saturator; + the "Sat bus" preset that grits
     a whole beat). Per-voice drive stays the separate tool for the 303/acid post-filter scream.
+21. **Modulation kit + Univibe (building-blocks Block B).** **✓ SHIPPED 2026-06-15.** The boutique-pedals
+    roadmap's Primitive 1: a small set of reusable, deterministically-seeded modulation sources in
+    `sound.h` — `mod_randwalk` (filtered random walk), `mod_sh` (sample-&-hold), `mod_optical` (the
+    asymmetric "incandescent bulb" LFO shape: slow bright, fast dim). `static inline` so unused sources
+    don't warn (mod_randwalk/mod_sh await Shallow Water / the VHS dropout). First consumer: **`univibe`**
+    (`SR_UNIVIBE`=93/94) — the SAME `phaser` allpass chain + a `phaser_optical[]` flag that swaps the
+    sine LFO for `mod_optical`, classic 4-stage, no feedback. Rides the existing `FX_PHASER` insert
+    (shares it with `phaser()` — don't run both on one bus), so zero chain wiring. `fx_set_phaser` resets
+    the flag false → existing phaser byte-identical. Verified: soundcheck `ok` + 900-frame tripwire
+    silent; A/B sine-probe through `univibe` vs `phaser` at matched rate/depth differs (metrics + sweep
+    depth), confirming the optical LFO is doing distinct work. **Showcase: `univibe`** (a `P` A/B toggle +
+    a throbbing lamp + live LFO-curve that draws the asymmetry). The kit is the multiplier: Shallow Water,
+    the Generation Loss dropout, and germanium bias-drift all ride these same three sources next.
 
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
