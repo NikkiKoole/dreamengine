@@ -1,10 +1,18 @@
 # roadnet — a spline arterial network over the heightmap (design)
 
-**Status: rungs 1–3 + bridges + magnifier + L2 zones done (2026-06-14).** A fresh testbed cart
+**Status: rungs 1–3 + bridges + magnifier + L2 zones + L2 block grid/lots done (2026-06-14).** A fresh testbed cart
 ([`tools/carts/roadnet.c`](../../tools/carts/roadnet.c)) for the one thing
 [`procgen-places.md`](procgen-places.md) explicitly parked as **"the wall"**:
 **arced / non-axis-aligned roads in a deterministic, infinite world.** This doc is
 that wall's design conversation (2026-06-13).
+
+**The goal (2026-06-14):** roadnet grows into **one app** — a showcase of abstract,
+infinite, deterministic road/world generation that is *also* a **drop-in procedural
+world** other games can ram into (sloop is the first consumer). So rather than keep
+roadnet and the tile-city cart (`procplaces`) as two carts that talk, we **fold** the
+useful pieces *into* roadnet — `procplaces` is the proven L2 reference (its `road_at()`
+is the collision==render seam), but the street level is being (re)built natively in
+roadnet's own world-tile coords so the whole LOD stack lives in one place.
 
 Related:
 - [`procgen-places.md`](procgen-places.md) → "Scope / rungs" v2 — the wall this
@@ -190,17 +198,95 @@ countryside gaps via `Z_NONE`) rather than a solid ring. **Decisions:** concentr
 gradient (the patchy "mix" knob is a later add); industrial fringe + water harbours;
 farm patches between suburb and wild.
 
-**Live knobs:** the setup panel has a **CITY (loupe)** group of four L2 sliders —
+**Live knobs:** the setup panel has a **CITY (loupe)** group of five L2 sliders —
 *city size* (`citysize_mul`, scales the urbanity radius), *downtown* (`u_com`, core
-size), *farms* (`farm_gate`, farmland vs countryside), *blocks* (`street_sp`, block
-size). Like the map sliders they're `P_*` floats read live, so the loupe re-zones as
-you drag. (Lower-bang knobs — industry/park density, warp strength — left hardcoded.)
+size), *farms* (`farm_gate`, farmland vs countryside), *blocks* (`block_sp`, block
+size), and *align* (`P_align`, the artery-vs-axis district blend — see "Aligned to the
+arterials"). Like the map sliders they're `P_*` floats read live, so the loupe re-zones
+as you drag. (Lower-bang knobs — industry/park density, warp strength — left hardcoded.)
 
-**Next (L2 blocks):** turn a zone *tile* into actual contents — lots, building
-footprints (collision-ready), parks/football field, parking, farm fields — each a
-function of `(block coords, zone)`. Street grid should align to the arterials. Then
-landmarks (gas/hospital/gun shop) as point POIs, and finally sloop's car at street
-scale.
+## L2 block contents — street grid + building lots (done — 2026-06-14)
+
+The zone tint is now filled with **real content**. A built-up zone grows a **nested
+street lattice** that carves it into **blocks**, and each block fills with **building
+lots**. All in roadnet's own world-tile coords (a *sub-tile* pitch, so it reads as
+blocks in the loupe), pure functions of world coords → seam-true, and the future
+`road_at()` will read the identical geometry.
+
+- **`street_axis(coord, U)` / `on_street(wx,wy,U)`** — line `k` sits at `k·block_sp()`
+  world tiles; its class is a pure fn of `k` (`k%4==0` → **avenue**, else **local**),
+  its road half-width follows the class. **Visibility is gated by urbanity**, so block
+  density *emerges*: avenues appear wherever it's built (`U ≥ U_LIGHT`), locals only in
+  the dense core (`U ≥ U_MED`) — downtown gets the full grid, the suburb only its
+  avenues, the industrial fringe big open blocks. No flag; it falls out of `U`.
+- **`lot_color(wx,wy,z)`** — a block interior is a sub-block hash grid of lots; each lot
+  hashes to a roof colour from its zone's palette (RES warm roofs + 1-in-8 yards, COM
+  concrete/glass, IND/HARBOR dark bodies).
+- **`block_sp()`** — the **blocks** panel slider (`P_blocks`) now sets the block pitch in
+  world tiles (0.7..2.3), live in the loupe.
+
+### Aligned to the arterials (done — 2026-06-14)
+
+The block grid no longer sits on a single global axis with arterials cutting across it
+at random angles. Each city's grid is now **oriented + anchored to the road that enters
+it**, so main street follows the highway and the grid radiates from downtown:
+
+- **`city_dir(node)`** — the entering road's direction: a **town** points toward its
+  nearest hub (its feeder, via `nearest_hub`); a **hub** toward its nearest neighbour
+  hub (the highway). A unit vector, pure fn of position → deterministic + seam-true.
+  Stored per gathered city (`gux/guy`).
+- **`urbanity()` records the dominant city** (`dom_i` = the strongest bump at the query
+  point). `render_streetlevel` transforms each built-up point into that city's **local
+  rotated frame** (origin = node, axes = `city_dir`) before running the grid — so the
+  lattice rotates to the road and a downtown crossing sits on the node.
+
+Adjacent cities get different orientations (realistic); they only meet across
+low-urbanity farmland, so there's no visible grid seam in practice. (A conurbation where
+two high-`U` bumps overlap *can* show a watershed line where `dom_i` flips — acceptable
+for now, revisit if it shows.)
+
+**A city is a PATCHWORK, not one monolithic grid (the `align` slider).** Real cities
+don't rotate *wholesale* to the one highway they hang off — some districts follow the
+road in, others just grid north, and the bigger roads connect however. So orientation is
+decided **per district**, not per city: `city_grid_coords()` cuts the city-local plane
+into coarse `DISTRICT_BLK`-sized district cells, each hashing to "aligned" or "axis". The
+**`align` slider** (`P_align`, the 5th CITY knob) sets the *proportion* that follow the
+artery — **1** = whole city aligned, **0** = all world-axis, between = the realistic mix.
+Both frames are node-anchored so it stays one coherent city; an aligned district abutting
+an axis one shows a grid-shear line (the real thing, e.g. an old core meeting a newer
+grid). Still a pure hash of the district cell → deterministic + seam-true.
+
+### `road_at()` + arterials carved through (done — 2026-06-14)
+
+The keystone: the street level is now **queryable**, and the arterials **carve through**
+the blocks as real road surface instead of being painted on top. The renderer and the
+query are *literally the same function* — `render_streetlevel` calls `road_at()` per cell
+— so screen == collision by construction (the locality contract, now structural).
+
+- **`gather_arterials()`** — once per loupe frame, enumerate the visible links (mirroring
+  `draw_highways`/`draw_feeders`) and push each link's `link_path()` polyline + class into
+  a **segment cache** (`sg*`/`nseg`). The geometry is the *same* `link_path()` the renderer
+  strokes → the cache agrees with the drawn road by construction. *(The enumeration is
+  duplicated from the draw loops — the one spot to keep in sync; the geometry is shared.)*
+- **`arterial_at(wx,wy)`** — point-to-segment distance (`seg_dist2`) over the cache vs a
+  per-class **world** half-width (`road_hw`: motorway 0.75 … dirt 0.22 tiles). Returns the
+  widest (lowest-idx) class the point is inside.
+- **`road_at(wx,wy) → {on_road, cls, zone, urb}`** — THE world query seam the drop-in
+  world exposes (sloop calls this). Combines `arterial_at` + the local street grid
+  (`on_street` in the district-aligned frame) + `zone_of`. Assumes `gather_cities()` +
+  `gather_arterials()` ran for the region this frame (the renderer does it; a consumer
+  gathers around its own position).
+
+So arterials cut through the city as dark road surface, the local grid meets them, and a
+highway shows as a road even crossing open farmland. Building lots only appear where
+`road_at` reports no road. (Bridges still come from the over-water spline stroke on top —
+`road_at` doesn't pave water.)
+
+**Next:** farm *fields* and park *contents* (the football field) as real block content
+(today FARM/PARK keep flat tint); building *footprints* drawn as collidable rects (not
+just colour, using `road_at`'s lot info); then landmarks (gas/hospital/gun shop) as point
+POIs, and finally **sloop's car at street scale (rung 4) — wire its driving into
+`road_at()`**, now that the seam exists.
 
 ## Rungs
 

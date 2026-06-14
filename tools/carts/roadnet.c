@@ -80,6 +80,7 @@ static float P_citysize   = 0.333f;  // city radius          → 0.5..2.0×
 static float P_downtown   = 0.375f;  // downtown core size
 static float P_farms      = 0.5f;    // farmland density
 static float P_blocks     = 0.25f;   // city-block size (street spacing)
+static float P_align      = 0.6f;    // districts aligned to the artery vs world-axis (0=all axis, 1=all aligned)
 
 static int   hub_cs(void)   { return 12 + (int)(P_hub_space  * 48); }   // 12..60
 static int   node_cs(void)  { return 6  + (int)(P_town_space * 24); }   // 6..30
@@ -565,15 +566,15 @@ static void draw_setup_panel(void) {
                      &P_jitter, &P_diag, &P_sea };
     for (int i = 0; i < 7; i++) ui_slider(pp[i], 4, 16 + i * 11, 88, L[i]);
     print("CITY (loupe)", 4, 95, CLR_MEDIUM_GREY);             // L2 knobs (street level)
-    static const char *L2[4] = { "city size", "downtown", "farms", "blocks" };
-    float *pp2[4] = { &P_citysize, &P_downtown, &P_farms, &P_blocks };
-    for (int i = 0; i < 4; i++) ui_slider(pp2[i], 4, 102 + i * 11, 88, L2[i]);
-    int roll = ui_button(4, 148, 88, 13, "ROLL");
-    int go   = ui_button(4, 163, 88, 15, "EXPLORE \x10");
+    static const char *L2[5] = { "city size", "downtown", "farms", "blocks", "align" };
+    float *pp2[5] = { &P_citysize, &P_downtown, &P_farms, &P_blocks, &P_align };
+    for (int i = 0; i < 5; i++) ui_slider(pp2[i], 4, 102 + i * 11, 88, L2[i]);
+    int roll = ui_button(4, 159, 88, 13, "ROLL");
+    int go   = ui_button(4, 174, 88, 14, "EXPLORE \x10");
     ui_end();
 
     snprintf(buf, sizeof buf, "seed #%u", (unsigned)(seedZ * 1000) % 100000u);
-    print(buf, 4, 181, CLR_MEDIUM_GREY);
+    print(buf, 4, 191, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 
     if (roll) seedZ += 0.37f;                    // fresh world, same params
@@ -606,7 +607,11 @@ static void render_roads(int detail) {
 //     wild(terrain) → FARM (cultivated ring) → RES (suburb) → COM (downtown core),
 //     with INDUSTRIAL on the fringe / drawn to WATER (= HARBOR), and PARK pockets
 //     carved out of any built-up zone. All pure fns of world coords → aligns with the
-//     highways running through. (Block contents — lots/buildings/fields — come next.)
+//     highways running through.
+//   • BLOCK CONTENTS (done): built-up zones grow a nested STREET GRID (local + avenue
+//     lattice, on_street/street_axis) that carves them into BLOCKS, and each block fills
+//     with building LOTS (lot_color). Density emerges from U — downtown gets the full
+//     local grid, the suburb only its avenues. (Farm fields / parks-as-content = next.)
 enum { Z_FARM, Z_RES, Z_COM, Z_IND, Z_HARBOR, Z_PARK };
 static const int ZONE_COL[6] = {
     CLR_YELLOW,      // FARM   — golden fields
@@ -624,7 +629,7 @@ static const int ZONE_COL[6] = {
 static float citysize_mul(void) { return 0.5f + P_citysize * 1.5f; }   // 0.5..2.0× radius
 static float u_com(void)        { return 0.90f - P_downtown * 0.40f; } // downtown core size (low = big)
 static float farm_gate(void)    { return 0.15f + P_farms * 0.60f; }    // farmland vs countryside
-static int   street_sp(void)    { return 2 + (int)(P_blocks * 4); }    // 2..6 — city-block size
+static float block_sp(void)     { return 0.7f + P_blocks * 1.6f; }     // 0.7..2.3 world tiles per city block
 
 static float rank_weight(int r) { return r==RK_METRO?1.0f : r==RK_CITY?0.78f : r==RK_TOWN?0.52f : 0.34f; }
 static float rank_cityR(int r)  { float b = r==RK_METRO?22.f : r==RK_CITY?14.f : r==RK_TOWN?8.f : 4.f; return b * citysize_mul(); }
@@ -632,6 +637,29 @@ static float rank_cityR(int r)  { float b = r==RK_METRO?22.f : r==RK_CITY?14.f :
 // nearby city nodes gathered once per loupe frame (so urbanity() is a short loop)
 #define MAXCITY 160
 static float gnx[MAXCITY], gny[MAXCITY], gnw[MAXCITY], gnr[MAXCITY]; static int gn;
+static float gux[MAXCITY], guy[MAXCITY];   // each city's primary axis (unit dir of the road that enters it)
+static int   dom_i = -1;                   // index of the city that dominates the last urbanity() query
+
+// The road that ENTERS a city → the axis its street grid aligns to. Town: toward its
+// nearest hub (the feeder). Hub: toward its nearest neighbour hub (the highway). Pure
+// fn of position → deterministic + seam-true. Returns a unit vector (defaults to +x).
+static void city_dir(float wx, float wy, int is_hub, float *ux, float *uy) {
+    float bx = wx + 1, by = wy, best = 1e18f; int found = 0;
+    if (is_hub) {                                        // nearest OTHER hub (self excluded)
+        int hc = ifloor(wx/HUB_CS), hr = ifloor(wy/HUB_CS);
+        for (int a = hc-2; a <= hc+2; a++) for (int b = hr-2; b <= hr+2; b++) {
+            float ox, oy; if (!get_hub(a, b, &ox, &oy)) continue;
+            if (ox == wx && oy == wy) continue;
+            float dx = ox-wx, dy = oy-wy, dd = dx*dx + dy*dy;
+            if (dd < best) { best = dd; bx = ox; by = oy; found = 1; }
+        }
+    } else {
+        found = nearest_hub(wx, wy, &bx, &by);           // the feeder road
+    }
+    float dx = bx - wx, dy = by - wy, L = fsqrt(dx*dx + dy*dy);
+    if (!found || L < 1e-4f) { *ux = 1; *uy = 0; return; }
+    *ux = dx/L; *uy = dy/L;
+}
 static void gather_cities(void) {
     gn = 0;
     int m = 6;                                       // margin in cells to catch big bumps
@@ -639,13 +667,15 @@ static void gather_cities(void) {
     int hr0 = ifloor(camY/HUB_CS)-m, hr1 = ifloor((camY+vrows)/HUB_CS)+m;
     for (int cx=hc0; cx<=hc1 && gn<MAXCITY; cx++) for (int cy=hr0; cy<=hr1 && gn<MAXCITY; cy++) {
         float wx,wy; if (!get_hub(cx,cy,&wx,&wy)) continue;
-        gnx[gn]=wx; gny[gn]=wy; gnw[gn]=rank_weight(hub_rank(cx,cy)); gnr[gn]=rank_cityR(hub_rank(cx,cy)); gn++;
+        gnx[gn]=wx; gny[gn]=wy; gnw[gn]=rank_weight(hub_rank(cx,cy)); gnr[gn]=rank_cityR(hub_rank(cx,cy));
+        city_dir(wx,wy,1,&gux[gn],&guy[gn]); gn++;
     }
     int tc0 = ifloor(camX/NODE_CS)-m, tc1 = ifloor((camX+vcols)/NODE_CS)+m;
     int tr0 = ifloor(camY/NODE_CS)-m, tr1 = ifloor((camY+vrows)/NODE_CS)+m;
     for (int cx=tc0; cx<=tc1 && gn<MAXCITY; cx++) for (int cy=tr0; cy<=tr1 && gn<MAXCITY; cy++) {
         float wx,wy; if (!get_node(cx,cy,&wx,&wy)) continue;
-        gnx[gn]=wx; gny[gn]=wy; gnw[gn]=rank_weight(town_rank(cx,cy)); gnr[gn]=rank_cityR(town_rank(cx,cy)); gn++;
+        gnx[gn]=wx; gny[gn]=wy; gnw[gn]=rank_weight(town_rank(cx,cy)); gnr[gn]=rank_cityR(town_rank(cx,cy));
+        city_dir(wx,wy,0,&gux[gn],&guy[gn]); gn++;
     }
 }
 static float urbanity(float wx, float wy) {          // 0..1, max bump over nearby cities
@@ -653,10 +683,10 @@ static float urbanity(float wx, float wy) {          // 0..1, max bump over near
     // as organic blobs, not perfect concentric circles.
     float ax = wx + (noise2(wx*0.045f + 11, wy*0.045f + 11) - 0.5f) * 16.0f;
     float ay = wy + (noise2(wx*0.045f + 37, wy*0.045f + 37) - 0.5f) * 16.0f;
-    float u = 0;
+    float u = 0; dom_i = -1;
     for (int i=0; i<gn; i++) {
         float dx=ax-gnx[i], dy=ay-gny[i], d=fsqrt(dx*dx+dy*dy)/gnr[i];
-        if (d < 1.0f) { float f=(1.0f-d); f=f*f*gnw[i]; if (f>u) u=f; }
+        if (d < 1.0f) { float f=(1.0f-d); f=f*f*gnw[i]; if (f>u) { u=f; dom_i=i; } }
     }
     return u;
 }
@@ -677,24 +707,181 @@ static int zone_of(float wx, float wy, float U) {    // assumes U >= U_FARM (bui
     float j = (noise2(wx*0.08f-seedZ, wy*0.08f-seedZ) - 0.5f) * 0.18f;   // jitter the core edge
     return (U + j >= u_com()) ? Z_COM : Z_RES;
 }
-static void render_streetlevel(void) {
+// ── L2 STREET GRID — a nested local lattice that carves a built-up zone into BLOCKS.
+// Line k sits at k·block_sp (world tiles); class + visibility are pure functions of k
+// and the local urbanity, so it's seam-true and the future road_at() reads the same
+// geometry. Block DENSITY falls out of U: downtown gets the full local grid, the suburb
+// only its avenues — block size emerges, it isn't a flag.
+enum { ST_NONE, ST_LOCAL, ST_AVENUE };
+static int street_axis(float coord, float U, float *adist) {
+    float sp = block_sp();
+    int k = ifloor(coord / sp + 0.5f);                    // nearest line index
+    float d = coord - k * sp; *adist = d < 0 ? -d : d;
+    if (k % 4 == 0) return (U >= U_LIGHT) ? ST_AVENUE : ST_NONE;   // the grid's bigger streets
+    return (U >= U_MED) ? ST_LOCAL : ST_NONE;                      // locals only in the dense core
+}
+static int on_street(float wx, float wy, float U) {
+    float dv, dh;
+    int cv = street_axis(wx, U, &dv), ch = street_axis(wy, U, &dh);
+    float hwv = (cv == ST_AVENUE) ? 0.22f : 0.13f;        // road half-width, in world tiles
+    float hwh = (ch == ST_AVENUE) ? 0.22f : 0.13f;
+    return (cv != ST_NONE && dv < hwv) || (ch != ST_NONE && dh < hwh);
+}
+// roof / ground colour for one building lot inside a block (sub-block hash grid)
+static int lot_color(float wx, float wy, int z) {
+    float lp = block_sp() * 0.5f;                         // ~4 lots per block
+    unsigned h = hash2(ifloor(wx/lp) + (int)(seedZ*131.0f), ifloor(wy/lp)*7 + (int)(seedZ*57.0f));
+    if (z == Z_RES) {
+        static const int roof[5] = { CLR_BROWN, CLR_RED, CLR_DARK_RED, CLR_DARK_PURPLE, CLR_PEACH };
+        return ((h & 7u) == 0) ? CLR_DARK_GREEN : roof[h % 5u];    // 1-in-8 lot = yard
+    }
+    if (z == Z_COM) {
+        static const int roof[4] = { CLR_LIGHT_GREY, CLR_TRUE_BLUE, CLR_BLUE_GREEN, CLR_INDIGO };
+        return roof[h % 4u];
+    }
+    static const int body[3] = { CLR_DARKER_GREY, CLR_DARK_BROWN, CLR_DARKER_PURPLE };  // IND / HARBOR
+    return body[h % 3u];
+}
+// ── DISTRICT ORIENTATION — a city is a PATCHWORK, not one monolithic grid. A fraction
+// P_align of a city's districts rotate into its artery frame (main street follows the
+// road in); the rest grid to the world axes ("bigger roads connect however"). Both
+// frames anchored at the node, so it stays one coherent city. Pure fn → seam-true.
+#define DISTRICT_BLK 5               // district size in blocks (orientation constant within one)
+static void city_grid_coords(float wx, float wy, float *gx, float *gy) {
+    float ex = wx - gnx[dom_i], ey = wy - gny[dom_i];        // node-local, world-axis frame
+    float dsp = block_sp() * DISTRICT_BLK;
+    unsigned hd = hash2(ifloor(ex/dsp) + dom_i*101, ifloor(ey/dsp)*7 - dom_i*53);
+    if ((hd % 1000u) < (unsigned)(P_align * 1000.0f)) {      // this district aligns to the artery
+        float ux = gux[dom_i], uy = guy[dom_i];
+        *gx =  ex*ux + ey*uy;                                // along the entering road
+        *gy = -ex*uy + ey*ux;                                // perpendicular
+    } else {                                                 // ...the rest grid to the world axes
+        *gx = ex; *gy = ey;
+    }
+}
+
+// ── ARTERIAL POINT-QUERY — "is this world point on a roadnet road, and which class?"
+// The renderer STROKES arterials in screen px; collision needs the same roads in WORLD
+// space. So once per frame we gather the visible links' polylines (the SAME link_path()
+// geometry the renderer draws → agree by construction) into a segment cache, then test
+// point-to-segment distance against a per-class WORLD half-width. This is the seam the
+// drop-in world exposes: render_streetlevel + the future sloop road_at() both read it.
+//
+// NB: gather_arterials() MIRRORS the enumeration in draw_highways()/draw_feeders() (which
+// hubs/towns link to which). The GEOMETRY is shared (link_path); only the *enumeration*
+// is duplicated — keep the two in sync if the linking rules ever change (rungs 1-3 frozen).
+#define MAXSEG 4096
+static float sgx0[MAXSEG], sgy0[MAXSEG], sgx1[MAXSEG], sgy1[MAXSEG];
+static int   sgcls[MAXSEG]; static int nseg;
+static float road_hw(int cls) {              // arterial road HALF-width, in world tiles
+    switch (cls) {
+        case CL_MOTORWAY: return 0.75f;
+        case CL_HIGHWAY:  return 0.60f;
+        case CL_ARTERIAL: return 0.45f;
+        case CL_STREET:   return 0.32f;
+        default:          return 0.22f;      // dirt
+    }
+}
+static void push_link(int np, int cls) {
+    for (int i = 0; i + 1 < np && nseg < MAXSEG; i++) {
+        sgx0[nseg]=lp_x[i]; sgy0[nseg]=lp_y[i]; sgx1[nseg]=lp_x[i+1]; sgy1[nseg]=lp_y[i+1];
+        sgcls[nseg]=cls; nseg++;
+    }
+}
+static void gather_arterials(void) {
+    nseg = 0;
+    int c0 = ifloor(camX/HUB_CS)-2, c1 = ifloor((camX+vcols)/HUB_CS)+2;    // mirror draw_highways
+    int r0 = ifloor(camY/HUB_CS)-2, r1 = ifloor((camY+vrows)/HUB_CS)+2;
+    for (int cx=c0; cx<=c1; cx++) for (int cy=r0; cy<=r1; cy++) {
+        float p1x,p1y; if (!get_hub(cx,cy,&p1x,&p1y)) continue;
+        for (int d=0; d<4; d++) {
+            int dx=DIR[d][0], dy=DIR[d][1];
+            if (d>=2) { int qx=cx, qy=(dy==1)?cy:cy-1;
+                unsigned qh=hash2(qx*2246822519u+7, qy*3266489917u+13);
+                if (qh%100u >= (unsigned)diag_pct()) continue;
+                if ((dy==1) != (int)((qh>>9)&1)) continue; }
+            float p2x,p2y; if (!get_hub(cx+dx,cy+dy,&p2x,&p2y)) continue;
+            float p0x,p0y,p3x,p3y;
+            if (!get_hub(cx-dx,cy-dy,&p0x,&p0y)) { p0x=2*p1x-p2x; p0y=2*p1y-p2y; }
+            if (!get_hub(cx+2*dx,cy+2*dy,&p3x,&p3y)) { p3x=2*p2x-p1x; p3y=2*p2y-p1y; }
+            int cls=(hub_rank(cx,cy)==RK_METRO||hub_rank(cx+dx,cy+dy)==RK_METRO)?CL_MOTORWAY:CL_HIGHWAY;
+            int np=link_path(p0x,p0y,p1x,p1y,p2x,p2y,p3x,p3y);
+            if (np) push_link(np, cls);
+        }
+    }
+    int m=5;                                                               // mirror draw_feeders
+    int fc0=ifloor(camX/NODE_CS)-m, fc1=ifloor((camX+vcols)/NODE_CS)+m;
+    int fr0=ifloor(camY/NODE_CS)-m, fr1=ifloor((camY+vrows)/NODE_CS)+m;
+    for (int cx=fc0; cx<=fc1; cx++) for (int cy=fr0; cy<=fr1; cy++) {
+        float tx,ty; if (!get_node(cx,cy,&tx,&ty)) continue;
+        int tr=town_rank(cx,cy);
+        float hx,hy;
+        if (nearest_hub(tx,ty,&hx,&hy)) {
+            int cls=(tr==RK_TOWN)?CL_ARTERIAL:CL_STREET;
+            int np=link_path(2*tx-hx,2*ty-hy,tx,ty,hx,hy,2*hx-tx,2*hy-ty);
+            if (np) push_link(np, cls);
+        }
+        float nx,ny;
+        if (nearest_town(tx,ty,&nx,&ny)) {
+            int nr=town_rank(ifloor(nx/NODE_CS),ifloor(ny/NODE_CS));
+            int cls=(tr==RK_TOWN||nr==RK_TOWN)?CL_STREET:CL_DIRT;
+            int np=link_path(2*tx-nx,2*ty-ny,tx,ty,nx,ny,2*nx-tx,2*ny-ty);
+            if (np) push_link(np, cls);
+        }
+    }
+}
+static float seg_dist2(float px,float py, float x0,float y0,float x1,float y1) {
+    float vx=x1-x0, vy=y1-y0, wx=px-x0, wy=py-y0;
+    float c1=vx*wx+vy*wy; if (c1<=0) return wx*wx+wy*wy;
+    float c2=vx*vx+vy*vy; if (c2<=c1) { float ex=px-x1,ey=py-y1; return ex*ex+ey*ey; }
+    float t=c1/c2, ex=px-(x0+t*vx), ey=py-(y0+t*vy); return ex*ex+ey*ey;
+}
+// nearest road over the cache; returns 1 + the WIDEST (lowest-idx) class we're inside.
+static int arterial_at(float wx, float wy, int *outcls) {
+    int best = 99;
+    for (int i=0; i<nseg; i++) {
+        if (sgcls[i] >= best) continue;                          // already have a bigger road here
+        float hw = road_hw(sgcls[i]);
+        if (seg_dist2(wx,wy, sgx0[i],sgy0[i],sgx1[i],sgy1[i]) < hw*hw) best = sgcls[i];
+    }
+    if (best < 99) { *outcls = best; return 1; }
+    return 0;
+}
+
+// THE WORLD QUERY SEAM (for the drop-in consumer, e.g. sloop). Assumes gather_cities() +
+// gather_arterials() have run for a region covering (wx,wy) this frame (the renderer does
+// this). on_road = drivable surface; cls = its road class; zone = the L2 land use.
+typedef struct { int on_road, cls, zone; float urb; } RoadHit;
+static RoadHit road_at(float wx, float wy) {
+    RoadHit r = { 0, CL_STREET, Z_NONE, 0 };
+    r.urb = urbanity(wx, wy);                                    // sets dom_i
+    if (!passable(height_at(wx, wy))) return r;                  // water/peak
+    int acls;
+    if (arterial_at(wx, wy, &acls)) { r.on_road = 1; r.cls = acls; }
+    if (r.urb < U_FARM) return r;                                // wild countryside
+    r.zone = zone_of(wx, wy, r.urb);
+    if (!r.on_road && (r.zone==Z_RES||r.zone==Z_COM||r.zone==Z_IND||r.zone==Z_HARBOR)) {
+        float gx, gy; city_grid_coords(wx, wy, &gx, &gy);
+        if (on_street(gx, gy, r.urb)) { r.on_road = 1; r.cls = CL_STREET; }
+    }
+    return r;
+}
+static void render_streetlevel(int bx, int by, int sz) {        // bounds = the loupe box (cheap)
     gather_cities();
+    gather_arterials();                                          // the road point-query cache
     int step = 2;
-    for (int sy=0; sy<SCREEN_H; sy+=step)
-        for (int sx=0; sx<SCREEN_W; sx+=step) {
+    int x0 = bx - (bx % step), y0 = by - (by % step);
+    for (int sy=y0; sy<by+sz; sy+=step)
+        for (int sx=x0; sx<bx+sz; sx+=step) {
             float wx = camX + sx/P, wy = camY + sy/P;
-            float U = urbanity(wx, wy);
-            if (U < U_FARM) continue;                            // wild → leave terrain showing
-            if (!passable(height_at(wx, wy))) continue;          // never pave water/peak
-            int z = zone_of(wx, wy, U);
-            if (z == Z_NONE) continue;                           // countryside gap → terrain shows
-            int col = ZONE_COL[z];
-            if (z==Z_RES || z==Z_COM || z==Z_IND || z==Z_HARBOR) {   // built-up → cut streets in
-                int sp = street_sp();
-                float fx = wx - sp*ifloor(wx/sp);
-                float fy = wy - sp*ifloor(wy/sp);
-                if (fx < 0.5f || fy < 0.5f) col = CLR_DARKER_GREY;
-            }
+            RoadHit h = road_at(wx, wy);                          // SAME query the consumer calls
+            int col;
+            if (h.on_road) col = CLR_DARK_GREY;                  // arterial carved through OR local street
+            else if (h.zone == Z_NONE) continue;                // water / wild / countryside gap → terrain
+            else if (h.zone==Z_RES || h.zone==Z_COM || h.zone==Z_IND || h.zone==Z_HARBOR) {
+                float gx, gy; city_grid_coords(wx, wy, &gx, &gy);   // a building lot (dom_i set by road_at)
+                col = lot_color(gx, gy, h.zone);
+            } else col = ZONE_COL[h.zone];                       // FARM / PARK tint
             rectfill(sx, sy, step, step, col);
         }
 }
@@ -726,7 +913,7 @@ static void draw_loupe(void) {
     rectfill(bx - 1, by - 1, LOUPE_SZ + 2, LOUPE_SZ + 2, CLR_WHITE);   // frame
     clip(bx, by, LOUPE_SZ, LOUPE_SZ);
     render_terrain();
-    render_streetlevel();                             // the level below (stub)
+    render_streetlevel(bx, by, LOUPE_SZ);             // the level below — streets, lots, carved arterials
     render_roads(1);                                  // the SAME highways, aligned, on top
     clip(0, 0, 0, 0);
 

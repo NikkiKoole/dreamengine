@@ -55,10 +55,15 @@ note) that has nothing to do with roadnet.
 
 **Mental model (LOD stack):**
 - **L0 region map** — ✅ done (roadnet: highways, cities, terrain).
-- **L1 city layout** — ✅ zones done (RCI land-use field); street *grid* is a stub.
-- **L2 block contents** — ⛔ **not built** (buildings, parks, the football field,
-  parking, farm fields as real, collidable content). Only previewed as flat zone tint.
-- **L3 car + collision + play** — ⛔ not built (sloop has the car; not wired in).
+- **L1 city layout** — ✅ zones done (RCI land-use field) + ✅ **street grid** (nested
+  local/avenue lattice carving blocks, density emergent from urbanity).
+- **L2 block contents** — 🔨 **mostly built** (2026-06-14): street grid + building
+  **lots** (`lot_color`), grid aligned to arterials (`city_dir`/`align` slider), and
+  arterials **carved through** as real road surface via the **`road_at()` query seam**.
+  Still ⛔: farm *fields*, park contents (the football field), parking, and footprints as
+  real *collidable* rects (today lots are colour only; FARM/PARK still flat tint).
+- **L3 car + collision + play** — ⛔ not built, **but `road_at()` now exists** — the seam
+  sloop will drive on. Wiring it in is rung 4 (the next leap).
 
 **So: we built the *world/map* thoroughly and prototyped the *street zoning* in a
 lens. We did NOT build the part you actually drive.** GTA1 itself was one dense city;
@@ -98,10 +103,14 @@ may not fit 2D top-down).
   mode, temporarily flip `static int mode = 0 → 1`, bake, revert).
 
 ## Next steps (in recommended order)
-1. **L2 blocks** — turn a zone *tile* into real contents: building footprints
-   (collision-ready), parks / the football field, parking lots, farm fields — each a
-   function of `(block coords, zone)`. Align the street grid to the arterials.
-   Iterate live under the magnifier.
+1. **L2 blocks** — 🔨 *street grid + building lots + grid-aligned-to-arterials +
+   `road_at()` & arterials-carved-through done (2026-06-14, see [`roadnet.md`](roadnet.md)
+   → "L2 block contents" / "Aligned to the arterials" / "`road_at()` + arterials carved
+   through")*. The street level is now **queryable** (`road_at` → `{on_road,cls,zone}`,
+   the seam sloop drives on) and arterials carve through the blocks as real road surface
+   (renderer calls `road_at`, so screen == collision). Remaining: farm *fields*, park
+   contents (the football field), parking; footprints as collision-ready rects (today
+   lots are colour only). Iterate live under the magnifier.
 2. **Landmarks** — gas / hospital / gun-shop point POIs (deferred from rung 3; they
    want gameplay context).
 3. **Rung 4 — drive it** — wire `road_at()` into `sloop`, drop the L2 city into hub
