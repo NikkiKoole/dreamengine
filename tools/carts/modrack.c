@@ -35,7 +35,7 @@ const char *SCALES[6] = { "maj","min","pen","pnm","blu","chr" };
 enum { MOD_CLOCK, MOD_LFO, MOD_SH, MOD_QUANT, MOD_VOICE, MOD_EUCLID, MOD_ENV, MOD_DRUM,
        MOD_SLEW, MOD_ATTN, MOD_LOGIC, MOD_SCOPE, MOD_KEYS, MOD_TURING, MOD_GRIDS, MOD_MARBLES, MOD_MATHS,
        MOD_SEQ, MOD_VIBRATO, MOD_CHANCE, MOD_MACRO, MOD_XPOSE, MOD_MIX, MOD_CMP, MOD_DIV, MOD_ADSR,
-       MOD_RVB, MOD_ECHO, MOD_DRIVE, MOD_CRUSH, MOD_SAT, MOD_WAH, MOD_VOWEL, MOD_EQ, MOD_FILT, NTYPE };   // RVB..FILT = FX (see apply_master_fx). WAH/VOWEL/EQ dual-mode; SAT/FILT master-only
+       MOD_RVB, MOD_ECHO, MOD_DRIVE, MOD_CRUSH, MOD_SAT, MOD_WAH, MOD_VOWEL, MOD_EQ, MOD_FILT, MOD_GRAINS, NTYPE };   // RVB..GRAINS = FX (see apply_master_fx). dual-mode except SAT/FILT (master-only)
 enum { FMT_INT, FMT_F1, FMT_SCALE, FMT_NOTE, FMT_MS, FMT_LOGIC, FMT_WAVE, FMT_FILTER, FMT_DEST, FMT_ENGINE, FMT_OCT, FMT_DIV, FMT_PCT, FMT_DRIVE };
 
 typedef struct { int type; bool out; int dx, dy; const char *label; } JackDef;   // type: 0 gate/1 pitch/2 cv
@@ -149,6 +149,11 @@ ModType TYPES[NTYPE] = {
     // inlet SWEEPS the cutoff, so patch an LFO/ENV → a filter sweep on the whole mix. mode lp/hp/bp/nt.
     [MOD_FILT]  = { "FILT", CLR_TRUE_BLUE, 5, 6, 1, {{2,false,30,60,"cv"}},
                     3, {{"mode",0,3.99f,0,12,30,FMT_FILTER},{"cut",100,12000,1200,30,30,FMT_INT},{"res",0,1,0.3f,48,30,FMT_F1}} },
+    // GRAINS = granular cloud (capture + scatter the recent past). Dual-mode. size=grain length,
+    // dens=grains/sec, mix=wet; position/scatter/feedback fixed to an evolving-cloud voicing. cv→mix.
+    // POOL-LIMITED: master + one part at a time (a 2nd patched CLOUD won't get a bus).
+    [MOD_GRAINS]= { "CLOUD", CLR_LIGHT_PEACH, 5, 6, 2, {{2,false,30,60,"cv"},{3,false,4,16,"in"}},
+                    3, {{"size",20,400,120,12,30,FMT_INT},{"dens",4,60,16,30,30,FMT_INT},{"mix",0,1,0.5f,48,30,FMT_F1}} },
 };
 // knob-index names for the multi-knob sound modules — MUST stay in the same order as the
 // knob arrays in TYPES[] above. Use these instead of raw numbers in eval/presets: a
@@ -169,6 +174,7 @@ enum { WHK_RATE, WHK_RES, WHK_MIX };                               // MOD_WAH kn
 enum { VWK_VOW, VWK_Q, VWK_MIX };                                  // MOD_VOWEL knobs
 enum { EQK_LO, EQK_MID, EQK_HI };                                  // MOD_EQ knobs
 enum { FLK_MODE, FLK_CUT, FLK_RES };                               // MOD_FILT knobs
+enum { GRK_SIZE, GRK_DENS, GRK_MIX };                              // MOD_GRAINS knobs
 
 int tw(int type) { return TYPES[type].cw * CELL; }   // module pixel width/height
 int th(int type) { return TYPES[type].ch * CELL; }
@@ -210,6 +216,7 @@ const char *HELP[NTYPE][3] = {
     [MOD_VOWEL]  = { "Vowel/formant filter: makes it 'talk'. vow", "morphs a->e->i->o->u, q=sharpness, mix=wet.", "cv->vow (LFO it = wow-wee-wow). ~ in = per part." },
     [MOD_EQ]     = { "3-band EQ (tone). lo/mid/hi = boost or cut", "in dB (the only BOOST in the rack). cv->hi", "(brightness). Patch a ~ in = EQ just that part." },
     [MOD_FILT]   = { "DJ filter: sweep the WHOLE mix. mode=lp/hp/", "bp/nt, cut=cutoff, res=peak. Patch an LFO/ENV", "into cv to SWEEP the cutoff (the build/drop)." },
+    [MOD_GRAINS] = { "Granular CLOUD: sprays grains of the recent", "past. size=grain len, dens=grains/sec, mix=wet.", "~ in = cloud one part (pool: master + 1 part)." },
 };
 
 // ── module instances + cables ──
@@ -810,8 +817,8 @@ void init(void) {
     // master FX chain: the SAT/CRUSH/ECHO/VERB modules drive these master inserts (in this order
     // — saturate → bitcrush → delay → space). All idle at mix 0 until a module is present, so a
     // rack with no FX module is byte-identical clean. (Per-voice DRIVE isn't a bus insert.)
-    int mfx[] = { FX_FILTER, FX_FORMANT, FX_WAH, FX_EQ, FX_DRIVE, FX_CRUSH, FX_ECHO, FX_REVERB };
-    fx_order(0, mfx, 8);
+    int mfx[] = { FX_FILTER, FX_FORMANT, FX_WAH, FX_EQ, FX_DRIVE, FX_CRUSH, FX_GRAINS, FX_ECHO, FX_REVERB };
+    fx_order(0, mfx, 9);
 
     preset_generative();
 }
@@ -1131,8 +1138,8 @@ static int primary_of(int type) { for (int i = 0; i < nmod; i++) if (mod[i].type
 
 #define FX_AUDIO_IN 1   // FX modules: jack 0 = cv, jack 1 = audio-in (pink)
 static int kind_index(int t) { return t == MOD_RVB ? 0 : t == MOD_ECHO ? 1 : t == MOD_DRIVE ? 2 : t == MOD_CRUSH ? 3
-                                     : t == MOD_WAH ? 4 : t == MOD_VOWEL ? 5 : t == MOD_EQ ? 6 : -1; }   // FILT/SAT master-only
-#define NPFX 7   // per-part-capable FX kinds (0..6)
+                                     : t == MOD_WAH ? 4 : t == MOD_VOWEL ? 5 : t == MOD_EQ ? 6 : t == MOD_GRAINS ? 7 : -1; }   // FILT/SAT master-only
+#define NPFX 8   // per-part-capable FX kinds (0..7)
 // first module of `type` whose audio-in is NOT patched — that one drives the MASTER bus
 static int primary_master(int type) {
     for (int i = 0; i < nmod; i++) if (mod[i].type == type && cable_into(i, FX_AUDIO_IN) < 0) return i;
@@ -1158,7 +1165,8 @@ static void pfx_apply(int ki, int slot, float a, float b, float c) {
         case 3: instrument_crush(slot, a, 6.0f, c); break;                  // a=bits, c=mix (private bus)
         case 4: instrument_wah_lfo(slot, a, b, c); break;                   // a=rate, b=res, c=mix
         case 5: instrument_formant(slot, a, b, c); break;                   // a=vowel, b=q, c=mix
-        default:instrument_eq(slot, a, b, c); break;                        // a=lo, b=mid, c=hi (dB)
+        case 6: instrument_eq(slot, a, b, c); break;                        // a=lo, b=mid, c=hi (dB)
+        default:instrument_grains(slot, a, b, 0.85f, 0.4f, 0.5f, c); break; // a=size, b=dens, c=mix (pos/scat/fb fixed)
     }
 }
 static void pfx_off(int ki, int slot) {
@@ -1169,7 +1177,8 @@ static void pfx_off(int ki, int slot) {
         case 3: instrument_crush(slot, 8, 1, 0); break;
         case 4: instrument_wah_lfo(slot, 2, 0, 0); break;
         case 5: instrument_formant(slot, 0.3f, 0.5f, 0); break;
-        default:instrument_eq(slot, 0, 0, 0); break;
+        case 6: instrument_eq(slot, 0, 0, 0); break;
+        default:instrument_grains(slot, 120, 12, 0.85f, 0.4f, 0, 0); break;
     }
 }
 
@@ -1183,6 +1192,7 @@ void apply_master_fx(void) {
     static int ap_vow_v = -1, ap_vow_q = -1, ap_vow_mix = -1;
     static int ap_eq_lo = -999, ap_eq_mid = -999, ap_eq_hi = -999;
     static int ap_fl_mode = -1, ap_fl_cut = -1, ap_fl_res = -1;
+    static int ap_gr_size = -1, ap_gr_dens = -1, ap_gr_mix = -1;
     // per-part (pink-cable) state: applied last frame? + last quantized a/b/c, per (kind, slot)
     static unsigned char fx_on[NPFX][32];
     static int fx_qa[NPFX][32], fx_qb[NPFX][32], fx_qc[NPFX][32];
@@ -1203,7 +1213,8 @@ void apply_master_fx(void) {
             case 3:  a = mod[i].param[CRK_BITS]; b = 0; c = clamp(mod[i].param[CRK_MIX] + cv, 0, 1); break;
             case 4:  a = mod[i].param[WHK_RATE]; b = mod[i].param[WHK_RES]; c = clamp(mod[i].param[WHK_MIX] + cv, 0, 1); break;  // WAH
             case 5:  a = clamp(mod[i].param[VWK_VOW] + cv, 0, 1); b = mod[i].param[VWK_Q]; c = mod[i].param[VWK_MIX]; break;     // VOWEL: cv→vowel
-            default: a = mod[i].param[EQK_LO]; b = mod[i].param[EQK_MID]; c = clamp(mod[i].param[EQK_HI] + cv * 6.0f, -12, 12); break;  // EQ: cv→hi (brightness)
+            case 6:  a = mod[i].param[EQK_LO]; b = mod[i].param[EQK_MID]; c = clamp(mod[i].param[EQK_HI] + cv * 6.0f, -12, 12); break;  // EQ: cv→hi (brightness)
+            default: a = mod[i].param[GRK_SIZE]; b = mod[i].param[GRK_DENS]; c = clamp(mod[i].param[GRK_MIX] + cv, 0, 1); break;        // GRAINS: cv→mix
         }
         int qa = (int)(a * 100), qb = (int)(b * 100), qc = (int)(c * 100);
         for (int j = 0; j < ns; j++) {
@@ -1306,6 +1317,14 @@ void apply_master_fx(void) {
         int cq = (int)(cut / 80), rq = q64(res);   // cutoff quantized to ~80Hz steps
         if (mode != ap_fl_mode || cq != ap_fl_cut || rq != ap_fl_res) { filter(mode, cut, res); ap_fl_mode = mode; ap_fl_cut = cq; ap_fl_res = rq; }
     } else if (ap_fl_mode != -1) { filter(0, 1000, 0); ap_fl_mode = ap_fl_cut = ap_fl_res = -1; }   // FILTER_OFF
+
+    // GRAINS — master granular cloud on the whole mix (pos/scat/fb fixed to an evolving voicing). cv→mix.
+    if ((mi = primary_master(MOD_GRAINS)) >= 0) {
+        float size = mod[mi].param[GRK_SIZE], dens = mod[mi].param[GRK_DENS];
+        float mix = clamp(mod[mi].param[GRK_MIX] + read_in(mi, 0), 0, 1);
+        int zq = (int)(size / 8), dq = (int)dens, mq = q64(mix);
+        if (zq != ap_gr_size || dq != ap_gr_dens || mq != ap_gr_mix) { grains(size, dens, 0.85f, 0.4f, 0.5f, mix); ap_gr_size = zq; ap_gr_dens = dq; ap_gr_mix = mq; }
+    } else if (ap_gr_mix != -1) { grains(120, 12, 0.85f, 0.4f, 0, 0); ap_gr_size = ap_gr_dens = ap_gr_mix = -1; }
 }
 
 void update(void) {
@@ -1550,6 +1569,8 @@ void draw_extras(int mi) {
                           rectfill(x + 8, y + 46, W - 16, 3, CLR_BLACK); rectfill(x + 8, y + 46, (int)(v * (W - 16)), 3, CLR_DARK_PEACH); break; }
         case MOD_FILT:  { float c = clamp((m->param[FLK_CUT] + read_in(mi, 0) * 8000.0f) / 13000.0f, 0, 1);   // bar tracks the cutoff sweep
                           rectfill(x + 8, y + 46, W - 16, 3, CLR_BLACK); rectfill(x + 8, y + 46, (int)(c * (W - 16)), 3, CLR_TRUE_BLUE); break; }
+        case MOD_GRAINS:{ float w = clamp(m->param[GRK_MIX] + read_in(mi, 0), 0, 1);
+                          rectfill(x + 8, y + 46, W - 16, 3, CLR_BLACK); rectfill(x + 8, y + 46, (int)(w * (W - 16)), 3, CLR_LIGHT_PEACH); break; }
     }
 }
 

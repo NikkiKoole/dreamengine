@@ -168,8 +168,8 @@ Cables draw as a drooping bezier curve. A small bright dot pulses down the cable
 
 ## FX modules + per-part routing (2026-06-14)
 
-The FX modules — **VERB, ECHO, DRIVE, CRUSH, WAH, VOWEL, EQ** (dual-mode) and **SAT, FILT**
-(master-only) — effect the sound. They don't sit in a CV patch; they configure the engine's FX.
+The FX modules — **VERB, ECHO, DRIVE, CRUSH, WAH, VOWEL, EQ, CLOUD** (dual-mode) and **SAT, FILT**
+(master-only) — effect the sound. (CLOUD = granular; pool-limited to master + one part at a time.) They don't sit in a CV patch; they configure the engine's FX.
 The dual-mode ones each have a **pink audio-in** jack, and VOICE / MACRO / DRUM each grew a **pink
 audio-out**. The pink cable carries no value; it just says *which part feeds which effect*:
 
