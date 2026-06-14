@@ -757,10 +757,38 @@ void preset_electronium(void) {  // Raymond Scott homage — his Electronium was
     add_cable(ck, 0, mb, 0); add_cable(mb, 1, dr, 1); add_cable(mb, 2, vo, 3);
     add_cable(ck, 1, dr, 0); add_cable(ck, 0, dr, 2);                    // kick on /2, hat every step
 }
+void preset_bandito(void) {      // Raymond Scott's drum machine was named "Bandito the Bongo Artist".
+                                 // GRIDS is the pattern brain → the kit; a MACRO MALLET plays tuned
+                                 // hand-percussion on the snare pattern; a TURING→XPOSE bassline locks
+                                 // to the kick. Run dirty through SAT. A little rhythm-bot.
+    note_off_all(); nmod = 0; ncable = 0; palette_scroll = 0;
+    int ck = spawn(MOD_CLOCK, bayx(0), bayy(0)), gr = spawn(MOD_GRIDS,  bayx(1), bayy(1));
+    int dr = spawn(MOD_DRUM,  bayx(2), bayy(2)), tm = spawn(MOD_TURING, bayx(3), bayy(3));
+    int qt = spawn(MOD_QUANT, bayx(4), bayy(4)), xp = spawn(MOD_XPOSE,  bayx(5), bayy(5));
+    int vo = spawn(MOD_VOICE, bayx(6), bayy(6)), mc = spawn(MOD_MACRO,  bayx(7), bayy(7));
+    int sa = spawn(MOD_SAT,   bayx(8), bayy(8));
+    mod[ck].param[CK_BPM] = 100; mod[ck].param[CK_SWG] = 0.12f;          // shuffle for a hand-played feel
+    mod[gr].param[0] = 0.3f; mod[gr].param[1] = 0.62f;                   // map / fill — a busy-ish kit
+    mod[tm].param[0] = 0.3f; mod[tm].param[1] = 8;
+    mod[qt].param[0] = SCALE_PENTA_MIN;
+    mod[xp].param[0] = -1;                                              // bass an octave down
+    mod[vo].param[VK_CUT] = 350; mod[vo].param[VK_RES] = 6; mod[vo].param[VK_WAV] = 0; mod[vo].param[VK_FENV] = 1000;  // punchy pluck bass
+    mod[mc].param[MK_ENG] = 1;                                          // MALLET = tuned hand-percussion (the bongos)
+    mod[mc].param[MK_HARM] = 0.4f; mod[mc].param[MK_TIMB] = 0.5f; mod[mc].param[MK_MORPH] = 0.5f; mod[mc].param[MK_DRV] = 0.2f;
+    mod[sa].param[SATK_AMT] = 0.4f; mod[sa].param[SATK_MODE] = 3; mod[sa].param[SATK_MIX] = 0.8f;   // dirty analog glue
+    // GRIDS pattern → the kit
+    add_cable(ck, 0, gr, 0); add_cable(gr, 1, dr, 0); add_cable(gr, 2, dr, 1); add_cable(gr, 3, dr, 2);
+    add_cable(gr, 2, mc, 0);                                            // snare pattern also fires the bongos
+    add_cable(gr, 1, vo, 0);                                            // bass locks to the kick
+    // melody source → bass (down an octave) + bongo pitch (mid register)
+    add_cable(ck, 0, tm, 0); add_cable(tm, 1, qt, 0);
+    add_cable(qt, 1, xp, 0); add_cable(xp, 1, vo, 1);
+    add_cable(qt, 1, mc, 1);
+}
 
-const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad", "PD reso", "Organ jam", "Space dub", "Sat bus", "Split FX", "Filter jam", "Tides", "Electronium" };
-void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad, preset_pdreso, preset_organ, preset_spacedub, preset_satbus, preset_splitfx, preset_filterjam, preset_tides, preset_electronium };
-#define NPRESET 32
+const char *PRESET_NAMES[] = { "Empty", "Generative", "Acid bass", "Beats", "Keys synth", "PWM pad", "Turing", "Grids beat", "Marbles", "Maths sweep", "Env pluck", "Zap lead", "Punch (VCA)", "Glide", "BP acid", "Notch phaser", "Seq melody", "Vibrato", "Chance gates", "Macro voice", "Mix mod", "Clockless", "Polymeter", "ADSR pad", "PD reso", "Organ jam", "Space dub", "Sat bus", "Split FX", "Filter jam", "Tides", "Electronium", "Bandito" };
+void (*PRESET_FN[])(void) = { preset_empty, preset_generative, preset_acid, preset_beats, preset_keys, preset_pwmpad, preset_turing, preset_grids, preset_marbles, preset_maths, preset_envpluck, preset_zaplead, preset_punch, preset_glide, preset_bpacid, preset_notchphaser, preset_seq, preset_vibe, preset_chance, preset_macro, preset_mix, preset_clockless, preset_polymeter, preset_adsrpad, preset_pdreso, preset_organ, preset_spacedub, preset_satbus, preset_splitfx, preset_filterjam, preset_tides, preset_electronium, preset_bandito };
+#define NPRESET 33
 
 // ── persistence ──
 typedef struct { int type, x, y; float param[8]; } SaveMod;
