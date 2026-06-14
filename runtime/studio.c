@@ -308,8 +308,6 @@ static int         replay_n   = 0;
 static int         replay_i   = 0;       // next event to apply
 
 static FILE   *trace_file     = NULL;    // --trace: one JSONL line of watch() state per frame
-static FILE   *uiaudit_file   = NULL;    // --uiaudit: one JSONL line of draw bounding boxes per frame
-static const char *uiaudit_path = NULL;
 static int     dump_every     = 0;       // --dump-every: 0 = off, else export every Nth frame
 static char    dump_dir[256]  = {0};     // --dump: directory for filmstrip PNGs
 static int     max_frames     = 0;       // --frames: stop after N frames (0 = run until close)
@@ -450,6 +448,11 @@ static int   clip_cx = 0, clip_cy = 0, clip_cw = 0, clip_ch = 0;  // active scis
 typedef struct { char kind; short x, y, w, h; unsigned char clip; char text[64]; } UiAuditRec;
 static UiAuditRec uiaudit_recs[UIAUDIT_MAX];
 static int        uiaudit_n = 0;
+// declared here (NOT under #ifndef PLATFORM_WEB) so the audit fns below compile in web/release too —
+// web never passes --uiaudit, so uiaudit_path stays NULL, the file is never opened, and every audit
+// fn early-returns (a no-op). Keeps the web build green without web-guarding each call site.
+static FILE       *uiaudit_file = NULL;   // --uiaudit JSONL output (native only; NULL elsewhere)
+static const char *uiaudit_path = NULL;   // set by --uiaudit <file>
 
 static void uiaudit_box(char kind, int x, int y, int w, int h, const char *text) {
     if (!uiaudit_file || uiaudit_n >= UIAUDIT_MAX) return;
