@@ -1227,10 +1227,13 @@ v1, document it on the panel.
    (crush the drums, leave the lead hi-fi). Bit-depth = floor to 2^bits levels; rate = sample-
    and-hold every Nth sample. Applied last in both the per-bus insert loop and the master chain,
    before the soft-clip; dormant until first call (mix 0 = off), so non-users stay byte-identical.
-   `floorf` quantization adds a small negative DC bias at low bits (~−0.014 @ bits 5) — kept as
-   on-brand lo-fi character (navkit ships it the same way). Showcase: `bitcrush.c` (master vs
-   per-instrument on a clean lead over a crushed bass). Verified: OFF/MASTER/BASS-ONLY renders
-   all distinct + clean (0 clipped, no NaN).
+   Quantization is **round-to-nearest** (`floorf(x*levels + 0.5f)`), symmetric about zero.
+   *(2026-06-14: was `floorf(x*levels)` = truncate-toward−∞, which added a ~−0.014 @ 5-bit negative
+   DC bias AND held a decaying note's negative half at a constant −1-LSB level — so a crushed tail
+   buzzed at fixed amplitude instead of fading, then snapped off when the voice gated. Round-to-nearest
+   fixes both: sub-½-LSB samples → true 0, so the tail fades to silence; DC measured −0.0148 → −0.0002
+   on the `bitcrush` render.)* Showcase: `bitcrush.c` (master vs per-instrument on a clean lead over a
+   crushed bass). Verified: OFF/MASTER/BASS-ONLY renders all distinct + clean (0 clipped, no NaN).
 6. **Cart-side, no engine change: swing knob on CLOCK** (`schedule_hit` already
    keeps the timing), **darker DRUM voices** (909 kick = longer sine + pitch
    env — the "Punch (VCA)" preset recipe, baked in).

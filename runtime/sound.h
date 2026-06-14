@@ -752,8 +752,8 @@ static void crush_process(int b, float *mixL, float *mixR) {
     if (++crush_cnt[b] >= (int)crush_rate[b]) {        // sample-rate reduction: re-sample every `rate`
         crush_cnt[b] = 0;
         float levels = powf(2.0f, crush_bits[b]);      // bit-depth reduction: quantize to 2^bits steps
-        crush_holdL[b] = floorf(*mixL * levels) / levels;
-        crush_holdR[b] = floorf(*mixR * levels) / levels;
+        crush_holdL[b] = floorf(*mixL * levels + 0.5f) / levels;   // round-to-nearest (symmetric): no DC
+        crush_holdR[b] = floorf(*mixR * levels + 0.5f) / levels;   // bias, and a decaying tail fades to 0
     }
     float mix = crush_mix[b];
     *mixL = dryL * (1.0f - mix) + crush_holdL[b] * mix;

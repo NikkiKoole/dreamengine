@@ -255,8 +255,9 @@ call (mix 0 = off). **Showcase: `bitcrush`** (its scope doubles as an XY pad —
 | subtle dirt | `crush(10.0f, 2.0f, 0.5f)` | a touch of aliasing whine + step, mostly clean | `bitcrush` |
 | lo-fi just the bass | `instrument_crush(I_BASS, 5.0f, 6.0f, 1.0f)` | crush ONE part (the bass) while the lead stays crystal — the point of the per-instrument bus | `bitcrush` |
 
-> ⚠ `floorf` quantization adds a small negative DC bias at low bits (~−0.014 @ bits 5) — kept as
-> on-brand lo-fi character, not blocked. See [`audio-notes.md §17`](../design/audio-notes.md).
+> Quantization is round-to-nearest (`floorf(x·levels + 0.5f)`), symmetric about zero — no DC bias,
+> and a decaying note fades to true silence through the crusher (the old truncating `floorf` held the
+> tail at a constant −1-LSB buzz until the voice gated). See [`audio-notes.md §17`](../design/audio-notes.md).
 
 ## EQ — `eq(low_gain, mid_gain, high_gain)` · `instrument_eq(slot, low_gain, mid_gain, high_gain)`
 
