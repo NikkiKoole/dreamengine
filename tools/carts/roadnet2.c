@@ -446,14 +446,19 @@ static void stroke_dashes(int n) {
 }
 
 // Draw one classified link for a phase: 0 = casing, 1 = centre (+ centre-line markings).
+// real carriageway HALF-widths in METRES, by class (motorway→dirt). Drawn at hw·P pixels so a
+// road is true-width when you drive (car sits in its lane) yet floors to 1px on the overview map.
+static const float ROAD_HW_M[5] = { 12.0f, 7.0f, 5.0f, 3.5f, 2.5f };
 static void draw_link(int n, int cls, int phase) {
     const RStyle *s = &RS[cls];
+    int r = (int)(ROAD_HW_M[cls] * P); if (r < 1) r = 1;     // metre half-width → px (floored)
     if (phase == 0) {
-        stroke_path(n, s->r, s->casing, CLR_BROWN);      // bridge deck casing = brown
+        stroke_path(n, r, s->casing, CLR_BROWN);             // casing/full width (brown over water = bridge)
     } else {
-        int cr = s->r - 1;
-        if (cr >= 1) stroke_path(n, cr, s->centre, CLR_WHITE);   // bridge deck = white
-        if (s->mark && zoom >= 0.7f) stroke_dashes(n);
+        int sh = (int)(1.5f * P); if (sh < 1) sh = 1;        // shoulder/kerb inset
+        int cr = r - sh;
+        if (cr >= 1) stroke_path(n, cr, s->centre, CLR_WHITE);   // carriageway (white over water = bridge)
+        if (s->mark && zoom >= 0.7f) stroke_dashes(n);       // centre dashes (drive zoom)
     }
 }
 

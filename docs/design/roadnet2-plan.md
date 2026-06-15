@@ -146,10 +146,14 @@ edges now), the field↔graph extraction step (graph is generated directly, not 
      `hub_cs`); zoom range re-spanned (`ZMIN 0.0008` continental … `OVERVIEW_ZOOM 0.012` town net …
      `DRIVE_ZOOM 1.5`); car speed real (`CAR_MAXSPD 0.6` → **~130 km/h, verified the HUD reads ~118
      not 10,000**); car + 20 m grid metre-sized; spawn moved to land. Terrain rescaled cleanly.
-   - ⛔ *Polish still open:* **metre-width road rendering** (roads are still px-stroked → thin lines,
-     so the car doesn't visibly sit in a lane); the reference **grid is faint** (bump contrast);
-     road **density/visibility** at this scale wants a tuning pass (towns can be sparse in a given
-     spot); and **scope** (~500 km) still to commit. None block driving — these are feel-tuning.
+   - ✅ **Metre-width roads** — `ROAD_HW_M[class]` (motorway 12 … dirt 2.5 m half-width) drawn at
+     `hw·P` px, floored to 1px so they stay visible on the map. The car now sits *on* a real-width
+     road. (Also fixed the post-rebase **hang**: the bend-search + road strokers had loops that step
+     in world units — scaled them so loop counts stay constant; `BEND_STEP`, off-screen-span skip.)
+   - ⛔ *Polish still open:* the reference **grid is faint** (and too dense at mid-zooms); road
+     **density** wants a tuning pass (towns sparse in spots); hub **junctions look blobby** at drive
+     zoom (overlapping wide roads + node marker); widths may be a touch wide; **scope** (~500 km) to
+     commit. None block driving.
 3. **Unified `road_at` = nearest-edge** over the *highway* edges first (prove the query +
    spatial index on the tier we already have), render as strokes. No field anywhere.
 4. **Collector tier as a warped grid**, generated directly as spline edges into the graph,
