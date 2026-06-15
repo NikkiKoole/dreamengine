@@ -30,12 +30,22 @@
 enum { E_PATROL, E_HUNT, E_ENGAGE, E_SEARCH, E_DOWN };
 static const int ECOL[5] = { CLR_DARK_GREY, CLR_ORANGE, CLR_RED, CLR_YELLOW, CLR_BLACK };
 
-static unsigned char wall[GH][GW];
+// enemy types — distinct tactics. range = preferred firing distance; coverW/heatW
+// = how much it values cover / fears your aim cone; strafeW = how much it circles.
+enum { TY_RUSH, TY_CAMP, TY_FLANK, NTY };
+typedef struct { char g; int hp, mag, gap; float range, coverW, heatW, speed, strafeW, spread; } EType;
+static const EType TY[NTY] = {
+    { 'R', 26,  6, 16, 26,  0.4f, 2.5f, 1.45f, 0.5f, 18 },   // rusher  — charges in close, sprays, ignores danger
+    { 'C', 34, 10, 26, 96,  3.5f, 7.0f, 0.62f, 0.1f, 8  },   // camper  — holds cover at long range, accurate, slow
+    { 'F', 30,  8, 22, 60,  1.3f, 9.0f, 1.15f, 1.5f, 13 },   // flanker — circles to your sides, dodges the cone
+};
+
+static unsigned char cell[GH][GW];  // 0 floor · 1 FULL cover (blocks move+LOS+bullets) · 2 LOW cover (blocks move only)
 static float flow[GH][GW];          // Dijkstra from last-known player cell
 static float heat[GH][GW];          // danger projected by the player's aim cone
 
 typedef struct { float x, y, vx, vy, aim; int hp, mag, reload, shake, spectate; } Player;
-typedef struct { float x, y, aim; int hp, alive, state, shootcd, mag, reload, callcd; } Enemy;
+typedef struct { float x, y, aim; int hp, alive, state, shootcd, mag, reload, callcd, type, strafe, strafeT; } Enemy;
 typedef struct { float x, y, vx, vy; int alive, foe; } Bullet;
 static Player pl;
 static Enemy en[NE];
@@ -54,11 +64,18 @@ static void voices_tick(void) { for (int i = 0; i < 16; i++) if (voices[i].ttl >
 static float panx(float x) { return x / SCREEN_W * 2 - 1; }
 
 // ---- geometry --------------------------------------------------------------
-static bool wallpx(float x, float y) { int cx = (int)(x/TILE), cy = (int)(y/TILE); return cx<0||cx>=GW||cy<0||cy>=GH||wall[cy][cx]; }
-static bool wcell(int x, int y) { return x<0||x>=GW||y<0||y>=GH||wall[y][x]; }
-static bool los_px(float x0, float y0, float x1, float y1) {       // sample the segment for walls
+static bool wallpx(float x, float y) { int cx = (int)(x/TILE), cy = (int)(y/TILE); return cx<0||cx>=GW||cy<0||cy>=GH||cell[cy][cx]!=0; }   // SOLID (full+low) — movement & nav
+static bool wcell(int x, int y) { return x<0||x>=GW||y<0||y>=GH||cell[y][x]!=0; }                                                          // SOLID
+static bool opaquepx(float x, float y) { int cx = (int)(x/TILE), cy = (int)(y/TILE); return cx<0||cx>=GW||cy<0||cy>=GH||cell[cy][cx]==1; } // blocks LOS + bullets (FULL only)
+static bool islow(int x, int y) { return x>=0&&x<GW&&y>=0&&y<GH&&cell[y][x]==2; }
+// is there LOW cover on the side of (x,y) facing direction (dirx,diry)? (= cover between you and a threat there)
+static bool low_facing(float x, float y, float dirx, float diry) {
+    int cx=(int)(x/TILE), cy=(int)(y/TILE), sx = dirx>0?1:dirx<0?-1:0, sy = diry>0?1:diry<0?-1:0;
+    return (sx && islow(cx+sx,cy)) || (sy && islow(cx,cy+sy)) || (sx && sy && islow(cx+sx,cy+sy));
+}
+static bool los_px(float x0, float y0, float x1, float y1) {       // FULL cover blocks sight; you see OVER low cover
     float dx = x1-x0, dy = y1-y0, d = fsqrt(dx*dx+dy*dy); int n = (int)(d/4)+1;
-    for (int i = 1; i < n; i++) { float t = (float)i/n; if (wallpx(x0+dx*t, y0+dy*t)) return false; }
+    for (int i = 1; i < n; i++) { float t = (float)i/n; if (opaquepx(x0+dx*t, y0+dy*t)) return false; }
     return true;
 }
 static float angnorm(float a) { while (a > 180) a -= 360; while (a < -180) a += 360; return a; }
@@ -68,7 +85,7 @@ static void relax(float f[GH][GW]) {
     bool ch = true; int g = 0;
     while (ch && g++ < GW*GH) { ch = false;
         for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) {
-            if (wall[y][x]) continue; float b = f[y][x];
+            if (cell[y][x]) continue; float b = f[y][x];
             for (int dy=-1; dy<=1; dy++) for (int dx=-1; dx<=1; dx++) {
                 if (!dx&&!dy) continue; if (wcell(x+dx,y+dy)) continue;
                 if (dx&&dy&&(wcell(x+dx,y)||wcell(x,y+dy))) continue;
@@ -116,14 +133,19 @@ static void fire(float x, float y, float aim, int foe, float spread) {
 
 // ---- setup -----------------------------------------------------------------
 static void reset(void) {
-    for (int y=0;y<GH;y++) for (int x=0;x<GW;x++) wall[y][x] = (x==0||y==0||x==GW-1||y==GH-1);
-    // scattered cover blocks (the arena)
+    for (int y=0;y<GH;y++) for (int x=0;x<GW;x++) cell[y][x] = (x==0||y==0||x==GW-1||y==GH-1);
+    // FULL cover blocks (the arena walls)
     int bx[]={8,8,18,18,28,30,14,24,33,6}, by[]={5,15,9,18,5,16,12,12,20,9}, bw[]={3,4,2,5,4,3,2,2,3,2}, bh[]={4,2,5,2,3,2,2,3,2,4};
-    for (int b=0;b<10;b++) for (int y=by[b]; y<by[b]+bh[b] && y<GH-1; y++) for (int x=bx[b]; x<bx[b]+bw[b] && x<GW-1; x++) wall[y][x]=1;
+    for (int b=0;b<10;b++) for (int y=by[b]; y<by[b]+bh[b] && y<GH-1; y++) for (int x=bx[b]; x<bx[b]+bw[b] && x<GW-1; x++) cell[y][x]=1;
+    // LOW cover (crates you shoot OVER) scattered in the open midfield
+    int lx[]={12,16,22,26,11,21,31,35,15,27,7,34}, ly[]={6,14,4,19,18,10,8,15,8,17,12,4};
+    for (int b=0;b<12;b++) if (!cell[ly[b]][lx[b]]) cell[ly[b]][lx[b]] = 2;
     pl = (Player){ TILE*3, TILE*(GH/2), 0, 0, 0, 100, 12, 0, 0, pl.spectate };
     for (int i=0;i<NE;i++) {
-        int x,y,t=0; do { x=GW/2+rnd(GW/2-2); y=2+rnd(GH-4); t++; } while (wcell(x,y) && t<80);
-        en[i] = (Enemy){ x*TILE+4, y*TILE+4, 180, 30, 1, E_PATROL, 0, 8, 0, 0 };
+        int x,y,tr=0; do { x=GW/2+rnd(GW/2-2); y=2+rnd(GH-4); tr++; } while (wcell(x,y) && tr<80);
+        int t = i % NTY;                                   // 2 of each type for 6 enemies
+        en[i] = (Enemy){ x*TILE+4, y*TILE+4, 180, TY[t].hp, 1, E_PATROL, 0, TY[t].mag, 0, 0 };
+        en[i].type = t; en[i].strafe = rnd(2) ? 1 : -1; en[i].strafeT = rnd(120);
     }
     for (int i=0;i<NB;i++) bul[i].alive = 0;
     known = 0; kage = 999; flow_cx = -1; kills = 0; msg_t = 0;
@@ -148,6 +170,7 @@ static void move_enemy(Enemy *e, float ax, float ay, float spd) {
 static void enemy_update(int i) {
     Enemy *e = &en[i];
     if (!e->alive) return;
+    const EType *T = &TY[e->type];
     if (e->shootcd > 0) e->shootcd--;
     if (e->callcd > 0) e->callcd--;
     bool see = los_px(e->x, e->y, pl.x, pl.y) && !pl.spectate ? los_px(e->x,e->y,pl.x,pl.y) : los_px(e->x,e->y,pl.x,pl.y);
@@ -169,36 +192,43 @@ static void enemy_update(int i) {
 
     // --- act per state ---
     if (e->state == E_ENGAGE) {
-        // pick the best nearby firing stance: keep LOS, dodge the heat cone, hug
-        // cover, hold range, spread from squadmates  -> emergent flanking
+        // pick a firing stance per type: keep LOS, dodge the heat cone, hold the
+        // type's range, hug cover, circle (strafe), spread from squadmates.
+        if (--e->strafeT <= 0) { e->strafe = -e->strafe; e->strafeT = 60 + rnd(90); }
+        float perp = angle_to(pl.x, pl.y, e->x, e->y) + 90 * e->strafe;   // lateral-around-player dir
         float best = -1e9f, bx = e->x, by = e->y;
         for (int a=0;a<8;a++) {
-            float ox = e->x + dx(7, a*45), oy = e->y + dy(7, a*45);
+            float ang = a*45, ox = e->x + dx(9, ang), oy = e->y + dy(9, ang);
             if (wallpx(ox, oy) || enemy_at_px(ox, oy, i) >= 0) continue;
             int cx=(int)(ox/TILE), cy=(int)(oy/TILE);
             float od = fsqrt((pl.x-ox)*(pl.x-ox)+(pl.y-oy)*(pl.y-oy));
-            float sc = 0;
-            sc += los_px(ox,oy,pl.x,pl.y) ? 4 : -6;          // must be able to shoot
-            sc -= heat_at(ox,oy) * 6;                         // AVOID the aim cone -> flank
-            sc -= fabsf(od - 64) * 0.04f;                     // hold a firing range
-            if (near_cover(cx,cy)) sc += 1.5f;                // peek from cover
-            for (int j=0;j<NE;j++) if (j!=i && en[j].alive) { float dd=fsqrt((en[j].x-ox)*(en[j].x-ox)+(en[j].y-oy)*(en[j].y-oy)); if (dd<28) sc -= (28-dd)*0.1f; }
+            float sc = los_px(ox,oy,pl.x,pl.y) ? 4 : -7;     // must be able to shoot
+            sc -= heat_at(ox,oy) * T->heatW;                 // AVOID the aim cone -> flank
+            sc -= fabsf(od - T->range) * 0.05f;              // hold this type's range
+            if (near_cover(cx,cy)) sc += T->coverW;          // peek from any cover
+            if (low_facing(ox,oy, pl.x-ox, pl.y-oy)) sc += T->coverW + 1.5f;   // LOW cover facing you = protected firing spot
+            sc += T->strafeW * cos_deg(angnorm(ang - perp)); // circle the player
+            for (int j=0;j<NE;j++) if (j!=i && en[j].alive) { float dd=fsqrt((en[j].x-ox)*(en[j].x-ox)+(en[j].y-oy)*(en[j].y-oy)); if (dd<26) sc -= (26-dd)*0.12f; }
             if (sc > best) { best = sc; bx = ox; by = oy; }
         }
-        move_enemy(e, bx, by, 0.9f);
+        // hold position ONLY when already safe in cover (campers settle; rushers/
+        // flankers stay in motion because they're rarely "safe") — fixes the freeze
+        int ecx=(int)(e->x/TILE), ecy=(int)(e->y/TILE);
+        bool safe = heat_at(e->x,e->y) < 0.12f && near_cover(ecx,ecy) && los_px(e->x,e->y,pl.x,pl.y);
+        if (!safe) move_enemy(e, bx, by, T->speed);
         e->aim = angle_to(e->x, e->y, pl.x, pl.y);
         if (los_px(e->x,e->y,pl.x,pl.y) && e->shootcd <= 0 && e->mag > 0) {
-            fire(e->x, e->y, e->aim, 1, 14); e->mag--; e->shootcd = 22;
-            if (e->mag == 0) { e->reload = 70; }
+            fire(e->x, e->y, e->aim, 1, T->spread); e->mag--; e->shootcd = T->gap;
+            if (e->mag == 0) e->reload = 70;
         }
-        if (e->mag == 0) { if (--e->reload <= 0) e->mag = 8; }   // reload window = vulnerable
+        if (e->mag == 0) { if (--e->reload <= 0) e->mag = T->mag; }   // reload window = vulnerable
     } else if (e->state == E_HUNT) {                          // approach around cover via the flow field
         float bestf = flow[(int)(e->y/TILE)][(int)(e->x/TILE)], tx = e->x, ty = e->y;
         for (int a=0;a<8;a++) { float ox=e->x+dx(7,a*45), oy=e->y+dy(7,a*45); int cx=(int)(ox/TILE),cy=(int)(oy/TILE);
             if (wcell(cx,cy)||enemy_at_px(ox,oy,i)>=0) continue; if (flow[cy][cx] < bestf) { bestf=flow[cy][cx]; tx=ox; ty=oy; } }
-        move_enemy(e, tx, ty, 0.8f);
+        move_enemy(e, tx, ty, T->speed * 0.92f);
     } else if (e->state == E_SEARCH) {
-        move_enemy(e, kx, ky, 0.5f);
+        move_enemy(e, kx, ky, T->speed * 0.7f);
         if (fsqrt((kx-e->x)*(kx-e->x)+(ky-e->y)*(ky-e->y)) < 10) e->state = E_PATROL;
     } else {                                                  // PATROL: small idle drift
         if (rnd(40)==0) e->aim = rnd(360);
@@ -211,10 +241,17 @@ static void player_update(void) {
     if (pl.spectate) {                                        // autopilot: kite the nearest visible enemy
         int t=-1; float bd=1e9f;
         for (int i=0;i<NE;i++) if (en[i].alive && los_px(pl.x,pl.y,en[i].x,en[i].y)) { float d=(en[i].x-pl.x)*(en[i].x-pl.x)+(en[i].y-pl.y)*(en[i].y-pl.y); if (d<bd){bd=d;t=i;} }
-        if (t>=0) { pl.aim = angle_to(pl.x,pl.y,en[t].x,en[t].y);
+        if (t>=0) { pl.aim = angle_to(pl.x,pl.y,en[t].x,en[t].y);   // visible: kite + fire
             float perp = pl.aim+90, mx = dx(1.4f,perp)+dx(0.6f,pl.aim+180), my = dy(1.4f,perp)+dy(0.6f,pl.aim+180);
             if (!wallpx(pl.x+mx,pl.y)) pl.x+=mx; if (!wallpx(pl.x,pl.y+my)) pl.y+=my;
             if (pl.mag>0 && (tick%9==0)) { fire(pl.x,pl.y,pl.aim,0,6); pl.mag--; if(pl.mag==0) pl.reload=40; } }
+        else {                                                      // none visible: advance to make contact
+            int n=-1; float nd=1e9f;
+            for (int i=0;i<NE;i++) if (en[i].alive) { float d=(en[i].x-pl.x)*(en[i].x-pl.x)+(en[i].y-pl.y)*(en[i].y-pl.y); if (d<nd){nd=d;n=i;} }
+            if (n>=0) { pl.aim = angle_to(pl.x,pl.y,en[n].x,en[n].y);
+                float mx=dx(1.5f,pl.aim), my=dy(1.5f,pl.aim);
+                if (!wallpx(pl.x+mx,pl.y)) pl.x+=mx; if (!wallpx(pl.x,pl.y+my)) pl.y+=my; }
+        }
         if (pl.mag==0 && --pl.reload<=0) pl.mag=12;
         return;
     }
@@ -247,12 +284,17 @@ void update(void) {
     for (int i=0;i<NB;i++) {
         if (!bul[i].alive) continue;
         bul[i].x += bul[i].vx; bul[i].y += bul[i].vy;
-        if (wallpx(bul[i].x, bul[i].y)) { bul[i].alive = 0; continue; }
+        if (opaquepx(bul[i].x, bul[i].y)) { bul[i].alive = 0; continue; }   // full cover stops it; flies over low cover
         if (bul[i].foe) {
-            if (fabsf(bul[i].x-pl.x)<4 && fabsf(bul[i].y-pl.y)<4) { pl.hp -= 8; pl.shake=6; bul[i].alive=0; play_pan(34,INSTR_NOISE,4,panx(pl.x),6);
-                if (pl.hp<=0){ pl.hp=0; setmsg("you are down. R to retry."); } }
+            if (fabsf(bul[i].x-pl.x)<4 && fabsf(bul[i].y-pl.y)<4) {
+                bul[i].alive=0;
+                if (low_facing(pl.x,pl.y,-bul[i].vx,-bul[i].vy) && rnd(2)==0) play_pan(56,INSTR_MEMBRANE,2,panx(pl.x),4);  // crate ate it
+                else { pl.hp -= 8; pl.shake=6; play_pan(34,INSTR_NOISE,4,panx(pl.x),6); if (pl.hp<=0){ pl.hp=0; setmsg("you are down. R to retry."); } }
+            }
         } else for (int j=0;j<NE;j++) if (en[j].alive && fabsf(bul[i].x-en[j].x)<4 && fabsf(bul[i].y-en[j].y)<4) {
-            en[j].hp -= 12; bul[i].alive=0; play_pan(60,INSTR_MEMBRANE,3,panx(en[j].x),5);
+            bul[i].alive=0;
+            if (low_facing(en[j].x,en[j].y,-bul[i].vx,-bul[i].vy) && rnd(2)==0) { play_pan(56,INSTR_MEMBRANE,2,panx(en[j].x),4); break; }  // covered
+            en[j].hp -= 12; play_pan(60,INSTR_MEMBRANE,3,panx(en[j].x),5);
             if (en[j].hp<=0) { en[j].alive=0; en[j].state=E_DOWN; kills++; play_pan(40,INSTR_REED,3,panx(en[j].x),18); }
             break;
         }
@@ -275,7 +317,10 @@ void draw(void) {
         int h = heat[y][x] > 0.6f ? CLR_RED : heat[y][x] > 0.3f ? CLR_ORANGE : CLR_BROWN;
         rectfill(x*TILE+sh, y*TILE, TILE, TILE, h);
     }
-    for (int y=0;y<GH;y++) for (int x=0;x<GW;x++) if (wall[y][x]) rectfill(x*TILE+sh, y*TILE, TILE, TILE, CLR_DARK_GREY);
+    for (int y=0;y<GH;y++) for (int x=0;x<GW;x++) {
+        if (cell[y][x]==1) rectfill(x*TILE+sh, y*TILE, TILE, TILE, CLR_DARK_GREY);          // full cover: tall block
+        else if (cell[y][x]==2) { rectfill(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_BROWN); rect(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_ORANGE); }  // low cover: a crate
+    }
 
     // comms: a line from each seeing enemy to the shared known position
     if (show_comms && known) for (int i=0;i<NE;i++) if (en[i].alive && los_px(en[i].x,en[i].y,pl.x,pl.y))
@@ -286,10 +331,10 @@ void draw(void) {
     for (int i=0;i<NB;i++) if (bul[i].alive) {
         line((int)bul[i].x+sh,(int)bul[i].y,(int)(bul[i].x-bul[i].vx)+sh,(int)(bul[i].y-bul[i].vy), bul[i].foe?CLR_RED:CLR_YELLOW);
     }
-    // enemies (coloured by state) + aim tick
+    // enemies — glyph = TYPE (R/C/F), colour = STATE; + aim tick
     for (int i=0;i<NE;i++) { if (!en[i].alive) continue; int x=(int)en[i].x+sh, y=(int)en[i].y;
-        circfill(x,y,3,ECOL[en[i].state]);
-        line(x,y,(int)(en[i].x+dx(5,en[i].aim))+sh,(int)(en[i].y+dy(5,en[i].aim)),CLR_LIGHT_GREY);
+        line(x,y,(int)(en[i].x+dx(6,en[i].aim))+sh,(int)(en[i].y+dy(6,en[i].aim)),CLR_LIGHT_GREY);
+        print(str("%c", TY[en[i].type].g), x-2, y-3, ECOL[en[i].state]);
     }
     // player
     int px=(int)pl.x+sh, py=(int)pl.y;
@@ -305,6 +350,6 @@ void draw(void) {
     print_right(pl.spectate?"SPECTATE":(known?"SPOTTED":"hidden"), SCREEN_W-4, HUD_Y+2, known?CLR_RED:CLR_GREEN);
     font(FONT_SMALL);
     if (msg_t>0) print(msg, 4, HUD_Y+12, CLR_LIGHT_PEACH);
-    else print("WASD move  mouse aim  click shoot   H heat  L comms  TAB spectate  R reset", 4, HUD_Y+12, CLR_MEDIUM_GREY);
+    else print("R rusher  C camper  F flanker   WASD+mouse shoot  H heat  L comms  TAB spectate  Rkey reset", 4, HUD_Y+12, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 }
