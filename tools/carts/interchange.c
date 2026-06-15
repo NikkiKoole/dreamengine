@@ -61,10 +61,12 @@ static void road(const float *xs, const float *ys, int n, int hw, int casing, in
 // ── cubic Bézier ramp from A (heading dir aA) to B (heading dir aB), sampled into xs/ys.
 //    Control handles along the two tangents give a smooth merge curve.
 #define RN 14
+// kA = handle at A (highway) — long = a parallel off-ramp TAPER before peeling off;
+// kB = handle at B (overpass) — long = the ramp runs along the crossing road before merging.
 static void ramp_pts(float ax, float ay, float aA, float bx, float by, float aB,
-                     float k, float *xs, float *ys) {
-    float c1x=ax+c_deg(aA)*k, c1y=ay+s_deg(aA)*k;
-    float c2x=bx-c_deg(aB)*k, c2y=by-s_deg(aB)*k;
+                     float kA, float kB, float *xs, float *ys) {
+    float c1x=ax+c_deg(aA)*kA, c1y=ay+s_deg(aA)*kA;
+    float c2x=bx-c_deg(aB)*kB, c2y=by-s_deg(aB)*kB;
     for (int i=0;i<=RN;i++){
         float t=(float)i/RN, u=1-t;
         float w0=u*u*u, w1=3*u*u*t, w2=3*u*t*t, w3=t*t*t;
@@ -72,9 +74,9 @@ static void ramp_pts(float ax, float ay, float aA, float bx, float by, float aB,
         ys[i]=w0*ay + w1*c1y + w2*c2y + w3*by;
     }
 }
-static void draw_ramp(float ax,float ay,float aA, float bx,float by,float aB, float k) {
+static void draw_ramp(float ax,float ay,float aA, float bx,float by,float aB, float kA, float kB) {
     float xs[RN+1], ys[RN+1];
-    ramp_pts(ax,ay,aA, bx,by,aB, k, xs,ys);
+    ramp_pts(ax,ay,aA, bx,by,aB, kA,kB, xs,ys);
     road(xs, ys, RN+1, 6, CLR_DARKER_GREY, CLR_DARK_GREY);
 }
 // a STRAIGHT road A→B, subdivided into short segments (polyfill fills short quads reliably; one
@@ -126,11 +128,13 @@ void draw(void) {
         // four quadrant ramps: highway point (CX±R,CY) ↔ crossing-road point (CX±R·u)
         float px=-uy, py=ux;                                     // perpendicular to the crossing road
         for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
-            float hx = CX + sx*R*1.2f, hy = CY + sy*HW;          // highway end: outer lane EDGE
+            float hx = CX + sx*R*1.4f, hy = CY + sy*HW;          // highway end: outer lane EDGE (the gore/nose)
             float cd = HW + R;                                   // crossing end: clearance R BEYOND the edge
             float ax = CX + ux*sy*cd - px*sx*HW_AR;              // ...on the crossing road's NEAR side
             float ay = CY + uy*sy*cd - py*sx*HW_AR;
-            draw_ramp(hx,hy, (sx>0?0:180), ax,ay, (sy>0?ang:ang+180), R*0.9f);
+            // highway tangent points TOWARD the curve (toward centre) so it tapers off parallel,
+            // not folding back; long kA = the off-ramp taper, long kB = run-on along the overpass
+            draw_ramp(hx,hy, (sx>0?180:0), ax,ay, (sy>0?ang:ang+180), R*1.1f, R*0.85f);
         }
     }
     if (itype == T_CLOVERLEAF) {
@@ -146,8 +150,8 @@ void draw(void) {
     if (itype == T_TRUMPET) {
         // 3-way: the crossing road only goes ONE side; a loop + a direct ramp
         float ax = CX + ux*R, ay = CY + uy*R;
-        draw_ramp(CX+R*1.5f,CY, 0,  ax,ay, ang, R);
-        draw_ramp(CX-R*1.5f,CY, 180, ax,ay, ang+180, R);
+        draw_ramp(CX+R*1.5f,CY, 0,  ax,ay, ang, R, R);
+        draw_ramp(CX-R*1.5f,CY, 180, ax,ay, ang+180, R, R);
         float lp[28], lq[28]; int n=0; float lcx=CX-R*0.5f, lcy=CY+uy*R*0.7f;
         for (int i=0;i<=26;i++){ float a=(float)i/26*300+30; lp[n]=lcx+c_deg(a)*R*0.5f; lq[n]=lcy+s_deg(a)*R*0.5f; n++; }
         road(lp,lq,n,5,CLR_DARKER_GREY,CLR_DARK_GREY);
