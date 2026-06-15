@@ -1629,6 +1629,14 @@
     ]
   },
   {
+    "title": "interchange",
+    "description": "A geometry SANDBOX for roadnet2's road interchanges — how a crossing road meets a highway, in fake-3D (the crossing road is drawn OVER the highway, reading as an overpass — grade separation without real z-levels) plus a library of connection types built from ramp curves. A horizontal highway and a hand-placed crossing road, with the ramps grown and eyeballed in isolation before porting the drawer into roadnet2. The eventual interface: given two crossing roads + a type, draw the ramps. Controls: T cycles the type (OVERPASS / DIAMOND / CLOVERLEAF / TRUMPET), LEFT/RIGHT rotate the crossing road, UP/DOWN ramp size, H hides the HUD. Diamond + overpass are solid; cloverleaf/trumpet are first-draft. See docs/design/roadnet2-plan.md.",
+    "file": "interchange.cart.png",
+    "kind": [
+      "tech-demo"
+    ]
+  },
+  {
     "title": "Football Manager",
     "description": "An FC-Mobile-style manager mode: run a club's starting XI on a drag-to-arrange formation pitch, with a bench of spares, switchable 4-4-2 / 4-3-3 shapes, and an out-of-position penalty that makes your shape matter. Wheel and deal in a transfer market against a cash budget — sign a face, sell the deadwood — then hit PLAY MATCH and the engine auto-sims a scoreline from your XI's strength versus the opponent's, ticking the goals up on a scoreboard before slamming home WIN/DRAW/DEFEAT. Other clubs play their own fixtures and the 6-team league table re-sorts live on points and goal difference across a 10-round season; finish top to be champions. Drag players between the pitch and the bench, click 4-4-2 / 4-3-3 to switch shape, click a price to BUY or a value to SELL in the market, and click PLAY MATCH (TAB cycles SQUAD/MARKET/LEAGUE, ENTER plays).",
     "file": "soccermgr.cart.png",

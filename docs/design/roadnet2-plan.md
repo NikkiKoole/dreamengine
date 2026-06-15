@@ -96,9 +96,24 @@ link A–B only if no third hub C sits in the lune (`|CA|²+|CB|² < β·|AB|²`
 junctions. Local + deterministic (gather hubs near the view with a margin so on-screen edges' lunes
 are covered → no pop on pan; then pure geometry). The old **`diag` slider is repurposed → `web`**
 (`P_web`, β = 1.8 − web): left = sparse/tree, right = looped/mesh. Curves use reflected control
-points (straight base; `link_path` still bends for terrain). **Next for "highwayey":** the
-hierarchy/interchanges (part B) — arterial tier + ramps so towns reach highways via interchanges,
-not at-grade feeders; and cleaning the junction render.
+points (straight base; `link_path` still bends for terrain).
+
+### Part B — hierarchy + interchanges (in progress)
+Approached from both ends; they meet at one interface — *given two crossing roads + a type → draw
+the ramps.*
+- **Geometry, bottom-up (started)** — a self-contained sandbox cart **`interchange.c`**: a highway +
+  a hand-placed crossing road, **fake-3D grade separation** (crossing road drawn OVER the highway →
+  overpass; no real z-levels — we decided to fake-z first), and a ramp-curve drawer. Types: OVERPASS
+  + DIAMOND (✅ both clean), CLOVERLEAF / TRUMPET (first-draft, tangled — to nail). Roads = subdivided
+  `polyfill` quad ribbons (one screen-long quad rendered empty; short segments fill fine). Grow the
+  shapes here, then port the drawer into roadnet2. Catalog (overpass / on-off ramp / diamond / parclo
+  / cloverleaf / trumpet / stack) + the fake-z-vs-real-z and how-rich decisions are in the convo.
+- **Placement, top-down (parked — it's worldgen-ish)** — towns currently T straight onto highway hubs
+  ("driveway onto a freeway"). Fix is *settlement-relationship driven*: tag each town **satellite** (a
+  city within region radius → arterial into that city, which holds the interchange) vs **isolated** (no
+  city near → reach the highway itself / chain to a neighbour); connections follow the hierarchy. We
+  already have 4 ranks (hamlet/town/city/metro) — likely no new size tier, just the relationship.
+  Deferred while the geometry is the focus.
 
 ## The v2 architecture — one graph, one query
 - **Everything is spline edges in ONE graph.** Highways → collectors → access → cul-de-sacs
