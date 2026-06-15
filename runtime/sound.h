@@ -315,6 +315,8 @@ typedef struct {
     float  br_lp;                       // bell-radiation 1-pole LP state
     float  br_dc_prev, br_dc_state;     // bore-return DC blocker (steady blow → large DC)
     float  br_out_prev, br_out_state;   // OUTPUT DC blocker (the asymmetric brassiness shaper injects DC)
+    float  br_env;                      // bore-output amplitude follower (level → shock-wave brightness)
+    float  br_hp;                       // OUTPUT high-shelf 1-pole state (the level-coupled "blat" lift)
     float  br_vib_ph, br_drift_ph, br_drift, br_noise_lp;  // humanized lip-vibrato + breath turbulence/drift
     int    br_attack;                   // speak-transient samples remaining (the "tah" onset)
     bool   br_on;                       // note-on init guard (engine id hit without a note-on → silent)
@@ -3200,17 +3202,29 @@ static inline float sound_bowed_sample(Voice *v, float pitch_mul) {
 // from here; the amp ADSR gates it like organ/reed/pipe/bowed.
 static void sound_brass_start(Voice *v) {
     float f = v->freq; if (f < 20.0f) f = 20.0f;
-    int len = (int)((float)SOUND_SAMPLE_RATE / f / 2.0f);   // half-wavelength one-way bore (reed model)
-    if (len > SOUND_KS_MAX - 1) len = SOUND_KS_MAX - 1;     // bottoms out ~43Hz, below brass range
+    // Size the bore for a reference ~16 semitones BELOW the played note, not the note itself, so the
+    // read delay (effLen) can LENGTHEN below the note-on pitch — the trombone SLIDE, downward
+    // note_glide / note_pitch / pitch-env, and the lower half of vibrato (the bore is a circular
+    // buffer; effLen clamps at br_len, so a too-short bore can only bend UP). effLen still reads the
+    // TRUE delay for the live pitch, and br_initfreq is set to the freq the full bore represents, so
+    // the note-on delay is exactly SR/(2·f) — tuning is unchanged, this only opens room beneath it.
+    int d0i = (int)((float)SOUND_SAMPLE_RATE / f / 2.0f);  // the ORIGINAL integer note-on delay — keep it
+    if (d0i < 4) d0i = 4;                                   // EXACTLY so brass tuning is byte-identical
+    int len = (int)((float)d0i * 2.5f);                    // longer bore → ~16 semitones of down-bend room
+    if (len > SOUND_KS_MAX - 1) len = SOUND_KS_MAX - 1;     // capped at the buffer; bottoms out ~43Hz
     if (len < 4) len = 4;
     for (int i = 0; i < len; i++) {                         // seed with tiny noise (faster than silence)
         v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
         v->ks_buf[i] = (((v->noise_state >> 16) & 0xff) / 127.5f - 1.0f) * 0.01f;
     }
-    v->br_len = len; v->br_idx = 0; v->br_initfreq = f;
+    // br_initfreq chosen so effLen == d0i at note-on (the formula effLen = br_len·br_initfreq/curf gives
+    // d0i·f/curf — IDENTICAL to the old line, so every pitch/tuning value is unchanged); the only
+    // difference is the clamp ceiling is now br_len (longer) instead of d0i, which opens the down-bend.
+    v->br_len = len; v->br_idx = 0; v->br_initfreq = (float)d0i * f / (float)len;
     v->br_lip_y1 = v->br_lip_y2 = v->br_lip_x1 = v->br_lip_x2 = 0.0f;   // lip biquad state
     v->br_lp = v->br_dc_prev = v->br_dc_state = 0.0f;
     v->br_out_prev = v->br_out_state = 0.0f;
+    v->br_env = v->br_hp = 0.0f;
     v->br_vib_ph = v->br_drift_ph = v->br_drift = v->br_noise_lp = 0.0f;
     v->br_attack = (int)(0.018f * (float)SOUND_SAMPLE_RATE);   // ~18ms breath/"tah" speak onset
     v->br_on = true;
@@ -3295,6 +3309,12 @@ static inline float sound_brass_sample(Voice *v, float pitch_mul) {
     float out = boreReturn;
     float dc  = out - v->br_dc_prev + 0.995f * v->br_dc_state;
     v->br_dc_prev = out; v->br_dc_state = dc;
+    // amplitude follower on the bore output → a normalized 0..1 "playing level". Brass brightness is
+    // dynamically coupled (pp ≈ sine, ff = blazing shock wave), so the OUTPUT brightening below rides
+    // this: it swells in as the oscillation builds on attack (the horn "blooming" into the note) and
+    // sits higher the louder the bore runs. Slow one-pole (~5ms) so it tracks level, not the waveform.
+    v->br_env += 0.0016f * (fabsf(dc) - v->br_env);
+    float lvl = v->br_env * 7.0f; if (lvl > 1.0f) lvl = 1.0f;
     // ── BRASS FORMANT: a resonant bandpass at the fixed fmtHz (the lip+bell resonance), reusing the
     // lip-biquad state. Zeros at ±1, peak gain ≈1 (b0 = 0.5−0.5·r², b2 = −b0). Emphasized strongly —
     // the prominent ~1.2kHz peak is a big part of what the ear hears as "a horn."
@@ -3312,7 +3332,8 @@ static inline float sound_brass_sample(Voice *v, float pitch_mul) {
     // into a hollow buzz (itself a synthy tell). The formant amount grows with brassiness, so pushing
     // TIMBRE blares harder. A GENTLE waveshaper on top adds a little buzz + lets level rise with breath.
     float voiced   = dc + fmt * (1.3f + bright * 2.6f);      // formant emphasis blooms with brassiness
-    float driveOut = 1.0f + bright * (2.2f + blow * 4.0f);   // shaping grows w/ brassiness + breath
+    float driveOut = 1.0f + bright * (2.2f + blow * 4.0f + lvl * 2.5f);   // grows w/ brassiness + breath + LEVEL
+                                                            // (the bore steepens harder the louder it runs → more highs at forte)
     // ASYMMETRIC steepening — a real brass shock wave is lopsided (the compression front is steeper
     // than the rarefaction). A plain tanh is an ODD nonlinearity, so it only ever makes ODD harmonics
     // → the spectrum stays clarinet-like (hollow, no even partials, doesn't read as "brass"). Biasing
@@ -3328,6 +3349,20 @@ static inline float sound_brass_sample(Voice *v, float pitch_mul) {
     float bdc = blaat - v->br_out_prev + 0.995f * v->br_out_state;
     v->br_out_prev = blaat; v->br_out_state = bdc;
     blaat = bdc;
+    // ── SHOCK-WAVE BRIGHTNESS (docs/design/brass-realism-handoff.md fix #1+#2): a real horn at forte
+    // radiates energy to ~8kHz and that brightness RISES with level, but the bore + bell LP + soft
+    // shaper rolled off ~an octave too early (dead by ~h12, almost nothing past 4kHz). Lift the highs
+    // on the OUTPUT — safe, can't destabilize the bore loop (opening the loop's bell LP flipped the
+    // register an octave down, see lpCoeff note). A one-pole high-shelf: `edge` is the >~4kHz content,
+    // added back scaled by brassiness × level. Dark bores (tuba) stay mellow — `(1-dark)` rolls the
+    // lift off — and a quiet/round voice (low bright) is untouched, so the coupling is musical.
+    v->br_hp += 0.42f * (blaat - v->br_hp);              // ~4kHz one-pole LP
+    float edge = blaat - v->br_hp;                        // the high-frequency content (the blat)
+    float brite = bright * (1.0f - 0.6f * dark) * (2.0f + 6.0f * lvl);   // brassiness × bore × level
+    blaat += edge * brite;
+    // the brightness lift adds energy → normalize it back out so pushing TIMBRE changes TIMBRE, not
+    // loudness (and the engine doesn't slam the master soft-clip). Self-balancing: more brite, more trim.
+    blaat *= 1.0f / (1.0f + 0.19f * brite);
     // makeup: keep loudness roughly even across the BORE axis (trumpet↔tuba) — §8.8.1 for harmonics
     return blaat * comp * (2.7f + dark * 0.7f);
 }
