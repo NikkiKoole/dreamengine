@@ -876,7 +876,13 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     voice path is skipped entirely at `depth==0`. **Showcase: `lfoshapes`** (8 shapes, live, on pitch
     or cutoff). **Forward-compat left in place:** promoting `shape` into the `instrument_lfo` signature
     later is purely additive (storage/dispatcher/request already shape-aware — see the code comment on
-    `instrument_lfo`). Original context (the three disconnected places this unified) below for the record:
+    `instrument_lfo`). **Adopted by existing carts (2026-06-15):** `sh101` now drives its square + S&H LFO
+    waveforms through the engine (sample-accurate, replacing a frame-rate software LFO; only NOISE stays
+    software — no engine white-noise shape); `22-filter` gained an `S` shape selector across all four
+    filters; and ten game/ambient beds whose cutoff LFO was a mechanical sine now use `LFO_SHAPE_RANDOM`
+    for organic drift (`hotline`, `neonrain`, `masseffect`, `podracer`, `dune`, `dwarffort`,
+    `dungeonkeeper`, `turfwar`, `wildfire`, `zoo` — wind/fire/cavern/engine-and-animal roars).
+    Original context (the three disconnected places this unified) below for the record:
     - the main LFO system (`instrument_lfo`/`note_lfo`, driving `LFO_PITCH`/`CUTOFF`/macro dests) is
       **sine-only** — no shape param (`sinf(lfo_phase·2π)` in `sound.h`); the one place shape would be
       most expressive has none.

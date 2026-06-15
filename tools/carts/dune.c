@@ -357,6 +357,7 @@ void init(void) {
     instrument(8, INSTR_TRI, 4, 120, 4, 200);                                             // build sting
     instrument(9, INSTR_NOISE, 220, 200, 3, 600); instrument_filter(9, FILTER_LOW, 380, 2);
     instrument_lfo(9, 0, LFO_CUTOFF, 0.4f, 180);                                          // desert wind
+    lfo_shape(9, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     bpm(96);
     reset_game();
 }

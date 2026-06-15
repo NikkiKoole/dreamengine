@@ -201,6 +201,7 @@ void init(void) {
     instrument(I_PAD, INSTR_TRI, 600, 300, 6, 1200);     // slow-attack warm pad
     instrument_filter(I_PAD, FILTER_LOW, 700, 4);
     instrument_lfo(I_PAD, 0, LFO_CUTOFF, 0.15f, 300);    // a slow filter drift
+    lfo_shape(I_PAD, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
 
     instrument(I_SAX, INSTR_SAW, 150, 200, 4, 500);      // a lonely sax line
     instrument_filter(I_SAX, FILTER_LOW, 1200, 7);

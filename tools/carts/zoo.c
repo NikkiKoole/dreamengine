@@ -123,6 +123,7 @@ void init() {
     instrument(7, INSTR_SAW,    30, 250, 5, 500);         // lion
     instrument_filter(7, FILTER_LOW, 500, 11);            //   …warm, behind a lowpass
     instrument_lfo(7, 0, LFO_CUTOFF, 2, 600);             //   …that the LFO sweeps open (roar)
+    lfo_shape(7, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     instrument(8, INSTR_SQUARE,  2,  50, 0,  50);         // water blip
     instrument_duty(8, 0.18f);                            //   …thin nasal pulse
 }

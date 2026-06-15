@@ -156,6 +156,7 @@ void init(void) {
     instrument(BOOSTI, INSTR_SAW, 6, 0, 7, 170);
     instrument_filter(BOOSTI, FILTER_LOW, 650, 11);
     instrument_lfo(BOOSTI, 0, LFO_CUTOFF, 6.0f, 700);    // roar = sweeping cutoff
+    lfo_shape(BOOSTI, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     instrument(ALARMI, INSTR_SQUARE, 2, 0, 6, 80);
     instrument_duty(ALARMI, 0.5f);
     instrument(SCRAPEI, INSTR_NOISE, 1, 0, 4, 60);

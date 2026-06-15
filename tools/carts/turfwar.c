@@ -198,6 +198,7 @@ void init(void) {
     instrument_duty(5, 0.34f);
     instrument_filter(5, FILTER_LOW, 520, 7);
     instrument_lfo(5, 0, LFO_CUTOFF, 0.4f, 180.0f);
+    lfo_shape(5, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     // sine pad for takeover chimes
     instrument(6, INSTR_SINE, 4, 180, 3, 380);
 

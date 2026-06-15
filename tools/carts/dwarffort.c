@@ -289,6 +289,7 @@ void init(void) {
     instrument(7, INSTR_TRI, 2, 70, 0, 120);                                               // block thunk
     instrument(8, INSTR_SAW, 240, 320, 4, 700); instrument_filter(8, FILTER_LOW, 380, 3);
     instrument_lfo(8, 0, LFO_CUTOFF, 0.25f, 140);                                          // cavern bed
+    lfo_shape(8, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     instrument(9, INSTR_TRI, 3, 120, 4, 360);                                              // new-day bell
     bpm(76);
     reset_game();

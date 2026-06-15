@@ -281,6 +281,7 @@ void init(void) {
     instrument(8, INSTR_TRI, 6, 140, 4, 240);                                                // build sting
     instrument(9, INSTR_SAW, 220, 300, 4, 700); instrument_filter(9, FILTER_LOW, 420, 3);
     instrument_lfo(9, 0, LFO_CUTOFF, 0.3f, 160);                                              // dungeon organ bed
+    lfo_shape(9, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     instrument(10, INSTR_SAW, 8, 200, 5, 280); instrument_filter(10, FILTER_LOW, 700, 2);    // invasion horn
     instrument(11, INSTR_SQUARE, 1, 110, 0, 120); instrument_duty(11, 0.2f);                 // slap thwack
     instrument(12, INSTR_SQUARE, 2, 60, 5, 120);                                             // heart alarm

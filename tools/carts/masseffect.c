@@ -364,6 +364,7 @@ void init(void) {
     instrument(7, INSTR_SAW, 2, 70, 3, 260);       // biotic whoosh
     instrument_filter(7, FILTER_LOW, 500, 9);
     instrument_lfo(7, 0, LFO_CUTOFF, 1.2f, 1100);
+    lfo_shape(7, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
 
     // galaxy starfield (fixed)
     for (int i = 0; i < 64; i++) {

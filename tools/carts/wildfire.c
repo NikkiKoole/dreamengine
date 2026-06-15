@@ -263,6 +263,7 @@ void init(void) {
     instrument(5, INSTR_SAW, 200, 400, 5, 400);
     instrument_filter(5, FILTER_LOW, 360, 7);
     instrument_lfo(5, 0, LFO_CUTOFF, 0.30f, 240.0f);
+    lfo_shape(5, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     instrument(6, INSTR_NOISE, 1, 50, 0, 40);      // crackle
     instrument_filter(6, FILTER_HIGH, 1800, 2);
 

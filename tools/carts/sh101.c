@@ -196,8 +196,12 @@ static void define_slots(void) {
     int rel = vca_gate ? 12 : f_rel(r_v);
     int cut = (int)f_cut(cut_v);
     int rs  = f_res(res_v);
-    int tri = (lfo_wave == 0);                 // engine LFOs are sine; the
-    float rate = f_rate(rate_v);               // other shapes run in update()
+    // tri(0)/square(1)/S&H(2) now run on the ENGINE LFO (sample-accurate) via the unified shapes;
+    // only NOISE(3) stays a software LFO in update() (no engine white-noise LFO). lfo_wave 0 keeps
+    // the historical engine SINE so the default patch is unchanged.
+    int eng = (lfo_wave <= 2);
+    int eng_shape = (lfo_wave == 1) ? LFO_SHAPE_SQUARE : (lfo_wave == 2) ? LFO_SHAPE_SH : LFO_SHAPE_SINE;
+    float rate = f_rate(rate_v);
 
     for (int s = 0; s < NSRC; s++) {
         int slot = SRC_SLOT[s];
@@ -208,15 +212,18 @@ static void define_slots(void) {
         instrument_filter(slot, FILTER_LOW, cut, rs);
         // filter envelope (shared ADSR shapes its A/D)
         instrument_env(slot, 0, ENV_CUTOFF, f_att(a_v), f_dec(d_v), f_fenv(fenv_v));
-        // LFO → pitch (vibrato) and LFO → cutoff, when the shape is TRI
-        instrument_lfo(slot, 0, LFO_PITCH,  rate, (tri && s != 3) ? f_vmod(vmod_v) : 0.0f);
-        instrument_lfo(slot, 1, LFO_CUTOFF, rate, tri ? f_fmod(fmod_v) : 0.0f);
+        // LFO → pitch (vibrato) + cutoff, engine-driven for sine/square/S&H (the chosen waveform)
+        instrument_lfo(slot, 0, LFO_PITCH,  rate, (eng && s != 3) ? f_vmod(vmod_v) : 0.0f);
+        instrument_lfo(slot, 1, LFO_CUTOFF, rate, eng ? f_fmod(fmod_v) : 0.0f);
+        lfo_shape(slot, 0, eng_shape);
+        lfo_shape(slot, 1, eng_shape);
         instrument_echo(slot, 0.08f);   // the delay pedal on the guitar-strap synth — barely-there slapback
     }
     // pulse-specific: width + its modulation source
     instrument_duty(SL_PULSE, duty_man());
     instrument_lfo(SL_PULSE, 2, LFO_DUTY, rate,
-                   (tri && pw_src == 0) ? pw_v * 0.4f : 0.0f);
+                   (eng && pw_src == 0) ? pw_v * 0.4f : 0.0f);
+    lfo_shape(SL_PULSE, 2, eng_shape);
     instrument_env(SL_PULSE, 1, ENV_DUTY, f_att(a_v), f_dec(d_v),
                    (pw_src == 2) ? pw_v * 0.45f : 0.0f);
     instrument_duty(SL_SUB, (sub_mode == 2) ? 0.25f : 0.5f);
@@ -385,19 +392,12 @@ static int pitch_override = 0;
 static void drive_live(void) {
     float rate = f_rate(rate_v);
 
-    // software LFO value for the non-sine shapes
-    static float sh_val = 0.0f; static int sh_step = -1;
-    float lval = 0.0f;
-    if (lfo_wave == 1) {                                   // square
-        lval = (fmodf(now() * rate, 1.0f) < 0.5f) ? 1.0f : -1.0f;
-    } else if (lfo_wave == 2) {                            // random (S&H)
-        int st = (int)(now() * rate);
-        if (st != sh_step) { sh_step = st; sh_val = rnd_float_between(-1.0f, 1.0f); }
-        lval = sh_val;
-    } else if (lfo_wave == 3) {                            // noise
-        lval = rnd_float_between(-1.0f, 1.0f);
-    }
-    int soft = (lfo_wave != 0);
+    // square/S&H now run on the engine LFO (sample-accurate); NOISE is the only software LFO left
+    // (no engine white-noise shape) — full-rate random pushed per frame as before.
+    int eng = (lfo_wave <= 2);
+    int eng_shape = (lfo_wave == 1) ? LFO_SHAPE_SQUARE : (lfo_wave == 2) ? LFO_SHAPE_SH : LFO_SHAPE_SINE;
+    float lval = (lfo_wave == 3) ? rnd_float_between(-1.0f, 1.0f) : 0.0f;
+    int soft = (lfo_wave == 3);
 
     if (cur_midi == NONE) { pitch_override = 0; return; }
 
@@ -409,9 +409,11 @@ static void drive_live(void) {
         note_cutoff(v[s], (int)fcut);
         note_res(v[s], f_res(res_v));
         note_vol(v[s], vol_of(s));
-        if (lfo_wave == 0) {                               // retune engine LFOs live
+        if (eng) {                                         // retune engine LFOs live (sine/square/S&H)
             note_lfo(v[s], 0, LFO_PITCH,  rate, (s != 3) ? f_vmod(vmod_v) : 0.0f);
             note_lfo(v[s], 1, LFO_CUTOFF, rate, f_fmod(fmod_v));
+            note_lfo_shape(v[s], 0, eng_shape);
+            note_lfo_shape(v[s], 1, eng_shape);
         }
     }
     // pulse width, live
@@ -419,8 +421,10 @@ static void drive_live(void) {
         float d = duty_man();
         if (soft && pw_src == 0) d = clamp(0.5f + lval * pw_v * 0.4f, 0.05f, 0.95f);
         note_duty(v[0], d);
-        if (lfo_wave == 0)
+        if (eng) {
             note_lfo(v[0], 2, LFO_DUTY, rate, (pw_src == 0) ? pw_v * 0.4f : 0.0f);
+            note_lfo_shape(v[0], 2, eng_shape);
+        }
     }
 
     // pitch: bender + software vibrato share one per-frame write. (TUNE no

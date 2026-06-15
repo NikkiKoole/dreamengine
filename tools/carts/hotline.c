@@ -428,6 +428,7 @@ void init(void) {
     instrument(5, INSTR_SAW, 6, 130, 6, 110);          // bass
     instrument_filter(5, FILTER_LOW, 700, 9);
     instrument_lfo(5, 0, LFO_CUTOFF, 0.45f, 1000.0f);   // slow filter sweep
+    lfo_shape(5, 0, LFO_SHAPE_RANDOM);   // organic drift, not a mechanical sine (STATUS #39)
     instrument(6, INSTR_SQUARE, 3, 70, 3, 80);          // arp / lead
     instrument_duty(6, 0.30f);
     state = ST_TITLE;
