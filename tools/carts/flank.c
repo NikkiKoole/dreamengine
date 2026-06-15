@@ -1,4 +1,5 @@
 #include "studio.h"
+#include "ui.h"
 #include <stdio.h>
 #include <math.h>
 
@@ -24,8 +25,28 @@
 #define GH 23
 #define TILE 8
 #define HUD_Y (GH * TILE)          // 184
-#define NE 6
+#define NE 8                        // array size / max squad
 #define NB 96
+#define NPK 3                       // health packs
+
+// ---- difficulty (live via the panel; sliders are 0..1, mapped to these) ----
+static float sl_count=0.66f, sl_dmg=0.30f, sl_rate=0.50f, sl_acc=0.50f, sl_sight=0.45f, sl_supp=0.50f, sl_heal=0.5f;
+static float d_dmg, d_gap, d_spread, d_sight, d_supp, d_regen, d_packs;   // derived each frame
+static int   ecount = 6, show_panel;
+static void recompute_difficulty(void) {
+    d_dmg    = 2 + sl_dmg * 10;          // 2..12 damage per hit
+    d_gap    = 1.8f - sl_rate * 1.2f;    // shot interval mult: 1.8 slow .. 0.6 fast
+    d_spread = 1.6f - sl_acc  * 1.15f;   // spread mult: 1.6 loose .. 0.45 tight
+    d_sight  = 0.7f + sl_sight* 0.7f;    // sight mult: 0.7 .. 1.4
+    d_supp   = sl_supp * 1.6f;           // suppression strength: 0 .. 1.6
+    d_packs  = sl_heal >= 0.33f ? 1 : 0; // healing tiers: none (<.33, hard) / packs (.33-.66, normal) / packs+regen (>.66, easy)
+    d_regen  = sl_heal >= 0.66f ? 1 : 0;
+}
+static void set_preset(int p) {          // 0 easy · 1 normal · 2 hard
+    if      (p==0) { sl_count=.33f; sl_dmg=.10f; sl_rate=.20f; sl_acc=.12f; sl_sight=.18f; sl_supp=.30f; sl_heal=1.0f; }
+    else if (p==1) { sl_count=.66f; sl_dmg=.30f; sl_rate=.50f; sl_acc=.50f; sl_sight=.45f; sl_supp=.50f; sl_heal=0.5f; }
+    else           { sl_count=1.0f; sl_dmg=.60f; sl_rate=.85f; sl_acc=.90f; sl_sight=.85f; sl_supp=1.0f; sl_heal=0.0f; }
+}
 #define INF 1e9f
 #define DIAG 1.41421356f
 
@@ -51,9 +72,11 @@ static float heat[GH][GW];          // danger projected by the player's aim cone
 typedef struct { float x, y, vx, vy, aim, pinned; int hp, mag, reload, shake, spectate, sneak, calm; } Player;  // pinned 0..1; calm = frames since hit (regen)
 typedef struct { float x, y, aim, lsx, lsy, alert; int hp, alive, state, shootcd, mag, reload, callcd, type, strafe, strafeT, suppressing, everseen, invx, invy; } Enemy;  // alert 0..100; inv = spot to investigate
 typedef struct { float x, y, vx, vy; int alive, foe; } Bullet;
+typedef struct { int x, y, active, cd; } Pack;     // health pickup (px coords)
 static Player pl;
 static Enemy en[NE];
 static Bullet bul[NB];
+static Pack pack[NPK];
 
 // shared blackboard (the squad's collective knowledge of you)
 static float kx, ky; static int known, kage, flow_cx = -1, flow_cy = -1;
@@ -145,14 +168,21 @@ static void reset(void) {
     int lx[]={12,16,22,26,11,21,31,35,15,27,7,34}, ly[]={6,14,4,19,18,10,8,15,8,17,12,4};
     for (int b=0;b<12;b++) if (!cell[ly[b]][lx[b]]) cell[ly[b]][lx[b]] = 2;
     pl = (Player){ .x = TILE*3, .y = TILE*(GH/2), .hp = 100, .mag = 12, .spectate = pl.spectate };
+    ecount = 2 + (int)(sl_count * 6 + 0.5f);               // 2..8 enemies (the count slider)
     for (int i=0;i<NE;i++) {
+        if (i >= ecount) { en[i].alive = 0; continue; }
         int x,y,tr=0; do { x=GW/2+rnd(GW/2-2); y=2+rnd(GH-4); tr++; } while (wcell(x,y) && tr<80);
-        int t = i % NTY;                                   // 2 of each type for 6 enemies
+        int t = i % NTY;                                   // even spread across the 3 types
         en[i] = (Enemy){ .x = x*TILE+4, .y = y*TILE+4, .aim = 180, .hp = TY[t].hp, .alive = 1,
                          .state = E_PATROL, .mag = TY[t].mag, .type = t,
                          .strafe = rnd(2) ? 1 : -1, .strafeT = rnd(120) };
     }
     for (int i=0;i<NB;i++) bul[i].alive = 0;
+    int packs_on = sl_heal >= 0.33f;                      // no packs on hard
+    for (int i=0;i<NPK;i++) {                              // health packs on open floor
+        int x,y,tr=0; do { x=4+rnd(GW-8); y=2+rnd(GH-4); tr++; } while (wcell(x,y) && tr<60);
+        pack[i] = (Pack){ x*TILE+4, y*TILE+4, packs_on, 0 };
+    }
     known = 0; kage = 999; flow_cx = -1; kills = 0; msg_t = 0;
 }
 void init(void) { reverb(0.25f, 0.5f); reset(); }
@@ -191,7 +221,7 @@ static void enemy_update(int i) {
     float pd = fsqrt((pl.x-e->x)*(pl.x-e->x) + (pl.y-e->y)*(pl.y-e->y));
     bool canlos = los_px(e->x, e->y, pl.x, pl.y);
     float ss = pl.sneak ? 0.5f : 1.0f, sh = pl.sneak ? 0.3f : 1.0f;
-    bool see   = canlos && pd <= 132 * ss;                    // spotted by sight (sneaking shrinks range)
+    bool see   = canlos && pd <= 132 * d_sight * ss;          // spotted by sight (difficulty + sneak scale it)
     bool heard = pd <= 48 * sh;                               // or heard moving nearby
     if (canlos && pd <= VIS_R) { e->everseen = 1; e->lsx = e->x; e->lsy = e->y; }   // YOUR last-seen memory of this enemy
 
@@ -217,7 +247,7 @@ static void enemy_update(int i) {
         if (e->type == TY_CAMP && los_px(e->x,e->y,pl.x,pl.y)) {   // SUPPRESSION: anchor + pour inaccurate fire to PIN you
             e->aim = angle_to(e->x, e->y, pl.x, pl.y);
             e->suppressing = e->mag > 0;
-            if (e->mag > 0 && e->shootcd <= 0) { fire(e->x, e->y, e->aim, 1, 30); e->mag--; e->shootcd = 7; if (e->mag==0) e->reload = 100; }
+            if (e->mag > 0 && e->shootcd <= 0) { fire(e->x, e->y, e->aim, 1, 30*d_spread); e->mag--; e->shootcd = (int)(7*d_gap); if (e->mag==0) e->reload = 100; }
             if (e->mag == 0 && --e->reload <= 0) e->mag = T->mag;  // reload = the gap in the pin (your window to move)
             return;
         }
@@ -247,7 +277,7 @@ static void enemy_update(int i) {
         if (!safe) move_enemy(e, bx, by, T->speed);
         e->aim = angle_to(e->x, e->y, pl.x, pl.y);
         if (los_px(e->x,e->y,pl.x,pl.y) && e->shootcd <= 0 && e->mag > 0) {
-            fire(e->x, e->y, e->aim, 1, T->spread); e->mag--; e->shootcd = T->gap;
+            fire(e->x, e->y, e->aim, 1, T->spread * d_spread); e->mag--; e->shootcd = (int)(T->gap * d_gap);
             if (e->mag == 0) e->reload = 70;
         }
         if (e->mag == 0) { if (--e->reload <= 0) e->mag = T->mag; }   // reload window = vulnerable
@@ -316,7 +346,10 @@ void update(void) {
     if (keyp('H')) show_heat = !show_heat;
     if (keyp('L')) show_comms = !show_comms;
     if (keyp('V')) reveal = !reveal;
+    if (keyp('O')) show_panel = !show_panel;
     if (keyp(KEY_TAB)) { pl.spectate = !pl.spectate; }
+    recompute_difficulty();
+    if (show_panel) return;                                   // sim paused while you tune (widgets live in draw)
     if (pl.hp <= 0) return;
 
     if (known) kage++;
@@ -327,11 +360,20 @@ void update(void) {
     // suppression: are you pinned right now? (any suppressor with LOS to you)
     int sup = 0;
     for (int i=0;i<NE;i++) if (en[i].alive && en[i].suppressing && los_px(en[i].x,en[i].y,pl.x,pl.y)) sup = 1;
-    pl.pinned += sup ? 0.05f : -0.035f;
+    pl.pinned += sup ? 0.05f * d_supp : -0.035f;
     if (pl.pinned < 0) pl.pinned = 0; if (pl.pinned > 1) pl.pinned = 1;
     if (pl.pinned > 0.3f && tick%3==0) pl.shake = 2;          // pinned = jittery
-    pl.calm++;                                                // out-of-combat HP regen (no hit for ~2.5s)
-    if (pl.calm > 150 && tick%15==0 && pl.hp > 0 && pl.hp < 100) pl.hp++;
+
+    // health packs — walk over an active one to heal (normal+easy; none on hard)
+    if (d_packs) for (int i=0;i<NPK;i++) {
+        if (!pack[i].active) { if (--pack[i].cd <= 0) pack[i].active = 1; continue; }   // respawns
+        if (pl.hp < 100 && fabsf(pack[i].x-pl.x) < 7 && fabsf(pack[i].y-pl.y) < 7) {
+            pl.hp = pl.hp + 35 > 100 ? 100 : pl.hp + 35; pack[i].active = 0; pack[i].cd = 720;
+            play_pan(79, INSTR_MALLET, 4, panx(pl.x), 12);
+        }
+    }
+    pl.calm++;                                                // EASY only: slow auto-heal out of combat
+    if (d_regen > 0.5f && pl.calm > 120 && pl.hp > 0 && pl.hp < 100 && tick%14==0) pl.hp++;
 
     // bullets
     for (int i=0;i<NB;i++) {
@@ -342,7 +384,7 @@ void update(void) {
             if (fabsf(bul[i].x-pl.x)<4 && fabsf(bul[i].y-pl.y)<4) {
                 bul[i].alive=0;
                 if (low_facing(pl.x,pl.y,-bul[i].vx,-bul[i].vy) && rnd(2)==0) play_pan(56,INSTR_MEMBRANE,2,panx(pl.x),4);  // crate ate it
-                else { pl.hp -= 5; pl.shake=6; pl.calm=0; play_pan(34,INSTR_NOISE,4,panx(pl.x),6); if (pl.hp<=0){ pl.hp=0; setmsg("you are down. R to retry."); } }
+                else { pl.hp -= (int)d_dmg; pl.shake=6; pl.calm=0; play_pan(34,INSTR_NOISE,4,panx(pl.x),6); if (pl.hp<=0){ pl.hp=0; setmsg("you are down. R to retry."); } }
             }
         } else for (int j=0;j<NE;j++) if (en[j].alive && fabsf(bul[i].x-en[j].x)<4 && fabsf(bul[i].y-en[j].y)<4) {
             bul[i].alive=0;
@@ -379,6 +421,9 @@ void draw(void) {
                              rect(x*TILE+sh, y*TILE, TILE, TILE, CLR_DARK_GREY); }
         else if (cell[y][x]==2) { rectfill(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_BROWN); rect(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_ORANGE); }  // low cover: a crate
     }
+    // health packs (a green + cross) — always visible so you can run for one
+    for (int i=0;i<NPK;i++) if (d_packs && pack[i].active) { int x=pack[i].x+sh, y=pack[i].y;
+        rectfill(x-3,y-1,7,3,CLR_GREEN); rectfill(x-1,y-3,3,7,CLR_GREEN); pset(x,y,CLR_WHITE); }
 
     // comms lines (debug, off by default) + the squad's belief about where you are
     int anysee = 0; for (int i=0;i<NE;i++) if (en[i].alive && los_px(en[i].x,en[i].y,pl.x,pl.y)) anysee=1;
@@ -420,12 +465,35 @@ void draw(void) {
     rect(4,HUD_Y+3,42,6,CLR_DARK_GREY); rectfill(5,HUD_Y+4,40*(pl.hp>0?pl.hp:0)/100,4,pl.hp>30?CLR_GREEN:CLR_RED);
     print(str("HP %d", pl.hp>0?pl.hp:0), 50, HUD_Y+2, CLR_WHITE);
     print(str("ammo %d", pl.mag), 96, HUD_Y+2, pl.mag?CLR_YELLOW:CLR_RED);
-    print(str("down %d/%d", kills, NE), 150, HUD_Y+2, CLR_ORANGE);
+    print(str("down %d/%d", kills, ecount), 150, HUD_Y+2, CLR_ORANGE);
     if (pl.sneak) print("SNEAK", 206, HUD_Y+2, CLR_INDIGO);
     print_right(pl.spectate?"SPECTATE":(pl.pinned>0.3f?"PINNED":(known?"SPOTTED":"hidden")), SCREEN_W-4, HUD_Y+2,
                 pl.pinned>0.3f?CLR_RED:(known?CLR_ORANGE:CLR_GREEN));
     font(FONT_SMALL);
     if (msg_t>0) print(msg, 4, HUD_Y+12, CLR_LIGHT_PEACH);
-    else print("WASD+Shift(sneak)   L-click gun (loud!)   R-click knife (quiet)   H/L/V debug  TAB spectate  R reset", 4, HUD_Y+12, CLR_MEDIUM_GREY);
+    else print("WASD+Shift  L-click gun  R-click knife  O difficulty  H/L/V debug  TAB spectate  R reset", 4, HUD_Y+12, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
+
+    // ---- difficulty panel (O) — sim is paused; widgets are immediate-mode ui.h ----
+    if (show_panel) {
+        fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();   // dim
+        int X=46, Y=12, W=228;
+        rrectfill(X-6, Y-6, W+12, 168, 4, CLR_DARKER_BLUE); rect(X-6, Y-6, W+12, 168, CLR_LIGHT_GREY);
+        print("DIFFICULTY", X, Y, CLR_WHITE);
+        print("O closes", X+W-44, Y, CLR_DARK_GREY);
+        ui_begin();
+        if (ui_button(X,      Y+12, 56, 14, "easy"))   set_preset(0);
+        if (ui_button(X+62,   Y+12, 64, 14, "normal")) set_preset(1);
+        if (ui_button(X+132,  Y+12, 56, 14, "hard"))   set_preset(2);
+        int sy = Y+32;
+        ui_slider(&sl_count, X, sy, W, "enemies");          sy += 14;
+        ui_slider(&sl_dmg,   X, sy, W, "damage");           sy += 14;
+        ui_slider(&sl_rate,  X, sy, W, "fire rate");        sy += 14;
+        ui_slider(&sl_acc,   X, sy, W, "accuracy");         sy += 14;
+        ui_slider(&sl_sight, X, sy, W, "sight");            sy += 14;
+        ui_slider(&sl_supp,  X, sy, W, "suppression");      sy += 14;
+        ui_slider(&sl_heal,  X, sy, W, "healing (hard/normal/easy)");  sy += 17;
+        if (ui_button(X,      sy, 116, 16, "apply + restart")) { reset(); show_panel = 0; }
+        if (ui_button(X+126,  sy, 62,  16, "resume"))          show_panel = 0;
+    }
 }
