@@ -188,11 +188,38 @@ reverb, tight drums). Natural sibling to the cab/amp work.
   | **small pool (recommended)** — the grains/reverb-tank pattern | 2–3 | **~94–141 KB** | yes — master + 1–2 instruments at once |
   | full per-bus | 8 (`SOUND_FX_BUSES`) | ~376 KB | yes everywhere, but overkill |
 
-  **Recommended: the 2-instance pool (~94 KB)** — mirrors how `grains` + the reverb tanks already work.
-  Code = the grains-pool template: singleton statics → a pool with a `bus→instance` map, mint
-  `FX_SHIMMER`=18 (room to 31), `apply_insert` case + auto-add + per-bus init, + the pedalboard pedal.
-  If you just want it *playable in the rig* cheaply (no reorder/per-instrument), the cabinet ambience
-  slot is ~free. Deferred — bigger than a quick win.
+  **Recommended: the 2-instance pool (~94 KB)** as `instrument_shimmer(slot, size, damp, shimmer_amt,
+  mix)` — claim-on-first-call aux bus (the `instr_bank.fx_bus` machinery, copy `instrument_grains`).
+  Master `shimmer()` keeps tank 0; instruments claim tank 1+; pool exhaustion → `[sound] WARNING` (no
+  silent drop). `SR_INSTR_SHIMMER` (re-read the enum tail — it drifts). Payload `a=slot, b=size, c=damp,
+  e0=shimmer, e1=mix` (×1000) — slot+4 **fits the 6-int budget cleanly, no bit-packing** (simpler than
+  `SR_INSTR_GRAINS`, which had to pack feedback+mix).
+
+  ⚠ **The one non-obvious trap — shimmer is MASTER-STAGE, not an `FX_*` insert.** Unlike `grains`
+  (`FX_GRAINS`, runs inside `apply_insert`), master `shimmer()` runs as a post-chain master-stage call
+  (before the soft-clip, like `dropout`/`amp_noise`). So do **NOT** mint `FX_SHIMMER` + route it through
+  `apply_insert` — that *moves* the master shimmer to a chain position and **breaks the master-bit-exact
+  guarantee.** Instead: **tank 0 stays the existing master-stage call, untouched** (→ trivially bit-exact),
+  and **tanks 1+ run per-aux-bus** (applied on `busL[b]/busR[b]` after that bus's `apply_insert` chain,
+  before it sums to master). One pool, two call sites. Make **all** per-tank state arrays — not just the
+  tank+`OctaveUp` but the **DC blocker (`shim_dcx`/`shim_dcy`), `shim_prev`, `shim_fb`, `shim_mix`** (the
+  DC state is the easy one to leave shared → cross-talk). Gate each on `shim_used[tank]`. **Verify master
+  bit-exact** with a `--det` md5 of an existing shimmer cart before/after the singleton→pool refactor
+  (the reverb-bus tank-pool commit did exactly this).
+
+  If you just want it *playable in the rig* cheaply (no reorder/per-instrument), the cabinet ambience slot
+  is ~free. Deferred — bigger than a quick win.
+
+  **Composes with spatial — but know the boundary** (it surfaced this gap). `instrument_shimmer` is
+  **isolation, not spatialization**: shimmer the pad, leave the drums dry. It layers correctly with
+  spatial **v1** (per-voice `listener`/Doppler is applied at the *voice*, before the FX bus): the dry
+  source still pans + Dopplers, and at `mix < 1` the dry passthrough keeps its position while the shimmer
+  wash sits as an *ambient, centered* tail under the moving source — which is musically right (reverb is
+  room ambience, not a point source). What it does **not** do is make the wet *tail* move/Doppler with the
+  source as one object — that's spatial **v2 emitter buses** ("a full radio mix through bus+FX, moving as
+  one object — wet tail and all", [`spatial.md`](spatial.md)). `instrument_shimmer` is orthogonal to v2
+  and pairs with it: the shimmer aux bus is exactly the kind of thing that *becomes* a positionable emitter
+  in v2. So: pads-shimmered/drums-dry + positioned sources = today; the shimmer tail flying past = v2.
 
 ## Side quests (engineering nits from the lists, not effects)
 - **`fast_tanh` Padé approximation** (B1 tip): if `DRIVE_SOFT`/the soft-clip is ever hot in the

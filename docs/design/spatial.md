@@ -191,6 +191,16 @@ the station's groove + its effect chain on that bus, then apply the *same
 post-FX**, before it sums into master. Now the whole produced sound — wet tails
 and all — moves as one object.
 
+> **The per-instrument FX buses are the emitters-in-waiting.** `instrument_shimmer`
+> / `instrument_grains` / `instrument_chorus` (and the per-instrument shimmer pool in
+> [`boutique-pedals-roadmap.md`](boutique-pedals-roadmap.md) → Follow-ups) already put
+> one part's *whole effected signal* on its own aux bus. v1 + those gives "shimmered
+> pad, dry drums, both positioned (dry pans/Dopplers, the wash is ambient/centered)" —
+> which is usually what you want. v2 is precisely the step that makes such a bus's **wet
+> tail** move/Doppler with the source too: the same aux bus, now carrying a `Spatial`.
+> So per-instrument FX (isolation) and emitter buses (spatialization) are orthogonal and
+> compose — build the FX-on-a-bus first, position the bus in v2.
+
 ### What v2 adds (additive — no v1 rewrite)
 
 - An `Emitter` owning a `Spatial` (the struct from "Shared machinery") bound to
