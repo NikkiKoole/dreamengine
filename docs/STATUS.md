@@ -773,8 +773,11 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     *engine* change (a `RenderTexture2D` carts can draw into + sample), since the feedback shader
     already fakes ~80% of the intuition on the live canvas.
 
-36. **modrack MACRO exposes only 6 of the engine's 14 macro-engines — DEFERRED until `sound.h` is clean, then bump the slot count**
-    *(new 2026-06-15, investigation + decision)*. The engine ships **14 modeled instruments all on the same
+36. **✓ SHIPPED 2026-06-15 — modrack MACRO now exposes all 14 modeled engines** *(Option B taken:
+    `SOUND_INSTR_SLOTS` 32→48; the 8 new engines MEMBRANE/REED/PIPE/VOICE/GUITAR/PIANO/BOWED/BRASS
+    got dedicated slots 32–39, `eng` knob 0..13. Bandito reworked to MEMBRANE bongos; new Chamber
+    preset (BOWED). Commits `5db2327` engine, `de5c36f` cart.)* Original investigation below.
+    *(2026-06-15, investigation + decision)*. The engine ships **14 modeled instruments all on the same
     Mutable-style harmonics/timbre/morph 3-macro interface** (`INSTR_PLUCK/MALLET/FM/ORGAN/EPIANO/PD`
     — the 6 modrack's MACRO `eng` knob already offers — plus **8 not reachable from modrack**:
     `MEMBRANE` (tabla/conga/**bongo**/djembe), `REED` (clarinet/sax), `PIPE` (flute), `VOICE`
@@ -818,7 +821,9 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     Engine macro reference (per-engine meaning of each macro) lives in the `INSTR_*` comments in
     [`runtime/studio.h`](../runtime/studio.h) and [`design/instrument-engines.md`](design/instrument-engines.md).
 
-37. **Bump polyphony `SOUND_VOICES` 16 → 32 — batch with #36's slot bump** *(new 2026-06-15)*.
+37. **✓ SHIPPED 2026-06-15 — polyphony `SOUND_VOICES` 16 → 32** *(+ `SOUND_HANDLE_BITS` 4→5;
+    commit `5db2327`, batched with #36's slot bump. Verified soundcheck + tripwire + tune-check.)*
+    Original note below. *(2026-06-15)*.
     16 voices starves on rich patches: the long-ringing modal/Karplus engines (PLUCK/MALLET/PIANO/
     GUITAR/MEMBRANE) hold voices through their release, so chords + fast passages + sustained tails
     overrun the pool. Precedent: the 8→16 flip (audio-notes §15).
