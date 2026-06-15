@@ -359,6 +359,20 @@ of an `#include "ui.h"` in your cart and it jumps to that same view.
 `static`, `#define` tunables, header-comment manual) and ships per the
 second-customer rule — a showcase cart *plus* one real cart using it.
 
+**Candidates (not headers yet — waiting on a second customer):**
+
+- **`sched.h` — energy/speed turn scheduler.** The roguelike "who acts next"
+  loop: each actor carries a `next`-turn time, the scheduler runs whoever's
+  `next` is smallest, then pushes it out by `COST/speed` (higher speed = acts
+  sooner & more often, naturally interleaved — the energy-accumulation idea as
+  next-event times). It's ~15 generic lines, currently living inline in its
+  **showcase `tempo`** (the visible version, with the turn-order ribbon). Source:
+  [nadako's turn-scheduling rant](https://nadako.github.io/rants/posts/2013-03-26_roguelike-turn-based-time-scheduling.html).
+  **Promote when a second cart needs speed-ordered turns** — the obvious one is
+  giving `lurk`'s monsters real speed stats (the AI carts `needs`/`pasture`/`lurk`
+  currently fake timing with fixed per-actor frame counters; this scheduler is
+  the honest layer under them). Until then it stays inline in `tempo`.
+
 ### Touch input: `ui.h` vs `tapp()` — the decision (settled 2026-06-07)
 
 Both build on the same virtual-touch pool, so **both are mouse + touch capable
