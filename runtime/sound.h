@@ -1540,13 +1540,45 @@ static void fx_set_shallow(int b, float rate, float depth, float mix) {
     shw_used[b] = (mix > 0.0f);
 }
 
+// ── noise gate — an envelope-follower + threshold that clamps the signal shut below a level ─────
+// The classic rig pedal: when the input falls below `threshold` the gate CLOSES (ducks to silence);
+// above it, OPENS. attack/release shape how fast. Tames hiss/hum tails on a noisy or driven part,
+// and — placed AFTER reverb in the chain — chops the tail for the iconic 80s GATED REVERB. A
+// per-bus reorderable insert (FX_GATE). threshold 0 = always open → not called → byte-identical.
+static float gate_thresh[SOUND_FX_BUSES];   // env level below which the gate closes (0 = bypass)
+static float gate_atk   [SOUND_FX_BUSES];   // open coefficient (fast)
+static float gate_rel   [SOUND_FX_BUSES];   // close coefficient (slower = smoother tail cut)
+static float gate_env   [SOUND_FX_BUSES];   // envelope follower
+static float gate_gain  [SOUND_FX_BUSES];   // current gate gain 0..1 (slewed)
+static bool  gate_used  [SOUND_FX_BUSES];
+static void gate_process(int b, float *mixL, float *mixR) {
+    float in = fabsf(*mixL) > fabsf(*mixR) ? fabsf(*mixL) : fabsf(*mixR);   // peak follow (both channels)
+    gate_env[b] += (in - gate_env[b]) * 0.02f;                             // ~fast envelope follower
+    float target = gate_env[b] > gate_thresh[b] ? 1.0f : 0.0f;             // open above threshold, else close
+    float coef = target > gate_gain[b] ? gate_atk[b] : gate_rel[b];        // attack when opening, release when closing
+    gate_gain[b] += (target - gate_gain[b]) * coef;
+    *mixL *= gate_gain[b]; *mixR *= gate_gain[b];
+}
+static float gate_coef(int ms) {   // one-pole coefficient from a time in ms (sound_follow_coef is defined later)
+    if (ms < 1) ms = 1;
+    float c = 1.0f - expf(-1.0f / ((float)ms * 0.001f * (float)SOUND_SAMPLE_RATE));
+    return c < 0.0f ? 0.0f : (c > 1.0f ? 1.0f : c);
+}
+static void fx_set_gate(int b, float threshold, int attack_ms, int release_ms) {
+    if (threshold < 0.0f) threshold = 0.0f; if (threshold > 1.0f) threshold = 1.0f;
+    gate_thresh[b] = threshold * 0.25f;                 // 0..1 → env threshold 0..0.25 (1.0 = aggressive)
+    gate_atk[b] = gate_coef(attack_ms);
+    gate_rel[b] = gate_coef(release_ms);
+    gate_used[b] = (threshold > 0.0f);                  // threshold 0 = always open → byte-identical
+}
+
 // ── reorderable insert chain (fx_order) ──────────────────────────────────────────────────────
 // The inserts above (FX_* in studio.h) run in a default order; fx_order() lets a cart rearrange
 // them PER BUS. fx_order[b] is the visit list; default = the canonical order, so an un-reordered
 // bus is byte-identical to the old hardcoded ladder. Each step still gates on its _used[b] flag,
 // so the default-order case is the same work as before.
 #define N_PEDALS  (FX_CRUSH + 1)            // the 8 reorderable PEDALS (FX_TREM..FX_CRUSH) — the default chain
-#define N_INSERTS (FX_SHALLOW + 1)          // array size / kind validation cap: pedals + FORMANT/FILTER/PAN/RINGMOD (default) + FX_REVERB/ECHO/GRAINS/DRIVE/SHALLOW (placed via fx_order). Chain length is capped separately by FX_ORDER_SLOTS.
+#define N_INSERTS (FX_GATE + 1)             // array size / kind validation cap: pedals + FORMANT/FILTER/PAN/RINGMOD (default) + FX_REVERB/ECHO/GRAINS/DRIVE/SHALLOW/GATE (placed via fx_order). Chain length is capped separately by FX_ORDER_SLOTS.
 #define FX_ORDER_SLOTS 16                   // fx_order packs 16 slots (4 ints × 4 bytes, 1 byte/slot: kind 5 bits | instance 3 bits). Kinds 0..31, instances 0..7. A chain longer than 16 is truncated.
 static int insert_order  [SOUND_FX_BUSES][N_INSERTS];   // per-bus visit list (kept distinct from the fx_order() API)
 static int insert_order_n[SOUND_FX_BUSES];  // populated slot count (default = 8 pedals + formant + filter + pan + ringmod; FX_REVERB only on a reverb-bus)
@@ -1570,6 +1602,7 @@ static void apply_insert(int kind, int inst, int b, float *L, float *R) {
         case FX_GRAINS: { int t = grain_tank_of[b]; if (t >= 0 && grain_pool[t].used) grains_process(&grain_pool[t], L, R); } break;
         case FX_DRIVE:   if (drvins_used[b][inst]) drive_process(b, inst, L, R); break;   // mix-bus saturation insert (per-instance; reuses the DRIVE_* shapers)
         case FX_SHALLOW: if (shw_used[b])    shallow_process(b, L, R); break;   // K-field short delay + Low Pass Gate
+        case FX_GATE:    if (gate_used[b])   gate_process(b, L, R);    break;   // noise gate (follower + threshold)
         // FX_REVERB: wet-REPLACE on a reverb-bus (a bus fed only by sends, bus_tank[b] >= 0), so any
         // inserts AFTER it in the chain chew on the wet tail (reverb→bitcrush). On any other bus
         // (master / a pedalboard's bus, bus_tank[b] == -1) it's a no-op pass-through — never zeroes a real mix.
@@ -1701,6 +1734,8 @@ typedef enum {
     SR_SHALLOW       = 96,   // a=rate*1000, b=depth*1000, c=mix*1000 — THE master shallow-water (bus 0): K-field delay + Low Pass Gate
     SR_INSTR_SHALLOW = 97,   // a=slot, b=rate*1000, c=depth*1000, e0=mix*1000 — shallow water on one instrument (auto-bus)
     SR_AMP_NOISE     = 98,   // a=hiss*1000, b=hum*1000, c=mains_hz — THE optional rig-noise floor (hiss + 50/60Hz hum)
+    SR_GATE          = 99,   // a=threshold*1000, b=attack_ms, c=release_ms — THE master noise gate (bus 0)
+    SR_INSTR_GATE    = 100,  // a=slot, b=threshold*1000, c=attack_ms, e0=release_ms — noise gate on one instrument (auto-bus)
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -4521,6 +4556,20 @@ static void sound_fire_req(SoundReq r) {
         fx_set_dropout(r.a / 1000.0f, r.b / 1000.0f);
     } else if (r.kind == SR_AMP_NOISE) {    // optional rig-noise floor: a=hiss, b=hum (×1000), c=mains_hz
         fx_set_amp_noise(r.a / 1000.0f, r.b / 1000.0f, r.c);
+    } else if (r.kind == SR_GATE) {         // master noise gate (bus 0): a=threshold(×1000), b=attack_ms, c=release_ms
+        fx_set_gate(0, r.a / 1000.0f, r.b, r.c);
+        bool present = false;               // auto-place FX_GATE in bus 0's chain (not in the default ladder)
+        for (int s = 0; s < insert_order_n[0]; s++) if (insert_order[0][s] == FX_GATE) present = true;
+        if (!present && insert_order_n[0] < FX_ORDER_SLOTS) { insert_order[0][insert_order_n[0]] = FX_GATE; insert_inst[0][insert_order_n[0]] = 0; insert_order_n[0]++; }
+    } else if (r.kind == SR_INSTR_GATE) {   // per-instrument: a=slot, b=threshold(×1000), c=attack_ms, e0=release_ms
+        if (r.a < 0 || r.a >= SOUND_INSTR_SLOTS) return;
+        int b = fx_bus_for(r.a);
+        if (b >= 1) {
+            fx_set_gate(b, r.b / 1000.0f, r.c, r.e0);
+            bool present = false;
+            for (int s = 0; s < insert_order_n[b]; s++) if (insert_order[b][s] == FX_GATE) present = true;
+            if (!present && insert_order_n[b] < FX_ORDER_SLOTS) { insert_order[b][insert_order_n[b]] = FX_GATE; insert_inst[b][insert_order_n[b]] = 0; insert_order_n[b]++; }
+        }
     } else if (r.kind == SR_SHALLOW) {      // master shallow water (bus 0): a=rate, b=depth, c=mix (×1000)
         fx_set_shallow(0, r.a / 1000.0f, r.b / 1000.0f, r.c / 1000.0f);
         bool present = false;               // auto-place FX_SHALLOW in bus 0's chain (not in the default ladder, like FX_GRAINS)
@@ -5650,6 +5699,15 @@ void amp_noise(float hiss, float hum, int mains_hz) {
     sound_push_ctrl(SR_AMP_NOISE, (int)(hiss * 1000.0f), (int)(hum * 1000.0f), mains_hz, 0, 0, 0);
 }
 
+// ── gate: a noise gate — clamp the signal shut below a threshold (rig gate / gated reverb) ──
+void gate(float threshold, int attack_ms, int release_ms) {
+    sound_push_ctrl(SR_GATE, (int)(threshold * 1000.0f), attack_ms, release_ms, 0, 0, 0);
+}
+void instrument_gate(int slot, float threshold, int attack_ms, int release_ms) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    sound_push_ctrl(SR_INSTR_GATE, slot, (int)(threshold * 1000.0f), attack_ms, release_ms, 0, 0);
+}
+
 // ── shallow water: a filtered-random short delay + a Low Pass Gate (the warped-water warble) ──
 void shallow(float rate, float depth, float mix) {
     sound_push_ctrl(SR_SHALLOW, (int)(rate * 1000.0f), (int)(depth * 1000.0f), (int)(mix * 1000.0f), 0, 0, 0);
@@ -5893,6 +5951,7 @@ static void sound_init(void) {
         cho_rate[b] = 1.5f; cho_depth[b] = 0.4f; cho_mix[b] = 0.5f; cho_used[b] = false;
         shw_widx[b] = 0; shw_env[b] = 0.0f; shw_lp[b] = 0.0f; shw_used[b] = false;   // shallow water: dormant + seeded
         shw_rate[b] = 1.0f; shw_depth[b] = 0.6f; shw_mix[b] = 0.0f; shw_mod[b] = (ModState){ .seed = 0x2B7E1516u + (unsigned)b * 2654435761u };
+        gate_thresh[b] = 0.0f; gate_atk[b] = 1.0f; gate_rel[b] = 1.0f; gate_env[b] = 0.0f; gate_gain[b] = 1.0f; gate_used[b] = false;   // noise gate: open (bypass)
         flg_widx[b] = 0; flg_phase[b] = 0.0f;
         flg_rate[b] = 0.3f; flg_depth[b] = 0.7f; flg_fb[b] = 0.7f; flg_mix[b] = 0.5f; flg_used[b] = false;
         for (int i = 0; i < TAPE_INST; i++) {

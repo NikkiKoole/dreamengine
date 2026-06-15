@@ -319,6 +319,26 @@ gate (next) to clamp the floor between notes.
 > as a quiet bed (`hiss`/`hum` ~0.2–0.4). Reach for it on lo-fi, ambient, and amp-sim tracks; leave it
 > at 0 everywhere else. The companion **noise gate** clamps it (and real signal) between notes.
 
+## gate — `gate(threshold, attack_ms, release_ms)` · `instrument_gate(slot, …)`
+
+A NOISE GATE: an envelope follower + threshold that **clamps the signal shut** when it falls below
+`threshold` and opens above it. The classic rig pedal — tame the hiss/hum and ringing tails of a noisy
+or high-gain part between notes — and, placed **AFTER reverb** in `fx_order`, it chops the tail for the
+iconic **80s gated reverb** (the Phil Collins snare). A reorderable insert (`FX_GATE` = kind 17).
+`threshold` 0–1 (**0 = always open / bypass**, byte-identical; higher closes sooner), `attack_ms`
+(open speed, ~1–10), `release_ms` (close speed / how fast the tail cuts, ~30–300). Master or per-instrument.
+
+| recipe | call | character | used by |
+|---|---|---|---|
+| gated reverb | `FX_REVERB`→`FX_GATE` in `fx_order` + `reverb_insert(0.9,0.3,0.7)` + `gate(0.4f, 2, 60)` | the 80s big-snare bloom that slams shut — reverb tail energy drops ~5× | `pedalboard` |
+| tighten a noisy lead | `instrument_gate(I_LEAD, 0.4f, 3, 100)` | clamp a driven/hissy part's tail so it's silent between phrases | `pedalboard` |
+| stutter chop | `gate(0.5f, 1, 25)` on a sustained pad | fast release + a moving source = rhythmic gating | — |
+
+> **Gate vs sidechain/glue.** All three are dynamics, but a gate is a *threshold switch* (open/shut on
+> level), where `sidechain`/`glue` *duck* continuously. Use the gate to remove noise/tails; use
+> sidechain for the pump. Pairs with `amp_noise` — though note the gate (a pre-output insert) clamps the
+> signal path, not the post-limiter `amp_noise` floor; gate a noisy *part*, or use it for gated reverb.
+
 ## EQ — `eq(low_gain, mid_gain, high_gain)` · `instrument_eq(slot, low_gain, mid_gain, high_gain)`
 
 3-band tone control, and **the library's only BOOST** — every other tone tool (the SVF filters)

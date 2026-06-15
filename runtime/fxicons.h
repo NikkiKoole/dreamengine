@@ -30,6 +30,7 @@ static int fx_body(int kind) {
         case FX_ECHO:    return CLR_DARK_PEACH;
         case FX_GRAINS:  return CLR_INDIGO;
         case FX_SHALLOW: return CLR_DARKER_BLUE;
+        case FX_GATE:    return CLR_DARK_GREEN;
         default:         return CLR_DARKER_GREY;
     }
 }
@@ -51,6 +52,7 @@ static int fx_accent(int kind) {
         case FX_ECHO:    return CLR_ORANGE;
         case FX_GRAINS:  return CLR_MAUVE;
         case FX_SHALLOW: return CLR_BLUE;
+        case FX_GATE:    return CLR_GREEN;
         default:         return CLR_LIGHT_GREY;
     }
 }
@@ -72,6 +74,7 @@ static const char *fx_name(int kind) {
         case FX_ECHO:    return "DELAY";
         case FX_GRAINS:  return "GRAINS";
         case FX_SHALLOW: return "SHALLOW";
+        case FX_GATE:    return "GATE";
         default:         return "FX";
     }
 }
@@ -149,6 +152,10 @@ static void fx_icon(int kind, int cx, int cy, int col, int bg) {
                 line(px, py, xx, wy, col); px = xx; py = wy;
             }
         }
+    } else if (kind == FX_GATE) {                            // a portcullis gate (bars between two rails)
+        line(cx - 12, cy - 7, cx + 12, cy - 7, col);         // top rail
+        line(cx - 12, cy + 6, cx + 12, cy + 6, col);         // bottom rail
+        for (int i = -2; i <= 2; i++) line(cx + i * 6, cy - 7, cx + i * 6, cy + 6, col);   // the bars
     } else if (kind == FX_GRAINS) {                          // a scattered cloud of grains
         circfill(cx - 8, cy + 1, 1, col);
         circfill(cx - 4, cy - 4, 2, col);

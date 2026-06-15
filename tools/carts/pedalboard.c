@@ -39,7 +39,7 @@
 // ── the effect catalog: every pedal you can drag into the chain ──────────────────────────────
 // kind = the engine FX_* insert kind (its slot in the reorderable chain). Every pedal — REVERB
 // included now (FX_REVERB via reverb_insert) — is a real insert, so chain order is audible.
-enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, C_PAN, C_FIL, C_RNG, C_DLY, C_LOFI, C_FUZZ, C_GRN, C_EQ2, C_OD, C_SHW, NCAT };
+enum { C_BIT, C_EQ, C_CHO, C_PHA, C_FLG, C_TAP, C_TRM, C_WAH, C_RVB, C_FMT, C_PAN, C_FIL, C_RNG, C_DLY, C_LOFI, C_FUZZ, C_GRN, C_EQ2, C_OD, C_SHW, C_GATE, NCAT };
 typedef struct {
     const char *name; int body, accent, kind, nk;
     const char *klabel[MAXK]; float kdef[MAXK];
@@ -79,6 +79,9 @@ static const FxDef CAT[NCAT] = {
     // SHALLOW is the Fairfield Shallow Water INSERT (FX_SHALLOW=16, the first kind past the old 16-kind
     // ceiling): a filtered-random short delay (warped-water warble) + a Low Pass Gate. RATE/DEPTH/MIX.
     { "SHALLOW",  CLR_DARKER_BLUE,   CLR_BLUE,         FX_SHALLOW, 3, { "RATE","DEP","MIX" },  { 0.30f, 0.60f, 0.50f } },
+    // GATE is the noise gate INSERT (FX_GATE=17): clamps the signal shut below THRSH. Put it after the
+    // REVERB pedal in the chain for gated reverb (the tail chops). THRSH · ATK (fast) · REL (tail cut).
+    { "GATE",     CLR_DARK_GREEN,    CLR_GREEN,        FX_GATE,    3, { "THR","ATK","REL" },   { 0.35f, 0.10f, 0.40f } },
 };
 
 // ── the chain: an ordered list of DISTINCT catalog ids, each with its own knobs + on-state ──
@@ -311,6 +314,7 @@ static void apply_fx(void) {
             case C_EQ2: if (act) eq_inst(1, (k[0]-0.5f)*24.0f, (k[1]-0.5f)*24.0f, (k[2]-0.5f)*24.0f); else eq_inst(1, 0.0f, 0.0f, 0.0f); break;
             case C_OD:  drive_insert_inst(1, act ? k[0] : 0.0f, (int)(k[1]*3.99f), act ? k[2] : 0.0f); break;   // 2nd bus drive (FX_DRIVE inst 1); amt/mix 0 = off
             case C_SHW: shallow(0.2f + k[0] * 7.8f, k[1], act ? k[2] : 0.0f); break;   // RATE 0.2..8 Hz, DEP, MIX (off = bypass)
+            case C_GATE: gate(act ? k[0] : 0.0f, 1 + (int)(k[1] * 15.0f), 20 + (int)(k[2] * 380.0f)); break;   // THR (off = bypass), ATK 1..16ms, REL 20..400ms
             case C_CHO: chorus(0.1f + k[0] * 4.9f, k[1], act ? k[2] : 0.0f); break;
             case C_PHA: phaser(0.1f + k[0] * 9.9f, k[1], (k[2]-0.5f) * 1.8f, act ? k[3] : 0.0f, 4); break;
             case C_FLG: flanger(0.05f + k[0] * 4.95f, k[1], k[2] * 0.95f, act ? k[3] : 0.0f); break;

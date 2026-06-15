@@ -1562,6 +1562,20 @@ v1, document it on the panel.
     toggle A/Bs floor-on vs dead-silent; a glowing 12AX7 + hiss speckle on the amp grille). Companion
     noise GATE (clamps the floor between notes) is the next pedal — now mintable as a real `FX_*` kind.
 
+26. **Noise gate (`gate`) — a reorderable insert; the rig gate + gated reverb.** **✓ SHIPPED 2026-06-15.**
+    Boutique-pedals roadmap (Block C, part 2). `gate(threshold, attack_ms, release_ms)` + `instrument_gate`
+    (`SR_GATE`=99/100), `FX_GATE`=17 (2nd kind past the widen). Per-bus envelope follower + threshold:
+    above → gain slews to 1 (attack), below → to 0 (release); applied to L/R. `threshold` 0 → always open
+    → not called → byte-identical. attack/release via an inlined one-pole coef (`sound_follow_coef` is
+    defined later in the file — a forward-ref compile error caught immediately by the gate; inlined
+    `gate_coef`). Per-bus insert, auto-added to the chain on first call. **Showcase: `pedalboard`** (the
+    GATE pedal — put it after the REVERB pedal for gated reverb). Verified: soundcheck + 900-frame
+    tripwire + `--det` byte-identical; `pedalboard`/`groovebox`/`epiano` byte-identical (new kind inert
+    in default chains); gated-reverb A/B chops the tail (~5× less back-half energy vs ungated). Honest
+    note: the gate is a pre-output insert, so it clamps the *signal path* (a noisy part, or a reverb tail
+    for gated verb) — NOT the post-limiter `amp_noise` floor (#25), which sits after everything. That
+    completes Block C (amp realism = the optional floor + the gate that tames signal noise).
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 
