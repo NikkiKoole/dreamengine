@@ -930,15 +930,15 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       crossing rooms jumps abruptly. Build plan: a cart-land **`acoustics.h`** helper (raycast occlusion
       + zone/material tables → the knobs) + those two engine conveniences. A tilemap **line-of-sight**
       primitive is an optional bonus (generalizes to vision/stealth). Findings in the cart header.
-    - **Both engine asks now DESIGNED** (ready to build when `sound.h` is free) in
-      [`design/spatial.md`](design/spatial.md) → "Designed solutions": (a) **float `note_vol` + `note_res`**
-      (keep their 0..7 / 0..15 ranges, just drop the input quantization → byte-identical for every existing
-      caller, since `int` literals promote to the same float; **supersedes** the earlier separate-`note_gain`
-      sketch — one fewer function); (b) rideable reverb = slew the tank's `fb`/`damp` toward targets, gated
+    - **Engine ask (a) SHIPPED 2026-06-15** (commit `5184a88`): **float `note_vol` + `note_res`** — both
+      now `float`, ranges kept (0..7 / 0..15), input quantization dropped → byte-identical for every existing
+      caller (int literals promote to the same float). Superseded the earlier separate-`note_gain` sketch.
+      **Engine ask (b) still DESIGNED** (ready to build when `sound.h` is free) in
+      [`design/spatial.md`](design/spatial.md) → "Designed solutions": rideable reverb = slew the tank's `fb`/`damp` toward targets, gated
       on a new `reverb_glide(ms)` (snap by default → byte-identical; `reverb()` re-call is already cheap —
       just no slew). Two-tank crossfade noted as the v3.1 higher-fidelity fallback.
-    - **Floating `note_vol` clears the second-customer bar independent of v3 — overdue, not speculative**
-      (cart survey 2026-06-15). The live per-note surface is float *everywhere* (`note_cutoff` Hz,
+    - **Floating `note_vol` cleared the second-customer bar independent of v3 — SHIPPED 2026-06-15**
+      (commit `5184a88`; was overdue, not speculative — cart survey 2026-06-15). The live per-note surface is float *everywhere* (`note_cutoff` Hz,
       `note_pitch`/`duty`/`pan`/`drive`/sends, the macros) **except two integers: `note_vol` (0..7) and
       `note_res` (0..15)** — the stragglers from before the float-everything convention. **8 carts already
       compute a continuous level then crush it through `note_vol`** via `(int)(level*7+0.5f)` in a per-frame

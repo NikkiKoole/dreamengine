@@ -372,8 +372,10 @@ line-of-sight primitive).
 Both are small, byte-identical-when-dormant, and mirror existing idioms. Append the request
 kinds after the current enum max (re-read the tail first — it drifts under parallel edits).
 
-**(a) Float `note_vol` + `note_res` — widen the knobs, don't add a function.** *(revised 2026-06-15;
-supersedes the earlier separate-`note_gain` sketch — see "rejected alternative" below.)*
+**(a) Float `note_vol` + `note_res` — widen the knobs, don't add a function.** ✅ **SHIPPED**
+(commit `5184a88`) — both now `float`, ranges kept (0..7 / 0..15), byte-identical for int callers.
+The design below is the as-built record. *(revised 2026-06-15; supersedes the earlier separate-`note_gain`
+sketch — see "rejected alternative" below.)*
 The problem: occlusion attenuation (and instrument dynamics) step audibly because `note_vol` is 0..7
 and `note_res` is 0..15. The fix is to make those two **live** knobs `float` — **keeping their existing
 ranges**, just removing the input quantization:
