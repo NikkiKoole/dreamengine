@@ -176,10 +176,23 @@ reverb, tight drums). Natural sibling to the cab/amp work.
 - ✅ **Wire `amp_noise()` into the `pedalboard` cabinet.** Done 2026-06-15 — the AMP cabinet now adds a
   rig-noise floor whose hiss tracks the GAIN knob (clean = silent, hot = hisses) + a touch of mains hum;
   Leslie/none stay pristine. Cart-side only; default board byte-identical (dormant until AMP is chosen).
-- **Shimmer in the pedalboard.** `shimmer()` is master-stage (a private reverb tank), so it's not a
-  draggable chain pedal — only the standalone `shimmer` cart has it. To add it to the rig: either make a
-  real per-bus `FX_SHIMMER` insert (the tank would need to go per-bus, non-trivial), or a non-reorderable
-  cabinet-style "ambience" slot driving the master `shimmer()`. Deferred — bigger than a quick win.
+- **Shimmer in the pedalboard / on the bus.** `shimmer()` is master-stage (a single private reverb
+  tank), so it's not a draggable chain pedal — only the standalone `shimmer` cart has it. Cost is mostly
+  **memory**: one instance = a `ReverbTank` (~30 KB) + the octave-up buffer (`SHIM_PBUF` 4096 = ~16 KB) ≈
+  **~47 KB**. CPU is pay-per-use (a reverb + a 2-tap granular read per sample, gated on `_used` — idle
+  buses cost nothing). Sized options:
+
+  | approach | instances | memory | reorderable / per-instrument |
+  |---|---|---|---|
+  | cabinet "ambience" slot (drives the existing master `shimmer()`) | 1 (reuse) | ~0 extra | no — fixed master output, like the amp_noise cabinet wiring |
+  | **small pool (recommended)** — the grains/reverb-tank pattern | 2–3 | **~94–141 KB** | yes — master + 1–2 instruments at once |
+  | full per-bus | 8 (`SOUND_FX_BUSES`) | ~376 KB | yes everywhere, but overkill |
+
+  **Recommended: the 2-instance pool (~94 KB)** — mirrors how `grains` + the reverb tanks already work.
+  Code = the grains-pool template: singleton statics → a pool with a `bus→instance` map, mint
+  `FX_SHIMMER`=18 (room to 31), `apply_insert` case + auto-add + per-bus init, + the pedalboard pedal.
+  If you just want it *playable in the rig* cheaply (no reorder/per-instrument), the cabinet ambience
+  slot is ~free. Deferred — bigger than a quick win.
 
 ## Side quests (engineering nits from the lists, not effects)
 - **`fast_tanh` Padé approximation** (B1 tip): if `DRIVE_SOFT`/the soft-clip is ever hot in the
