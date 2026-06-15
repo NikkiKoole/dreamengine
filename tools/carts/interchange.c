@@ -10,10 +10,13 @@
 // here, eyeball them, then port the drawer into roadnet2. The eventual interface is:
 // "given two crossing roads (+ a type) → draw the ramps."  See docs/design/roadnet2-plan.md.
 //
-//   T            cycle type: OVERPASS → DIAMOND → CLOVERLEAF → TRUMPET
-//   ◄ ►          rotate the crossing road
-//   ▲ ▼          ramp size
-//   H            hide HUD
+// Junction = TOPOLOGY (cross / T-split / Y-split) × CLASS-PAIR (highway/arterial each). The rule:
+// any highway → grade-separated (overpass + ramps); else at-grade. Toggle via on-screen buttons
+// or keys. See docs/design/roadnet2-plan.md → "The junction matrix".
+//   click buttons  topology / flip / A class / B class / ramp type      (or the keys:)
+//   Y  topology    1/2  road A/B class    F  flip 3rd leg    T  ramp type
+//   L  lanes       ◄ ►  angle             P  panel           H  hud
+//   sliders        reach / gore / taper / run-on (ramp shape)
 // ============================================================================
 
 #define LANE_W   6          // one lane width (px)
@@ -27,9 +30,13 @@ static float fsq(float x){ if(x<=0)return 0; float g=x>1?x:1; for(int i=0;i<6;i+
 static float c_deg(float d){ return dx(1.0f, d); }   // engine dx/dy = cos/sin in degrees (0=right,90=down)
 static float s_deg(float d){ return dy(1.0f, d); }
 
-enum { T_OVERPASS, T_DIAMOND, T_CLOVERLEAF, T_TRUMPET, T_COUNT };
-static const char *TNAME[T_COUNT] = { "OVERPASS", "DIAMOND", "CLOVERLEAF", "TRUMPET" };
+enum { T_OVERPASS, T_DIAMOND, T_CLOVERLEAF, T_COUNT };   // ramp STYLE (grade-separated only)
+static const char *TNAME[T_COUNT] = { "OVERPASS", "DIAMOND", "CLOVERLEAF" };
 static int   itype = T_DIAMOND;
+enum { TOPO_CROSS, TOPO_TEE, TOPO_WYE, TOPO_COUNT };    // junction TOPOLOGY (the leg layout)
+static const char *PNAME[TOPO_COUNT] = { "CROSS", "T-SPLIT", "Y-SPLIT" };
+static int   topo = TOPO_CROSS;
+static int   flip = 0;          // 3-way junctions: which side the 3rd leg is on
 static float ang   = 90.0f;     // crossing road angle (deg from highway)
 static int   show_hud = 1, show_panel = 1;
 // tunable ramp shape — slider-normalised 0..1, mapped to real values in draw() (tune by feel,
@@ -108,6 +115,8 @@ void init(void) {}
 
 void update(void) {
     if (keyp('T') || keyp(KEY_TAB)) itype = (itype + 1) % T_COUNT;
+    if (keyp('Y')) topo = (topo + 1) % TOPO_COUNT;   // cross / T-split / Y-split
+    if (keyp('F')) flip = !flip;                 // mirror the 3rd leg (3-way only)
     if (keyp('L')) lanes = lanes % 4 + 1;        // cycle highway lanes 1..4
     if (keyp('1')) clsA = !clsA;                 // toggle road A class (highway/arterial)
     if (keyp('2')) clsB = !clsB;                 // toggle road B class
@@ -124,34 +133,35 @@ void draw(void) {
     float ux = c_deg(ang), uy = s_deg(ang);            // crossing-road unit dir
     float R  = 24 + s_reach*66;                        // ramp reach (px), from the slider
     float goreM = 1.0f + s_gore*1.0f, taperM = 0.5f + s_taper*1.3f, runonM = 0.4f + s_runon*1.0f;
-    int HW = rwidth(clsA);                             // road A (horizontal) half-width
-    int BW = rwidth(clsB);                             // road B (crossing) half-width
+    int HW = rwidth(clsA);                             // road A (the through road) half-width
+    int BW = rwidth(clsB);                             // road B (crossing / branch) half-width
     int graded = (clsA==C_HIGHWAY || clsB==C_HIGHWAY); // any highway → grade-separated; else at-grade
+    int tee = (topo==TOPO_TEE), wye = (topo==TOPO_WYE);
+    int ss  = flip ? 1 : -1;                           // 3-way: which side the 3rd leg sits on
+    float far = (float)(SCREEN_W + SCREEN_H);
 
-    // 1. ROAD A (horizontal), drawn UNDER everything; highway gets a median + lane lines
+    // 1. ROAD A (horizontal through road), under everything; highway gets median + lane lines
     straight(0, CY, SCREEN_W, CY, HW+2, CLR_DARKER_GREY, clsA==C_HIGHWAY?CLR_LIGHT_GREY:CLR_MEDIUM_GREY);
     if (clsA == C_HIGHWAY) {
         for (int j = 1; j < lanes; j++) { hdash(CY - j*LANE_W, CLR_WHITE); hdash(CY + j*LANE_W, CLR_WHITE); }
         rectfill(0, CY-1, SCREEN_W, 2, CLR_DARKER_GREY);   // centre median
     }
 
-    // 2. RAMPS — only when GRADE-SEPARATED (a highway is involved). AR×AR just crosses at grade.
-    if (graded && (itype == T_DIAMOND || itype == T_CLOVERLEAF)) {
-        // four quadrant ramps: highway point (CX±R,CY) ↔ crossing-road point (CX±R·u)
-        float px=-uy, py=ux;                                     // perpendicular to the crossing road
+    // 2. RAMPS — grade-separated cross/T only (AR×AR crosses at grade; WYE has none yet)
+    if (graded && !wye && (itype == T_DIAMOND || itype == T_CLOVERLEAF)) {
+        float px=-uy, py=ux;
         for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
-            float hx = CX + sx*R*goreM, hy = CY + sy*(HW - LANE_W*0.5f);  // start ON the outer lane (overlaps highway)
-            float cd = HW + R;                                   // crossing end: clearance R BEYOND the edge
-            float ax = CX + ux*sy*cd - px*sx*(BW*0.35f);       // end tucked ONTO the crossing carriageway
-            float ay = CY + uy*sy*cd - py*sx*(BW*0.35f);       // (overpass drawn on top → clips it neat)
-            // highway tangent points TOWARD the curve (toward centre) so it tapers off parallel,
-            // not folding back; kA = the off-ramp taper run, kB = run-on along the overpass
+            if (tee && sy != ss) continue;                   // T-split: ramps only on the 3rd-leg side
+            float hx = CX + sx*R*goreM, hy = CY + sy*(HW - LANE_W*0.5f);
+            float cd = HW + R;
+            float ax = CX + ux*sy*cd - px*sx*(BW*0.35f);
+            float ay = CY + uy*sy*cd - py*sx*(BW*0.35f);
             draw_ramp(hx,hy, (sx>0?180:0), ax,ay, (sy>0?ang:ang+180), R*taperM, R*runonM);
         }
     }
-    if (graded && itype == T_CLOVERLEAF) {
-        // loop ramps: a 270° curl in each quadrant (tight inner turn)
+    if (graded && !wye && itype == T_CLOVERLEAF) {
         for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
+            if (tee && sy != ss) continue;
             float cx = CX + sx*R*0.6f, cy = CY + sy*R*0.6f;
             float lp[28], lq[28]; int n=0;
             for (int i=0;i<=26;i++){ float a = (float)i/26*300 + (sx*sy>0?40:220);
@@ -159,41 +169,43 @@ void draw(void) {
             road(lp, lq, n, 5, CLR_DARKER_GREY, CLR_DARK_GREY);
         }
     }
-    if (graded && itype == T_TRUMPET) {
-        // 3-way: the crossing road only goes ONE side; a loop + a direct ramp
-        float ax = CX + ux*R, ay = CY + uy*R;
-        draw_ramp(CX+R*1.5f,CY, 0,  ax,ay, ang, R, R);
-        draw_ramp(CX-R*1.5f,CY, 180, ax,ay, ang+180, R, R);
-        float lp[28], lq[28]; int n=0; float lcx=CX-R*0.5f, lcy=CY+uy*R*0.7f;
-        for (int i=0;i<=26;i++){ float a=(float)i/26*300+30; lp[n]=lcx+c_deg(a)*R*0.5f; lq[n]=lcy+s_deg(a)*R*0.5f; n++; }
-        road(lp,lq,n,5,CLR_DARKER_GREY,CLR_DARK_GREY);
+
+    // 3. ROAD B / the 3rd leg, drawn OVER A (overpass shadow if grade-separated; at-grade = no shadow)
+    int dcol = clsB==C_HIGHWAY ? CLR_LIGHT_GREY : CLR_MEDIUM_GREY;
+    if (wye) {                                           // Y-split: a branch forks off A toward one side
+        float bd = ss > 0 ? 35.0f : -35.0f;              // (fixed fork angle for now; flip mirrors it)
+        float ex = CX + c_deg(bd)*far, ey = CY + s_deg(bd)*far;
+        if (graded) straight(CX,CY, ex,ey, BW+3, -1, CLR_BROWNISH_BLACK);
+        straight(CX,CY, ex,ey, BW, CLR_DARKER_GREY, dcol);
+    } else {                                             // CROSS (full) or T-SPLIT (stub on ss side)
+        float b0x = tee ? CX : CX - ux*far, b0y = tee ? CY : CY - uy*far;
+        float b1x = CX + (tee?ss:1)*ux*far, b1y = CY + (tee?ss:1)*uy*far;
+        if (graded) straight(b0x,b0y, b1x,b1y, BW+3, -1, CLR_BROWNISH_BLACK);
+        straight(b0x,b0y, b1x,b1y, BW, CLR_DARKER_GREY, dcol);
     }
 
-    // 3. ROAD B (crossing). GRADE-SEPARATED → drawn OVER A with an underbridge shadow (overpass);
-    //    AT-GRADE (AR×AR) → same level, no shadow, so it reads as a plain crossroads.
-    float far = (float)(SCREEN_W + SCREEN_H);
-    int stub = (graded && itype==T_TRUMPET);                      // trumpet: crossing road is one-sided
-    float a0x = stub ? CX : CX - ux*far, a0y = stub ? CY : CY - uy*far;
-    float a1x = CX + ux*far, a1y = CY + uy*far;
-    if (graded) straight(a0x,a0y, a1x,a1y, BW+3, -1, CLR_BROWNISH_BLACK);   // underbridge shadow (overpass)
-    straight(a0x,a0y, a1x,a1y, BW, CLR_DARKER_GREY, clsB==C_HIGHWAY?CLR_LIGHT_GREY:CLR_MEDIUM_GREY);
-
-    if (show_panel) {                                  // live ramp-shape sliders (tune by feel)
+    if (show_panel) {                                  // live tuning: sliders + toggle buttons
         font(FONT_SMALL);
-        fillp(FILL_CHECKER, -1); rectfill(0, 12, 66, 56, CLR_BLACK); fillp_reset();
+        fillp(FILL_CHECKER, -1); rectfill(0, 12, 66, 102, CLR_BLACK); fillp_reset();
         ui_begin();
         ui_slider(&s_reach, 3, 16, 58, "reach");
         ui_slider(&s_gore,  3, 28, 58, "gore");
         ui_slider(&s_taper, 3, 40, 58, "taper");
         ui_slider(&s_runon, 3, 52, 58, "run-on");
+        if (ui_button(3, 66, 58, 10, PNAME[topo]))            topo = (topo+1) % TOPO_COUNT;
+        if (ui_button(3, 78, 58, 10, flip ? "flip \x1a" : "flip \x1b")) flip = !flip;
+        if (ui_button(3, 90, 27, 10, clsA==C_HIGHWAY?"A:HW":"A:AR")) clsA = !clsA;
+        if (ui_button(34,90, 27, 10, clsB==C_HIGHWAY?"B:HW":"B:AR")) clsB = !clsB;
+        if (ui_button(3,102, 58, 10, TNAME[itype]))           itype = (itype+1) % T_COUNT;
         ui_end();
         font(FONT_NORMAL);
     }
     if (show_hud) {
         char buf[56]; const char *cn[2] = { "HW", "AR" };
         rectfill(0,0,SCREEN_W,11,CLR_BLACK);
-        snprintf(buf,sizeof buf,"%s x %s   %s", cn[clsA], cn[clsB], graded ? TNAME[itype] : "CROSSROADS (at-grade)");
+        snprintf(buf,sizeof buf,"%s  %sx%s  %s", PNAME[topo], cn[clsA], cn[clsB],
+                 graded ? TNAME[itype] : "at-grade");
         print(buf, 4, 2, CLR_LIGHT_GREY);
-        print_centered("1/2 class  T type  L lanes  \x1a\x1b angle  P panel", SCREEN_W/2, SCREEN_H-9, CLR_DARK_GREY);
+        print_centered("click toggles \x10 or: 1/2 Y F T L  \x1a\x1b angle  P panel", SCREEN_W/2, SCREEN_H-9, CLR_DARK_GREY);
     }
 }
