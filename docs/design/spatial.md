@@ -296,6 +296,68 @@ work* — with maybe a small convenience API so every cart doesn't hand-roll it.
 Out of scope until v1 (and probably v2) ship; recorded here so v1's API doesn't
 accidentally foreclose it.
 
+### The industry vocabulary (use the real terms)
+
+- **Occlusion / obstruction / exclusion** (Creative EAX → FMOD/Wwise): *obstruction* =
+  direct path blocked, same room (muffle dry, reverb intact); *occlusion* = wall to
+  another space (muffle dry **and** wet); *exclusion* = direct open, reverb path blocked.
+- **Rooms + portals** (Wwise Spatial Audio, Steam Audio, Resonance) — the scalable model:
+  don't model individual walls, partition into **rooms** joined by **portals** (doorways).
+  A source next door is heard *through the portal* (localized at the doorway, muffled).
+  "Wall thickness" generalizes to **transmission loss** (sound *through* the wall) vs the
+  cheaper path *around* via a portal — sound takes whichever is louder.
+- **Geometry-query ladder**: raycast(s) listener→source against the tilemap → room/zone
+  membership → baked propagation (Steam Audio; overkill here).
+
+### Absorption — where the physics gives a formula
+
+Every surface has an **absorption coefficient α** (0..1) **per frequency band**; α≈0 =
+reflector (tile/stone/glass), α≈1 = eats everything (drape/open window). Crucially **most
+materials absorb highs far more than lows** → soft rooms sound *dark + dead*, hard rooms
+*bright + long*. The decay time follows **Sabine**:
+
+```
+RT60 = 0.161 · V / Σ(Sᵢ·αᵢ)     (room volume ÷ total surface absorption)
+```
+
+→ bigger room = longer tail; more/softer surfaces = shorter, deader tail; and because α is
+larger for highs, the tail **darkens as it decays**. This maps straight onto knobs we have:
+- **`reverb(size, damping)`**: `size` ≈ RT60 (derivable from zone area ÷ α via Sabine),
+  `damping` ≈ **HF absorption** (bright tile ↔ dark carpet — literally the high-freq α).
+- **per-band** absorption (if ever needed) = `reverb_bus_fx(tank, FX_EQ, …)` on the tail —
+  already expressible, no new API.
+
+So a "material" = a `(size, damping[, EQ])` preset (tile = long/bright, carpet = short/dark,
+wood = mid). Absorption is **the physical justification for the reverb knobs we already
+shipped**, not a new primitive.
+
+### The clean split + the one convergent gap
+
+**The cart computes "how blocked" (occlusion 0..1) and "which zone"; the engine just makes
+it sound blocked.** The engine stays **geometry-agnostic** — walls/thickness/rooms/portals/
+raycasts all live in the cart's model, feeding `note_cutoff` (muffle), gain (attenuate),
+and a zone reverb. That keeps the engine surface tiny.
+
+All three axes — occlusion, zones, materials — converge on **one** engine need: a reverb
+you can **ride/crossfade per frame** as the listener crosses rooms. But effects are
+**set-and-hold** (CLAUDE.md): re-calling `reverb()` every frame churns the DSP → *stutter*.
+So the likely API that "drops out" of v3 is a **slewed/crossfadable zone reverb** (a
+reverb-target that glides, or crossfading two tanks — the tank pool helps), **not** anything
+about walls. A second candidate that *generalizes beyond audio*: a **tilemap line-of-sight /
+raycast** primitive (occlusion *and* enemy vision/stealth/lighting want exactly "can A see B").
+
+### The probe (do this BEFORE any engine work)
+
+A `"probe"`-tagged top-down cart — a little guy walking rooms — to *hear* where it hurts and
+let the API drop out: **different floor materials** (footstep tone/reverb per ground: tile/
+carpet/wood/grass — the player's own sound carries the material + room), **walls/obstacles**
+that occlude in-room **emitters** (raycast listener→emitter, drive `note_cutoff` + gain),
+**multiple rooms with different reverbs** (the set-and-hold stutter shows here), a **doorway**
+(does it need portal localization or is muffle+attenuate enough?), and **thick vs thin walls**
+(transmission). Hand-wired against existing knobs, no new engine API — the report is *what
+dropped out* (expected: a cart-land `acoustics.h` helper + the rideable-reverb gap, maybe a
+line-of-sight primitive).
+
 ---
 
 ## Cost estimates (guesstimate)
