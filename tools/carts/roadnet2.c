@@ -91,7 +91,7 @@ static float P_town_space = 0.167f;  // town lattice spacing → 6..30 tiles
 static float P_hub_dens   = 0.75f;   // hub presence         → 40..100 %
 static float P_town_dens  = 0.444f;  // town presence        → 0..90 %
 static float P_jitter     = 0.6f;    // node wiggle off-grid → 0..~0.45·cell
-static float P_diag       = 0.25f;   // diagonal shortcuts   → 0..100% of quads (no X)
+static float P_web        = 0.5f;    // highway WEB density (β-skeleton): 0 = sparse/tree, 1 = looped/mesh
 static float P_sea        = 0.5f;    // sea level            → subtract 0.30..0.60
 
 static int   hub_cs(void)   { return 25000 + (int)(P_hub_space  * 35000); }  // 25..60 km (cities)
@@ -99,7 +99,7 @@ static int   node_cs(void)  { return 3000  + (int)(P_town_space * 5000);  }  // 
 static int   hub_pct(void)  { return 40 + (int)(P_hub_dens   * 60); }   // 40..100
 static int   town_pct(void) { return (int)(P_town_dens * 90); }         // 0..90
 static int   jit(int cs)    { int j = (int)(P_jitter * cs * 0.45f); return j < 1 ? 1 : j; }
-static int   diag_pct(void) { return (int)(P_diag * 100); }             // 0..100
+static float hw_beta(void)  { return 1.8f - P_web * 1.0f; }             // β-skeleton param: 1.8 sparse(RNG) .. 0.8 dense
 static float sea_sub(void)  { return 0.30f + P_sea * 0.30f; }           // 0.30..0.60
 #define NODE_CS  node_cs()
 #define HUB_CS   hub_cs()
@@ -290,10 +290,6 @@ static void catmull(float p0,float p1,float p2,float p3,float t,float *out){
                 + (-p0+3*p1-3*p2+p3)*t3 );
 }
 
-// The 4 forward link directions (the reverse 4 are owned by the neighbour cell, so
-// each physical link is enumerated exactly once → no double-draw, no seam fight).
-static const int DIR[4][2] = {{1,0},{0,1},{1,1},{1,-1}};
-
 #define LINK_SAMPLES 40             // world-space samples per link (km-long now → sample denser)
 #define MAXBEND      (26.0f*WS)     // furthest a road will detour sideways (metres)
 #define MAX_BRIDGE   (10.0f*WS)     // longest WATER span a road will bridge (metres);
@@ -465,31 +461,41 @@ static void draw_link(int n, int cls, int phase) {
 
 // HIGHWAYS — the connected backbone. Hub lattice, forward-only links, Catmull-Rom
 // shaped by the hubs beyond each span (reflect when absent). phase 0=casing, 1=centre.
+// The backbone is a PROXIMITY GRAPH over the hubs (β-skeleton), not a lattice: a link A–B
+// exists only if no third hub C lies in the forbidden lune (|CA|²+|CB|² < β·|AB|²). β=1 is the
+// Gabriel graph (looped, "highway map"); β→1.8 thins toward the RNG (tree-like). This gives a
+// sparse, branching corridor network with low-degree junctions — real highways, not a grid of
+// at-grade knots. Local + deterministic: gather the hubs near the view (margin so every on-screen
+// edge's lune is fully covered → no pop on pan), then it's pure geometry over that set.
+#define HW_MAX 512
 static void draw_highways(int phase) {
-    int c0 = ifloor(camX / HUB_CS) - 2, c1 = ifloor((camX + vcols) / HUB_CS) + 2;
-    int r0 = ifloor(camY / HUB_CS) - 2, r1 = ifloor((camY + vrows) / HUB_CS) + 2;
+    int c0 = ifloor(camX / HUB_CS) - 4, c1 = ifloor((camX + vcols) / HUB_CS) + 4;
+    int r0 = ifloor(camY / HUB_CS) - 4, r1 = ifloor((camY + vrows) / HUB_CS) + 4;
+    static float hx[HW_MAX], hy[HW_MAX]; static int hrk[HW_MAX]; int N = 0;
     for (int cx = c0; cx <= c1; cx++)
-        for (int cy = r0; cy <= r1; cy++) {
-            float p1x, p1y; if (!get_hub(cx, cy, &p1x, &p1y)) continue;
-            for (int d = 0; d < 4; d++) {
-                int dx = DIR[d][0], dy = DIR[d][1];
-                if (d >= 2) {                                           // diagonal: AT MOST one per quad (no X)
-                    int qx = cx, qy = (dy == 1) ? cy : cy - 1;          // the quad this diagonal crosses
-                    unsigned qh = hash2(qx * 2246822519u + 7, qy * 3266489917u + 13);
-                    if (qh % 100u >= (unsigned)diag_pct()) continue;    // this quad has no diagonal
-                    if ((dy == 1) != (int)((qh >> 9) & 1)) continue;    // and it picked the OTHER diagonal
-                }
-                float p2x, p2y;
-                if (!get_hub(cx + dx, cy + dy, &p2x, &p2y)) continue;
-                float p0x, p0y, p3x, p3y;
-                if (!get_hub(cx - dx, cy - dy, &p0x, &p0y)) { p0x = 2*p1x - p2x; p0y = 2*p1y - p2y; }
-                if (!get_hub(cx + 2*dx, cy + 2*dy, &p3x, &p3y)) { p3x = 2*p2x - p1x; p3y = 2*p2y - p1y; }
-                // class from the two hubs' ranks: a metro endpoint makes it a motorway
-                int cls = (hub_rank(cx, cy) == RK_METRO || hub_rank(cx + dx, cy + dy) == RK_METRO)
-                          ? CL_MOTORWAY : CL_HIGHWAY;
-                int np = link_path(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);  // bends/bridges terrain
-                if (np) draw_link(np, cls, phase);                           // 0 = no route
+        for (int cy = r0; cy <= r1 && N < HW_MAX; cy++) {
+            float x, y; if (!get_hub(cx, cy, &x, &y)) continue;
+            hx[N]=x; hy[N]=y; hrk[N]=hub_rank(cx, cy); N++;
+        }
+    float beta = hw_beta();
+    float maxd2 = (3.2f * HUB_CS) * (3.2f * HUB_CS);          // only consider nearby pairs
+    for (int i = 0; i < N; i++)
+        for (int j = i + 1; j < N; j++) {
+            float ax=hx[i], ay=hy[i], bx=hx[j], by=hy[j];
+            float ab2 = (bx-ax)*(bx-ax) + (by-ay)*(by-ay);
+            if (ab2 > maxd2 || ab2 < 1) continue;
+            int linked = 1;                                  // β-skeleton test against every other hub
+            for (int k = 0; k < N; k++) {
+                if (k==i || k==j) continue;
+                float ca2 = (hx[k]-ax)*(hx[k]-ax) + (hy[k]-ay)*(hy[k]-ay);
+                float cb2 = (hx[k]-bx)*(hx[k]-bx) + (hy[k]-by)*(hy[k]-by);
+                if (ca2 + cb2 < beta * ab2) { linked = 0; break; }
             }
+            if (!linked) continue;
+            float p0x=2*ax-bx, p0y=2*ay-by, p3x=2*bx-ax, p3y=2*by-ay;   // straight base; link_path bends for terrain
+            int cls = (hrk[i]==RK_METRO || hrk[j]==RK_METRO) ? CL_MOTORWAY : CL_HIGHWAY;
+            int np = link_path(p0x,p0y, ax,ay, bx,by, p3x,p3y);
+            if (np) draw_link(np, cls, phase);
         }
 }
 
@@ -629,9 +635,9 @@ static void draw_setup_panel(void) {
     font(FONT_SMALL);
     ui_begin();
     static const char *L[7] = { "hub gap", "town gap", "hub dens", "town dens",
-                                "wiggle", "diag", "water" };
+                                "wiggle", "web", "water" };
     float *pp[7] = { &P_hub_space, &P_town_space, &P_hub_dens, &P_town_dens,
-                     &P_jitter, &P_diag, &P_sea };
+                     &P_jitter, &P_web, &P_sea };
     for (int i = 0; i < 7; i++) ui_slider(pp[i], 4, 16 + i * 12, 88, L[i]);
     int roll = ui_button(4, 104, 88, 14, "ROLL");
     int go   = ui_button(4, 122, 88, 16, "EXPLORE \x10");

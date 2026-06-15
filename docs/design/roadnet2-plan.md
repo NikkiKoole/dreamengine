@@ -88,6 +88,18 @@ drive, inset = map):
 **routing** version (a highlighted route on the GPS) is a later layer on the same widget once the
 graph is back. Forks to settle by feel: heading-up vs north-up GPS; teleport vs route.
 
+## Highways as a proximity graph (β-skeleton) — done 2026-06-15
+The backbone was a 4-connected lattice → every hub an at-grade crossing of 4–6 highways (a grid
+of knots, not a highway network). Replaced with a **β-skeleton proximity graph** over the hubs:
+link A–B only if no third hub C sits in the lune (`|CA|²+|CB|² < β·|AB|²`). β=1 = Gabriel (looped,
+"highway map"); β→1.8 = RNG-ish (tree). Result: sparse, **branching corridors** with low-degree
+junctions. Local + deterministic (gather hubs near the view with a margin so on-screen edges' lunes
+are covered → no pop on pan; then pure geometry). The old **`diag` slider is repurposed → `web`**
+(`P_web`, β = 1.8 − web): left = sparse/tree, right = looped/mesh. Curves use reflected control
+points (straight base; `link_path` still bends for terrain). **Next for "highwayey":** the
+hierarchy/interchanges (part B) — arterial tier + ramps so towns reach highways via interchanges,
+not at-grade feeders; and cleaning the junction render.
+
 ## The v2 architecture — one graph, one query
 - **Everything is spline edges in ONE graph.** Highways → collectors → access → cul-de-sacs
   are all `RoadEdge`s (a class + a polyline, sampled from control points). Nodes are real
