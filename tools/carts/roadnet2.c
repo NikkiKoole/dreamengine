@@ -117,13 +117,15 @@ static float P    = TILE;            // pixels per tile = TILE * zoom (set per f
 // visible at the map's zoom; a metre-sized, metre-accurate car wants the L0 metre re-base
 // (lattice in km + wider zoom) — the deliberate next step. See roadnet2-plan.md.
 #define M_PER_UNIT  60.0f    // metres per world unit — THE scale knob (drive, then tune this)
-#define CAR_ACCEL   0.025f   // gas, units/frame² along the heading
-#define CAR_BRAKE   0.05f
-#define CAR_REVMAX -0.30f
-#define CAR_FRIC    0.97f    // engine speed kept per frame
-#define CAR_MAXSPD  0.90f    // units/frame
-#define CAR_STEER   3.2f     // deg/frame at full speed (scales down with speed)
-#define CAR_GRIP    0.20f    // velocity→heading lerp
+// PLACEHOLDER speeds — calmed down so it's drivable at the current (uncalibrated) scale; the
+// metre re-base will replace these with real m/s (e.g. 130 km/h → ~0.6 units/frame at 1u=1m).
+#define CAR_ACCEL   0.010f   // gas, units/frame² along the heading
+#define CAR_BRAKE   0.022f
+#define CAR_REVMAX -0.14f
+#define CAR_FRIC    0.96f    // engine speed kept per frame
+#define CAR_MAXSPD  0.34f    // units/frame
+#define CAR_STEER   3.0f     // deg/frame at full speed (scales down with speed)
+#define CAR_GRIP    0.22f    // velocity→heading lerp
 static int   car_on = 0;
 static float car_x, car_y, car_vx, car_vy, car_spd, car_ang, car_odo;  // odo in metres
 static int   click_px, click_py;     // press anchor — click (tiny move) = place car, else = drag-pan
@@ -668,7 +670,8 @@ void update(void) {
     if (vmode == V_DRIVE && car_on) {            // ══ DRIVE — follow the car, arrows/WASD steer ══
         float turn = (btn(0,BTN_RIGHT)||key('D') ? 1.0f:0) - (btn(0,BTN_LEFT)||key('A') ? 1.0f:0);
         float sc = car_spd / CAR_MAXSPD; if (sc < 0) sc = -sc;
-        car_ang += turn * CAR_STEER * sc;        // steering scales with speed (parked can't turn)
+        if (sc > 0.04f && sc < 0.5f) sc = 0.5f;  // responsive even at low speed (but a parked car can't turn)
+        car_ang += turn * CAR_STEER * sc;        // steering scales with speed
         if (btn(0,BTN_UP)  ||key('W')) car_spd += CAR_ACCEL;
         if (btn(0,BTN_DOWN)||key('S')) car_spd -= CAR_BRAKE;
         car_spd *= CAR_FRIC; car_spd = clamp(car_spd, CAR_REVMAX, CAR_MAXSPD);
