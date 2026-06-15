@@ -47,6 +47,7 @@ tag answers "why does this cart exist?", which stays true forever.
 | `waveed` | drawable single-cycle waves earn their keep (live-morph drone) | `wave_set()` + `INSTR_USER0..3` |
 | `platform-paint` (vs `platform-rects`) *(not tagged — shipped with the API as its teaching pair)* | level-as-painted-data needs a spritesheet read | `sget()` |
 | `podracer` *(not tagged — a game that stumbled onto the cliff, not built to ask)* | software-poly perf cliff is real | off-screen bbox clamp (STATUS #14) |
+| `acoustics` (spatial v3) | acoustic zones: the **mechanic is cart-land** (listener→source raycast → `note_cutoff` [Hz+slewed = great], zones → `reverb(size,damping)`, materials → `(size,damping)` presets). But two conveniences dropped out: `note_vol`'s **0..7 steps audibly** under occlusion attenuation, and **set-and-hold blocks** a per-frame zone-reverb crossfade (rooms jump). | **verdict in, API not yet built** — (a) `note_gain(handle, float)`, (b) a **rideable/crossfadable zone reverb**; the bulk ships as a cart-land `acoustics.h` helper. A tilemap line-of-sight primitive is an optional generalizing bonus. STATUS #40, [`spatial.md`](spatial.md) v3. |
 
 *(`heldnotes`, `filterenv`, `pitchenv` are demo carts shipped **with** their APIs —
 the probing happened in design docs and the instrument cabinet's ear-testing.
