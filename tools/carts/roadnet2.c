@@ -108,6 +108,27 @@ static int   show_grid = 0;          // cell-border overlay (seam test)
 static int   show_hud  = 1;
 static float zoom = 1.0f;            // mousewheel zoom (ZMIN..ZMAX)
 static float P    = TILE;            // pixels per tile = TILE * zoom (set per frame)
+
+// ── CAR (build step 2: the SCALE measuring instrument) — left-click the map to drop it,
+// arrows/WASD drive, camera follows; C toggles it off (free-cam). Physics ported from
+// steer.c (speed-scaled steering + grip). Speed reads out in km/h via M_PER_UNIT — the
+// SCALE KNOB you tune by feel. NOTE: the car is unit-scaled + fixed-pixel for now so it's
+// visible at the map's zoom; a metre-sized, metre-accurate car wants the L0 metre re-base
+// (lattice in km + wider zoom) — the deliberate next step. See roadnet2-plan.md.
+#define M_PER_UNIT  60.0f    // metres per world unit — THE scale knob (drive, then tune this)
+#define CAR_ACCEL   0.025f   // gas, units/frame² along the heading
+#define CAR_BRAKE   0.05f
+#define CAR_REVMAX -0.30f
+#define CAR_FRIC    0.97f    // engine speed kept per frame
+#define CAR_MAXSPD  0.90f    // units/frame
+#define CAR_STEER   3.2f     // deg/frame at full speed (scales down with speed)
+#define CAR_GRIP    0.20f    // velocity→heading lerp
+static int   car_on = 0;
+static float car_x, car_y, car_vx, car_vy, car_spd, car_ang, car_odo;  // odo in metres
+static int   click_px, click_py;     // press anchor — click (tiny move) = place car, else = drag-pan
+static void car_spawn(float wx, float wy) {
+    car_x = wx; car_y = wy; car_vx = car_vy = car_spd = 0; car_ang = -90; car_odo = 0; car_on = 1;
+}
 static int   vcols, vrows;           // visible world-tile span this frame (road bounds)
 static int   dragging = 0, drag_px, drag_py;  // left-drag-to-pan ("grab the map")
 
@@ -545,12 +566,20 @@ static void hud(void) {
     char buf[64];
     float cx = camX + vcols / 2.0f, cy = camY + vrows / 2.0f;
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);
-    print("ROADNET", 4, 2, CLR_LIGHT_GREY);
-    snprintf(buf, sizeof buf, "x %d  y %d", (int)cx, (int)cy);
-    print(buf, 80, 2, CLR_MEDIUM_GREY);
-    if (show_grid) print("[grid]", 160, 2, CLR_DARK_PURPLE);
-    print_centered("drag/\x18\x19\x1a\x1b pan   wheel zoom   SPACE jump   R seed   M setup   G grid",
-                   SCREEN_W / 2, SCREEN_H - 9, CLR_DARK_GREY);
+    print("ROADNET2", 4, 2, CLR_LIGHT_GREY);
+    if (car_on) {                                // speed readout = the scale instrument
+        float kmh = (car_spd < 0 ? -car_spd : car_spd) * M_PER_UNIT * 60.0f * 3.6f;
+        snprintf(buf, sizeof buf, "%3d km/h   %.2f km", (int)kmh, car_odo / 1000.0f);
+        print(buf, 84, 2, CLR_YELLOW);
+        print_centered("\x18\x19\x1a\x1b/WASD drive   C drop car   wheel zoom   R reset",
+                       SCREEN_W / 2, SCREEN_H - 9, CLR_DARK_GREY);
+    } else {
+        snprintf(buf, sizeof buf, "x %d  y %d", (int)cx, (int)cy);
+        print(buf, 84, 2, CLR_MEDIUM_GREY);
+        if (show_grid) print("[grid]", 170, 2, CLR_DARK_PURPLE);
+        print_centered("click = drop CAR   drag/\x18\x19\x1a\x1b pan   wheel zoom   SPACE jump   R seed   M setup",
+                       SCREEN_W / 2, SCREEN_H - 9, CLR_DARK_GREY);
+    }
 }
 
 // ── INTRO / SETUP PANEL — a glass strip of sliders over the LIVE world preview.
@@ -619,38 +648,68 @@ void update(void) {
         camX = ccx - SCREEN_W * 0.5f / np; camY = ccy - SCREEN_H * 0.5f / np;
     }
 
-    float pan = 1.3f / zoom;                     // constant on-screen pan speed
-    if (btn(0, BTN_LEFT)  || key('A')) camX -= pan;
-    if (btn(0, BTN_RIGHT) || key('D')) camX += pan;
-    if (btn(0, BTN_UP)    || key('W')) camY -= pan;
-    if (btn(0, BTN_DOWN)  || key('S')) camY += pan;
-
-    // left-drag to pan ("grab the map"). In setup mode only right of the panel, so
-    // the sliders keep the left edge. Convert screen-px delta → world tiles via P.
-    int pan_ok = (mode == 1) || (mouse_x() > PANEL_W);
-    if (mouse_pressed(MOUSE_LEFT) && pan_ok) { dragging = 1; drag_px = mouse_x(); drag_py = mouse_y(); }
-    if (!mouse_down(MOUSE_LEFT)) dragging = 0;
-    if (dragging) {
-        float pp = TILE * zoom;
-        camX -= (mouse_x() - drag_px) / pp;
-        camY -= (mouse_y() - drag_py) / pp;
-        drag_px = mouse_x(); drag_py = mouse_y();
+    float pp = TILE * zoom;
+    if (keyp('C')) {                             // toggle the car (spawn at screen centre)
+        if (!car_on) car_spawn(camX + SCREEN_W * 0.5f / pp, camY + SCREEN_H * 0.5f / pp);
+        else car_on = 0;
     }
 
-    if (keyp(KEY_SPACE)) {                       // deterministic jump to fresh scenery
+    if (car_on) {                                // ── DRIVE (steer.c model) — arrows/WASD ──
+        float turn = (btn(0,BTN_RIGHT)||key('D') ? 1.0f:0) - (btn(0,BTN_LEFT)||key('A') ? 1.0f:0);
+        float sc = car_spd / CAR_MAXSPD; if (sc < 0) sc = -sc;
+        car_ang += turn * CAR_STEER * sc;        // steering scales with speed (parked can't turn)
+        if (btn(0,BTN_UP)  ||key('W')) car_spd += CAR_ACCEL;
+        if (btn(0,BTN_DOWN)||key('S')) car_spd -= CAR_BRAKE;
+        car_spd *= CAR_FRIC; car_spd = clamp(car_spd, CAR_REVMAX, CAR_MAXSPD);
+        car_vx = lerp(car_vx, dx(car_spd, car_ang), CAR_GRIP);    // velocity chases the heading
+        car_vy = lerp(car_vy, dy(car_spd, car_ang), CAR_GRIP);
+        car_x += car_vx; car_y += car_vy;
+        car_odo += fsqrt(car_vx*car_vx + car_vy*car_vy) * M_PER_UNIT;
+        camX = car_x - SCREEN_W * 0.5f / pp; camY = car_y - SCREEN_H * 0.5f / pp;  // camera follows
+    } else {                                     // ── FREE-CAM pan (arrows/WASD) ──
+        float pan = 1.3f / zoom;
+        if (btn(0, BTN_LEFT)  || key('A')) camX -= pan;
+        if (btn(0, BTN_RIGHT) || key('D')) camX += pan;
+        if (btn(0, BTN_UP)    || key('W')) camY -= pan;
+        if (btn(0, BTN_DOWN)  || key('S')) camY += pan;
+    }
+
+    // mouse: a CLICK (tiny move) drops/places the car; a DRAG grabs+pans the map (free-cam only)
+    int pan_ok = (mode == 1) || (mouse_x() > PANEL_W);
+    if (mouse_pressed(MOUSE_LEFT) && pan_ok) { dragging = 1; drag_px = click_px = mouse_x(); drag_py = click_py = mouse_y(); }
+    if (mouse_down(MOUSE_LEFT)) {
+        if (dragging && !car_on) {               // grab-pan the map
+            camX -= (mouse_x() - drag_px) / pp; camY -= (mouse_y() - drag_py) / pp;
+            drag_px = mouse_x(); drag_py = mouse_y();
+        }
+    } else {
+        if (dragging && mode == 1) {             // released: was it a click? → (re)place the car
+            int ddx = mouse_x() - click_px, ddy = mouse_y() - click_py;
+            if (ddx*ddx + ddy*ddy < 16) car_spawn(camX + mouse_x()/pp, camY + mouse_y()/pp);
+        }
+        dragging = 0;
+    }
+
+    if (keyp(KEY_SPACE) && !car_on) {            // deterministic jump to fresh scenery
         jumpN += 1.0f;
         unsigned h = hash2((int)(jumpN * 911), 7);
         camX += (float)((int)(h % 4000u) - 2000) + 800.0f;
         camY += (float)((int)((h >> 11) % 4000u) - 2000) + 800.0f;
     }
-    if (keyp('R')) { zoom = 1.0f; view_metrics(); camX = SPAWN_X - vcols / 2.0f; camY = SPAWN_Y - vrows / 2.0f; seedZ += 0.37f; jumpN = 0; }
+    if (keyp('R')) { zoom = 1.0f; view_metrics(); camX = SPAWN_X - vcols / 2.0f; camY = SPAWN_Y - vrows / 2.0f; seedZ += 0.37f; jumpN = 0; car_on = 0; }
     if (keyp('G')) show_grid = !show_grid;
     if (keyp('H')) show_hud  = !show_hud;
-    if (keyp('M')) mode = 0;                     // re-open the setup panel
+    if (keyp('M')) { mode = 0; car_on = 0; }     // re-open the setup panel
 }
 
+static void draw_car(void) {                     // fixed-pixel so it's visible at any zoom
+    int sx = sxp(car_x), sy = syp(car_y);
+    circfill(sx, sy, 3, CLR_RED); circ(sx, sy, 3, CLR_BLACK);     // body
+    line(sx, sy, sx + (int)dx(7, car_ang), sy + (int)dy(7, car_ang), CLR_WHITE);  // heading
+}
 void draw(void) {
     draw_world();                                // the live preview, always
+    if (car_on) draw_car();
     if (mode == 0) draw_setup_panel();
     else if (show_hud) hud();
 }

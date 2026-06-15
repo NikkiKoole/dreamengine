@@ -67,6 +67,9 @@ generation hashes use integer cell indices (exact), but footprint geometry *far*
 jitter. Fine for any realistically-explored region — but it's a reason to lean **bounded-city**
 (one characterful place you roam, GTA1-style) over truly-infinite if you ever want sub-metre
 detail everywhere. **Decide scope when you lock scale**; it sets the top of the ladder.
+Leaning (not committed): **~500 km bound** is more than enough — no one drives 1000s of km in
+this — and it sits comfortably under the float-precision wall, keeping sub-metre detail
+everywhere. Good to know; defer the actual decision until scale is felt.
 
 ## The v2 architecture — one graph, one query
 - **Everything is spline edges in ONE graph.** Highways → collectors → access → cul-de-sacs
@@ -116,11 +119,14 @@ edges now), the field↔graph extraction step (graph is generated directly, not 
 
 ## Build order (each a stop-and-look milestone)
 1. **L0 verified** — the cart already runs the clean highways (done; it's the baseline).
-2. **Re-base to metres + LOCK SCALE by driving** — restate the L0 lattice/road widths in metres,
-   then drop a **car (or car-speed camera) on the bare highways** and tune speed vs. distances
-   until crossing a city / the inter-city gap *feels* right. **This is a measuring instrument, not
-   the payoff** — it sets the metric every later tier is generated against. Also decide **scope**
-   (bounded city vs infinite) here. Don't generate fill-in until this feels right.
+2. **Re-base to metres + LOCK SCALE by driving** — 🔨 *car instrument added* (click the map to
+   drop a car, arrows/WASD drive, camera follows, C drops it; HUD reads **km/h + odometer** via
+   `M_PER_UNIT`, the scale knob). Physics ported from `steer.c`. **Still to do here:** the actual
+   metre re-base — the car is *unit-scaled + fixed-pixel* for now (visible at the map's zoom), so
+   a metre-sized car needs the L0 lattice restated in metres (cities in km) + the zoom range
+   widened so you can sit at ~4 px/m to drive and ~0.001 to see the continent. Then tune
+   `M_PER_UNIT` / car speed / block size until crossing a city *feels* right, and decide **scope**.
+   This is a measuring instrument, not the payoff — don't generate fill-in until it feels right.
 3. **Unified `road_at` = nearest-edge** over the *highway* edges first (prove the query +
    spatial index on the tier we already have), render as strokes. No field anywhere.
 4. **Collector tier as a warped grid**, generated directly as spline edges into the graph,
