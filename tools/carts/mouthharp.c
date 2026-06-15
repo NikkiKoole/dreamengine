@@ -43,7 +43,7 @@ static int   voice   = -1;    // the one held drone voice; pitch is fixed
 static float bend    = 0;     // semitone dip on each pluck, springs back = the boing
 static float env     = 0;     // pluck amplitude envelope 0..1 (decays)
 static float level   = 0;     // smoothed value fed to note_vol
-static float formant = 0.45f; // 0..1 mouth position (→ bandpass centre), smoothed
+static float fpos = 0.45f; // 0..1 mouth position (→ bandpass centre), smoothed
 static int   mode    = 0;     // 0 = pluck (folk), 1 = drone (dan-moi)
 static int   subdiv  = 4;     // reiter subdivisions per beat
 static int   last_slot = -99999;
@@ -101,11 +101,11 @@ void update(void) {
     // ---- the mouth: mouse-y sweeps the formant (the melody), in BOTH modes ----
     if (!autoplay) {
         float t = clamp((float)(mouse_y() - PLAY_TOP) / (PLAY_BOT - PLAY_TOP), 0, 1);
-        formant = lerp(formant, 1.0f - t, 0.30f);          // up = bright/open
+        fpos = lerp(fpos, 1.0f - t, 0.30f);          // up = bright/open
     } else {
         // gentle self-playing vowel wander + plucks, so it's alive at rest/bake
         ap_t++;
-        formant = lerp(formant, 0.5f + 0.45f * sinf(ap_t * 0.045f), 0.08f);
+        fpos = lerp(fpos, 0.5f + 0.45f * sinf(ap_t * 0.045f), 0.08f);
         if (mode == 0) {
             int slot = (int)((beat() + beat_pos()) * subdiv);
             if (slot != last_slot && (slot & 1 || chance(60))) pluck();
@@ -134,13 +134,13 @@ void update(void) {
 
     // ---- drive the one voice ----
     note_pitch(voice, HARP_MIDI[harp] + bend);
-    note_cutoff(voice, formant_hz(formant));
-    note_vol(voice, (int)(clamp(level, 0, 1) * 7 + 0.5f));
+    note_cutoff(voice, formant_hz(fpos));
+    note_vol(voice, clamp(level, 0, 1) * 7.0f);
 
     if (twang_vis > 0) twang_vis--;
 
 #ifdef DE_TRACE
-    watch("formant", "%.2f", formant);
+    watch("formant", "%.2f", fpos);
     watch("env",     "%.2f", env);
     watch("mode",    "%d",   mode);
 #endif
@@ -174,7 +174,7 @@ void draw(void) {
     font(FONT_NORMAL);
 
     // ---- the mouth strip (left): a vertical bar, the cursor = current vowel ----
-    int mx = 22, my = (int)lerp(PLAY_BOT, PLAY_TOP, formant);
+    int mx = 22, my = (int)lerp(PLAY_BOT, PLAY_TOP, fpos);
     rectfill(mx - 8, PLAY_TOP, 16, PLAY_BOT - PLAY_TOP, CLR_DARKER_GREY);
     rect(mx - 8, PLAY_TOP, 16, PLAY_BOT - PLAY_TOP, CLR_DARK_GREY);
     // vowel labels up the mouth (dark/closed at the bottom, open/bright at top)
@@ -192,7 +192,7 @@ void draw(void) {
     // ---- the harmonic comb (right): the drone's overtones, the one the formant
     //      is voicing glows. Move the mouth and watch the tune climb the comb. ----
     float rh = root_hz();
-    int   fy = hz_to_y((float)formant_hz(formant));
+    int   fy = hz_to_y((float)formant_hz(fpos));
     rect(COMB_X - 4, PLAY_TOP - 2, COMB_W + 8, PLAY_BOT - PLAY_TOP + 4, CLR_DARK_BROWN);
     for (int h = 1; h <= 24; h++) {
         float hz = rh * h;
