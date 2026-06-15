@@ -56,3 +56,48 @@ So the accepted *direction* (future work, not built here):
   [0017](0017-three-macro-core-plus-engine-aux-channel.md) (the instrument macro core this contrasts with),
   and the effects modulation note in [`audio-notes.md`](../design/audio-notes.md) / the SET-AND-HOLD callout
   in [`effects-recipes.md`](../guides/effects-recipes.md).
+
+## Proposed API (sketch — not built; for the modrack implementer)
+
+A **curated target enum** (the safety boundary — only params cheap to update continuously; it is
+*impossible* to modulate a buffer-reconfiguring param, so the API can't be misused into a stutter):
+
+```c
+#define FXMOD_FILTER_CUT   0   // the DJ-filter cutoff — the marquee modrack sweep
+#define FXMOD_FILTER_RES   1
+#define FXMOD_DRIVE        2   // drive amount (a tanh shaper — cheap, great under an LFO)
+#define FXMOD_REVERB_SEND  3   // a send LEVEL (not the tank)
+#define FXMOD_DELAY_SEND   4
+#define FXMOD_TREM_DEPTH   5
+#define FXMOD_PAN_DEPTH    6
+#define FXMOD_WAH          7   // wah position (auto-wah-by-CV)
+#define FXMOD_GRAINS_MIX   8
+#define FXMOD_SHIMMER_MIX  9
+// … closed set; grows only when a param proves BOTH useful AND cheap to sweep.
+// Deliberately NO crush bit-depth, NO chorus/flanger/tape ring buffers.
+```
+
+Two entry points:
+
+```c
+// CV / per-frame — the one modrack needs. Engine SLEWS internally → per-frame updates don't zipper.
+void fx_mod(int bus, int target, float value);              // bus 0 = master; value normalized 0..1
+void instrument_fx_mod(int slot, int target, float value);  // resolve slot → its FX bus (fx_bus_for)
+
+// Engine-side LFO — set-and-forget convenience for carts with no CV graph (no per-frame request spam).
+void fx_lfo(int bus, int target, float rate_hz, float depth, float center);   // depth 0 = detach
+```
+
+modrack usage (a FILTER module patched from a CV node):
+```c
+fx_mod(0, FXMOD_FILTER_CUT, cv_value);   // per frame; engine slews → smooth sweep, no stutter
+```
+
+Notes for whoever builds it:
+- **`fx_mod` is the core** (modrack produces its own CV per frame → it wants a *sink*). `fx_lfo` is sugar.
+- **Values normalized 0..1**, mapped per-target internally (uniform + modrack-friendly, matches the macro
+  feel) rather than natural units.
+- Mirrors the static-vs-modulated split that already exists for voices: `filter()`/`drive_insert()` =
+  set-once config; `fx_mod`/`fx_lfo` = the continuous layer on top (like `instrument_timbre()` vs `LFO_TIMBRE`).
+- Internally each safe target reuses the existing slew (the `note_cutoff`/`note_reverb` one-pole), and is
+  applied on the audio thread — no new per-frame request flood for the `fx_lfo` path.
