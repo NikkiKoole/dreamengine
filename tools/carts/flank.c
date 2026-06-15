@@ -44,8 +44,10 @@ static unsigned char cell[GH][GW];  // 0 floor · 1 FULL cover (blocks move+LOS+
 static float flow[GH][GW];          // Dijkstra from last-known player cell
 static float heat[GH][GW];          // danger projected by the player's aim cone
 
-typedef struct { float x, y, vx, vy, aim; int hp, mag, reload, shake, spectate; } Player;
-typedef struct { float x, y, aim; int hp, alive, state, shootcd, mag, reload, callcd, type, strafe, strafeT; } Enemy;
+#define KEY_LSHIFT 340             // raylib left-shift — held to sneak
+#define VIS_R 96                   // player's own vision radius (fog of war)
+typedef struct { float x, y, vx, vy, aim, pinned; int hp, mag, reload, shake, spectate, sneak; } Player;  // pinned 0..1 = suppression
+typedef struct { float x, y, aim, lsx, lsy; int hp, alive, state, shootcd, mag, reload, callcd, type, strafe, strafeT, suppressing, everseen; } Enemy;
 typedef struct { float x, y, vx, vy; int alive, foe; } Bullet;
 static Player pl;
 static Enemy en[NE];
@@ -53,7 +55,7 @@ static Bullet bul[NB];
 
 // shared blackboard (the squad's collective knowledge of you)
 static float kx, ky; static int known, kage, flow_cx = -1, flow_cy = -1;
-static int show_heat = 1, show_comms = 1, kills, msg_t, tick; static char msg[40];
+static int show_heat = 1, show_comms = 0, reveal, kills, msg_t, tick; static char msg[40];
 
 // ---- voices ----------------------------------------------------------------
 typedef struct { int h, ttl; } Voice; static Voice voices[16];
@@ -140,12 +142,13 @@ static void reset(void) {
     // LOW cover (crates you shoot OVER) scattered in the open midfield
     int lx[]={12,16,22,26,11,21,31,35,15,27,7,34}, ly[]={6,14,4,19,18,10,8,15,8,17,12,4};
     for (int b=0;b<12;b++) if (!cell[ly[b]][lx[b]]) cell[ly[b]][lx[b]] = 2;
-    pl = (Player){ TILE*3, TILE*(GH/2), 0, 0, 0, 100, 12, 0, 0, pl.spectate };
+    pl = (Player){ .x = TILE*3, .y = TILE*(GH/2), .hp = 100, .mag = 12, .spectate = pl.spectate };
     for (int i=0;i<NE;i++) {
         int x,y,tr=0; do { x=GW/2+rnd(GW/2-2); y=2+rnd(GH-4); tr++; } while (wcell(x,y) && tr<80);
         int t = i % NTY;                                   // 2 of each type for 6 enemies
-        en[i] = (Enemy){ x*TILE+4, y*TILE+4, 180, TY[t].hp, 1, E_PATROL, 0, TY[t].mag, 0, 0 };
-        en[i].type = t; en[i].strafe = rnd(2) ? 1 : -1; en[i].strafeT = rnd(120);
+        en[i] = (Enemy){ .x = x*TILE+4, .y = y*TILE+4, .aim = 180, .hp = TY[t].hp, .alive = 1,
+                         .state = E_PATROL, .mag = TY[t].mag, .type = t,
+                         .strafe = rnd(2) ? 1 : -1, .strafeT = rnd(120) };
     }
     for (int i=0;i<NB;i++) bul[i].alive = 0;
     known = 0; kage = 999; flow_cx = -1; kills = 0; msg_t = 0;
@@ -173,18 +176,23 @@ static void enemy_update(int i) {
     const EType *T = &TY[e->type];
     if (e->shootcd > 0) e->shootcd--;
     if (e->callcd > 0) e->callcd--;
-    bool see = los_px(e->x, e->y, pl.x, pl.y) && !pl.spectate ? los_px(e->x,e->y,pl.x,pl.y) : los_px(e->x,e->y,pl.x,pl.y);
+    e->suppressing = 0;
     float pd = fsqrt((pl.x-e->x)*(pl.x-e->x) + (pl.y-e->y)*(pl.y-e->y));
+    bool canlos = los_px(e->x, e->y, pl.x, pl.y);
+    float ss = pl.sneak ? 0.5f : 1.0f, sh = pl.sneak ? 0.3f : 1.0f;
+    bool see   = canlos && pd <= 132 * ss;                    // spotted by sight (sneaking shrinks range)
+    bool heard = pd <= 48 * sh;                               // or heard moving nearby
+    if (canlos && pd <= VIS_R) { e->everseen = 1; e->lsx = e->x; e->lsy = e->y; }   // YOUR last-seen memory of this enemy
 
     // --- sense + communicate ---
-    if (see) {
+    if (see || heard) {
         if (!known && e->callcd <= 0) { play_pan(72, INSTR_REED, 3, panx(e->x), 16); setmsg("enemy: \"contact!\""); e->callcd = 120; }
-        known = 1; kx = pl.x; ky = pl.y; kage = 0;            // broadcast to the squad
+        known = 1; kx = pl.x; ky = pl.y; kage = 0;            // broadcast your position to the squad
         for (int j=0;j<NE;j++) if (en[j].alive && en[j].state == E_PATROL) en[j].state = E_HUNT;
-        e->state = E_ENGAGE;
+        e->state = canlos ? E_ENGAGE : E_HUNT;                // engage only with real LOS; else move in to investigate
     } else if (known) {
-        e->state = (pd < 24) ? E_ENGAGE : E_HUNT;
-        if (kage > 200) { known = 0; e->state = E_SEARCH; }   // knowledge went stale
+        e->state = (pd < 24 && canlos) ? E_ENGAGE : E_HUNT;
+        if (kage > 200) { known = 0; e->state = E_SEARCH; }   // knowledge went stale -> go to last-seen
     } else if (e->state != E_SEARCH) e->state = E_PATROL;
 
     int kcx = (int)(kx/TILE), kcy = (int)(ky/TILE);
@@ -192,6 +200,13 @@ static void enemy_update(int i) {
 
     // --- act per state ---
     if (e->state == E_ENGAGE) {
+        if (e->type == TY_CAMP && los_px(e->x,e->y,pl.x,pl.y)) {   // SUPPRESSION: anchor + pour inaccurate fire to PIN you
+            e->aim = angle_to(e->x, e->y, pl.x, pl.y);
+            e->suppressing = e->mag > 0;
+            if (e->mag > 0 && e->shootcd <= 0) { fire(e->x, e->y, e->aim, 1, 26); e->mag--; e->shootcd = 5; if (e->mag==0) e->reload = 85; }
+            if (e->mag == 0 && --e->reload <= 0) e->mag = T->mag;  // reload = the gap in the pin (your window to move)
+            return;
+        }
         // pick a firing stance per type: keep LOS, dodge the heat cone, hold the
         // type's range, hug cover, circle (strafe), spread from squadmates.
         if (--e->strafeT <= 0) { e->strafe = -e->strafe; e->strafeT = 60 + rnd(90); }
@@ -255,12 +270,14 @@ static void player_update(void) {
         if (pl.mag==0 && --pl.reload<=0) pl.mag=12;
         return;
     }
+    pl.sneak = key(KEY_LSHIFT);                               // hold Shift = sneak: slower but quiet + low profile
+    float spd = 1.6f * (pl.sneak ? 0.5f : 1.0f) * (1 - 0.6f*pl.pinned);   // sneak + suppression both slow you
     float mx=0,my=0;
-    if (key('A')||key(KEY_LEFT)) mx=-1.6f; else if (key('D')||key(KEY_RIGHT)) mx=1.6f;
-    if (key('W')||key(KEY_UP)) my=-1.6f; else if (key('S')||key(KEY_DOWN)) my=1.6f;
+    if (key('A')||key(KEY_LEFT)) mx=-spd; else if (key('D')||key(KEY_RIGHT)) mx=spd;
+    if (key('W')||key(KEY_UP)) my=-spd; else if (key('S')||key(KEY_DOWN)) my=spd;
     if (!wallpx(pl.x+mx, pl.y)) pl.x += mx; if (!wallpx(pl.x, pl.y+my)) pl.y += my;
     pl.aim = angle_to(pl.x, pl.y, mouse_x(), mouse_y());
-    if ((mouse_down(0)||key(KEY_SPACE)) && pl.mag>0 && pl.reload<=0) { fire(pl.x,pl.y,pl.aim,0,5); pl.mag--; pl.reload=8; if(pl.mag==0) pl.reload=45; }
+    if ((mouse_down(0)||key(KEY_SPACE)) && pl.mag>0 && pl.reload<=0) { fire(pl.x,pl.y,pl.aim,0,5 + pl.pinned*16); pl.mag--; pl.reload=8; if(pl.mag==0) pl.reload=45; }   // suppressed = your aim shakes too
     if (pl.reload>0) pl.reload--;
     if (pl.mag==0 && pl.reload<=0) pl.mag=12;
 }
@@ -272,6 +289,7 @@ void update(void) {
     if (keyp('R')) { reset(); return; }
     if (keyp('H')) show_heat = !show_heat;
     if (keyp('L')) show_comms = !show_comms;
+    if (keyp('V')) reveal = !reveal;
     if (keyp(KEY_TAB)) { pl.spectate = !pl.spectate; }
     if (pl.hp <= 0) return;
 
@@ -279,6 +297,13 @@ void update(void) {
     compute_heat();
     player_update();
     for (int i=0;i<NE;i++) enemy_update(i);
+
+    // suppression: are you pinned right now? (any suppressor with LOS to you)
+    int sup = 0;
+    for (int i=0;i<NE;i++) if (en[i].alive && en[i].suppressing && los_px(en[i].x,en[i].y,pl.x,pl.y)) sup = 1;
+    pl.pinned += sup ? 0.05f : -0.035f;
+    if (pl.pinned < 0) pl.pinned = 0; if (pl.pinned > 1) pl.pinned = 1;
+    if (pl.pinned > 0.3f && tick%3==0) pl.shake = 2;          // pinned = jittery
 
     // bullets
     for (int i=0;i<NB;i++) {
@@ -322,24 +347,37 @@ void draw(void) {
         else if (cell[y][x]==2) { rectfill(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_BROWN); rect(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_ORANGE); }  // low cover: a crate
     }
 
-    // comms: a line from each seeing enemy to the shared known position
+    // comms lines (debug, off by default) + the squad's belief about where you are
+    int anysee = 0; for (int i=0;i<NE;i++) if (en[i].alive && los_px(en[i].x,en[i].y,pl.x,pl.y)) anysee=1;
     if (show_comms && known) for (int i=0;i<NE;i++) if (en[i].alive && los_px(en[i].x,en[i].y,pl.x,pl.y))
         line((int)en[i].x+sh, (int)en[i].y, (int)kx+sh, (int)ky, CLR_DARK_GREEN);
-    if (known) { pset((int)kx+sh,(int)ky,CLR_GREEN); circ((int)kx+sh,(int)ky,3,CLR_DARK_GREEN); }
+    if (known) {
+        if (anysee) { pset((int)kx+sh,(int)ky,CLR_GREEN); circ((int)kx+sh,(int)ky,3,CLR_DARK_GREEN); }
+        else print("?", (int)kx-1+sh, (int)ky-3, blink(20)?CLR_YELLOW:CLR_ORANGE);   // they're investigating your LAST-SEEN spot
+    }
 
     // bullets
-    for (int i=0;i<NB;i++) if (bul[i].alive) {
+    for (int i=0;i<NB;i++) if (bul[i].alive)
         line((int)bul[i].x+sh,(int)bul[i].y,(int)(bul[i].x-bul[i].vx)+sh,(int)(bul[i].y-bul[i].vy), bul[i].foe?CLR_RED:CLR_YELLOW);
+
+    // enemies — FOG OF WAR: draw those you can see; a dim ghost where you last saw the rest
+    for (int i=0;i<NE;i++) {
+        if (!en[i].alive) continue;
+        float ed = fsqrt((en[i].x-pl.x)*(en[i].x-pl.x)+(en[i].y-pl.y)*(en[i].y-pl.y));
+        bool vis = reveal || pl.spectate || (ed <= VIS_R && los_px(pl.x,pl.y,en[i].x,en[i].y));
+        if (vis) { int x=(int)en[i].x+sh, y=(int)en[i].y;
+            if (en[i].suppressing) circ(x,y,5,blink(4)?CLR_RED:CLR_ORANGE);    // muzzle bloom of a suppressor
+            line(x,y,(int)(en[i].x+dx(6,en[i].aim))+sh,(int)(en[i].y+dy(6,en[i].aim)),CLR_LIGHT_GREY);
+            print(str("%c", TY[en[i].type].g), x-2, y-3, ECOL[en[i].state]);
+        } else if (en[i].everseen)                                            // last-seen ghost (your memory)
+            print(str("%c", TY[en[i].type].g), (int)en[i].lsx-2+sh, (int)en[i].lsy-3, CLR_DARKER_GREY);
     }
-    // enemies — glyph = TYPE (R/C/F), colour = STATE; + aim tick
-    for (int i=0;i<NE;i++) { if (!en[i].alive) continue; int x=(int)en[i].x+sh, y=(int)en[i].y;
-        line(x,y,(int)(en[i].x+dx(6,en[i].aim))+sh,(int)(en[i].y+dy(6,en[i].aim)),CLR_LIGHT_GREY);
-        print(str("%c", TY[en[i].type].g), x-2, y-3, ECOL[en[i].state]);
-    }
-    // player
+    // your vision ring + you
+    if (!reveal && !pl.spectate) circ((int)pl.x+sh, (int)pl.y, VIS_R, CLR_DARKER_GREY);
     int px=(int)pl.x+sh, py=(int)pl.y;
-    circfill(px,py,3,pl.hp>0?CLR_WHITE:CLR_DARK_GREY);
+    circfill(px,py,3, pl.sneak ? CLR_DARK_GREY : (pl.hp>0?CLR_WHITE:CLR_DARK_GREY));
     line(px,py,(int)(pl.x+dx(8,pl.aim))+sh,(int)(pl.y+dy(8,pl.aim)),CLR_YELLOW);
+    if (pl.pinned > 0.3f) { rect(0,0,SCREEN_W,HUD_Y,CLR_RED); print("PINNED", px-11, py-15, blink(6)?CLR_RED:CLR_ORANGE); }
 
     // HUD
     rectfill(0,HUD_Y,SCREEN_W,SCREEN_H-HUD_Y,CLR_DARKER_BLUE);
@@ -347,9 +385,11 @@ void draw(void) {
     print(str("HP %d", pl.hp>0?pl.hp:0), 50, HUD_Y+2, CLR_WHITE);
     print(str("ammo %d", pl.mag), 96, HUD_Y+2, pl.mag?CLR_YELLOW:CLR_RED);
     print(str("down %d/%d", kills, NE), 150, HUD_Y+2, CLR_ORANGE);
-    print_right(pl.spectate?"SPECTATE":(known?"SPOTTED":"hidden"), SCREEN_W-4, HUD_Y+2, known?CLR_RED:CLR_GREEN);
+    if (pl.sneak) print("SNEAK", 206, HUD_Y+2, CLR_INDIGO);
+    print_right(pl.spectate?"SPECTATE":(pl.pinned>0.3f?"PINNED":(known?"SPOTTED":"hidden")), SCREEN_W-4, HUD_Y+2,
+                pl.pinned>0.3f?CLR_RED:(known?CLR_ORANGE:CLR_GREEN));
     font(FONT_SMALL);
     if (msg_t>0) print(msg, 4, HUD_Y+12, CLR_LIGHT_PEACH);
-    else print("R rusher  C camper  F flanker   WASD+mouse shoot  H heat  L comms  TAB spectate  Rkey reset", 4, HUD_Y+12, CLR_MEDIUM_GREY);
+    else print("WASD move  Shift sneak  mouse+click shoot   H/L/V debug  TAB spectate  R reset   R/C/F=rusher/camper/flanker", 4, HUD_Y+12, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 }
