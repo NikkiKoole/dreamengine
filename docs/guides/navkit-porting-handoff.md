@@ -159,6 +159,17 @@ links navkit's *genuine* functions; that's the only real reference.
   robot). 0015 says FM detents cover "metallic clang," so it's contested + niche — argue the gate first.
 - **Octaver** — 0015 refuses it (we have polyphony — play the octave). Don't, unless you can beat that.
 - **Comb / pitched delay**, **bus distortion** — mostly covered (flanger/tape mod-delay; per-voice drive).
+- **King Tubby dub delay** (`dub_loop.h` — "multi-head tape delay with degradation, wow/flutter, drift,
+  speed"). *Needs `sound.h`* — but most machinery already exists. The **dub *character* is already
+  cart-side** (`echo` tape-delay + `tape` wow/flutter + `crush`/`filter`, the `dub` cart + "dub throw"
+  recipes), so the only thing a port adds is the **multi-head**: several taps at musical divisions in one
+  delay line with integrated per-repeat degradation/wow/drift. That's the engine-requiring bit — our
+  `echo` is **single-tap** and you can't stack echoes cart-side. Reuses what we have: `moddel_hermite`
+  (which *came from* `dub_loop.h`'s `hermiteInterpolate`), the tape wow/flutter LFOs, the echo tape-speed
+  slew. **Gate first (0015):** single-head dub is a recipe (done); the multi-head + integrated degradation
+  is *probably* a genuine new primitive (echo can't do simultaneous taps) — confirm before building.
+  Effort: *medium* (a multi-tap `dub_loop` buffer + a `dub()` API + 4-place + showcase). Cousin of the
+  just-shipped `varispeed` (`half_speed`) — same tape family, shared hermite DNA. (Noted 2026-06-15.)
 - **Instruments:** open engine work is catalogued in [`instrument-engines.md`](../design/instrument-engines.md)
   + `audio-notes §18` (PIPE reads an octave low + flat; PLUCK/REED/BRASS flatten at the top of their
   range). Use the **oscillator-verbatim** playbook in `porting-from-navkit.md`, A/B with

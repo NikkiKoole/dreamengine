@@ -861,6 +861,10 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       soft-clip *only if* it shows up hot in the profiler; an **AC128 transfer-curve LUT** for a *named*
       vintage-germanium fuzz voicing beyond `DRIVE_ASYM`; exposing the Shimmer pitch-shifter as a
       standalone bus effect. Full detail: the roadmap's "Side quests" + "Follow-ups" sections.
+    - **King Tubby multi-head dub delay** (`dub_loop.h` port) — dub *character* is already cart-side
+      (`echo`+`tape`, the `dub` cart); a faithful port adds the **multi-head** taps + integrated
+      degradation, which needs `sound.h` (echo is single-tap). Sized in
+      [`navkit-porting-handoff.md`](guides/navkit-porting-handoff.md) → queue; gate on 0015 first.
 
 39. **Unify LFO shape (it's a patchwork)** *(2026-06-15)* — "LFO shape" = the modulator's waveform
     (sine/tri/square/saw/ramp/S&H/random/…). Right now it lives in three disconnected places:
