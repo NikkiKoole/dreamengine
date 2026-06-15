@@ -210,6 +210,18 @@ and all — moves as one object.
   and run the bus output through a **varispeed delay line** keyed by
   `doppler_target` — the same fractional-tap + slew mechanism as the echo insert
   (`sound.h:431`). One delay buffer per emitter bus.
+
+> **The exact hook (as of `5561f8d`, 2026-06-15).** The aux-bus fold loop
+> `for (int b = 1; b < SOUND_FX_BUSES; b++)` now runs, per bus:
+> `apply_insert chain → leslie → sidechain → per-instrument shimmer → busL[0] += busL[b]`.
+> Drop the v2 spatialization **right after the per-instrument shimmer line, before the
+> `busL[0] += busL[b]` fold** — i.e. on the fully-produced `busL[b]/busR[b]`. That ordering
+> is the point: you position the *finished wet source*, so its shimmer/reverb tail moves
+> *with* it (the thing v1 can't do). The emitter bus **is** an instrument's claimed aux bus
+> (`instr_bank.fx_bus` via `fx_bus_for`) — `instrument_shimmer`/`instrument_grains`/
+> `instrument_chorus` are the emitters-in-waiting: one part's whole effected signal already
+> lives on its own bus. Note master shimmer is bit-exact-locked (`shimmertest --det` md5
+> `9587acf…`) — it runs master-stage (tank 0), *not* in this loop, so it's independent of v2.
 - **API** mirrors v1, addressing a bus instead of a note handle:
   ```c
   void bus_pos(int bus, float x, float y);      // place an aux bus (an "emitter") in the world
