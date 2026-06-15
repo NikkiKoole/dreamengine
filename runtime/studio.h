@@ -342,7 +342,9 @@ void instrument_motion(int slot, float vx, float vy);     // that bus's velocity
 #define LFO_TIMBRE  5   // sweep the timbre macro (brightness; on PD-reso = a resonant filter sweep with no filter). depth 0..1
 #define LFO_MORPH   6   // sweep the morph macro (the engine's 3rd axis — PD DCW depth, FM feedback, organ chorus, EP bark). depth 0..1
 #define LFO_PAN     7   // auto-pan — sweep the stereo position. depth 0..1 (1 = full L↔R). the declarative path for tremolo-pan / rotary-style motion
-void instrument_lfo(int slot, int which, int dest, float rate_hz, float depth);  // attach sine LFO `which` (0..2 — a slot has 3) to a slot. dest: LFO_PITCH/DUTY/VOLUME/CUTOFF or the macro dests LFO_HARMONICS/TIMBRE/MORPH (engine voices). rate 4–8 Hz typical. depth 0 = off
+void instrument_lfo(int slot, int which, int dest, float rate_hz, float depth);  // attach LFO `which` (0..2 — a slot has 3) to a slot. dest: LFO_PITCH/DUTY/VOLUME/CUTOFF or the macro dests LFO_HARMONICS/TIMBRE/MORPH (engine voices). rate 4–8 Hz typical. depth 0 = off. Shape defaults SINE — set via lfo_shape()
+void lfo_shape(int slot, int which, int shape);   // set the WAVEFORM of a slot's LFO `which` (0..2) to an LFO_SHAPE_* (default SINE). Call alongside instrument_lfo(); persists across instrument_lfo() retunes. SH on LFO_PITCH = a random-step arp; SQUARE on LFO_CUTOFF = a stepped filter
+void note_lfo_shape(int handle, int which, int shape);   // same, for a live held note (note_on handle) — set its LFO `which` waveform to LFO_SHAPE_*
 
 // resonant filter per instrument — sculpts the tone (the SID-style knob)
 #define FILTER_OFF   0
@@ -486,10 +488,21 @@ void instrument_formant(int slot, float vowel, float q, float mix);     // forma
 // "electric piano" throb). One shared phase per bus, so a per-instrument tremolo wobbles that
 // instrument's whole output in unison — the coherent amp wobble a per-voice LFO_VOLUME can't give.
 // Master (whole mix), or per-instrument. Only attenuates (never boosts), like a real amp.
-#define TREM_SINE    0   // smooth sine wobble — the classic amp/EP tremolo (default)
-#define TREM_SQUARE  1   // hard on/off chop — the helicopter/stutter
-#define TREM_TRI     2   // linear ramp up/down — a sharper sine, between sine and square
-void tremolo(float rate, float depth, int shape);                       // rate 0.1..20 Hz, depth 0..1 (0 = off), shape TREM_*. THE master tremolo
+// LFO_SHAPE_* — the ONE modulator-waveform vocabulary, shared by tremolo/autopan (shape arg),
+// fx_lfo (shape arg), and the voice LFOs via lfo_shape()/note_lfo_shape(). SINE/SQUARE/TRI keep the
+// old TREM_* values (0/1/2) so existing carts are unaffected; TREM_* are now aliases.
+#define LFO_SHAPE_SINE    0   // smooth sine — the default everywhere
+#define LFO_SHAPE_SQUARE  1   // hard on/off — chop / stutter; on cutoff = a stepped 2-state filter
+#define LFO_SHAPE_TRI     2   // linear up/down ramp — sharper than sine
+#define LFO_SHAPE_SAW     3   // ramp DOWN then snap up (1→-1) — sawtooth
+#define LFO_SHAPE_RAMP    4   // ramp UP then snap down (-1→1) — reverse saw
+#define LFO_SHAPE_OPTICAL 5   // asymmetric bulb throb (slow brighten, fast dim) — the Univibe glow
+#define LFO_SHAPE_SH      6   // sample & hold — random value, stepped, held for one cycle (random-step arp on pitch)
+#define LFO_SHAPE_RANDOM  7   // smooth filtered random walk — drifting/"human" wander
+#define TREM_SINE    LFO_SHAPE_SINE     // back-compat aliases — tremolo()/autopan() take any LFO_SHAPE_* now
+#define TREM_SQUARE  LFO_SHAPE_SQUARE
+#define TREM_TRI     LFO_SHAPE_TRI
+void tremolo(float rate, float depth, int shape);                       // rate 0.1..20 Hz, depth 0..1 (0 = off), shape LFO_SHAPE_* (TREM_* still valid). THE master tremolo
 void instrument_tremolo(int slot, float rate, float depth, int shape);  // tremolo on just this slot (auto-grabs a private FX bus)
 
 // auto-pan — the tremolo LFO applied ANTIPHASE to L/R: a stereo sweep that moves the sound side to
@@ -555,7 +568,7 @@ void varispeed(float speed);   // 0.25..4 (2 octaves down..up); 1.0 = bypass. Sw
 // Only cheap-to-sweep params are exposed — it is impossible to modulate a buffer effect into a stutter.
 void fx_mod(int bus, int target, float value);                       // bus 0 = master, 1.. = an instrument's bus; target = FXMOD_*; value 0..1 (mapped per target). Call per frame; engine slews → no zipper
 void instrument_fx_mod(int slot, int target, float value);           // same, addressed by instrument slot (resolves to its FX bus)
-void fx_lfo(int bus, int target, float rate_hz, float depth, float center);  // engine sine LFO on a target: rate Hz, depth 0..1 (peak deviation; 0 = DETACH), center 0..1. e.g. fx_lfo(0,FXMOD_FILTER_CUT,0.3,0.4,0.5)
+void fx_lfo(int bus, int target, float rate_hz, float depth, float center, int shape);  // engine LFO on a target: rate Hz, depth 0..1 (peak deviation; 0 = DETACH), center 0..1, shape LFO_SHAPE_*. e.g. fx_lfo(0,FXMOD_FILTER_CUT,0.3,0.4,0.5,LFO_SHAPE_SINE)
 // gate — a NOISE GATE: clamps the signal shut when it falls below `threshold`, opens above it. The
 // classic rig pedal (tame a noisy/driven part's hiss + tails between notes); place it AFTER reverb in
 // fx_order for the iconic 80s GATED REVERB (the tail chops off). A reorderable insert (FX_GATE).

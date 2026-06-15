@@ -45,6 +45,11 @@ typedef struct {
     uint8_t loop;       // 1 = repeat when SFX ends
 } Sfx;
 
+// deterministically-seeded modulation state (the modulation kit, Block B) — declared up here because
+// Voice/fx LFOs embed one per instance for the stateful LFO shapes (S&H / random walk). The kit's
+// mod_randwalk/mod_sh/mod_optical helpers (which operate on it) live further down near the effects.
+typedef struct { unsigned int seed; float val, target, phase; } ModState;
+
 // An instrument = a waveform + an ADSR envelope + pulse duty. `instr` ids in
 // note()/hit()/chord()/tone() index this bank. Slots 0..4 are pre-filled with the
 // five raw waves (near-instant envelope) so old carts keep working; carts define 5+.
@@ -57,6 +62,7 @@ typedef struct {
     int   lfo_dest[3];              // LFO_PITCH / LFO_DUTY / LFO_VOLUME / LFO_CUTOFF, per LFO
     float lfo_rate[3];              // Hz
     float lfo_depth[3];             // 0 = off; units depend on dest
+    int   lfo_shape[3];             // LFO_SHAPE_* per LFO (default SINE); set by lfo_shape(), copied to new voices
     int   flt_mode;                 // FILTER_OFF / LOW / HIGH / BAND / NOTCH
     float flt_cutoff;               // Hz
     float flt_q;                    // damping coefficient (1/Q); small = resonant
@@ -107,6 +113,8 @@ typedef struct {
     float  rel_start;          // envelope level at the moment the gate ends (release fades from here)
     int    lfo_dest[3];
     float  lfo_rate[3], lfo_depth[3], lfo_phase[3];
+    int    lfo_shape[3];        // LFO_SHAPE_* per LFO (default SINE)
+    ModState lfo_mod[3];        // per-LFO state for the stateful shapes (S&H / random); seeded at note-on
     int    env_dest[3];              // mod-envelopes (AD; timer = step_samples, retriggered at note-on)
     int    env_a_samp[3], env_d_samp[3];
     float  env_amount[3];
@@ -599,8 +607,7 @@ static float moddel_hermite(const float *buf, int len, float readPos) {
 // Internal helpers (like moddel_hermite — "write the technique once"); effects consume them. Each
 // instance carries its own ModState so multiple buses/effects don't share a phase. Seed once at
 // init (LCG, so --det renders byte-reproducibly) — never Date/rand. static inline = no warning when
-// a source has no consumer yet (mod_randwalk/mod_sh await Shallow Water / the VHS dropout).
-typedef struct { unsigned int seed; float val, target, phase; } ModState;
+// a source has no consumer yet. (ModState typedef lives up by the Sfx struct — the Voice embeds one.)
 
 // slow FILTERED random in ~[-1,1]; `rate` Hz = how fast it wanders. The "living"/drift source.
 static inline float mod_randwalk(ModState *m, float rate, float dt) {
@@ -628,6 +635,29 @@ static inline float mod_sh(ModState *m, float rate, float dt) {
 static inline float mod_optical(float phase) {
     return phase < 0.8f ? powf(phase / 0.8f, 0.6f)                    // slow rise over ~80% of the cycle
                         : 1.0f - (phase - 0.8f) / 0.2f;               // quick fall over the last 20%
+}
+
+// ── the ONE LFO-shape dispatcher (STATUS #39) — every LFO site routes through these ──────────────
+// lfo_wave: the STATELESS shapes, phase 0..1 → bipolar −1..1 (the voice LFO's historical sine output
+// range, so SINE stays byte-identical). lfo_eval: the full vocabulary — the stateful S&H / random
+// shapes need a ModState (per LFO instance) + the rate/dt, so they get the same deterministic stepping
+// as the modulation kit. Keep LFO_SHAPE_* (studio.h) and these in sync.
+static inline float lfo_wave(int shape, float phase) {
+    switch (shape) {
+        case LFO_SHAPE_SQUARE:  return phase < 0.5f ? 1.0f : -1.0f;
+        case LFO_SHAPE_TRI:     return phase < 0.5f ? (phase * 4.0f - 1.0f) : (3.0f - phase * 4.0f);
+        case LFO_SHAPE_SAW:     return 1.0f - 2.0f * phase;              // ramp down 1 → −1
+        case LFO_SHAPE_RAMP:    return 2.0f * phase - 1.0f;             // ramp up −1 → 1
+        case LFO_SHAPE_OPTICAL: return mod_optical(phase) * 2.0f - 1.0f; // bulb throb, mapped to −1..1
+        default:                return sinf(phase * 6.2831853f);        // LFO_SHAPE_SINE — unchanged
+    }
+}
+// `phase` is the caller's running 0..1 phase (used by the stateless shapes); `m` carries the per-
+// instance state used ONLY by S&H/RANDOM (which advance their own m->phase). Returns −1..1.
+static inline float lfo_eval(int shape, float phase, ModState *m, float rate, float dt) {
+    if (shape == LFO_SHAPE_SH)     return mod_sh(m, rate, dt);          // stepped sample & hold
+    if (shape == LFO_SHAPE_RANDOM) return mod_randwalk(m, rate, dt);    // filtered random walk
+    return lfo_wave(shape, phase);
 }
 
 // BBD charge-well saturation (navkit bbdSaturate): soft-clips above ±0.7, adding warm even harmonics
@@ -1076,29 +1106,19 @@ static void fx_set_eq(int b, int i, float low_db, float mid_db, float high_db) {
 // that instrument's WHOLE output in unison (the coherent amp wobble a per-voice LFO_VOLUME can't
 // give — every note shares one phase, tails included). Stereo (same gain L/R). Dormant until the
 // first tremolo()/instrument_tremolo() with depth>0 → non-users byte-identical.
-#define TREM_SHAPE_SINE   0
+#define TREM_SHAPE_SINE   0   // = LFO_SHAPE_SINE (kept for the internal trem/pan code)
 #define TREM_SHAPE_SQUARE 1
 #define TREM_SHAPE_TRI    2
 static float trem_rate [SOUND_FX_BUSES];   // LFO rate Hz
 static float trem_depth[SOUND_FX_BUSES];   // modulation depth 0..1
-static int   trem_shape[SOUND_FX_BUSES];   // TREM_SHAPE_*
+static int   trem_shape[SOUND_FX_BUSES];   // LFO_SHAPE_* (now the full vocabulary, via lfo_eval)
 static float trem_phase[SOUND_FX_BUSES];   // LFO phase 0..1
+static ModState trem_md[SOUND_FX_BUSES];   // state for the S&H/random shapes
 static bool  trem_used [SOUND_FX_BUSES];
 static void trem_process(int b, float *mixL, float *mixR) {
-    float phase = trem_phase[b];
-    float mod;
-    switch (trem_shape[b]) {
-        case TREM_SHAPE_SQUARE:
-            mod = phase < 0.5f ? 1.0f : 0.0f;
-            break;
-        case TREM_SHAPE_TRI:
-            mod = phase < 0.5f ? phase * 4.0f - 1.0f : 3.0f - phase * 4.0f;
-            mod = mod * 0.5f + 0.5f;
-            break;
-        default: // sine
-            mod = 0.5f + 0.5f * sinf(phase * 6.2831853f);
-            break;
-    }
+    // -1..1 wave from the shared dispatcher → 0..1 mod (sine/square/tri reproduce the old output exactly)
+    float wave = lfo_eval(trem_shape[b], trem_phase[b], &trem_md[b], trem_rate[b], 1.0f / (float)SOUND_SAMPLE_RATE);
+    float mod = 0.5f + 0.5f * wave;
     trem_phase[b] += trem_rate[b] * (1.0f / (float)SOUND_SAMPLE_RATE);
     if (trem_phase[b] >= 1.0f) trem_phase[b] -= 1.0f;
     float g = 1.0f - trem_depth[b] * (1.0f - mod);
@@ -1107,7 +1127,8 @@ static void trem_process(int b, float *mixL, float *mixR) {
 static void fx_set_tremolo(int b, float rate, float depth, int shape) {
     if (rate  < 0.1f)  rate  = 0.1f;  if (rate  > 20.0f) rate  = 20.0f;
     if (depth < 0.0f)  depth = 0.0f;  if (depth > 1.0f)  depth = 1.0f;
-    if (shape < 0 || shape > TREM_SHAPE_TRI) shape = TREM_SHAPE_SINE;
+    if (shape < 0 || shape > LFO_SHAPE_RANDOM) shape = TREM_SHAPE_SINE;
+    if (trem_md[b].seed == 0) trem_md[b].seed = 0x9A1u + (unsigned)(b * 2246822519u);   // deterministic seed for S&H/random
     trem_rate[b] = rate; trem_depth[b] = depth; trem_shape[b] = shape;
     trem_used[b] = (depth > 0.0f);   // depth 0 = off (identity gain), like mix 0 elsewhere
 }
@@ -1124,22 +1145,11 @@ static float pan_rate [SOUND_FX_BUSES];   // LFO rate Hz
 static float pan_depth[SOUND_FX_BUSES];   // pan depth 0..1 (1 = full L↔R)
 static int   pan_shape[SOUND_FX_BUSES];   // TREM_SHAPE_*
 static float pan_phase[SOUND_FX_BUSES];   // LFO phase 0..1
+static ModState pan_md[SOUND_FX_BUSES];   // state for the S&H/random shapes
 static bool  pan_used [SOUND_FX_BUSES];
 static void pan_process(int b, float *mixL, float *mixR) {
-    float phase = pan_phase[b];
-    float mod;
-    switch (pan_shape[b]) {
-        case TREM_SHAPE_SQUARE:
-            mod = phase < 0.5f ? 1.0f : 0.0f;
-            break;
-        case TREM_SHAPE_TRI:
-            mod = phase < 0.5f ? phase * 4.0f - 1.0f : 3.0f - phase * 4.0f;
-            mod = mod * 0.5f + 0.5f;
-            break;
-        default: // sine
-            mod = 0.5f + 0.5f * sinf(phase * 6.2831853f);
-            break;
-    }
+    float wave = lfo_eval(pan_shape[b], pan_phase[b], &pan_md[b], pan_rate[b], 1.0f / (float)SOUND_SAMPLE_RATE);
+    float mod = 0.5f + 0.5f * wave;
     pan_phase[b] += pan_rate[b] * (1.0f / (float)SOUND_SAMPLE_RATE);
     if (pan_phase[b] >= 1.0f) pan_phase[b] -= 1.0f;
     float gL = 1.0f - pan_depth[b] * (1.0f - mod);   // L full at the LFO peak
@@ -1149,7 +1159,8 @@ static void pan_process(int b, float *mixL, float *mixR) {
 static void fx_set_autopan(int b, float rate, float depth, int shape) {
     if (rate  < 0.1f)  rate  = 0.1f;  if (rate  > 20.0f) rate  = 20.0f;
     if (depth < 0.0f)  depth = 0.0f;  if (depth > 1.0f)  depth = 1.0f;
-    if (shape < 0 || shape > TREM_SHAPE_TRI) shape = TREM_SHAPE_SINE;
+    if (shape < 0 || shape > LFO_SHAPE_RANDOM) shape = TREM_SHAPE_SINE;
+    if (pan_md[b].seed == 0) pan_md[b].seed = 0x51Fu + (unsigned)(b * 2654435761u);   // deterministic seed for S&H/random
     pan_rate[b] = rate; pan_depth[b] = depth; pan_shape[b] = shape;
     pan_used[b] = (depth > 0.0f);   // depth 0 = off (identity gain), like tremolo
 }
@@ -1756,7 +1767,8 @@ typedef enum {
     SR_INSTR_POS     = 112,  // a=slot, b=x*1000, c=y*1000 — position an instrument's whole effected bus (v2 emitter, spatial.md).
                              // WAS 110 — collided with SR_VARISPEED (its handler ran first → instr_pos was shadowed/dead); renumbered 2026-06-15.
     SR_FX_MOD        = 113,  // a=target(FXMOD_*), b=value*1000, c=bus — CV sink: ride a sweep-safe effect param (ADR 0018)
-    SR_FX_LFO        = 114,  // a=target(FXMOD_*), b=rate*100, c=bus, e0=depth*1000, e1=center*1000 — engine sine LFO on a target (depth 0 = detach)
+    SR_FX_LFO        = 114,  // a=target(FXMOD_*), b=rate*100, c=bus, e0=depth*1000, e1=center*1000, e2=shape — engine LFO on a target (depth 0 = detach)
+    SR_LFO_SHAPE     = 115,  // a=which, b=shape(LFO_SHAPE_*), c=slot (>=0 → instrument) ; e0/e1=handle (c<0 → live held note) — set a voice LFO's waveform
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -1946,6 +1958,8 @@ static float fxlfo_rate [SOUND_FX_BUSES][FXMOD_N];  // Hz; 0 = CV mode (use fxmo
 static float fxlfo_depth[SOUND_FX_BUSES][FXMOD_N];  // peak deviation 0..1 (0 = detached)
 static float fxlfo_ctr  [SOUND_FX_BUSES][FXMOD_N];  // LFO center 0..1
 static float fxlfo_phase[SOUND_FX_BUSES][FXMOD_N];  // 0..1 running phase
+static int   fxlfo_shape[SOUND_FX_BUSES][FXMOD_N];  // LFO_SHAPE_* (default SINE)
+static ModState fxlfo_mod[SOUND_FX_BUSES][FXMOD_N]; // per-target state for S&H/random shapes
 
 // normalized 0..1 → the target's natural param value, written into the live array (no enable side-effect).
 static void fxmod_apply(int b, int target, float v) {
@@ -1969,8 +1983,9 @@ static void fxmod_tick(void) {
     for (int b = 0; b < SOUND_FX_BUSES; b++)
         for (int t = 0; t < FXMOD_N; t++) {
             if (!fxmod_on[b][t]) continue;
-            if (fxlfo_rate[b][t] > 0.0f && fxlfo_depth[b][t] > 0.0f) {   // ENGINE LFO mode — sine is already smooth, no slew
-                float s = sinf(fxlfo_phase[b][t] * 6.2831853f);          // -1..1
+            if (fxlfo_rate[b][t] > 0.0f && fxlfo_depth[b][t] > 0.0f) {   // ENGINE LFO mode — any LFO_SHAPE_* (the dispatcher)
+                float s = lfo_eval(fxlfo_shape[b][t], fxlfo_phase[b][t], &fxlfo_mod[b][t],
+                                   fxlfo_rate[b][t], 1.0f / (float)SOUND_SAMPLE_RATE);   // -1..1
                 fxlfo_phase[b][t] += fxlfo_rate[b][t] / (float)SOUND_SAMPLE_RATE;
                 if (fxlfo_phase[b][t] >= 1.0f) fxlfo_phase[b][t] -= 1.0f;
                 fxmod_cur[b][t] = fxlfo_ctr[b][t] + fxlfo_depth[b][t] * s;
@@ -4315,11 +4330,18 @@ static void sound_setup_note(Voice *v, int midi, int slot, int vol, int gate_sam
     v->d_samp     = ins->d_samp;
     v->r_samp     = ins->r_samp;
     v->sustain    = ins->sustain;
+    // deterministic per-voice seed for the stateful LFO shapes (S&H/random): a counter advanced per
+    // voice-start → distinct per note yet identical run-to-run (so --det stays byte-reproducible).
+    static unsigned int lfo_seed_ctr = 0x12345u;
     for (int L = 0; L < SOUND_LFOS; L++) {
         v->lfo_dest[L]  = ins->lfo_dest[L];
         v->lfo_rate[L]  = ins->lfo_rate[L];
         v->lfo_depth[L] = ins->lfo_depth[L];
+        v->lfo_shape[L] = ins->lfo_shape[L];
         v->lfo_phase[L] = 0.0f;
+        lfo_seed_ctr = lfo_seed_ctr * 1103515245u + 12345u;
+        v->lfo_mod[L].seed = lfo_seed_ctr ^ (unsigned)(L * 0x9E3779B9u);
+        v->lfo_mod[L].phase = 0.0f; v->lfo_mod[L].val = 0.0f; v->lfo_mod[L].target = 0.0f;
     }
     for (int e = 0; e < SOUND_ENVS; e++) {        // mod-envelopes (timer is step_samples → retriggers here)
         v->env_dest[e]   = ins->env_dest[e];
@@ -5044,7 +5066,7 @@ static void sound_fire_req(SoundReq r) {
             if (!fxmod_on[b][t]) { fxmod_on[b][t] = true; fxmod_prime[b][t] = true; }
             fxmod_any = true;
         }
-    } else if (r.kind == SR_FX_LFO) {          // a=target, b=rate*100, c=bus, e0=depth*1000, e1=center*1000 — engine sine LFO (depth 0 = detach)
+    } else if (r.kind == SR_FX_LFO) {          // a=target, b=rate*100, c=bus, e0=depth*1000, e1=center*1000, e2=shape — engine LFO (depth 0 = detach)
         int b = r.c, t = r.a;
         if (b >= 0 && b < SOUND_FX_BUSES && t >= 0 && t < FXMOD_N) {
             float depth = r.e0 / 1000.0f;
@@ -5055,9 +5077,18 @@ static void sound_fire_req(SoundReq r) {
                 fxlfo_rate[b][t]  = rate < 0.01f ? 0.01f : rate;
                 fxlfo_depth[b][t] = depth > 1.0f ? 1.0f : depth;
                 fxlfo_ctr[b][t]   = r.e1 / 1000.0f;
-                if (!fxmod_on[b][t]) { fxmod_on[b][t] = true; fxlfo_phase[b][t] = 0.0f; }
+                fxlfo_shape[b][t] = (r.e2 >= 0 && r.e2 <= LFO_SHAPE_RANDOM) ? r.e2 : LFO_SHAPE_SINE;
+                if (!fxmod_on[b][t]) { fxmod_on[b][t] = true; fxlfo_phase[b][t] = 0.0f;
+                    fxlfo_mod[b][t].seed = 0x2345u + (unsigned)(b * 977u + t * 131u);   // deterministic seed for S&H/random
+                    fxlfo_mod[b][t].phase = 0.0f; fxlfo_mod[b][t].val = 0.0f; fxlfo_mod[b][t].target = 0.0f; }
                 fxmod_any = true;
             }
+        }
+    } else if (r.kind == SR_LFO_SHAPE) {       // a=which, b=shape, c=slot(>=0 → instrument) | handle in e0/e1 (c<0 → live note)
+        int which = r.a, shape = r.b;
+        if (which >= 0 && which < SOUND_LFOS && shape >= 0 && shape <= LFO_SHAPE_RANDOM) {
+            if (r.c >= 0 && r.c < SOUND_INSTR_SLOTS) instr_bank[r.c].lfo_shape[which] = shape;   // slot config → new voices
+            else { Voice *v = sound_held_voice(r.e0, r.e1); if (v) v->lfo_shape[which] = shape; } // live held note
         }
     }
 }
@@ -5170,7 +5201,8 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             if (v->sfx_idx < 0) {
                 for (int L = 0; L < SOUND_LFOS; L++) {
                     if (v->lfo_depth[L] <= 0.0f) continue;
-                    float lfo = sinf(v->lfo_phase[L] * 6.2831853f);     // -1..1
+                    float lfo = lfo_eval(v->lfo_shape[L], v->lfo_phase[L], &v->lfo_mod[L],
+                                         v->lfo_rate[L], 1.0f / (float)SOUND_SAMPLE_RATE);   // -1..1 (SINE = unchanged)
                     v->lfo_phase[L] += v->lfo_rate[L] / (float)SOUND_SAMPLE_RATE;
                     if (v->lfo_phase[L] >= 1.0f) v->lfo_phase[L] -= 1.0f;
                     if      (v->lfo_dest[L] == LFO_PITCH)  pitch_mul *= powf(2.0f, (lfo * v->lfo_depth[L]) / 12.0f);
@@ -5737,7 +5769,23 @@ void instrument_lfo(int slot, int which, int dest, float rate_hz, float depth) {
     if (which < 0 || which >= SOUND_LFOS) return;
     if (rate_hz < 0) rate_hz = 0;
     if (depth   < 0) depth   = 0;
+    // NOTE: deliberately does NOT set shape (SR_INSTR_LFO leaves it alone) so calling this after
+    // lfo_shape() won't reset the waveform. FORWARD-COMPAT (STATUS #39): to promote shape into this
+    // signature later, add an `int shape` arg and a `lfo_shape(slot, which, shape)` call below — the
+    // storage/dispatcher/request already exist, so it's purely additive (no DSP change).
     sound_push_ctrl(SR_INSTR_LFO, slot, dest, (int)(rate_hz * 1000.0f), (int)(depth * 1000.0f), which, 0);
+}
+// set a slot's LFO waveform (LFO_SHAPE_*). Separate from instrument_lfo() because 72 carts already call
+// that with a frozen signature; this is the non-breaking front door (default SINE → old carts unchanged).
+void lfo_shape(int slot, int which, int shape) {
+    if (slot < 0 || slot >= SOUND_INSTR_SLOTS) return;
+    if (which < 0 || which >= SOUND_LFOS) return;
+    sound_push_ctrl(SR_LFO_SHAPE, which, shape, slot, 0, 0, 0);   // c = slot (>=0) → instrument config
+}
+// set a live held note's LFO waveform (LFO_SHAPE_*) — the note_lfo() twin.
+void note_lfo_shape(int handle, int which, int shape) {
+    if (which < 0 || which >= SOUND_LFOS) return;
+    sound_push_ctrl(SR_LFO_SHAPE, which, shape, -1, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);  // c=-1 → live note (handle in e0/e1)
 }
 
 void instrument_filter(int slot, int mode, int cutoff_hz, int resonance) {
@@ -6147,9 +6195,9 @@ void instrument_fx_mod(int slot, int target, float value) {   // resolve slot �
     int b = fx_bus_for(slot); if (b < 0) return;
     sound_push_ctrl(SR_FX_MOD, target, (int)(value * 1000.0f), b, 0, 0, 0);
 }
-void fx_lfo(int bus, int target, float rate_hz, float depth, float center) {   // engine sine LFO; depth 0 = detach
+void fx_lfo(int bus, int target, float rate_hz, float depth, float center, int shape) {   // engine LFO (any LFO_SHAPE_*); depth 0 = detach
     if (bus < 0 || bus >= SOUND_FX_BUSES || target < 0 || target >= FXMOD_N) return;
-    sound_push_ctrl(SR_FX_LFO, target, (int)(rate_hz * 100.0f), bus, (int)(depth * 1000.0f), (int)(center * 1000.0f), 0);
+    sound_push_ctrl(SR_FX_LFO, target, (int)(rate_hz * 100.0f), bus, (int)(depth * 1000.0f), (int)(center * 1000.0f), shape);
 }
 
 // ── shimmer: a reverb with an octave-up pitch-shifter in the feedback loop (the ascending tail) ──
@@ -6329,6 +6377,7 @@ static void sound_init(void) {
             instr_bank[i].lfo_dest[L]  = LFO_PITCH;
             instr_bank[i].lfo_rate[L]  = 0.0f;
             instr_bank[i].lfo_depth[L] = 0.0f;   // off until instrument_lfo() is called
+            instr_bank[i].lfo_shape[L] = LFO_SHAPE_SINE;   // default waveform; lfo_shape() overrides
         }
         for (int e = 0; e < SOUND_ENVS; e++) {
             instr_bank[i].env_dest[e]   = ENV_CUTOFF;

@@ -1641,6 +1641,23 @@ v1, document it on the panel.
     collided with `SR_VARISPEED` at request-kind 110 (two parallel agents) — varispeed's handler ran
     first and shadowed `instrument_pos` (silently broken on master); renumbered `SR_INSTR_POS`→112.
 
+30. **Unified `LFO_SHAPE_*` — one modulator-waveform vocabulary (STATUS #39).** **✓ SHIPPED 2026-06-15.**
+    Folded three disconnected shape systems (voice LFOs = sine-only; `tremolo`/`autopan` = ad-hoc
+    `TREM_*`; the modulation kit's `mod_sh`/`mod_randwalk`/`mod_optical` baked into single effects) into
+    ONE enum (SINE/SQUARE/TRI/SAW/RAMP/OPTICAL/SH/RANDOM) + ONE dispatcher: `lfo_wave(shape,phase)` for
+    the stateless shapes (−1..1, SINE = the historical `sinf` so it's byte-identical), `lfo_eval(…,
+    ModState*,rate,dt)` adding the stateful S&H/random (reusing the kit helpers). Wired into all four LFO
+    sites: voice LFOs (`lfo_shape`/`note_lfo_shape` — NON-breaking setters, since 72 carts call the
+    frozen `instrument_lfo`), `tremolo`/`autopan` (any shape now; `TREM_*` aliased to `LFO_SHAPE_*`), and
+    `fx_lfo` (gained a `shape` arg; the lone caller fixed). Stateful shapes embed a deterministically-
+    seeded `ModState` per LFO instance → `--det` byte-reproducible (verified: S&H render md5-identical
+    across two runs, bounded, no clip). `SR_LFO_SHAPE`=115; `SR_FX_LFO` extended (e2=shape). `ModState`
+    typedef moved above the Voice struct (the Voice embeds `lfo_mod[3]`). Byte-identical for every
+    existing cart: SINE → same `sinf`, `depth==0` skips the eval, trem/pan sine/square/tri reproduce the
+    old `mod` exactly. **Showcase: `lfoshapes`** (8 shapes live, on pitch or cutoff — S&H-on-pitch = the
+    random-step arp). **Forward-compat:** promoting `shape` into `instrument_lfo`'s signature later is
+    additive only (the storage/dispatcher/request are already shape-aware).
+
 One-line version: **we built a very good modular synth and forgot to build the
 broken speaker it should play through.**
 

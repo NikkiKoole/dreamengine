@@ -44,12 +44,12 @@ static float a_rate = -1, a_depth = -1, a_ctr = -1;
 static float rate_hz(void) { return 0.05f + k_rate * 6.0f; }
 
 static void rearm(void) {
-    for (int i = 0; i < 3; i++) fx_lfo(0, TGT[i], 0.0f, 0.0f, 0.0f);  // detach every engine LFO (+ any CV)
+    for (int i = 0; i < 3; i++) fx_lfo(0, TGT[i], 0.0f, 0.0f, 0.0f, LFO_SHAPE_SINE);  // detach every engine LFO (+ any CV)
     // restore the effects' STATIC baselines (modulation overrides these while a target is active)
     filter(FILTER_LOW, 1600.0f, 0.55f);          // a mid-open lowpass — FILTER_CUT rides this
     drive_insert(0.0f, DRIVE_SOFT, 1.0f);        // amt 0 = clean; mix ready so FXMOD_DRIVE is audible when ridden
     shimmer(0.82f, 0.40f, 0.60f, 0.0f);          // mix 0 = off; FXMOD_SHIMMER_MIX blooms it in
-    if (mode == 1) fx_lfo(0, TGT[target], rate_hz(), k_depth, k_ctr);  // engine LFO arms here; CV pushes in update()
+    if (mode == 1) fx_lfo(0, TGT[target], rate_hz(), k_depth, k_ctr, LFO_SHAPE_SINE);  // engine LFO arms here; CV pushes in update()
     a_target = target; a_mode = mode; a_rate = k_rate; a_depth = k_depth; a_ctr = k_ctr;
 }
 

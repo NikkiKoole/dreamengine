@@ -866,8 +866,17 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       degradation, which needs `sound.h` (echo is single-tap). Sized in
       [`navkit-porting-handoff.md`](guides/navkit-porting-handoff.md) → queue; gate on 0015 first.
 
-39. **Unify LFO shape (it's a patchwork)** *(2026-06-15)* — "LFO shape" = the modulator's waveform
-    (sine/tri/square/saw/ramp/S&H/random/…). Right now it lives in three disconnected places:
+39. **Unify LFO shape (it's a patchwork)** — ✓ **SHIPPED 2026-06-15.** One `LFO_SHAPE_*` enum
+    (SINE/SQUARE/TRI/SAW/RAMP/OPTICAL/SH/RANDOM) now drives every LFO site through a single
+    `lfo_wave`/`lfo_eval` dispatcher: voice LFOs (new `lfo_shape(slot,which,shape)` +
+    `note_lfo_shape(handle,…)` setters — non-breaking, the 72 `instrument_lfo` carts unchanged),
+    `tremolo`/`autopan` (now take any shape; `TREM_*` are aliases), and `fx_lfo` (gained a `shape`
+    arg). Stateful shapes (S&H/random) embed a deterministically-seeded `ModState` per LFO instance
+    (`--det` byte-reproducible). SINE stays byte-identical (dispatcher returns the same `sinf`); the
+    voice path is skipped entirely at `depth==0`. **Showcase: `lfoshapes`** (8 shapes, live, on pitch
+    or cutoff). **Forward-compat left in place:** promoting `shape` into the `instrument_lfo` signature
+    later is purely additive (storage/dispatcher/request already shape-aware — see the code comment on
+    `instrument_lfo`). Original context (the three disconnected places this unified) below for the record:
     - the main LFO system (`instrument_lfo`/`note_lfo`, driving `LFO_PITCH`/`CUTOFF`/macro dests) is
       **sine-only** — no shape param (`sinf(lfo_phase·2π)` in `sound.h`); the one place shape would be
       most expressive has none.

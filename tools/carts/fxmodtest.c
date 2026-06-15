@@ -9,7 +9,7 @@ void init(void) {
     note_on(40, SL, 4); note_on(47, SL, 4); note_on(52, SL, 4);
     shimmer(0.85f, 0.4f, 0.7f, 0.0f);          // configured, mix 0 = off baseline
 #ifndef FXMOD_OFF
-    fx_lfo(0, FXMOD_SHIMMER_MIX, 0.33f, 0.5f, 0.5f);   // ~3s sweep, full 0..1 swing
+    fx_lfo(0, FXMOD_SHIMMER_MIX, 0.33f, 0.5f, 0.5f, LFO_SHAPE_SINE);   // ~3s sweep, full 0..1 swing
 #endif
 }
 void update(void) {}

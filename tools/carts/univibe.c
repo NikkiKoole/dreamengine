@@ -45,7 +45,7 @@ static float rate_hz(void) { return 0.2f + k_rate * 7.8f; }
 
 // the optical LFO shape, mirrored from the engine's mod_optical (for the lamp + curve viz)
 static float optical(float ph) { return ph < 0.8f ? powf(ph / 0.8f, 0.6f) : 1.0f - (ph - 0.8f) / 0.2f; }
-static float lfo_shape(float ph) { return sine ? 0.5f - 0.5f * cosf(ph * 6.2831853f) : optical(ph); }
+static float lamp_wave(float ph) { return sine ? 0.5f - 0.5f * cosf(ph * 6.2831853f) : optical(ph); }
 
 static void play_chord(int ci) {
     for (int i = 0; i < 4; i++) {
@@ -83,7 +83,7 @@ void draw(void) {
     print(sine ? "SINE (phaser)" : "OPTICAL (vibe)", SCREEN_W - 112, 6, sine ? CLR_DARK_GREY : CLR_PEACH);
 
     // the LAMP — brightness follows the live LFO (slow bright, fast dim when optical)
-    float v = lfo_shape(lamp_ph);
+    float v = lamp_wave(lamp_ph);
     int cx = SCREEN_W / 2, cy = 70, R = 26;
     for (int r = R; r > 0; r--) {                       // a soft glow halo
         int a = (int)(v * 255 * r / R);
@@ -97,7 +97,7 @@ void draw(void) {
     int px = gx, py = gy + gh - 1;
     for (int i = 0; i <= gw; i++) {
         float ph = (float)i / gw;
-        int yy = gy + gh - 1 - (int)(lfo_shape(ph) * (gh - 2));
+        int yy = gy + gh - 1 - (int)(lamp_wave(ph) * (gh - 2));
         if (i) line(px, py, gx + i, yy, CLR_MAUVE);
         px = gx + i; py = yy;
     }

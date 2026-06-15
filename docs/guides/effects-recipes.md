@@ -38,7 +38,7 @@ and leave the rest dry. `drive` is the exception — it's a **per-voice** insert
 > **…but the sweep-safe params have a sanctioned per-frame path: `fx_mod()` / `fx_lfo()`.** The
 > SET-AND-HOLD warning is about *reconfiguring buffer DSP*. A curated set of *cheap* params (filter
 > cutoff/res, drive amount, trem/pan depth, grains/shimmer mix) are fine to move continuously — and
-> `fx_mod()` (per-frame CV sink) / `fx_lfo()` (fire-and-forget engine sine) are the **right way** to
+> `fx_mod()` (per-frame CV sink) / `fx_lfo()` (fire-and-forget engine LFO, any `LFO_SHAPE_*`) are the **right way** to
 > do it: the engine slews internally so it never zippers, and the `FXMOD_*` enum only names safe
 > params, so the API *can't* be pointed at a buffer effect. **Configure the effect first, then
 > modulate** — `fx_mod` rides an already-live effect's param, it doesn't enable one. See the
@@ -391,7 +391,7 @@ laps the ~2 s buffer → a click). Master output stage; pitch is exact (A4→A3 
 > hold a fixed off-speed and the read laps the write (a periodic click). For a clean *sustained* octave
 > on one part, that's `grains_pitch` / shimmer territory; `varispeed` is the moving-tape effect.
 
-## modulating effects — `fx_mod(bus, target, value)` · `instrument_fx_mod(slot, …)` · `fx_lfo(bus, target, rate, depth, center)`
+## modulating effects — `fx_mod(bus, target, value)` · `instrument_fx_mod(slot, …)` · `fx_lfo(bus, target, rate, depth, center, shape)`
 
 Not an effect — the **modulation layer over** effects (ADR 0018). Effects keep their own set-and-hold
 knobs; this RIDES a curated, *sweep-safe* one under a control signal, the way `LFO_TIMBRE` rides an
@@ -402,9 +402,11 @@ mod on an un-configured bus is silent). Two entry points:
 - **`fx_mod(bus, target, value)`** — the per-frame **CV sink**. Push your own LFO/envelope/sequencer
   value every frame (this is what `modrack` patches a CV node into); the engine slews internally so
   per-frame pokes never zipper. `instrument_fx_mod(slot, …)` addresses an instrument's private bus.
-- **`fx_lfo(bus, target, rate_hz, depth, center)`** — fire-and-forget **engine sine**. Set once; runs
-  on the audio thread (no per-frame calls). `depth` 0..1 = peak deviation around `center`; **`depth 0`
-  = detach** (the param freezes at its last value). `depth 0.5` + `center 0.5` = a full 0..1 swing.
+- **`fx_lfo(bus, target, rate_hz, depth, center, shape)`** — fire-and-forget **engine LFO**. Set once;
+  runs on the audio thread (no per-frame calls). `depth` 0..1 = peak deviation around `center`; **`depth
+  0` = detach** (the param freezes at its last value). `depth 0.5` + `center 0.5` = a full 0..1 swing.
+  `shape` is any `LFO_SHAPE_*` (SINE/SQUARE/TRI/SAW/RAMP/OPTICAL/SH/RANDOM — STATUS #39); SQUARE on
+  `FILTER_CUT` = a stepped filter, S&H = per-step jumps.
 
 `value`/`center`/`depth` are all normalized 0..1, mapped per target. **Targets (`FXMOD_*`):**
 
@@ -420,9 +422,10 @@ mod on an un-configured bus is silent). Two entry points:
 
 | recipe | call | character | used by |
 |---|---|---|---|
-| auto-wah-ish filter sweep | `filter(FILTER_LOW,…)` then `fx_lfo(0, FXMOD_FILTER_CUT, 0.3, 0.4, 0.5)` | a slow cyclic lowpass rock — the cheap wah | `fxmod` |
+| auto-wah-ish filter sweep | `filter(FILTER_LOW,…)` then `fx_lfo(0, FXMOD_FILTER_CUT, 0.3, 0.4, 0.5, LFO_SHAPE_SINE)` | a slow cyclic lowpass rock — the cheap wah | `fxmod` |
+| stepped filter | `filter(FILTER_LOW,…)` then `fx_lfo(0, FXMOD_FILTER_CUT, 2, 0.4, 0.5, LFO_SHAPE_SH)` | random per-step cutoff jumps — the rhythmic S&H filter | `lfoshapes` |
 | hand-driven filter (modrack) | per frame: `fx_mod(0, FXMOD_FILTER_CUT, cv)` | the DJ filter, swept by your own CV/knob/envelope | `fxmod` |
-| breathing dirt | `drive_insert(0,SOFT,1)` then `fx_lfo(0, FXMOD_DRIVE, 0.2, 0.3, 0.5)` | saturation that swells and backs off | `fxmod` |
+| breathing dirt | `drive_insert(0,SOFT,1)` then `fx_lfo(0, FXMOD_DRIVE, 0.2, 0.3, 0.5, LFO_SHAPE_SINE)` | saturation that swells and backs off | `fxmod` |
 | blooming wash | `shimmer(…,0)` then `fx_mod(0, FXMOD_SHIMMER_MIX, env)` | swell the ascending shimmer in on a gesture | `fxmod` |
 
 > **Deferred targets (not yet built):** reverb/delay **sends** (they're per-*voice* in this engine, not
