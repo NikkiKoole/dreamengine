@@ -102,6 +102,16 @@
       </div>
     </a>
 
+    <a class="card" href="lfoshapes/" data-title="lfoshapes" data-search="lfoshapes lfoshapes instrument the showcase for the unified lfo_shape_* vocabulary - the modulator waveform, shared across the whole engine (voice lfos via lfo_shape()/note_lfo_shape(), tremolo/autopan, and fx_lfo). one held saw note runs an lfo; press 1..8 to switch its waveform live - sine / square / tri / saw / ramp / optical (the univibe bulb throb) / s&amp;h (sample &amp; hold) / random (filtered walk) - and watch the trace redraw while the yellow dot tracks the value right now. d flips the destination between pitch (vibrato) and cutoff (a filter wobble); -/= set the rate. the expressive payoffs: s&amp;h on pitch is a random-step arpeggio, square on cutoff is a stepped two-state filter. the stateful shapes are deterministically seeded (--det reproducible). h help. (status #39.)" data-added="2026-06-15" data-tier="3">
+      <img src="lfoshapes/cart.png" alt="lfoshapes" loading="lazy">
+      <div class="body">
+        <h2>lfoshapes <span class="dual" title="Ships two audio backends — a dedicated-thread AudioWorklet build and a plain ScriptProcessor build. Responds to the Audio toggle above.">⚡2×audio</span></h2>
+        <div class="badge b-desktop">🔴 Desktop Only — good luck past the title screen</div>
+        <p>The showcase for the unified LFO_SHAPE_* vocabulary - the modulator waveform, shared across the whole engine (voice LFOs via lfo_shape()/note_lfo_shape(), tremolo/autopan, and fx_lfo). One held saw note runs an LFO; press 1..8 to switch its WAVEFORM live - sine / square / tri / saw / ramp / optical (the Univibe bulb throb) / S&amp;H (sample &amp; hold) / random (filtered walk) - and watch the trace redraw while the yellow dot tracks the value right now. D flips the destination between PITCH (vibrato) and CUTOFF (a filter wobble); -/= set the rate. The expressive payoffs: S&amp;H on PITCH is a random-step arpeggio, SQUARE on CUTOFF is a stepped two-state filter. The stateful shapes are deterministically seeded (--det reproducible). H help. (STATUS #39.)</p>
+        <div class="added">added 2026-06-15</div>
+      </div>
+    </a>
+
     <a class="card" href="shimmer/" data-title="shimmer" data-search="shimmer shimmer instrument the showcase for shimmer() - a reverb with an octave-up pitch-shifter wired into its feedback loop (the strymon bluesky / brian eno sound). each pass through the reverb, the wet tail is tapped, pitched up an octave, and fed back in - so a held chord doesn't just bloom, it climbs, rising into a glassy crystalline pad. a held organ chord feeds the shimmer; 1..4 change chord (cmaj/am/fmaj/g). the shimmer slider is the climb: low = a plain reverb bloom, high = an endless ascent (a 2-grain overlap-add octave-up recirculates, tanh-governed + dc-blocked so it can't run away). size/damp/mix set decay length / tail darkness / dry-wet. rising sparks visualise the ascending octave tail - more shimmer spawns more, climbing faster and brightening as the energy rises through the octaves. the trophy of the boutique-pedals roadmap (primitive 2: a real-time bus pitch-shifter)." data-added="2026-06-15" data-tier="2">
       <img src="shimmer/cart.png" alt="shimmer" loading="lazy">
       <div class="body">
@@ -3562,7 +3572,7 @@
       </div>
     </a>
 </div>
-<footer>349 carts · arrows + Z/X to play (most carts)</footer>
+<footer>350 carts · arrows + Z/X to play (most carts)</footer>
 <script>
 (function () {
   var grid = document.querySelector('.grid')
