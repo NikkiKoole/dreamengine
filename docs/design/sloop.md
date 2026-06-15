@@ -735,7 +735,10 @@ before the parts bin. Each rung is a runnable cart.
 6. **The journey.** Beacon goal, fuel as the clock, win/score.
 
 Cut for v1 (DDA rabbit holes): crew/NPCs, combat, electrical systems, part HP bars,
-turrets, interior tiles, water/amphibious. Each is a clean v2.
+turrets, interior tiles, water/amphibious. Each is a clean v2. **The combat / enemy
+AI is being prototyped separately in the `flank` cart — a tunable top-down "fight
+engine" (flanking, cover, suppression, stealth, difficulty panel) meant to drop into
+sloop's v2: [`flank-tactical-ai.md`](flank-tactical-ai.md).**
 
 Likely ~900–1200 lines at MVP (peers: orbit 703, coaster 970, galerijflat 1440).
 
@@ -854,6 +857,11 @@ or English single words in the series' plain-noun register — *Jalopy*, *Overla
   scrolling minimap with named locations. The world-streaming + minimap structure.
 - `docs/design/galerijflat.md` — the legendary-series build-log discipline (✓ decisions,
   step-by-step log, handoff section) this doc should grow into once building starts.
+- `tools/carts/flank.c` + [`flank-tactical-ai.md`](flank-tactical-ai.md) — the **enemy/combat
+  AI prototype** for sloop's v2: a tunable top-down fight engine (flanking, full/low cover,
+  suppression, stealth + fog, graded alertness, difficulty panel). Built emergent-first so one
+  engine covers many fight types (gunfight / brawl / stealth-murder); the doc has the building
+  blocks, the behaviour menu, tuning knobs, and a "what to lift" porting section.
 - `runtime/ui.h` — BUILD-mode widgets (part palette buttons, sliders); never hand-roll.
 - CLAUDE.md → "Data-driven carts: name your indices" — the part enum rule (modrack).
 - CLAUDE.md → "Game feel" — breakage/impact wants hit-stop + shake + debris + sound.
