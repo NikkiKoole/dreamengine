@@ -27,8 +27,13 @@ enum { T_OVERPASS, T_DIAMOND, T_CLOVERLEAF, T_TRUMPET, T_COUNT };
 static const char *TNAME[T_COUNT] = { "OVERPASS", "DIAMOND", "CLOVERLEAF", "TRUMPET" };
 static int   itype = T_DIAMOND;
 static float ang   = 90.0f;     // crossing road angle (deg from highway)
-static int   rampsz = 46;       // ramp reach (px)
-static int   show_hud = 1;
+static int   show_hud = 1, show_panel = 1;
+// tunable ramp shape — slider-normalised 0..1, mapped to real values in draw() (tune by feel,
+// then bake the chosen values as constants when porting the drawer into roadnet2):
+static float s_reach = 0.33f;   //  R       reach  24..90 px
+static float s_gore  = 0.40f;   //  gore    divergence point along highway, ×R 1.0..2.0
+static float s_taper = 0.46f;   //  kA      off-ramp taper run, ×R 0.5..1.8
+static float s_runon = 0.45f;   //  kB      run-on along the overpass, ×R 0.4..1.4
 
 // ── ribbon: stroke a polyline as a clean filled road (centre-line + polyfill quads + joint
 //    circles), the same technique roadnet2 uses. casing = a darker outline drawn first/wider.
@@ -102,17 +107,16 @@ void update(void) {
     if (key(KEY_LEFT))  ang  -= 1.5f;
     if (key(KEY_RIGHT)) ang  += 1.5f;
     if (ang < 25) ang = 25; if (ang > 155) ang = 155;
-    if (key(KEY_UP))   rampsz += 1;
-    if (key(KEY_DOWN)) rampsz -= 1;
-    if (rampsz < 24) rampsz = 24; if (rampsz > 90) rampsz = 90;
     if (keyp('H')) show_hud = !show_hud;
+    if (keyp('P')) show_panel = !show_panel;
 }
 
 void draw(void) {
     cls(CLR_DARK_GREEN);
     int CX = SCREEN_W/2, CY = SCREEN_H/2;
     float ux = c_deg(ang), uy = s_deg(ang);            // crossing-road unit dir
-    float R  = (float)rampsz;
+    float R  = 24 + s_reach*66;                        // ramp reach (px), from the slider
+    float goreM = 1.0f + s_gore*1.0f, taperM = 0.5f + s_taper*1.3f, runonM = 0.4f + s_runon*1.0f;
     int HW = lanes * LANE_W;                            // highway carriageway half-width
 
     // 1. HIGHWAY (horizontal), drawn UNDER everything: carriageway, then markings
@@ -128,13 +132,13 @@ void draw(void) {
         // four quadrant ramps: highway point (CX±R,CY) ↔ crossing-road point (CX±R·u)
         float px=-uy, py=ux;                                     // perpendicular to the crossing road
         for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
-            float hx = CX + sx*R*1.4f, hy = CY + sy*HW;          // highway end: outer lane EDGE (the gore/nose)
+            float hx = CX + sx*R*goreM, hy = CY + sy*HW;         // highway end: outer lane EDGE (the gore/nose)
             float cd = HW + R;                                   // crossing end: clearance R BEYOND the edge
             float ax = CX + ux*sy*cd - px*sx*HW_AR;              // ...on the crossing road's NEAR side
             float ay = CY + uy*sy*cd - py*sx*HW_AR;
             // highway tangent points TOWARD the curve (toward centre) so it tapers off parallel,
-            // not folding back; long kA = the off-ramp taper, long kB = run-on along the overpass
-            draw_ramp(hx,hy, (sx>0?180:0), ax,ay, (sy>0?ang:ang+180), R*1.1f, R*0.85f);
+            // not folding back; kA = the off-ramp taper run, kB = run-on along the overpass
+            draw_ramp(hx,hy, (sx>0?180:0), ax,ay, (sy>0?ang:ang+180), R*taperM, R*runonM);
         }
     }
     if (itype == T_CLOVERLEAF) {
@@ -165,11 +169,22 @@ void draw(void) {
     straight(a0x,a0y, a1x,a1y, HW_AR+3, -1, CLR_BROWNISH_BLACK);   // underbridge shadow
     straight(a0x,a0y, a1x,a1y, HW_AR,   CLR_DARKER_GREY, CLR_MEDIUM_GREY);  // deck (over the highway)
 
+    if (show_panel) {                                  // live ramp-shape sliders (tune by feel)
+        font(FONT_SMALL);
+        fillp(FILL_CHECKER, -1); rectfill(0, 12, 66, 56, CLR_BLACK); fillp_reset();
+        ui_begin();
+        ui_slider(&s_reach, 3, 16, 58, "reach");
+        ui_slider(&s_gore,  3, 28, 58, "gore");
+        ui_slider(&s_taper, 3, 40, 58, "taper");
+        ui_slider(&s_runon, 3, 52, 58, "run-on");
+        ui_end();
+        font(FONT_NORMAL);
+    }
     if (show_hud) {
         char buf[48];
         rectfill(0,0,SCREEN_W,11,CLR_BLACK);
         snprintf(buf,sizeof buf,"INTERCHANGE  %s  %dx2 lanes", TNAME[itype], lanes);
         print(buf, 4, 2, CLR_LIGHT_GREY);
-        print_centered("T type  L lanes  \x1a\x1b angle  \x18\x19 ramp", SCREEN_W/2, SCREEN_H-9, CLR_DARK_GREY);
+        print_centered("T type  L lanes  \x1a\x1b angle  P panel  H hud", SCREEN_W/2, SCREEN_H-9, CLR_DARK_GREY);
     }
 }
