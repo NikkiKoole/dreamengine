@@ -3323,5 +3323,15 @@
       "tech-demo",
       "toy"
     ]
+  },
+  {
+    "title": "flank",
+    "description": "Top-down tactical AI -- a squad that isn't dumb (a testbed for a GTA1 / Hotline-Miami enemy brain). Four ideas: COMMUNICATION -- a shared blackboard; the instant any enemy sees you it calls your position to the whole squad and blind ones converge (knowledge decays, so break contact and they search your last-known spot). FLOW FIELD -- a Dijkstra map flooded from your last-known cell, so they approach AROUND cover, not into walls. HEATMAP / FLANKING -- your aim projects a danger cone; enemies score firing spots to AVOID the cone, so they peel off and hit you from the sides and behind. COVER + SPREAD -- they favour cells beside walls and away from each other, peeking from cover instead of bunching into one kill-funnel. Enemy glyphs are coloured by state (patrol/hunt/engage/search). WASD move, mouse aim, click/SPACE shoot; H toggles the heat overlay, L the comms lines, TAB spectates an autopilot fight, R resets.",
+    "file": "flank.cart.png",
+    "kind": [
+      "tech-demo",
+      "game"
+    ],
+    "genre": "shooter"
   }
 ]
