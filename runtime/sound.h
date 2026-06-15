@@ -4502,7 +4502,7 @@ static void sound_fire_req(SoundReq r) {
         if (v) v->freq_target = sound_midi_to_freq_f(r.a / 256.0f);
     } else if (r.kind == SR_NOTE_VOL) {
         Voice *v = sound_held_voice(r.e0, r.e1);
-        if (v) v->vol_target = (r.a < 0 ? 0 : r.a > 7 ? 7 : r.a) / 7.0f;
+        if (v) { float vv = r.a / 1000.0f; vv = vv < 0.0f ? 0.0f : vv > 7.0f ? 7.0f : vv; v->vol_target = vv / 7.0f; }
     } else if (r.kind == SR_NOTE_CUTOFF) {
         Voice *v = sound_held_voice(r.e0, r.e1);
         if (v) v->cutoff_target = (float)r.a;
@@ -4526,7 +4526,7 @@ static void sound_fire_req(SoundReq r) {
         if (v) { float d = r.a / 1000.0f; v->duty_target = d < 0.01f ? 0.01f : d > 0.99f ? 0.99f : d; }
     } else if (r.kind == SR_NOTE_RES) {
         Voice *v = sound_held_voice(r.e0, r.e1);
-        if (v) { int res = r.a < 0 ? 0 : r.a > 15 ? 15 : r.a; v->flt_q_target = 2.0f - res * 0.13f; }
+        if (v) { float res = r.a / 1000.0f; res = res < 0.0f ? 0.0f : res > 15.0f ? 15.0f : res; v->flt_q_target = 2.0f - res * 0.13f; }
     } else if (r.kind == SR_NOTE_LFO) {   // a=which, b=dest, c=rate*1000, e2=depth*1000 (phase kept → no click)
         Voice *v = sound_held_voice(r.e0, r.e1);
         int L = r.a;
@@ -5629,9 +5629,9 @@ void note_pitch(int handle, float midi) {
     sound_push_ctrl(SR_NOTE_PITCH, (int)(midi * 256.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
-void note_vol(int handle, int vol) {
+void note_vol(int handle, float vol) {   // 0..7, fractions allowed (range kept so int callers stay byte-identical)
     if (handle <= 0) return;
-    sound_push_ctrl(SR_NOTE_VOL, vol, 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
+    sound_push_ctrl(SR_NOTE_VOL, (int)(vol * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
 void note_cutoff(int handle, int hz) {
@@ -5640,9 +5640,9 @@ void note_cutoff(int handle, int hz) {
     sound_push_ctrl(SR_NOTE_CUTOFF, hz, 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
-void note_res(int handle, int resonance) {
+void note_res(int handle, float resonance) {   // 0..15, fractions allowed (range kept so int callers stay byte-identical)
     if (handle <= 0) return;
-    sound_push_ctrl(SR_NOTE_RES, resonance, 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
+    sound_push_ctrl(SR_NOTE_RES, (int)(resonance * 1000.0f), 0, 0, handle & SOUND_HANDLE_MASK, handle >> SOUND_HANDLE_BITS, 0);
 }
 
 void note_lfo(int handle, int which, int dest, float rate_hz, float depth) {

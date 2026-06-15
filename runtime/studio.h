@@ -290,9 +290,9 @@ void hit(int midi, int instr, int vol, int dur_ms);       // note with custom du
 int  note_on(int midi, int instr, int vol);               // start a sustained note → returns a handle. vol 0 = start silent. note_off it later
 void note_off(int handle);                                // release a held note (lets its envelope fade out)
 void note_pitch(int handle, float midi);                  // slide a held note to a new pitch (float → between notes); no retrigger
-void note_vol(int handle, int vol);                       // change a held note's volume 0..7 live; 0 = silent but still alive
+void note_vol(int handle, float vol);                     // change a held note's volume 0..7 live (fractions OK — smooth fades/dynamics); 0 = silent but still alive
 void note_cutoff(int handle, int hz);                     // sweep a held note's filter cutoff live (needs a filter on its instrument slot)
-void note_res(int handle, int resonance);                 // sweep a held note's filter resonance 0..15 live (pairs with note_cutoff for the acid squelch)
+void note_res(int handle, float resonance);               // sweep a held note's filter resonance 0..15 live, fractions OK (pairs with note_cutoff for the acid squelch)
 void note_lfo(int handle, int which, int dest, float rate_hz, float depth);  // retune a held note's LFO `which` (0..2) live — dest LFO_PITCH/DUTY/VOLUME/CUTOFF; depth 0 = off
 void note_env(int handle, int which, int dest, int attack_ms, int decay_ms, float amount);  // set a held note's mod-envelope `which` (0..2) live — same shape as instrument_env(); amount 0 = off
 void note_filter(int handle, int mode);                   // switch a held note's filter mode live (FILTER_OFF/LOW/HIGH/BAND/NOTCH)
