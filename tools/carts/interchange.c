@@ -128,8 +128,8 @@ void draw(void) {
         for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
             float hx = CX + sx*R*1.2f, hy = CY + sy*HW;          // highway end: outer lane EDGE
             float cd = HW + R;                                   // crossing end: clearance R BEYOND the edge
-            float ax = CX + ux*sy*cd + px*sx*HW_AR;              // ...on the crossing road's near SIDE
-            float ay = CY + uy*sy*cd + py*sx*HW_AR;
+            float ax = CX + ux*sy*cd - px*sx*HW_AR;              // ...on the crossing road's NEAR side
+            float ay = CY + uy*sy*cd - py*sx*HW_AR;
             draw_ramp(hx,hy, (sx>0?0:180), ax,ay, (sy>0?ang:ang+180), R*0.9f);
         }
     }
