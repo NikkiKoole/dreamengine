@@ -46,7 +46,7 @@ void init(void) {
     instrument_harmonics(7, 0.0f);                 // voicing 0 = Rhodes tine
     instrument_timbre(7, 0.20f);                   // mellow suitcase brightness
     instrument_morph(7, 0.12f);                    // gentle dig-in bark
-    instrument_tremolo(7, 5.0f, 0.35f, TREM_SINE); // the Suitcase wobble (amplitude, not stereo pan)
+    instrument_tremolo(7, 5.0f, 0.35f, LFO_SHAPE_SINE); // the Suitcase wobble (amplitude, not stereo pan)
 
     spatial_model(18.0f, 260.0f, 1.2f);            // distance falloff (reads on 320px)
     spatial_speed(420.0f);                         // Doppler tuned for a musical whoosh

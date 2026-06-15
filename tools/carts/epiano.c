@@ -177,7 +177,7 @@ static void apply_wah(void) {
     }
 }
 static void ep_keytrack(int h, int midi) { if (h < 0 || wahmode == 0) return; note_cutoff(h, 300 + (midi - 36) * 14); }
-static void apply_trem(void)   { instrument_tremolo(I_EP, 4.5f + trem_spd * 3.0f, val[SL_TREM] * 0.9f, TREM_SINE); }
+static void apply_trem(void)   { instrument_tremolo(I_EP, 4.5f + trem_spd * 3.0f, val[SL_TREM] * 0.9f, LFO_SHAPE_SINE); }
 static void apply_phaser(void) { instrument_phaser(I_EP, phaser_rate, 0.5f + phaser_str * 0.5f, 0.35f + phaser_str * 0.5f, (machine == M_RHODES && phasermode) ? 0.5f : 0.0f, 6); }
 
 // ════ the FRONT PANEL → the param layer + the per-machine effects ════════════════════════════════
@@ -207,7 +207,7 @@ static void apply_machine(void) {
     // RHODES VIBE — the Suitcase stereo vibrato: the real bus auto-pan (antiphase tremolo), so the
     // whole Rhodes incl. the ringing tine tails sways L↔R coherently (the per-voice LFO_PAN stand-in
     // this replaced couldn't — there each note had its own phase). SPD = rate, DEP = sweep width.
-    instrument_autopan(I_EP, 3.0f + ped_k[0][0][0] * 4.0f, suitcase ? (0.35f + ped_k[0][0][1] * 0.55f) : 0.0f, TREM_SINE);
+    instrument_autopan(I_EP, 3.0f + ped_k[0][0][0] * 4.0f, suitcase ? (0.35f + ped_k[0][0][1] * 0.55f) : 0.0f, LFO_SHAPE_SINE);
     // RHODES DYNO — lush stereo chorus (bypassed at mix 0). EQ presence ONLY when on, so a clean
     // machine is NEVER routed through an EQ (that was the character-killer — it dulled the bell).
     instrument_chorus(I_EP, 0.6f, 0.35f + ped_k[0][1][0] * 0.4f, dyno ? 0.55f : 0.0f);
