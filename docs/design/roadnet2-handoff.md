@@ -26,11 +26,13 @@ rung-1..3 baseline (the elegant terrain-aware spline highways), rebuilt upward.
    **fake-3D grade separation** (one road drawn over the other = overpass; no real z-levels).
    - **Diamond fully dialed** (✅): smooth ramps off the lane edge, lane-count consistent,
      near-side overpass connection, off-ramp tapers, clean connections.
-   - **Two axes wired**: TOPOLOGY (cross / T-split / Y-split, + flip) × CLASS-PAIR (highway/arterial
-     each). Junction follows the pairing: AR×AR = at-grade (crossroads / T-intersection); any
-     highway = grade-separated (ramps).
-   - **Live UI**: toggle buttons (topology / flip / A class / B class / ramp type) + ramp-shape
-     sliders (reach / gore / taper / run-on). Keys mirror them (Y / F / 1 / 2 / T / L / ←→ / P / H).
+   - **Live UI = THE junction matrix** (data-driven `JUNCS[]`): every supported junction is one
+     clickable button — `cross / diamond / clover• / stack•` · `tee / half / trumpet` · `fork / wye`
+     (rows = topology, columns = that row's variants; • = red dot = stub/draft). One click sets the
+     WHOLE config (topology + both classes + ramp-style); active framed yellow; hover → bottom-strip
+     tooltip with full name + expected render + build status. Keys are now just modifiers:
+     **F** flip · **◄►** angle · **L** lanes · **P** panel · **H** hud. Plus ramp-shape sliders
+     (reach / gore / taper / run-on). To inspect a junction unobstructed, **P** hides the panel.
 
 ## The junction matrix (the part-B map) — full table in roadnet2-plan.md
 THREE axes: TOPOLOGY (cross / T-split / Y-split) × CLASS-PAIR (AR×AR at-grade / HW×AR / HW×HW;
@@ -43,26 +45,35 @@ broken full. So a grade-sep cell is a MENU of ramp-styles, not one junction.
 - ✅ T-split + HW — **HALF-DIAMOND** (the two near-side ramps + trunk-at-merge; serves ONE carriageway —
   a deliberate *partial*. **Relabeled** from the earlier mistaken "trumpet": it only connects the near
   side, which is correct *as a half-diamond*).
-- ⛔ T-split + HW — **trumpet** (the FULL version: bridge-over + loop + connectors → both carriageways).
-- 🔶 / ⛔ to build: **cloverleaf** (itype stub), **HW×HW stack** (Cross+HW×HW just overpass+ramps now),
-  parclo / half-trumpet.
-- NOTE: the `itype` enum is still OVERPASS/DIAMOND/CLOVERLEAF — it needs to grow into per-topology
-  ramp-style menus (T-split: HALF-DIAMOND ↔ TRUMPET; Cross+HW×HW: STACK ↔ CLOVERLEAF).
+- 🔶 T-split + HW — **trumpet** FIRST PASS (itype `T_TRUMPET`): trunk comes down to a *throat* just
+  above the highway; a `draw_loop()` teardrop (~300°) springs tangent from the throat; a flyover
+  connector crosses the centreline to the FAR carriageway and merges tangent to the highway. The loop
+  reads. STILL ROUGH → the loop-end and the connector only *touch* the lanes (need short tangent
+  **merge stubs**); the `flip`/ss side is uneyeballed; reach/gore/taper/run-on aren't wired into the
+  loop yet (only the connector). **This is the next thing to refine.**
+- ⛔ to build: **cloverleaf** (old tangled loop-circles — rebuild on `draw_loop`, 4 loops), **HW×HW
+  stack** (showpiece), parclo / half-trumpet.
+- The `itype` enum is now OVERPASS / DIAMOND / CLOVERLEAF / **TRUMPET**. Each `JUNCS[]` row carries its
+  own ramp-style, so the matrix button picks it directly (no separate ramp-style control anymore).
+- **`draw_loop(cx,cy,rad,a0,sweep)`** is the reusable teardrop primitive (ribbon arc) — it's what the
+  cloverleaf's 4 loops + parclo will copy. Get it dialed on the trumpet first.
 
 ## What's next (recommended order)
-1. **Nail the remaining ramp-styles in the sandbox.** The big one is the **loop ramp** (teardrop) —
-   build it once and it drives both the **trumpet** (T-split, full: 1 loop + connectors + the arterial
-   bridges OVER to reach both carriageways) and the **cloverleaf** (Cross, 4 loops). Then the **stack**
-   (HW×HW system interchange — the showpiece). Lower priority: parclo, half-trumpet.
-   (Wye ✅ done — tangent diverge. T-split half-diamond ✅ — but it's the *partial*; the full trumpet
-   is still to build.)
-2. **Bake the slider values → constants, and PORT the drawer into roadnet2.** Interface:
+1. **Refine the TRUMPET (in progress).** The `draw_loop()` teardrop works; what's left is the *merge*:
+   short tangent stubs so the loop-end and the flyover connector kiss the highway lanes (right now they
+   just touch); verify the `flip` (ss=+1) side; wire reach/gore/taper into the loop (radius/centre),
+   not only the connector. Open the cart → click **trumpet** (the bake's default is CROSS). Decide with
+   Nikki what "right" looks like (merge into specific lanes? gore-nose triangles? one-way arrows?).
+2. **Cloverleaf** — rebuild the (currently tangled) `clover` cell on `draw_loop`: 4 teardrops, one per
+   quadrant, + 4 outer ramps. Then the **stack** (HW×HW showpiece). Lower priority: parclo, half-trumpet.
+   (Wye ✅, half-diamond ✅ partial, trumpet 🔶 first pass.)
+3. **Bake the slider values → constants, and PORT the drawer into roadnet2.** Interface:
    *given two crossing roads (positions, dirs, classes) + a topology → draw the junction.* Wire it
    to roadnet2's road graph (where roads meet → choose junction from the matrix).
-3. **Settlement placement** (parked — it's worldgen-ish): tag towns **satellite** (→ arterial into
+4. **Settlement placement** (parked — it's worldgen-ish): tag towns **satellite** (→ arterial into
    their city) vs **isolated** (→ reach a highway via an interchange / chain to a neighbour), so
    towns stop T-ing straight onto highway hubs. The "where interchanges go" half of part B.
-4. Polish backlog: faint/dense reference grid, big node-marker dots at drive zoom, road-density
+5. Polish backlog: faint/dense reference grid, big node-marker dots at drive zoom, road-density
    tuning, the ~500 km scope decision.
 
 ## How to run / see it
@@ -70,8 +81,10 @@ broken full. So a grade-sep cell is a MENU of ramp-styles, not one junction.
   **click a spot** to drop the car and enter **DRIVE** (arrows/WASD drive, camera follows, GPS
   inset bottom-right). **Click the GPS** to pop back to MAP; click elsewhere to fast-travel. `web`
   + the other panel sliders re-roll the network live.
-- **interchange**: open it → the diamond shows. Click the panel **buttons** (or keys) to flip
-  topology / classes / flip / ramp type; drag the **sliders** to shape the ramps.
+- **interchange**: open it → CROSS/diamond shows. **Click any junction button** in the matrix to
+  switch (cross / diamond / clover• / stack• · tee / half / trumpet · fork / wye). Hover a button for
+  its tooltip. **F** flip, **◄►** angle, **L** lanes, **P** hide-panel-to-inspect. Drag the sliders to
+  shape the ramps.
 
 ## Gotchas (cost real time this session)
 - **Screenshot bakes compile the whole engine, which includes `runtime/sound.h`.** A parallel agent
