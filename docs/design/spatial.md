@@ -4,7 +4,8 @@
 > (`listener`, `listener_vel`, `spatial_model`, `spatial_speed`, `note_pos`,
 > `note_motion`, `hit_at`). v2 = **emitter buses** (`instrument_pos`,
 > `instrument_motion`): position an instrument's whole effected bus so its FX tail
-> (shimmer/reverb) moves *with* it. Showcase cart `spatial` (radio = a v2 emitter,
+> (shimmer/reverb) moves *with* it. Showcase cart `spatial` (a UFO flies past as a v2
+> emitter — a sustained shimmer tone, so the Doppler reads through the whole pass;
 > car = v1 per-voice). **v3 (acoustic zones) remains PROPOSED.** The v1/v2 sections
 > below are the record of what was built; see also the [STATUS.md](../STATUS.md) ledger.
 >
