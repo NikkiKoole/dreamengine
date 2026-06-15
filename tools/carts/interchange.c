@@ -124,9 +124,12 @@ void draw(void) {
     // 2. RAMPS at highway level (so the overpass bridge occludes them where they pass under)
     if (itype == T_DIAMOND || itype == T_CLOVERLEAF) {
         // four quadrant ramps: highway point (CX±R,CY) ↔ crossing-road point (CX±R·u)
+        float px=-uy, py=ux;                                     // perpendicular to the crossing road
         for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
-            float hx = CX + sx*R*1.5f, hy = CY + sy*HW;          // on the highway LANE EDGE (this side)
-            float ax = CX + ux*sy*R,   ay = CY + uy*sy*R;         // on the crossing road
+            float hx = CX + sx*R*1.2f, hy = CY + sy*HW;          // highway end: outer lane EDGE
+            float cd = HW + R;                                   // crossing end: clearance R BEYOND the edge
+            float ax = CX + ux*sy*cd + px*sx*HW_AR;              // ...on the crossing road's near SIDE
+            float ay = CY + uy*sy*cd + py*sx*HW_AR;
             draw_ramp(hx,hy, (sx>0?0:180), ax,ay, (sy>0?ang:ang+180), R*0.9f);
         }
     }
