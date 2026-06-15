@@ -773,6 +773,41 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     *engine* change (a `RenderTexture2D` carts can draw into + sample), since the feedback shader
     already fakes ~80% of the intuition on the live canvas.
 
+36. **modrack MACRO exposes only 6 of the engine's 14 macro-engines — blocked by a full slot table**
+    *(new 2026-06-15, investigation)*. The engine ships **14 modeled instruments all on the same
+    Mutable-style harmonics/timbre/morph 3-macro interface** (`INSTR_PLUCK/MALLET/FM/ORGAN/EPIANO/PD`
+    — the 6 modrack's MACRO `eng` knob already offers — plus **8 not reachable from modrack**:
+    `MEMBRANE` (tabla/conga/**bongo**/djembe), `REED` (clarinet/sax), `PIPE` (flute), `VOICE`
+    (formant sing/speak), `GUITAR` (string+body), `PIANO` (stiff-string grand/harpsichord),
+    `BOWED` (violin/cello), `BRASS` (trumpet→tuba)). They'd drop straight into MACRO's existing
+    knobs + CV inlets (same 3 macros, all CV-modulatable). Bonus: `MEMBRANE` would give the
+    **Bandito** preset *real* bongos instead of the MALLET stand-in.
+
+    **The blocker is `SOUND_INSTR_SLOTS = 32` (slots 0–31 all used).** modrack gives each MACRO
+    engine a dedicated slot, and there are no free slots. The allocation:
+    - **0–4** — the engine's raw built-in waves (reserved).
+    - **5–22 (18 slots) — the VOICE module's `wav` knob.** 9 waveforms (`saw/sqr/tri/sin/noi` +
+      4 drawn user tables `org/vox/bel/fld`, baked via `wave_set()`) × **2 envelope banks**:
+      5–13 = normal envelope (own decay), 14–22 = *flat* envelope (full sustain). VOICE plays the
+      flat bank when its `a`/amp jack is patched, so an external ENV is a true VCA instead of
+      fighting the slot's baked decay (`slot = (amp_cv?14:5) + wav`). The biggest tenant.
+    - **23–25** — MACRO engines PLUCK/MALLET/FM.
+    - **26–28** — DRUM kick/snare/hat.
+    - **29–31** — MACRO engines ORGAN/EPIANO/PD.
+
+    Two paths to the other 8 engines:
+    - **A — reconfigure-on-change (cart-only, unblocked now):** make the six MACRO slots a *pool*;
+      re-init a MACRO's slot to the chosen engine when its `eng` knob changes (set-and-hold — a rare
+      deliberate action). All 14 selectable, ≤6 sounding at once across the patch (generous). Needs a
+      per-engine config table (engine + sustain/release), pool assignment by MACRO-module order,
+      `FMT_ENGINE` grown to 14 labels, `eng` range 0..13. **Recommended.**
+    - **B — bump `SOUND_INSTR_SLOTS`** (e.g. 32→44) so each engine gets a permanent slot (all 14
+      simultaneous). Cleaner, but a `sound.h` memory-layout change (grows every cart's `.bss`) — and
+      it collides with the per-engine `sound.h` split (#32). Deferred unless A proves too limiting.
+
+    Engine macro reference (per-engine meaning of each macro) lives in the `INSTR_*` comments in
+    [`runtime/studio.h`](../runtime/studio.h) and [`design/instrument-engines.md`](design/instrument-engines.md).
+
 ---
 
 ## Decided-against / deferred ✗
