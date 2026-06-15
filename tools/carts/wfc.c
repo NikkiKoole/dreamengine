@@ -31,7 +31,9 @@ static const int LVCOL[NLV] = { CLR_DARK_BLUE, CLR_BLUE, CLR_YELLOW,
 static const int LVW[NLV]   = { 2, 3, 3, 7, 4, 2 };   // collapse weights (favour grass -> land with bays)
 
 static int  opts[GH][GW];     // bitmask of still-possible levels per cell
-static bool done, autorun, smooth = true;
+static bool done, autorun;
+static int  rmode = 2;        // render: 0 flat bands, 1 diagonal (marching squares), 2 rounded (RPG-Maker corners)
+static const char *RNAME[3] = { "flat bands", "auto-tiled (diagonal)", "auto-tiled (rounded)" };
 static int  steps, restarts;
 
 // propagation stack — a cell is pushed at most NLV times (one per bit removed)
@@ -124,7 +126,7 @@ void init(void) { wfc_reset(); solve_all(); }
 void update(void) {
     if (keyp('R')) { restarts = 0; wfc_reset(); autorun = true; }
     if (btnp(0, BTN_A) || keyp('A')) autorun = !autorun;
-    if (keyp('B')) smooth = !smooth;
+    if (keyp('B')) rmode = (rmode + 1) % 3;
     if (keyp(KEY_SPACE)) { autorun = false; step(); }
     if (autorun && !done) for (int i = 0; i < 6; i++) step();   // ~6 collapses/frame
 
@@ -174,9 +176,44 @@ static void fill_case(int X, int Y, int c, int col) {
 
 static int level_at(int x, int y) { return low(opts[y][x]); }   // valid once collapsed
 
+// is cell (x,y) part of layer L? (out of bounds = not, so map edges round off)
+static bool fill_at(int x, int y, int L) {
+    return x >= 0 && x < GW && y >= 0 && y < GH && level_at(x, y) >= L;
+}
+// RPG-Maker 4-corner autotiling: draw each cell as 4 quadrants. A quadrant whose
+// two edge-neighbours are BOTH empty is an outer corner -> a rounded quarter-disc;
+// otherwise it's a straight edge / interior -> a full square. No diagonals.
+static void quad(int qx, int qy, int ccx, int ccy, bool oa, bool ob, int col) {
+    if (!oa && !ob) {                       // outer convex corner -> quarter circle toward cell centre
+        clip(qx, qy, P / 2, P / 2);
+        circfill(ccx, ccy, P / 2, col);
+        clip(0, 0, 0, 0);
+    } else {
+        rectfill(qx, qy, P / 2, P / 2, col);
+    }
+}
+static void render_rounded(void) {
+    int h = P / 2;
+    rectfill(0, 0, SCREEN_W, HUD_Y, LVCOL[DEEP]);
+    for (int L = 1; L < NLV; L++)
+        for (int y = 0; y < GH; y++)
+            for (int x = 0; x < GW; x++) {
+                if (level_at(x, y) < L) continue;
+                int cx0 = x * P, cy0 = y * P, ccx = cx0 + h, ccy = cy0 + h, col = LVCOL[L];
+                bool N = fill_at(x, y-1, L), S = fill_at(x, y+1, L),
+                     W = fill_at(x-1, y, L), E = fill_at(x+1, y, L);
+                quad(cx0,     cy0,     ccx, ccy, W, N, col);   // NW
+                quad(cx0 + h, cy0,     ccx, ccy, E, N, col);   // NE
+                quad(cx0,     cy0 + h, ccx, ccy, W, S, col);   // SW
+                quad(cx0 + h, cy0 + h, ccx, ccy, E, S, col);   // SE
+            }
+}
+
 void draw(void) {
-    if (smooth && done) {
-        // AUTO-TILING: paint sea, then each higher level with marching-squares coasts
+    if (rmode == 2 && done) {
+        render_rounded();                       // RPG-Maker corner autotiling (rounded, no diagonals)
+    } else if (rmode == 1 && done) {
+        // marching-squares auto-tiling: paint sea, then each level's coast over the one below
         rectfill(0, 0, SCREEN_W, HUD_Y, LVCOL[DEEP]);
         for (int L = 1; L < NLV; L++)
             for (int j = 0; j < GH - 1; j++)
@@ -203,9 +240,9 @@ void draw(void) {
     rectfill(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y, CLR_BLACK);
     int hx = print("WFC ", 4, HUD_Y + 2, CLR_WHITE);
     print(done ? "done" : "collapsing", hx, HUD_Y + 2, done ? CLR_GREEN : CLR_YELLOW);
-    print_right(smooth ? "auto-tiled" : "flat bands", SCREEN_W - 4, HUD_Y + 2, CLR_BLUE);
+    print_right(RNAME[rmode], SCREEN_W - 4, HUD_Y + 2, CLR_BLUE);
     font(FONT_SMALL);
-    print(str("SPACE step   A auto   R regenerate   B bands<->smooth     steps %d  restarts %d", steps, restarts),
+    print(str("SPACE step   A auto   R regenerate   B render mode     steps %d  restarts %d", steps, restarts),
           4, HUD_Y + 13, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
