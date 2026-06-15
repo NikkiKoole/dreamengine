@@ -19,10 +19,10 @@
 #include <stdatomic.h>   // lock-free SPSC request queue: main (producer) ↔ audio (consumer) thread
 
 #define SOUND_SAMPLE_RATE  44100
-#define SOUND_VOICES       16
+#define SOUND_VOICES       32   // polyphony (8→16→32; needs SOUND_HANDLE_BITS≥5). ~9-10KB/voice .bss; CPU is the real cost (every active voice runs per-sample) — long-ringing modal/Karplus engines + chords starved 16
 #define SOUND_SFX_STEPS    32
 #define SOUND_SFX_SLOTS    32
-#define SOUND_INSTR_SLOTS  32   // 0-4 = the raw waves; 5-31 cart-defined (rich patch carts like modrack want banks per wave)
+#define SOUND_INSTR_SLOTS  48   // 0-4 = the raw waves; 5-47 cart-defined (rich patch carts like modrack want banks per wave + many macro engines). ~200B/slot
 
 // Waveform IDs (INSTR_*) come from studio.h.
 // Wave ids below INSTR_ENGINE_BASE are wavetable oscillators (sound_osc); at/above they are
@@ -314,7 +314,7 @@ static Voice         voices[SOUND_VOICES];
 // or -1). A setter is honored only if the live voice still carries the handle's
 // generation — so a stale handle (its voice was stolen or the slot reused)
 // silently no-ops instead of hitting the wrong note. See docs/design/held-notes.md.
-#define SOUND_HANDLE_BITS 4                      // slot field width — must hold SOUND_VOICES-1
+#define SOUND_HANDLE_BITS 5                      // slot field width — must hold SOUND_VOICES-1 (32 voices → 0..31 → 5 bits)
 #define SOUND_HANDLE_MASK ((1 << SOUND_HANDLE_BITS) - 1)
 _Static_assert(SOUND_VOICES <= (1 << SOUND_HANDLE_BITS),
                "SOUND_VOICES no longer fits the handle slot field - bump SOUND_HANDLE_BITS");
