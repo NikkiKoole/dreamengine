@@ -1751,6 +1751,8 @@ typedef enum {
     SR_NOTE_MOTION   = 107,  // a=vx*1000, b=vy*1000, e0/e1=handle — held voice velocity (Doppler)
     SR_HIT_AT        = 108,  // a=midi, b=instr, c=vol, e0=gate_samples, e1=x*1000, e2=y*1000 — positioned one-shot
     SR_INSTR_SHIMMER = 109,  // a=slot, b=size*1000, c=damp*1000, e0=shimmer*1000, e1=mix*1000 — shimmer reverb on one instrument (pooled aux bus)
+    SR_INSTR_POS     = 110,  // a=slot, b=x*1000, c=y*1000 — position an instrument's whole effected bus (v2 emitter, spatial.md)
+    SR_INSTR_MOTION  = 111,  // a=slot, b=vx*1000, c=vy*1000 — that emitter bus's velocity → bus Doppler
 } SoundReqKind;
 typedef struct { SoundReqKind kind; int a, b, c; int delay_samples; int dur_samples; int e0, e1, e2; } SoundReq;
 #define SOUND_REQ_QUEUE   512   // generous: live held-voice control pushes many setters/frame, and a patch cart's
@@ -4082,38 +4084,113 @@ static float g_spatial_max     = 400.0f;   // silent beyond this distance
 static float g_spatial_rolloff = 1.0f;     // falloff steepness
 static float g_spatial_c       = 340.0f;   // speed of sound (units/sec); 0 = Doppler off
 
-// Recompute one positioned voice's pan_target / sp_gain_target / doppler_target from the
-// listener. Pure geometry, called per request (per frame) — never per sample.
-static void spatial_recompute(Voice *v) {
-    if (!v->sp_on) { v->sp_gain_target = 1.0f; v->doppler_target = 1.0f; return; }
-    float dx = v->sp_x - g_listener_x, dy = v->sp_y - g_listener_y;
+// Pure geometry shared by v1 voices and v2 emitter buses (spatial.md "shared machinery"):
+// a source position + velocity → distance gain, bearing pan, Doppler factor, all vs the listener.
+// Called per request (per frame), never per sample.
+static void spatial_geom(float sx, float sy, float svx, float svy,
+                         float *gain, float *pan, float *doppler) {
+    float dx = sx - g_listener_x, dy = sy - g_listener_y;
     float d  = sqrtf(dx*dx + dy*dy);
     // distance gain — OpenAL inverse-distance clamped, culled to 0 past max
-    if (d >= g_spatial_max) v->sp_gain_target = 0.0f;
+    if (d >= g_spatial_max) *gain = 0.0f;
     else {
         float dc = d < g_spatial_ref ? g_spatial_ref : d;
         float g  = g_spatial_ref / (g_spatial_ref + g_spatial_rolloff * (dc - g_spatial_ref));
-        v->sp_gain_target = g < 0.0f ? 0.0f : g > 1.0f ? 1.0f : g;
+        *gain = g < 0.0f ? 0.0f : g > 1.0f ? 1.0f : g;
     }
     // pan — sine of the bearing angle: (sx-lx)/distance, naturally in [-1,1]
     float p = d > 0.0001f ? (dx / d) : 0.0f;
-    v->pan_target = p < -1.0f ? -1.0f : p > 1.0f ? 1.0f : p;
+    *pan = p < -1.0f ? -1.0f : p > 1.0f ? 1.0f : p;
     // Doppler — radial relative velocity along the listener→source axis (positive = receding)
     if (g_spatial_c > 0.0f && d > 0.0001f) {
-        float rvx = v->sp_vx - g_listener_vx, rvy = v->sp_vy - g_listener_vy;
+        float rvx = svx - g_listener_vx, rvy = svy - g_listener_vy;
         float vr  = (rvx*dx + rvy*dy) / d;          // dot(relvel, unit(source−listener))
         float lim = -0.9f * g_spatial_c;            // avoid blow-up as vr → −c
         if (vr < lim) vr = lim;
-        v->doppler_target = g_spatial_c / (g_spatial_c + vr);
-    } else {
-        v->doppler_target = 1.0f;
-    }
+        *doppler = g_spatial_c / (g_spatial_c + vr);
+    } else *doppler = 1.0f;
+}
+
+// Recompute one positioned voice's pan_target / sp_gain_target / doppler_target (v1, per-voice).
+static void spatial_recompute(Voice *v) {
+    if (!v->sp_on) { v->sp_gain_target = 1.0f; v->doppler_target = 1.0f; return; }
+    spatial_geom(v->sp_x, v->sp_y, v->sp_vx, v->sp_vy,
+                 &v->sp_gain_target, &v->pan_target, &v->doppler_target);
 }
 
 // Re-sweep every positioned voice — called when the listener (pos/vel/model/speed) changes.
 static void spatial_recompute_all(void) {
     for (int i = 0; i < SOUND_VOICES; i++)
         if (voices[i].active && voices[i].sp_on) spatial_recompute(&voices[i]);
+}
+
+// ── v2: emitter buses (spatial.md) — position a whole aux bus's FINISHED effected output ──────────
+// Unlike v1 (per-voice, pre-bus), an emitter positions the bus output AFTER its inserts/FX, at the
+// fold to master — so the FX tail (shimmer/reverb) moves WITH the source. An emitter = an aux bus
+// (1..7). Dormant until instrument_pos()/spatial_set_bus() turns emit_on[b] on → the bus folds
+// untouched (byte-identical) for every cart that never positions a bus.
+// Doppler is a 2-grain variable-ratio PITCH SHIFTER (the generalized octave-up): bounded buffer,
+// zero net latency drift, and a SUSTAINED shift (unlike a modulated delay, which decays). Crossfaded
+// to dry near unity so a stationary emitter is transparent (no comb coloration).
+#define EMIT_DL_LEN  3072      // grain buffer per bus (~70ms @44100), stereo
+#define EMIT_GRAIN   2048.0f   // grain/window length (~46ms) — the 2-grain crossfade period
+static bool  emit_on   [SOUND_FX_BUSES];
+static float emit_x    [SOUND_FX_BUSES], emit_y    [SOUND_FX_BUSES];
+static float emit_vx   [SOUND_FX_BUSES], emit_vy   [SOUND_FX_BUSES];
+static float emit_gain [SOUND_FX_BUSES], emit_gain_t[SOUND_FX_BUSES];   // distance gain (current + slew target)
+static float emit_pan  [SOUND_FX_BUSES], emit_pan_t [SOUND_FX_BUSES];   // bearing pan
+static float emit_dopp [SOUND_FX_BUSES], emit_dopp_t[SOUND_FX_BUSES];   // Doppler factor (pitch ratio)
+static float emit_bufL [SOUND_FX_BUSES][EMIT_DL_LEN], emit_bufR[SOUND_FX_BUSES][EMIT_DL_LEN];
+static int   emit_wpos [SOUND_FX_BUSES];
+static float emit_ph   [SOUND_FX_BUSES];   // grain phase 0..1 (the pitch shifter)
+
+// set an aux bus's emitter target from world coords (internal; instrument_pos/_motion call this).
+static void spatial_set_bus(int b, float x, float y, float vx, float vy) {
+    if (b < 1 || b >= SOUND_FX_BUSES) return;
+    emit_on[b] = true;
+    emit_x[b] = x; emit_y[b] = y; emit_vx[b] = vx; emit_vy[b] = vy;
+    spatial_geom(x, y, vx, vy, &emit_gain_t[b], &emit_pan_t[b], &emit_dopp_t[b]);
+}
+// re-sweep every active emitter — called when the listener (pos/vel/model/speed) changes.
+static void spatial_recompute_emitters(void) {
+    for (int b = 1; b < SOUND_FX_BUSES; b++)
+        if (emit_on[b]) spatial_geom(emit_x[b], emit_y[b], emit_vx[b], emit_vy[b],
+                                     &emit_gain_t[b], &emit_pan_t[b], &emit_dopp_t[b]);
+}
+// per-sample: position bus b's finished stereo output — gain + pan + Doppler. Pinned at the fold.
+static void emit_process(int b, float *mixL, float *mixR) {
+    emit_gain[b] += (emit_gain_t[b] - emit_gain[b]) * 0.003f;   // anti-zipper slews (match v1)
+    emit_pan [b] += (emit_pan_t [b] - emit_pan [b]) * 0.002f;
+    emit_dopp[b] += (emit_dopp_t[b] - emit_dopp[b]) * 0.003f;
+    float inL = *mixL, inR = *mixR;
+    // Doppler — 2-grain pitch shifter at ratio = emit_dopp (the octave-up generalized): phase advances
+    // at (ratio-1)/grain, two grains a half-window apart, sine-windowed. Sustained shift, bounded buffer.
+    int wp = emit_wpos[b];
+    emit_bufL[b][wp] = inL; emit_bufR[b][wp] = inR;
+    emit_wpos[b] = (wp + 1) % EMIT_DL_LEN;
+    emit_ph[b] += (emit_dopp[b] - 1.0f) / EMIT_GRAIN;
+    if (emit_ph[b] >= 1.0f) emit_ph[b] -= 1.0f; else if (emit_ph[b] < 0.0f) emit_ph[b] += 1.0f;
+    float shL = 0.0f, shR = 0.0f;
+    for (int g = 0; g < 2; g++) {
+        float p = emit_ph[b] + g * 0.5f; if (p >= 1.0f) p -= 1.0f;
+        float rp = (float)wp - (1.0f - p) * EMIT_GRAIN; if (rp < 0.0f) rp += EMIT_DL_LEN;
+        float w = sinf(3.14159265f * p);                 // sine window: w0²+w1²=1
+        shL += moddel_hermite(emit_bufL[b], EMIT_DL_LEN, rp) * w;
+        shR += moddel_hermite(emit_bufR[b], EMIT_DL_LEN, rp) * w;
+    }
+    shL *= 0.7071f; shR *= 0.7071f;
+    // crossfade dry↔shifted by distance-from-unity → transparent at rest (no comb on a still emitter),
+    // no click crossing unity at closest approach; full shift beyond ±2.5% (where pitch is audible anyway)
+    float d = emit_dopp[b] - 1.0f; if (d < 0.0f) d = -d;
+    float blend = d * 40.0f; if (blend > 1.0f) blend = 1.0f;
+    float oL = inL * (1.0f - blend) + shL * blend;
+    float oR = inR * (1.0f - blend) + shR * blend;
+    // pan split per the master pan law (same as the per-voice path)
+    float pan = emit_pan[b], pL, pR;
+    if (g_pan_law == PAN_POWER) { float th = (pan + 1.0f) * 0.78539816f; pL = cosf(th); pR = sinf(th); }
+    else { pL = pan <= 0.0f ? 1.0f : 1.0f - pan; pR = pan >= 0.0f ? 1.0f : 1.0f + pan; }
+    *mixL = oL * emit_gain[b] * pL;
+    *mixR = oR * emit_gain[b] * pR;
 }
 
 // Shared note setup for both one-shot note() (kind 2) and held note_on() — copies the
@@ -4812,18 +4889,18 @@ static void sound_fire_req(SoundReq r) {
         g_pan_law = (r.a == PAN_POWER) ? PAN_POWER : PAN_LINEAR;
     } else if (r.kind == SR_LISTENER) {        // a=x*1000, b=y*1000 — the listener (ears) position
         g_listener_x = r.a / 1000.0f; g_listener_y = r.b / 1000.0f;
-        spatial_recompute_all();
+        spatial_recompute_all(); spatial_recompute_emitters();
     } else if (r.kind == SR_LISTENER_VEL) {    // a=vx*1000, b=vy*1000 — listener velocity (Doppler)
         g_listener_vx = r.a / 1000.0f; g_listener_vy = r.b / 1000.0f;
-        spatial_recompute_all();
+        spatial_recompute_all(); spatial_recompute_emitters();
     } else if (r.kind == SR_SPATIAL_MODEL) {   // a=ref*1000, b=max*1000, c=rolloff*1000
         g_spatial_ref = r.a / 1000.0f; if (g_spatial_ref < 0.0f) g_spatial_ref = 0.0f;
         g_spatial_max = r.b / 1000.0f; if (g_spatial_max < g_spatial_ref + 0.001f) g_spatial_max = g_spatial_ref + 0.001f;
         g_spatial_rolloff = r.c / 1000.0f; if (g_spatial_rolloff < 0.0f) g_spatial_rolloff = 0.0f;
-        spatial_recompute_all();
+        spatial_recompute_all(); spatial_recompute_emitters();
     } else if (r.kind == SR_SPATIAL_SPEED) {   // a=c*1000 — speed of sound; 0 = Doppler off
         g_spatial_c = r.a / 1000.0f; if (g_spatial_c < 0.0f) g_spatial_c = 0.0f;
-        spatial_recompute_all();
+        spatial_recompute_all(); spatial_recompute_emitters();
     } else if (r.kind == SR_NOTE_POS) {        // a=x*1000, b=y*1000, e0/e1=handle — place a held voice
         Voice *v = sound_held_voice(r.e0, r.e1);
         if (v) { v->sp_on = true; v->sp_x = r.a / 1000.0f; v->sp_y = r.b / 1000.0f; spatial_recompute(v); }
@@ -4849,6 +4926,12 @@ static void sound_fire_req(SoundReq r) {
         v->pan = v->pan_target;                 // snapshot: snap pan/gain/Doppler (no slew-in for a blip)
         v->sp_gain = v->sp_gain_target;
         v->doppler_mul = v->doppler_target;
+    } else if (r.kind == SR_INSTR_POS) {       // a=slot, b=x*1000, c=y*1000 — position an instrument's bus (v2 emitter)
+        int b = fx_bus_for(r.a);
+        if (b >= 1) spatial_set_bus(b, r.b / 1000.0f, r.c / 1000.0f, emit_vx[b], emit_vy[b]);
+    } else if (r.kind == SR_INSTR_MOTION) {    // a=slot, b=vx*1000, c=vy*1000 — emitter bus velocity
+        int b = fx_bus_for(r.a);
+        if (b >= 1) spatial_set_bus(b, emit_x[b], emit_y[b], r.b / 1000.0f, r.c / 1000.0f);
     }
 }
 
@@ -5110,6 +5193,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             if (leslie_used[b]) leslie_process(b, &busL[b], &busR[b]);   // rotary speaker — pinned LAST (cabinet output stage, not a reorderable pedal)
             if (sc[b].used) { float g = sc_apply(b, busL[b], busR[b]); busL[b] *= g; busR[b] *= g; }   // sidechain/glue duck (pinned after inserts)
             { int st = shim_bus_of[b]; if (st >= 1 && shim[st].used) shimmer_process(st, &busL[b], &busR[b]); }   // per-instrument shimmer (pool tank 1+), pinned after inserts
+            if (emit_on[b]) emit_process(b, &busL[b], &busR[b]);   // v2: position the FINISHED bus output (gain+pan+Doppler) — order: inserts→FX→shimmer→spatial→fold
             busL[0] += busL[b]; busR[0] += busR[b];
         }
 
@@ -5506,6 +5590,13 @@ void hit_at(int midi, int instr, int vol, int dur_ms, float x, float y) {
     int dur = (dur_ms * SOUND_SAMPLE_RATE) / 1000;
     if (dur < 1) dur = 1;
     sound_push_ctrl(SR_HIT_AT, midi, instr, vol, dur, (int)(x * 1000.0f), (int)(y * 1000.0f));
+}
+// v2 emitter buses: position an instrument's WHOLE effected output (dry + FX tail) as one object.
+void instrument_pos(int slot, float x, float y) {
+    sound_push_ctrl(SR_INSTR_POS, slot, (int)(x * 1000.0f), (int)(y * 1000.0f), 0, 0, 0);
+}
+void instrument_motion(int slot, float vx, float vy) {
+    sound_push_ctrl(SR_INSTR_MOTION, slot, (int)(vx * 1000.0f), (int)(vy * 1000.0f), 0, 0, 0);
 }
 
 void pan_law(int law) {
@@ -6162,6 +6253,14 @@ static void sound_init(void) {
     }
     for (int b = 0; b < SOUND_FX_BUSES; b++) shim_bus_of[b] = -1;
     shim_next = 1; shim_overflow = 0;
+    for (int b = 0; b < SOUND_FX_BUSES; b++) {   // v2 emitter buses: dormant + neutral defaults
+        emit_on[b] = false;
+        emit_gain[b] = emit_gain_t[b] = 1.0f;    // unity until positioned
+        emit_pan[b]  = emit_pan_t[b]  = 0.0f;    // center
+        emit_dopp[b] = emit_dopp_t[b] = 1.0f;    // no Doppler (ratio 1 → blend 0 → dry passthrough)
+        emit_ph[b] = 0.0f;
+        emit_wpos[b] = 0;
+    }
 
     // per-bus chorus + flanger + tape inserts (bus 0 master + aux): clean slate (libtcc hot-reload + --det)
     memset(cho_buf, 0, sizeof(cho_buf));

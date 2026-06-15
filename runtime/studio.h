@@ -328,6 +328,10 @@ void spatial_speed(float c);                              // speed of sound (wor
 void note_pos(int handle, float x, float y);              // place a held note (note_on handle) in the world → auto pan + distance-volume, slewed
 void note_motion(int handle, float vx, float vy);         // held note's velocity (units/sec) → Doppler pitch as it moves past the listener
 void hit_at(int midi, int instr, int vol, int dur_ms, float x, float y);  // one-shot note positioned in the world (pan+volume+Doppler snapshot at trigger) — no handle needed
+// emitter buses (v2): position an instrument's WHOLE effected output (dry + its FX tail — shimmer/reverb)
+// as one object, so the tail moves WITH it. note_pos positions dry voices only; this positions the finished bus.
+void instrument_pos(int slot, float x, float y);          // place instrument `slot`'s effected bus in the world (auto pan + distance)
+void instrument_motion(int slot, float vx, float vy);     // that bus's velocity (units/sec) → Doppler on the whole effected source
 
 // one routable LFO per instrument — a slow sine that wobbles one parameter
 #define LFO_PITCH   0   // vibrato — depth in semitones (0.3 subtle, 2 wide)
