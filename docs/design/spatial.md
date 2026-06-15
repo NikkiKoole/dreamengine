@@ -424,6 +424,12 @@ zone. So the fix is just a slew, gated so non-users stay byte-identical:
   build it unless the morph proves insufficient.
 - Still **listener-centric** (master tank = the listener's room). An emitter carrying *its own* room's
   reverb through a portal is the deferred rooms+portals refinement, unchanged by this.
+- **Candidate customer: the `deeper` cart** (the acoustic-zones cart — `room_openness()` → `reverb()`/
+  `echo()`, contrast cranked extreme 2026-06-15). It's the real "rooms" cart that would pull this in.
+  But **verdict UNDECIDED** — pending an ears test: walk fast corridor→hall and listen for whether the
+  reverb *size* stairsteps (the `echo` time already glides via its tape-slew, and `deeper` smooths
+  openness + change-gates, so it may already be smooth enough). Build `reverb_glide` only if that test
+  says the stepping is audible; until then it stays designed-not-built.
 
 The rest of v3 (occlusion raycast, zone/material `(size,damping)` tables) stays a cart-land
 `acoustics.h` helper over these knobs — no further engine API.
