@@ -54,6 +54,7 @@ What this implies elsewhere (docs to update, things now out of scope).
 | [0015](0015-effects-are-recipes-not-primitives.md) | Effects are recipes, not primitives: the roster is closed | accepted |
 | [0016](0016-combo-organ-recipe-then-macro-or-engine.md) | Combo organ: a recipe now; its own macro axis or engine only when a station proves it | proposed |
 | [0017](0017-three-macro-core-plus-engine-aux-channel.md) | Keep the 3-macro core; a blessed per-engine aux channel for the exceptions (not a 4th macro) | accepted |
+| [0018](0018-effects-keep-params-but-become-modulatable.md) | Effects keep bespoke params (no instrument-style macros) — but make the sweep-safe ones LFO/CV-able (esp. in modrack) | accepted |
 
 > Back-fill candidates (decisions made but not yet written up): C as the language /
 > no-heap globals+stack; the `.cart.png` zTXt format; carts-carry-their-own-settings
