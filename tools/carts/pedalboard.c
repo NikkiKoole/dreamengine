@@ -17,7 +17,7 @@
 //
 // THE GUITAR (lower half, when the palette is closed):
 //   FRETTING HAND — ROOT row (Z X C V B N M) moves up the neck (E F G A B C D); SHAPE row (A S D
-//                   F G) sets the chord shape (5 / maj / min / sus4 / 7).
+//                   F G) sets the chord shape (5 / min / maj / sus4 / 7).
 //   STRUMMING HAND — sweep across the strings over the body (the STRUM zone) to strum; tap a string
 //                    on the neck to pick one; SPACE strums. M-row toggles autoplay.
 //
@@ -126,13 +126,14 @@ static const Rig RIG[NRIG] = {
 // ── the fretting hand: real guitar tab ──  standard tuning, E-shape MOVEABLE chords.
 static const int OPEN[NSTR] = { 40, 45, 50, 55, 59, 64 };   // E A D G B E (low→high)
 static const int SHAPE_F[NSHAPE][NSTR] = {
+    // ordered so the THIRD climbs left→right (none → ♭3 → ♮3 → 4): a musical gradient
     { 0, 2, 2, -1, -1, -1 },   // 5    power — finger root/5th/octave; high strings ring open
-    { 0, 2, 2,  1,  0,  0 },   // maj  E-shape major
     { 0, 2, 2,  0,  0,  0 },   // min  E-shape minor
+    { 0, 2, 2,  1,  0,  0 },   // maj  E-shape major
     { 0, 2, 2,  2,  0,  0 },   // sus4 suspended fourth
     { 0, 2, 0,  1,  0,  0 },   // 7    E-shape dominant 7
 };
-static const char *SHAPE_NAME[NSHAPE] = { "5", "maj", "min", "sus4", "7" };
+static const char *SHAPE_NAME[NSHAPE] = { "5", "min", "maj", "sus4", "7" };
 static const char  SHAPE_KEY[NSHAPE]  = { 'A', 'S', 'D', 'F', 'G' };
 static const int   ROOT_FRET[NROOT]   = { 0, 1, 3, 5, 7, 8, 10 };         // barre fret for E F G A B C D
 static const char *ROOT_NAME[NROOT]   = { "E", "F", "G", "A", "B", "C", "D" };
