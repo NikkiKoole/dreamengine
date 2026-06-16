@@ -1,0 +1,113 @@
+{
+  "note": "golden effect stability from tools/carts/fxcheck.c — regenerate with `node tools/fx-check.js --save`. Records known issues at extremes as the accepted baseline; the gate catches regressions (got worse / drifted).",
+  "thresholdDb": {
+    "warn": 1.5,
+    "bad": 4
+  },
+  "fx": [
+    {
+      "fx": 0,
+      "peakDb": -5.37,
+      "rmsDb": -13.59,
+      "dc": -0.0002,
+      "clipRatio": 0,
+      "sev": "ok"
+    },
+    {
+      "fx": 1,
+      "peakDb": -0.27,
+      "rmsDb": -9.19,
+      "dc": -0.0002,
+      "clipRatio": 0,
+      "sev": "ok"
+    },
+    {
+      "fx": 2,
+      "peakDb": -0.08,
+      "rmsDb": -7.55,
+      "dc": -0.041,
+      "clipRatio": 0.002,
+      "sev": "bad"
+    },
+    {
+      "fx": 3,
+      "peakDb": -2.2,
+      "rmsDb": -13.66,
+      "dc": -0.005,
+      "clipRatio": 0,
+      "sev": "ok"
+    },
+    {
+      "fx": 4,
+      "peakDb": 0,
+      "rmsDb": -5.52,
+      "dc": -0.046,
+      "clipRatio": 0.043,
+      "sev": "warn"
+    },
+    {
+      "fx": 5,
+      "peakDb": 0,
+      "rmsDb": -6.81,
+      "dc": -0.0008,
+      "clipRatio": 0.012,
+      "sev": "ok"
+    },
+    {
+      "fx": 6,
+      "peakDb": -0.49,
+      "rmsDb": -6.2,
+      "dc": -0.0004,
+      "clipRatio": 0,
+      "sev": "ok"
+    },
+    {
+      "fx": 7,
+      "peakDb": 0,
+      "rmsDb": -4.07,
+      "dc": 0.0003,
+      "clipRatio": 0.164,
+      "sev": "ok"
+    },
+    {
+      "fx": 8,
+      "peakDb": -6.02,
+      "rmsDb": -12.1,
+      "dc": -0.0062,
+      "clipRatio": 0,
+      "sev": "ok"
+    },
+    {
+      "fx": 9,
+      "peakDb": 0,
+      "rmsDb": -3.41,
+      "dc": -0.0003,
+      "clipRatio": 0.203,
+      "sev": "ok"
+    },
+    {
+      "fx": 10,
+      "peakDb": -5.38,
+      "rmsDb": -16.62,
+      "dc": -0.0039,
+      "clipRatio": 0,
+      "sev": "ok"
+    },
+    {
+      "fx": 11,
+      "peakDb": 0,
+      "rmsDb": -1.98,
+      "dc": -0.1305,
+      "clipRatio": 0.431,
+      "sev": "bad"
+    },
+    {
+      "fx": 12,
+      "peakDb": 0,
+      "rmsDb": -0.7,
+      "dc": -0.0021,
+      "clipRatio": 0.744,
+      "sev": "warn"
+    }
+  ]
+}

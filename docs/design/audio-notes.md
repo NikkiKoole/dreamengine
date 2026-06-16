@@ -1857,14 +1857,26 @@ up with the §18 note that "whatever is off about BOWED, it is not pitch" — pa
 
 ### 20.2 Still open (no gate yet)
 
-1. **Effects have almost no tooling coverage.** ~15 bus effects; nothing renders them to assert
-   finite / bounded / actually-changes-the-signal. The sharp edge is the **feedback paths at their
-   documented extremes** (echo fb 1.1, flanger/phaser ±0.95, filter/wah resonance →1.0): stability
-   there rests on internal `tanh` guards asserted by COMMENT, not test. Wanted: an `fx-check.js` fuzz
-   harness (each effect × extreme params × impulse/noise → assert no NaN, peak ≤ ceiling) — the DSP
-   twin of `build-all`. **Effect STACKING is also untested:** `fx_order()` chains effects in any order
-   on the master bus, each is tuned in isolation, and the limiter protects the ceiling but not the
-   stability of two feedback effects in series.
+1. **Effect stability — SHIPPED `tools/fx-check.js`** (harness `fxcheck.c`, baseline
+   `fx-baseline.json`). Drives a loud sustained chord into the master bus and sets one effect at a
+   time to its documented EXTREME (echo fb 1.1, flanger/phaser ±0.95, filter res 0.99, …), then
+   asserts finite/bounded: no collapse-to-silence (a NaN through a feedback loop reads as silence in
+   the 16-bit render), no DC runaway, no permanent limiter-pinning, and that it moves the signal off
+   DRY. **The DC test is the subtle one:** a finite-window *mean* mistakes a sub-sonic resonant
+   oscillation (which max-feedback combs/allpass produce) for DC, so it integrates over the full
+   window AND each half and requires both halves to agree in sign — true DC is a persistent bias, a
+   wobble averages out. Baseline records the intrinsic state; `--quiet` flags only regressions
+   (got-worse / >4 dB drift). It's a STABILITY gate, not a character gate — beauty is still by ear.
+
+   **First-run findings — two real latent bugs at the feedback extremes:** the **phaser** (fb 0.95,
+   8 stages) carries **−0.13 persistent DC**, the **echo** (fb 1.1) **−0.04** — both far past the
+   ~1e-4 `dc-check` clean tolerance, both confirmed persistent (not wobble). This is exactly the
+   failure mode `dc-check.js`'s header warns about: there is deliberately no master DC blocker, so
+   "every asymmetric / feedback stage must block its own." The phaser/echo feedback loops are missing
+   that blocker; it only bites at high feedback (the `drive` effect already has one, `drv_dc_*`). Fix
+   = a one-pole DC blocker in those two loops. Latent (real carts use lower feedback), baselined until
+   fixed. **Still untested: effect STACKING** — `fx_order()` chains effects any order on the master
+   bus; each is fuzzed alone; the limiter protects the ceiling, not two feedback effects in series.
 2. **The web/wasm audio path is verified only by ear.** Every gate above runs the NATIVE build.
    69 carts are "engine-stale" on the web, but the deeper gap is that nothing checks whether the
    emscripten / AudioWorklet build emits the SAME SAMPLES as native (sample rate, worklet buffering,

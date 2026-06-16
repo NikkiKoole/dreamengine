@@ -360,6 +360,49 @@ The first-run findings (the why-this-exists) live in
 this — a waveguide/Karplus engine that quantizes its delay length goes flat at the top
 of its range, and this is how you see it before a player does.
 
+### Level — is each engine at the right loudness?
+
+The twin of tune-check for *level*. **`tools/level-check.js`** renders the same `tunecheck`
+sweep (`--det`, deterministic) and measures each note's peak / RMS / crest in dBFS against a
+committed golden baseline (`tools/level-baseline.json`). It catches the silent regression a
+compile + tune-check + dc-check all miss: an engine that got louder/quieter, or one now
+slamming the master soft-clip (crest collapse → squashed dynamics).
+
+```bash
+node tools/level-check.js              # render + per-engine peak/RMS/crest report
+node tools/level-check.js --save       # re-bless the golden baseline (after an INTENDED change)
+node tools/level-check.js --quiet      # CI gate: exit 1 on >4 dB drift, new silence, or clip
+node tools/level-check.js note.wav     # measure one WAV
+```
+
+Why a baseline (tune-check needs none): pitch has an exact target (A440); level has no absolute
+truth, so the gate compares against the last blessed render. Three absolute checks need no
+baseline though — SILENT (broken voice), HOT-on-its-own (a single note near full-scale → two
+clip), and loudness-outlier-vs-library-median. **Run after any `sound.h` edit that could touch
+levels** (envelopes, gains, an engine's amp normalize, a new shaper). First-run findings (BOWED
+~+12 dB, BRASS hot at the bottom): [`audio-notes.md` §20](../design/audio-notes.md).
+
+### Effect stability — does an effect blow up at its extremes?
+
+**`tools/fx-check.js`** (harness `fxcheck.c`) drives a loud sustained chord into the master bus
+and sets one effect at a time to its documented EXTREME (echo fb 1.1, flanger/phaser ±0.95,
+filter res 0.99, …), then asserts the output stays finite/bounded: no collapse-to-silence (a NaN
+through a feedback loop reads as silence in the 16-bit render), no DC runaway, no permanent
+limiter-pinning, and that it actually moves the signal off the DRY reference.
+
+```bash
+node tools/fx-check.js                 # render + per-effect peak/rms/dc/clip report
+node tools/fx-check.js --save          # bless the baseline (records known extremes as accepted)
+node tools/fx-check.js --quiet         # CI gate: exit 1 only on a REGRESSION (got worse / drifted)
+```
+
+The DC test is the subtle bit: a finite-window *mean* mistakes a sub-sonic resonant oscillation
+(what max-feedback combs/allpass produce) for DC, so it integrates over the full window AND each
+half and requires both to agree in sign — true DC is a persistent bias, a wobble averages out.
+It's a STABILITY gate, not a character gate (whether the reverb is *beautiful* is still by ear).
+**Run after any `sound.h` effect edit.** First-run findings (the phaser/echo missing a DC blocker
+in their feedback loops): [`audio-notes.md` §20](../design/audio-notes.md).
+
 ### Before/after diff
 
 ```bash
