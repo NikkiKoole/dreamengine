@@ -33,6 +33,10 @@
 static float sl_count=0.66f, sl_dmg=0.30f, sl_rate=0.50f, sl_acc=0.50f, sl_sight=0.45f, sl_supp=0.50f, sl_heal=0.5f;
 static float d_dmg, d_gap, d_spread, d_sight, d_supp, d_regen, d_packs;   // derived each frame
 static int   ecount = 6, show_panel;
+// game flow: a slim menu (presets + start) bookends the fight; the full slider
+// panel is the "tweak" sub-screen (also reachable mid-fight via O).
+enum { PH_START, PH_PLAYING, PH_OVER };
+static int phase = PH_START, won, cur_preset = 1;   // cur_preset: 0/1/2 = easy/normal/hard, -1 = custom
 static void recompute_difficulty(void) {
     d_dmg    = 2 + sl_dmg * 10;          // 2..12 damage per hit
     d_gap    = 1.8f - sl_rate * 1.2f;    // shot interval mult: 1.8 slow .. 0.6 fast
@@ -46,6 +50,7 @@ static void set_preset(int p) {          // 0 easy · 1 normal · 2 hard
     if      (p==0) { sl_count=.33f; sl_dmg=.10f; sl_rate=.20f; sl_acc=.12f; sl_sight=.18f; sl_supp=.30f; sl_heal=1.0f; }
     else if (p==1) { sl_count=.66f; sl_dmg=.30f; sl_rate=.50f; sl_acc=.50f; sl_sight=.45f; sl_supp=.50f; sl_heal=0.5f; }
     else           { sl_count=1.0f; sl_dmg=.60f; sl_rate=.85f; sl_acc=.90f; sl_sight=.85f; sl_supp=1.0f; sl_heal=0.0f; }
+    cur_preset = p;
 }
 #define INF 1e9f
 #define DIAG 1.41421356f
@@ -342,7 +347,7 @@ void update(void) {
     voices_tick();
     tick++;
     if (msg_t>0) msg_t--;
-    if (keyp('R')) { reset(); return; }
+    if (keyp('R')) { reset(); phase = PH_PLAYING; return; }   // R = quick restart into the fight
     if (keyp('H')) show_heat = !show_heat;
     if (keyp('L')) show_comms = !show_comms;
     if (keyp('V')) reveal = !reveal;
@@ -350,7 +355,8 @@ void update(void) {
     if (keyp(KEY_TAB)) { pl.spectate = !pl.spectate; }
     recompute_difficulty();
     if (show_panel) return;                                   // sim paused while you tune (widgets live in draw)
-    if (pl.hp <= 0) return;
+    if (phase != PH_PLAYING) return;                          // start / game-over menu up: sim frozen behind it
+    if (pl.hp <= 0) { phase = PH_OVER; won = 0; return; }     // you died → end screen
 
     if (known) kage++;
     compute_heat();
@@ -400,6 +406,9 @@ void update(void) {
         }
     }
     if (pl.shake>0) pl.shake--;
+
+    // win: the whole squad is down → end screen
+    { int a=0; for(int i=0;i<NE;i++) if(en[i].alive) a++; if(a==0){ phase=PH_OVER; won=1; } }
 
 #ifdef DE_TRACE
     int alive=0,eng=0; for(int i=0;i<NE;i++) if(en[i].alive){alive++; if(en[i].state==E_ENGAGE)eng++;}
@@ -522,15 +531,37 @@ void draw(void) {
         if (ui_button(X,      Y+12, 56, 14, "easy"))   set_preset(0);
         if (ui_button(X+62,   Y+12, 64, 14, "normal")) set_preset(1);
         if (ui_button(X+132,  Y+12, 56, 14, "hard"))   set_preset(2);
-        int sy = Y+32;
-        ui_slider(&sl_count, X, sy, W, "enemies");          sy += 14;
-        ui_slider(&sl_dmg,   X, sy, W, "damage");           sy += 14;
-        ui_slider(&sl_rate,  X, sy, W, "fire rate");        sy += 14;
-        ui_slider(&sl_acc,   X, sy, W, "accuracy");         sy += 14;
-        ui_slider(&sl_sight, X, sy, W, "sight");            sy += 14;
-        ui_slider(&sl_supp,  X, sy, W, "suppression");      sy += 14;
-        ui_slider(&sl_heal,  X, sy, W, "healing (hard/normal/easy)");  sy += 17;
-        if (ui_button(X,      sy, 116, 16, "apply + restart")) { reset(); show_panel = 0; }
-        if (ui_button(X+126,  sy, 62,  16, "resume"))          show_panel = 0;
+        int sy = Y+32;                                       // any slider drag → "custom" (no preset highlighted)
+        if (ui_slider(&sl_count, X, sy, W, "enemies"))    cur_preset=-1;  sy += 14;
+        if (ui_slider(&sl_dmg,   X, sy, W, "damage"))     cur_preset=-1;  sy += 14;
+        if (ui_slider(&sl_rate,  X, sy, W, "fire rate"))  cur_preset=-1;  sy += 14;
+        if (ui_slider(&sl_acc,   X, sy, W, "accuracy"))   cur_preset=-1;  sy += 14;
+        if (ui_slider(&sl_sight, X, sy, W, "sight"))      cur_preset=-1;  sy += 14;
+        if (ui_slider(&sl_supp,  X, sy, W, "suppression"))cur_preset=-1;  sy += 14;
+        if (ui_slider(&sl_heal,  X, sy, W, "healing (hard/normal/easy)")) cur_preset=-1;  sy += 17;
+        if (ui_button(X,     sy, 116, 16, phase==PH_PLAYING ? "apply + restart" : "apply + start")) { reset(); phase=PH_PLAYING; show_panel=0; }
+        if (ui_button(X+126, sy, 62,  16, phase==PH_PLAYING ? "resume" : "back"))                    show_panel=0;
+        ui_end();                                            // resolve presses → clicks (without this, only hover works)
+    } else if (phase != PH_PLAYING) {
+        // ---- slim bookend menu: presets + start; "tweak" opens the full panel above ----
+        fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();   // dim the field
+        int X=96, W=128, Y=64;
+        rrectfill(X-12, Y-40, W+24, 132, 4, CLR_DARKER_BLUE); rect(X-12, Y-40, W+24, 132, CLR_LIGHT_GREY);
+        if (phase==PH_OVER) {
+            print_centered(won ? "CLEARED" : "YOU DIED", SCREEN_W/2, Y-34, won?CLR_GREEN:CLR_RED);
+            print_centered(str("%d / %d down", kills, ecount), SCREEN_W/2, Y-22, CLR_LIGHT_GREY);
+        } else {
+            print_centered("FLANK", SCREEN_W/2, Y-34, CLR_WHITE);
+            print_centered("tactical squad AI", SCREEN_W/2, Y-22, CLR_MEDIUM_GREY);
+        }
+        ui_begin();
+        const char *pn[3] = {"easy","normal","hard"}; int pw[3] = {40,44,40}, pxs[3] = {X, X+44, X+92};
+        for (int p=0;p<3;p++) {                              // active preset gets a yellow frame
+            if (ui_button(pxs[p], Y, pw[p], 16, pn[p])) set_preset(p);
+            if (cur_preset==p) rect(pxs[p]-1, Y-1, pw[p]+2, 18, CLR_YELLOW);
+        }
+        if (ui_button(X, Y+24, W, 18, phase==PH_OVER ? "restart" : "start")) { reset(); phase=PH_PLAYING; }
+        if (ui_button(X, Y+46, W, 16, "tweak difficulty")) show_panel = 1;
+        ui_end();
     }
 }
