@@ -87,6 +87,46 @@ The only genuinely-missing area-fill *verbs* on the horizon: **`ribbon`** (fill 
 rivers, trails, a hedge beside a road; dunes' wind-ridges) and maybe **`contour`** (bands following an
 iso-elevation — terraces, strata). Everything else tends to be a biome or a recipe.
 
+## Beyond fill: the other atom families, and the build pipeline (proposed)
+
+The 7 built atoms are all **area fills** (write into an empty region). A fuller world needs a few more
+*families* — and pricing each against the rules above shows most aren't "new fill atoms" at all. The
+proposed set, classified:
+
+| proposed | family | verdict | note |
+|---|---|---|---|
+| **meander** | flow | ✅ new atom (`ribbon`, organic) | wandering curve. Open-world → **lattice-anchored** (roadnet's spline-between-hash-nodes), free-grown only inside a bounded region |
+| **route** | flow | ⚠️ already exists — it's **roadnet** | pathfinding-as-generator = roadnet's network. *Consume* it. Bounded-region route = the dungeon-corridor atom |
+| **bridge** | flow | ⚠️ connectivity **rule** (network tier) | fires where `route ∩ water`; roadnet already bridges |
+| **pool** | water | 🔁 recipe = `blob` + `relief` | "water settles low" — organic blob gated by elevation |
+| **relief** | infra | ✅ **infra field** (not a tab) | like `subdivide`; half-built (`elev_raw`). Promote so atoms *read slope* |
+| **cliff** | terrain | ✅ new atom = `contour` | fill along an iso-elevation; reads relief |
+| **blob** | area | ↪ **partition** generator (sibling of `subdivide`) | region SHAPE is orthogonal to fill verb — blob makes an organic region, the fills fill it |
+| **carve** | area | ↪ partition + modifier (subtractive hole) | a negative region the makers respect; runs as a pass |
+| **ring** | placement | 🔁 placement **flavor** | `scatter` with a radial locus (one "place" verb, locus = grid/radial/along-path) |
+| **line** | placement | ✅ new atom = `ribbon` (decorate a path) | props along a path/edge; `border` is its perimeter special-case |
+| **cluster** | composite | ✅ **new category: composition** | a bounded mini-driver recursing into atoms (hamlet = footprints + route + scatter) |
+| **age** | modifier | ✅ **new category: modifier** | reads + transforms existing state; needs a post-process *phase* |
+| **dress** | modifier | 🔁 a finishing `scatter` pass (additive) | runs in the modifier phase but doesn't read/transform like `age` |
+
+**The structural change this forces — the driver becomes a phased PIPELINE.** Today the WORLD driver is
+a single "makers" pass. Modifiers (which read prior output) and connectivity (which spans regions) only
+make sense as ordered phases:
+
+```
+1. fields/infra   relief, cover, climate            (read-only)
+2. partition      subdivide / blob / carve           → bounded regions (+ holes)
+3. connectivity   route / meander / bridge           (from roadnet)
+4. makers         scatter rows footprint pave border line ring cluster
+5. modifiers      age, dress                         (read phase-4 output, transform)
+```
+
+Determinism survives because each phase is still pure-fn-of-`(region, seed)` reading the *deterministic*
+output of earlier phases in fixed order. **Phase 5 is the new concept** and the highest-leverage
+addition — it's what turns a tidy map into a lived-in, weathered one. (Everything built so far is phase
+4 only.) The new *categories* this reveals: **flow verbs** (meander/line/cliff), **partition generators**
+(blob/carve), **composition** (cluster), **modifiers** (age), **infra** (relief).
+
 ## Two fill-modes (seeing them as different keeps each simple)
 
 The features split cleanly — don't unify them in code, only in vocabulary:
