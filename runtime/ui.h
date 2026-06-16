@@ -84,6 +84,9 @@
 
 #include "studio.h"
 #include <stdint.h>
+#ifdef DE_TRACE
+#include <stdio.h>          // ui_begin()/ui_end() tripwire warning (debug builds only)
+#endif
 
 #ifndef UI_MIN_TARGET
 #define UI_MIN_TARGET 24
@@ -172,6 +175,9 @@ static void   *ui_grab_evt[UI_MAX_EVT]; static int ui_grab_n = 0;
 static void   *ui_rel_evt[UI_MAX_EVT];  static int ui_rel_n = 0;
 
 static int   ui_frame_ct = 0;
+#ifdef DE_TRACE
+static int   ui_ended = 1, ui_warned = 0;   // tripwire: did ui_end() run after the last widget-drawing ui_begin()?
+#endif
 static int   ui_focus_on = 0;
 static int   ui_focus_i = 0;
 static int   ui_foc_count = 0;   // focusables registered last frame
@@ -342,6 +348,14 @@ static void ui_loupe_render(void) {
 // between ui_begin and ui_end, and ui_end clears them.)
 static void ui_begin(void) {
     ui_frame_ct++;
+#ifdef DE_TRACE
+    if (ui_wid_n > 0 && !ui_ended && !ui_warned) {   // last frame drew widgets but ui_end() never ran
+        printf("[ui] WARNING: %d widget(s) drawn but ui_end() was not called — clicks won't "
+               "register (only hover shows). Call ui_end() last in draw().\n", ui_wid_n);
+        ui_warned = 1;
+    }
+    ui_ended = 0;
+#endif
     ui_wid_n = 0; ui_foc_n = 0;
     ui_press_n = 0;
 
@@ -422,6 +436,9 @@ extern void de_ui_audit(int x, int y, int w, int h, int focusable);  // harness 
 
 // call LAST in draw(): routes this frame's presses to widgets, prunes captures
 static void ui_end(void) {
+#ifdef DE_TRACE
+    ui_ended = 1;                  // tripwire: ui_end() ran this frame (see ui_begin)
+#endif
     ui_grab_n = 0; ui_rel_n = 0;   // cart has read this frame's events by now
     for (int p = 0; p < ui_press_n; p++) {
         int already = 0;          // a contact captures at most one widget

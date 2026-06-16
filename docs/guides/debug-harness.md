@@ -580,6 +580,27 @@ node tools/ui-audit.js <name> --json           # machine output; exit 1 if any l
 - **`ui_get_widgets(const UiWid **out)`** (in `runtime/ui.h`) is the public accessor that
   exposes the live widget rects; a cart or debug code can read it between `ui_begin()`/`ui_end()`.
 
+### UI lifecycle tripwire — forgot `ui_end()` (clicks silently dead)
+
+`ui.h` widgets must be wrapped `ui_begin()` … draw widgets … **`ui_end()`** — `ui_end()` is
+where this frame's presses get *resolved* to a widget (and where the `de_ui_audit` rects are
+emitted). **Forget it and the buttons still draw and still light up on hover — but no click
+ever registers** (no capture is ever formed). It's a silent, easy-to-miss bug; flank's start
+menu shipped with it.
+
+A `DE_TRACE`-only tripwire in `ui.h` catches it: if a frame draws widgets but `ui_end()` never
+runs, it prints once to stdout —
+
+```
+[ui] WARNING: 3 widget(s) drawn but ui_end() was not called — clicks won't register (only hover shows). Call ui_end() last in draw().
+```
+
+It fires in any `DE_TRACE` build (`play.js`, `ui-audit.js`) but **not** the editor's ▶ native
+build (which omits `DE_TRACE` to avoid forcing `<stdio.h>` on every cart) — so if clicks feel
+dead in the editor, run the cart through either tool to see the diagnosis. `ui-audit.js`
+surfaces it as a `✘` lifecycle finding (and exits 1); coverage follows the run, so use
+`--explore` to reach widgets behind a trigger (a panel that only opens on a key/tap).
+
 ### Suppressing a false positive (linter-style, in the cart source)
 
 Intentional bleed or a deliberately stacked label is waived with a comment in the cart `.c`:

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // ui-audit.js — find UI bugs a screenshot wouldn't tell you about: text that runs
 // off the screen edge (so it's silently clipped to nothing), text labels that
-// overlap, and — with --explore — panels that only open on a keypress or a tap.
+// overlap, widgets that draw but never respond to clicks (a missing ui_end() —
+// surfaced from ui.h's DE_TRACE tripwire), and — with --explore — panels that
+// only open on a keypress or a tap.
 //
 // Runs the cart headless under runtime/studio.c's --uiaudit mode (via play.js),
 // which logs every print()/spr()/rect()/circ() bounding box per frame, plus each
@@ -40,13 +42,19 @@ const overlayArg  = (() => { const i = args.indexOf('--overlay'); const v = args
 const ROOT = path.resolve(__dirname, '..')
 
 // ── run the cart once under --uiaudit, return the parsed per-frame records ──
+// ui.h's DE_TRACE tripwire prints "[ui] WARNING: …" to stdout when a frame draws
+// widgets but never calls ui_end() (clicks silently dead). We pipe stdout and
+// collect those across every run() so the report can surface them.
+const uiWarnings = new Set()
 let runSeq = 0
 function run(inMode, frames, dumpDir) {
   const auditPath = path.join(os.tmpdir(), `uiaudit-${name}-${process.pid}-${runSeq++}.jsonl`)
   const play = [path.join('tools', 'play.js'), name, ...inMode,
                 '--headless', '--frames', String(frames), '--uiaudit', auditPath]
   if (dumpDir) play.push('--dump', dumpDir, '--dump-every', '1')
-  const r = spawnSync('node', play, { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] })
+  const r = spawnSync('node', play, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })
+  if (r.stdout) for (const line of r.stdout.toString().split('\n'))
+    if (line.startsWith('[ui] WARNING')) uiWarnings.add(line.trim())
   if (r.status !== 0 || !fs.existsSync(auditPath)) {
     console.error(`ui-audit: cart "${name}" failed to run (see compile output above)`); process.exit(1)
   }
@@ -276,11 +284,11 @@ const stale   = waivers.filter(w => w.kind !== 'bad' && !w.used)
 // ── report ──────────────────────────────────────────────────────────────────
 if (asJson) {
   console.log(JSON.stringify({ cart: name, framesSeen, minFrames, screen: { w: SW, h: SH },
-    offscreenText: offList, textOverlap: colList,
+    offscreenText: offList, textOverlap: colList, uiLifecycle: [...uiWarnings],
     waived: waivedN, transient: transientN, staleWaivers: stale.map(w => w.raw), badWaivers: badWaivers.map(w => w.raw),
     explored: wantExplore ? { keys: exploreKeys.map(k => k.label), taps: exploreTaps.length, discovered } : undefined },
     null, 2))
-  process.exit(offList.length || colList.length ? 1 : 0)
+  process.exit(offList.length || colList.length || uiWarnings.size ? 1 : 0)
 }
 
 const span = (o) => o.first === o.last ? `frame ${o.first}` : `frames ${o.first}–${o.last}`
@@ -298,6 +306,11 @@ if (colList.length) {
   console.log('')
 }
 if (!offList.length && !colList.length) console.log('  ✓ no off-screen or overlapping text found.')
+
+if (uiWarnings.size) {
+  console.log(`\n  ✘ ${uiWarnings.size} ui.h lifecycle bug(s) — widgets render but won't respond to clicks (only hover):`)
+  for (const w of uiWarnings) console.log(`      ${w}`)
+}
 
 if (transientN)     console.log(`  · ${transientN} transient finding(s) hidden (< ${minFrames} frames — likely mid-animation; --min-frames 1 to show)`)
 if (waivedN)        console.log(`  · ${waivedN} finding(s) waived by // ui-audit-ignore`)
@@ -325,4 +338,4 @@ if (overlayInfo)
   console.log(`  ▣ overlay (frame ${overlayInfo.target}, ${overlayInfo.widgets} widgets): ${overlayInfo.out}`)
 
 console.log(`  (coverage: ${framesSeen} frames${wantExplore ? ' incl. auto-explore' : ' of default play — drive more with --explore/--beats'})\n`)
-process.exit(offList.length || colList.length ? 1 : 0)
+process.exit(offList.length || colList.length || uiWarnings.size ? 1 : 0)
