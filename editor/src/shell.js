@@ -632,11 +632,17 @@ const CART_GENRE_ORDER = ['arcade', 'shooter', 'platformer', 'fighting', 'puzzle
                           'sports', 'strategy', 'rpg', 'adventure', 'simulation', 'sandbox', 'tabletop']
 let cartFilter = null   // null = all; else { axis: 'kind'|'genre', value } — flat single-select
 let cartSort = localStorage.getItem('cartSort') || 'featured'   // 'featured' (index.json order) | 'title' | 'newest' | 'oldest' | 'updated'
-let cartDates = null        // { file: { added, updated } } ISO dates from /carts/dates.json (git), fetched once
+// { file: { added, updated } } ISO dates (git history, served by vite). Seeded from
+// localStorage so the panel renders instantly on open; refreshed in the background (see
+// buildTutorialsPanel) so a freshly-committed rebake still surfaces without a restart.
+let cartDates = null
+try { cartDates = JSON.parse(localStorage.getItem('cartDates') || 'null') } catch {}
+let cartDatesBuild = 0      // bumped per panel build; the async refresh bails if it changed
 
 async function buildTutorialsPanel() {
   const body = tutorialsPanel.querySelector('#tutorials-body')
   if (!body) return
+  const myBuild = ++cartDatesBuild
   // preserve scroll + search term across reopen/rebuild
   const prevScroll = tutorialsPanel.scrollTop
   const prevSearch = body.querySelector('#tutorials-search')?.value || ''
@@ -651,10 +657,10 @@ async function buildTutorialsPanel() {
     return
   }
 
-  // cart dates (git history, served by vite) — re-fetched each panel open so a freshly
-  // committed rebake shows up without restarting; powers Newest/Oldest + Recently-updated.
-  // keep the last good map so a transient fetch failure doesn't blank the dates.
-  try { cartDates = await (await fetch('/carts/dates.json')).json() } catch { cartDates = cartDates || {} }
+  // cart dates: render now with the cached map (localStorage / prior fetch); a live git
+  // refresh runs in the background below, after the grid is built (powers Newest/Oldest +
+  // Recently-updated). No await here = opening the tab never blocks on git.
+  if (!cartDates) cartDates = {}
 
   const search = document.createElement('input')
   search.id = 'tutorials-search'
@@ -766,7 +772,7 @@ async function buildTutorialsPanel() {
 
     grid.appendChild(card)
     const d = (cartDates && cartDates[file]) || {}
-    return { card, titleEl, descEl, idx, title: title || '', desc: description || '',
+    return { card, titleEl, descEl, idx, title: title || '', desc: description || '', file,
              name: String(file).replace(/\.cart\.png$/i, ''), kind: kind || [], genre: genre || null,
              added: d.added || '', updated: d.updated || d.added || '' }
   })
@@ -820,6 +826,24 @@ async function buildTutorialsPanel() {
   syncChips()
   applyFilter()
   tutorialsPanel.scrollTop = prevScroll
+
+  // live git refresh, off the critical path: pull fresh dates, and only if they actually
+  // changed, cache them + patch the items' dates + re-sort. Bails if the panel was rebuilt
+  // or closed while the fetch was in flight (stale closure).
+  ;(async () => {
+    let fresh
+    try { fresh = await (await fetch('/carts/dates.json')).json() } catch { return }
+    if (myBuild !== cartDatesBuild) return
+    if (JSON.stringify(fresh) === JSON.stringify(cartDates)) return
+    cartDates = fresh
+    try { localStorage.setItem('cartDates', JSON.stringify(fresh)) } catch {}
+    items.forEach(it => {
+      const d = cartDates[it.file] || {}
+      it.added = d.added || ''
+      it.updated = d.updated || d.added || ''
+    })
+    applyFilter()
+  })()
 }
 // (no eager build — switchTab('tutorials') rebuilds the panel each time it's opened)
 
