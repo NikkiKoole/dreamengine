@@ -117,9 +117,17 @@ reach. The selector (the C tables) stays per-cart; the atoms are the universal u
    reusable unit; `rows_draw` just tiles it. *Refinements left:* field-**size** variation (uniform
    grid now), Voronoi/irregular parcels, dirt access tracks, and gating fields to open land via the
    selector (today every cell is a field — partition is the world driver's job, not the atom's).
-3. **`footprint` + selector — buildings** — generalise the RES `building_at` prototype via the
-   C-table selector (house/shop/big-box from one atom). This is the GTA street the car drives.
-4. **`pave` / `stamp`** — parking, plazas, the football field, set-pieces.
+3. ✅ **`footprint` atom — buildings** *(built 2026-06-17)*. The GTA street. A block grid carves
+   streets; each block's **perimeter** lots front a street **by construction** (centre = courtyard/
+   parking, so no orphan interiors). One `footprint_fill(lot, outward, zone, hash, show[])` makes
+   **house / shop / tower** from a `zone` field (residential/commercial/downtown) + hash — the types
+   *emerge*, none are enumerated (the thesis, proven). `outward` = the street side → setback (yard) +
+   driveway face that way. *Refinements left:* the real partition (today a uniform block grid tiles a
+   city everywhere; WHERE cities sit is the world selector's job, fed by roadnet), irregular/rotated
+   lots along curved arterials, `building_at()` as the collision seam for sloop, and merging the RES
+   `building_at` prototype from `roadnet-streetlevel.md` item 5.
+4. **`border` / `pave` / `stamp`** — hedgerows (rows has a basic one), parking, plazas, the football
+   field, set-pieces.
 
 ## Open decisions (for build time)
 - **Scatter distribution:** jittered grid (simplest, seam-safe) vs a relaxed Poisson — lean jittered.

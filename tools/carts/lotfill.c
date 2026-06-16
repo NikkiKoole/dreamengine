@@ -25,6 +25,8 @@
 //   seam-safe, byte-identical for a seed.
 // • rows    — BOUNDED fill-mode: a coarse parcel grid of fields, each planted with
 //   rows of a crop + a hedgerow. rows_fill() fills ONE region; the driver tiles it.
+// • footprint — buildings: a block grid carves streets, perimeter lots front them
+//   by construction, and one footprint_fill() makes house/shop/tower from a ZONE.
 //
 // Two field layers + two scatter layers make it "interesting" with no special cases:
 //   • biome field (warped fbm) → cover KIND (bare/grass/meadow/forest)
@@ -365,8 +367,120 @@ static const char *rows_probe(float x, float y) {
     return buf;
 }
 
+// ── ATOM: footprint ──────────────────────────────────────────────────────────
+// Buildings — the GTA street. The thesis (docs/design/streetlevel-content.md): a
+// house / shop / tower are the SAME atom with different params, chosen by a ZONE
+// field (residential / commercial / downtown) — not enumerated types. A block grid
+// carves streets; each block's PERIMETER lots front a street BY CONSTRUCTION (the
+// centre stays courtyard/parking, so reachability is a theorem — no orphan
+// interiors). footprint_fill() fills ONE lot. Layers: 0 ground (streets + lot base)
+// · 1 building (the footprint) · 2 detail (driveway/door). Zone tiles a city
+// everywhere here; WHERE cities go is the world driver's selector, not the atom.
+#define BLK_P 72         // block pitch (world px)
+#define ST_W  9          // street width
+enum { FL_GROUND, FL_BUILD, FL_DETAIL };
+enum { ZN_RES, ZN_COM, ZN_TOWN, ZN_N };          // downtown = ZN_TOWN
+static const char *ZN_NAME[ZN_N] = { "residential", "commercial", "downtown" };
+
+static int posmod(int a, int b) { int m = a % b; return m < 0 ? m + b : m; }
+
+static int zone_at(float x, float y) {
+    float i = noise3(x * 0.0016f, y * 0.0016f, (float)lf_seed + 90.0f);
+    return i < 0.46f ? ZN_RES : i < 0.72f ? ZN_COM : ZN_TOWN;
+}
+
+// fill ONE building lot. outward ∈ {0 up,1 right,2 down,3 left} = the street side.
+static void footprint_fill(Rect lot, int outward, int zone, unsigned h, const bool show[3]) {
+    static const int ROOF_RES [5] = { CLR_RED, CLR_DARK_RED, CLR_BROWN, CLR_PEACH, CLR_DARK_PURPLE };
+    static const int ROOF_COM [4] = { CLR_DARK_GREY, CLR_TRUE_BLUE, CLR_BLUE_GREEN, CLR_INDIGO };
+    static const int ROOF_TOWN[3] = { CLR_DARKER_BLUE, CLR_DARKER_GREY, CLR_INDIGO };
+
+    int m  = (zone == ZN_TOWN) ? 1 : 2;                                  // side/back margin
+    int fs = (zone == ZN_RES)  ? 5 : (zone == ZN_COM) ? 3 : 1;           // front setback (yard)
+    int ix = lot.x + m, iy = lot.y + m, iw = lot.w - 2 * m, ih = lot.h - 2 * m;
+    switch (outward) {                                                   // push front edge in by setback
+        case 0: iy += fs; ih -= fs; break;
+        case 2: ih -= fs;           break;
+        case 1: iw -= fs;           break;
+        case 3: ix += fs; iw -= fs; break;
+    }
+    if (iw < 2 || ih < 2) return;
+
+    if (show[FL_BUILD]) {
+        int col = zone == ZN_RES ? ROOF_RES[h % 5] : zone == ZN_COM ? ROOF_COM[h % 4] : ROOF_TOWN[h % 3];
+        rectfill(ix, iy, iw, ih, col);
+        if (zone == ZN_TOWN) {                                          // fake height: lit top, offset up-left
+            rectfill(ix - 1, iy - 1, iw, 1, CLR_LIGHT_GREY);
+            for (int yy = iy; yy < iy + ih; yy += 2) pset(ix, yy, CLR_DARKER_GREY);  // window columns
+        }
+    }
+    if (show[FL_DETAIL]) {                                               // driveway/path to the street + door
+        int dc = CLR_MEDIUM_GREY, dx = ix + iw / 2, dy = iy + ih / 2;
+        switch (outward) {
+            case 0: line(dx, lot.y, dx, iy, dc);             pset(dx, iy, CLR_BROWNISH_BLACK); break;
+            case 2: line(dx, iy + ih - 1, dx, lot.y + lot.h - 1, dc); pset(dx, iy + ih - 1, CLR_BROWNISH_BLACK); break;
+            case 1: line(ix + iw - 1, dy, lot.x + lot.w - 1, dy, dc); pset(ix + iw - 1, dy, CLR_BROWNISH_BLACK); break;
+            case 3: line(lot.x, dy, ix, dy, dc);             pset(ix, dy, CLR_BROWNISH_BLACK); break;
+        }
+    }
+}
+
+static void footprint_draw(float cam_x, float cam_y, float zoom) {
+    if (zoom < 0.01f) zoom = 0.01f;
+    float cx = cam_x + SCREEN_W / 2.0f, cy = cam_y + SCREEN_H / 2.0f;
+    float hwv = (SCREEN_W / 2.0f) / zoom, hhv = (SCREEN_H / 2.0f) / zoom;
+    int Lpx = (int)(cx - hwv) - BLK_P, Rpx = (int)(cx + hwv) + BLK_P;
+    int Tpx = (int)(cy - hhv) - BLK_P, Bpx = (int)(cy + hhv) + BLK_P;
+
+    bool show[3] = { layer_on[FL_GROUND],
+                     layer_on[FL_BUILD]  && zoom >= 0.5f,
+                     layer_on[FL_DETAIL] && zoom >= 0.9f };   // driveways only when close
+    int b0x = ifloordiv(Lpx, BLK_P), b1x = ifloordiv(Rpx, BLK_P);
+    int b0y = ifloordiv(Tpx, BLK_P), b1y = ifloordiv(Bpx, BLK_P);
+    int IN = BLK_P - ST_W, nlot = 3, ls = IN / nlot, nb = 0;
+    for (int by = b0y; by <= b1y; by++)
+        for (int bx = b0x; bx <= b1x; bx++) {
+            int ox = bx * BLK_P, oy = by * BLK_P, inx = ox + ST_W, iny = oy + ST_W;
+            int zone = zone_at(inx + IN / 2.0f, iny + IN / 2.0f);
+            if (show[FL_GROUND]) {
+                rectfill(ox, oy, BLK_P, BLK_P, CLR_DARK_GREY);                       // street band (top+left L)
+                rectfill(inx, iny, IN, IN, zone == ZN_RES ? CLR_DARK_GREEN : CLR_MEDIUM_GREY);
+            }
+            for (int lj = 0; lj < nlot; lj++)
+                for (int li = 0; li < nlot; li++) {
+                    if (li == 1 && lj == 1) {                                        // centre courtyard
+                        if (show[FL_GROUND] && zone != ZN_RES)
+                            rectfill(inx + li * ls, iny + lj * ls, ls, ls, CLR_DARKER_GREY);
+                        continue;
+                    }
+                    Rect lot = { inx + li * ls, iny + lj * ls, ls, ls };
+                    int outward = (lj == 0) ? 0 : (lj == 2) ? 2 : (li == 0) ? 3 : 1; // block-outward = street side
+                    unsigned hh = hash2(bx * 97 + li + lf_seed * 7, by * 89 + lj);
+                    footprint_fill(lot, outward, zone, hh, show);
+                    nb++;
+                }
+        }
+
+    if (dbg) {                                                                       // block partition + active block
+        for (int bx = b0x; bx <= b1x + 1; bx++) line(bx * BLK_P, Tpx, bx * BLK_P, Bpx, CLR_DARK_RED);
+        for (int by = b0y; by <= b1y + 1; by++) line(Lpx, by * BLK_P, Rpx, by * BLK_P, CLR_DARK_RED);
+        int abx = ifloordiv((int)cx, BLK_P), aby = ifloordiv((int)cy, BLK_P);
+        rect(abx * BLK_P, aby * BLK_P, BLK_P, BLK_P, CLR_YELLOW);
+    }
+    cnt[0] = nb; cnt_lbl[0] = "bldgs"; cnt_lbl[1] = NULL; cnt_lbl[2] = NULL;
+}
+
+static const char *footprint_probe(float x, float y) {
+    static char buf[40];
+    int bx = ifloordiv((int)x, BLK_P), by = ifloordiv((int)y, BLK_P), IN = BLK_P - ST_W;
+    int zone = zone_at(bx * BLK_P + ST_W + IN / 2.0f, by * BLK_P + ST_W + IN / 2.0f);
+    bool street = posmod((int)x, BLK_P) < ST_W || posmod((int)y, BLK_P) < ST_W;
+    snprintf(buf, sizeof buf, "%s  %s", ZN_NAME[zone], street ? "street" : "lot");
+    return buf;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
-//  THE ATOM REGISTRY — each atom is a tab; `footprint` drops in here next
+//  THE ATOM REGISTRY — each atom is a tab
 // ════════════════════════════════════════════════════════════════════════════
 typedef struct {
     const char *name;
@@ -377,8 +491,9 @@ typedef struct {
 } Atom;
 
 static Atom atoms[] = {
-    { "SCATTER", 3, { "base", "ground", "canopy" }, scat_draw, scat_probe },
-    { "ROWS",    3, { "soil", "crop",   "border" }, rows_draw, rows_probe },
+    { "SCATTER",   3, { "base", "ground", "canopy" }, scat_draw,      scat_probe },
+    { "ROWS",      3, { "soil", "crop",   "border" }, rows_draw,      rows_probe },
+    { "FOOTPRINT", 3, { "ground", "build", "detail" }, footprint_draw, footprint_probe },
 };
 #define N_ATOMS ((int)(sizeof atoms / sizeof atoms[0]))
 
