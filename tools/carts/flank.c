@@ -50,12 +50,26 @@ static void recompute_difficulty(void) {
     d_packs  = sl_heal >= 0.33f ? 1 : 0; // healing tiers: none (<.33, hard) / packs (.33-.66, normal) / packs+regen (>.66, easy)
     d_regen  = sl_heal >= 0.66f ? 1 : 0;
 }
-static void set_preset(int p) {          // 0 easy · 1 normal · 2 hard
-    if      (p==0) { sl_count=.33f; sl_dmg=.10f; sl_rate=.20f; sl_acc=.12f; sl_sight=.18f; sl_supp=.30f; sl_heal=1.0f; }
-    else if (p==1) { sl_count=.66f; sl_dmg=.30f; sl_rate=.50f; sl_acc=.50f; sl_sight=.45f; sl_supp=.50f; sl_heal=0.5f; }
-    else           { sl_count=1.0f; sl_dmg=.60f; sl_rate=.85f; sl_acc=.90f; sl_sight=.85f; sl_supp=1.0f; sl_heal=0.0f; }
+static void set_preset(int p) {          // 0 easy · 1 normal · 2 hard — LETHALITY only (count is the scenario's job)
+    if      (p==0) { sl_dmg=.10f; sl_rate=.20f; sl_acc=.12f; sl_sight=.18f; sl_supp=.30f; sl_heal=1.0f; }
+    else if (p==1) { sl_dmg=.30f; sl_rate=.50f; sl_acc=.50f; sl_sight=.45f; sl_supp=.50f; sl_heal=0.5f; }
+    else           { sl_dmg=.60f; sl_rate=.85f; sl_acc=.90f; sl_sight=.85f; sl_supp=1.0f; sl_heal=0.0f; }
     cur_preset = p;
 }
+// ---- scenarios: WHAT KIND of fight (orthogonal to difficulty's HOW HARD) ----
+// A scenario sets the squad's STARTING POSTURE + the headcount. The posture is the
+// keystone: you can only stealth-open a fight the room starts unaware of. (Composition
+// /loadout/arena are future scenario knobs; melee scenarios wait on weapon abstraction.)
+enum { ST_ASLEEP, ST_ALERTED, ST_HOT };  // start posture: unaware patrol · searching (knows something's up) · hunting you from frame 0
+typedef struct { const char *name; int posture; float count; } Scen;
+static const Scen SCEN[] = {
+    { "gunfight", ST_ASLEEP, 0.66f },    // full squad, unaware — open it loud OR stealth, your call
+    { "sneaky",   ST_ASLEEP, 0.35f },    // sparse patrol, unaware — slip in, knife the isolated one
+    { "ambush",   ST_HOT,    0.66f },    // they already know — no stealth, gunfight from the first frame
+};
+#define NSCEN ((int)(sizeof SCEN / sizeof SCEN[0]))
+static int scenario = 0;
+static void set_scenario(int s) { scenario = s; sl_count = SCEN[s].count; }   // posture is applied in reset()
 #define INF 1e9f
 #define DIAG 1.41421356f
 
@@ -212,7 +226,14 @@ static void reset(void) {
         int x,y,tr=0; do { x=4+rnd(GW-8); y=2+rnd(GH-4); tr++; } while (wcell(x,y) && tr<60);
         pack[i] = (Pack){ x*TILE+4, y*TILE+4, packs_on, 0 };
     }
-    known = 0; kage = 999; flow_cx = -1; kills = 0; msg_t = 0; combat = 0; combat_t = 0;
+    known = 0; kage = 999; flow_cx = -1; kills = 0; msg_t = 0; combat_t = 0;
+    // apply the scenario's starting posture (pure params on the alert/combat/known model)
+    int post = SCEN[scenario].posture;
+    combat = (post != ST_ASLEEP);
+    if (post == ST_ALERTED) for (int i=0;i<NE;i++) if (en[i].alive)     // a sweep is on: searching, but they don't know where you are
+        { en[i].alert = 35; en[i].invx = (int)en[i].x; en[i].invy = (int)en[i].y; }
+    if (post == ST_HOT) { known = 1; kx = pl.x; ky = pl.y; kage = 0;    // ambush: converging on your spawn from frame 0
+        for (int i=0;i<NE;i++) if (en[i].alive) { en[i].alert = 85; en[i].invx = (int)pl.x; en[i].invy = (int)pl.y; } }
 }
 void init(void) { reverb(0.25f, 0.5f); reset(); phase = PH_PLAYING; }   // boot straight into the fight (normal preset); the menu/panel only appears on the win/lose end screen, or via R
 
@@ -608,15 +629,22 @@ void draw(void) {
     // ---- difficulty panel (from the menu's "tweak difficulty") — widgets are immediate-mode ui.h ----
     if (show_panel) {
         fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();   // dim
-        int X=46, Y=12, W=228;
-        rrectfill(X-6, Y-6, W+12, 168, 4, CLR_DARKER_BLUE); rect(X-6, Y-6, W+12, 168, CLR_LIGHT_GREY);
-        print("DIFFICULTY", X, Y, CLR_WHITE);
+        int X=46, Y=8, W=228;
+        rrectfill(X-6, Y-6, W+12, 180, 4, CLR_DARKER_BLUE); rect(X-6, Y-6, W+12, 180, CLR_LIGHT_GREY);
         ui_begin();
-        if (ui_button(X,      Y+12, 56, 14, "easy"))   set_preset(0);
-        if (ui_button(X+62,   Y+12, 64, 14, "normal")) set_preset(1);
-        if (ui_button(X+132,  Y+12, 56, 14, "hard"))   set_preset(2);
-        int sy = Y+32;                                       // any slider drag → "custom" (no preset highlighted)
-        if (ui_slider(&sl_count, X, sy, W, "enemies"))    cur_preset=-1;  sy += 14;
+        // row 1 — SCENARIO (what kind of fight): sets starting posture + headcount
+        print("SCENARIO", X, Y, CLR_WHITE);
+        int sxw = (W - (NSCEN-1)*6) / NSCEN;                 // 3 buttons across, 6px gaps
+        for (int s=0;s<NSCEN;s++) { int bx = X + s*(sxw+6);
+            if (ui_button(bx, Y+10, sxw, 14, SCEN[s].name)) set_scenario(s);
+            if (scenario==s) rect(bx-1, Y+9, sxw+2, 16, CLR_YELLOW);   // active scenario framed
+        }
+        // row 2 — DIFFICULTY (how hard): lethality presets + sliders
+        print("DIFFICULTY", X, Y+30, CLR_WHITE);
+        int pxs[3]={X,X+62,X+132}, pw[3]={56,64,56}; const char *pn[3]={"easy","normal","hard"};
+        for (int p=0;p<3;p++) { if (ui_button(pxs[p], Y+42, pw[p], 14, pn[p])) set_preset(p);
+            if (cur_preset==p) rect(pxs[p]-1, Y+41, pw[p]+2, 16, CLR_YELLOW); }
+        int sy = Y+62;                                       // any slider drag → "custom" (no preset highlighted)
         if (ui_slider(&sl_dmg,   X, sy, W, "damage"))     cur_preset=-1;  sy += 14;
         if (ui_slider(&sl_rate,  X, sy, W, "fire rate"))  cur_preset=-1;  sy += 14;
         if (ui_slider(&sl_acc,   X, sy, W, "accuracy"))   cur_preset=-1;  sy += 14;
@@ -638,6 +666,7 @@ void draw(void) {
             print_centered("FLANK", SCREEN_W/2, Y-34, CLR_WHITE);
             print_centered("tactical squad AI", SCREEN_W/2, Y-22, CLR_MEDIUM_GREY);
         }
+        print_centered(str("scenario: %s  (tweak to change)", SCEN[scenario].name), SCREEN_W/2, Y-10, CLR_INDIGO);
         ui_begin();
         const char *pn[3] = {"easy","normal","hard"}; int pw[3] = {40,44,40}, pxs[3] = {X, X+44, X+92};
         for (int p=0;p<3;p++) {                              // active preset gets a yellow frame

@@ -60,7 +60,7 @@ firing stance, or camper suppression). Glyph = type (`R`/`C`/`F`), colour = stat
 - ☐ **More archetypes** — melee dasher (dog), shotgunner, sniper (laser telegraph), shielded heavy, grenadier, leader/officer
 - ☐ **Morale / panic** — squad breaks when decimated / leader dies; surrender/retreat
 - ☐ **Coordinated search** — fan out to sweep rooms instead of converging on one cell
-- ✓ **Peacetime → combat posture** — the room starts unaware. Global `combat` flag (0 peacetime / 1 combat time), a **one-way latch** on top of per-enemy `alert`. In peacetime, senses are dialled down (`peace = 0.5` multiplies the `see`/`heard` ranges) and everyone patrols. Three triggers flip the whole squad via `go_combat(tx,ty)` — which jumps every enemy's alert floor to 45 (snap to searching) and points them at the trigger: **(1)** a loud gunshot (both player fire paths), **(2)** a confirmed sighting that sticks (the existing alert≥70 "contact!" branch), **(3)** a comrade's **corpse found** (a living enemy within 30px LOS of an `E_DOWN` body — so leaving bodies on patrol routes is risky). Once in combat, an alert floor of 30 holds the squad at least searching. Player-facing: a `! ALARM !` flash + the existing "contact!" callout on the flip; the HUD status word reads `hidden` (peacetime stealth, green) → `ALERT` (combat, lost you, orange) → `SPOTTED` (they see you, red); corpses draw as slumped bodies. The knife stays **silent** (no `go_combat`), so the opening is a real stealth phase — and reaction time means a startled patroller you *do* trip gives the full ~½s window. Trace: `watch("combat")`; verified peacetime holds idle (400f) and a gunshot latches it (frame 35). **Next knob:** how alert the room *starts* (sleepy ↔ twitchy) as a scenario/difficulty slider — currently always peacetime.
+- ✓ **Peacetime → combat posture** — the room starts unaware. Global `combat` flag (0 peacetime / 1 combat time), a **one-way latch** on top of per-enemy `alert`. In peacetime, senses are dialled down (`peace = 0.5` multiplies the `see`/`heard` ranges) and everyone patrols. Three triggers flip the whole squad via `go_combat(tx,ty)` — which jumps every enemy's alert floor to 45 (snap to searching) and points them at the trigger: **(1)** a loud gunshot (both player fire paths), **(2)** a confirmed sighting that sticks (the existing alert≥70 "contact!" branch), **(3)** a comrade's **corpse found** (a living enemy within 30px LOS of an `E_DOWN` body — so leaving bodies on patrol routes is risky). Once in combat, an alert floor of 30 holds the squad at least searching. Player-facing: a `! ALARM !` flash + the existing "contact!" callout on the flip; the HUD status word reads `hidden` (peacetime stealth, green) → `ALERT` (combat, lost you, orange) → `SPOTTED` (they see you, red); corpses draw as slumped bodies. The knife stays **silent** (no `go_combat`), so the opening is a real stealth phase — and reaction time means a startled patroller you *do* trip gives the full ~½s window. Trace: `watch("combat")`; verified peacetime holds idle (400f) and a gunshot latches it (frame 35). **The starting posture is a *scenario* property, not a difficulty slider** — see the scenario layer below.
 - ☐ **Evidence discovery** — spotting a corpse raises the alarm (a primary trigger for the peacetime→combat flip above)
 - ☐ **Reinforcements / alarm** — an alerted enemy triggers more
 
@@ -72,17 +72,27 @@ firing stance, or camper suppression). Glyph = type (`R`/`C`/`F`), colour = stat
 The three threads — "tune flank into a fight engine", "do grenades/sniper get their
 own strategies?", and "emergent is king" — all point at the same thing.
 
-**The difficulty panel is the first 7 knobs of exactly that.** A *scenario* is just a
-bigger preset that also sets **composition + loadout + arena**, not only the combat
-numbers:
+**Status:** a first scenario slice is **live** — a `SCEN[]` array + a **scenario row**
+(second row, above the difficulty sliders, in the tweak panel) that's **orthogonal** to
+difficulty: *scenario = what kind of fight*, *difficulty = how hard*. Each scenario sets
+the **starting posture** (the keystone — you can only stealth-open a fight the room starts
+unaware of) + the **headcount** (`sl_count` moved off the difficulty presets to the
+scenario; difficulty now owns lethality only). Shipped: **gunfight** (asleep, full squad),
+**sneaky** (asleep, sparse), **ambush** (HOT — already onto you, no stealth). Composition
+/ loadout / arena are the remaining scenario knobs (melee scenarios wait on the weapon flag).
 
-| Scenario | What the preset sets |
-|---|---|
-| **Gunfight** (current) | ranged types, cover-heavy arena, suppression on |
-| **Street brawl** | everyone melee, no guns, tight arena, fast, no cover-camping |
-| **Sneaky murder** | few *unaware* patrollers, sight way down, packs off, you have the knife |
-| **Stealth** | sparse guards, long patrol routes, alarm/reinforcements matter |
-| **Knife fight** | both sides melee-only, open floor, no ranged |
+**The difficulty sliders are the lethality half of exactly that.** A *scenario* is the
+bigger preset that also sets **starting posture + composition + loadout + arena**, not the
+combat numbers:
+
+| Scenario | Posture | What the preset sets |
+|---|---|---|
+| **Gunfight** ✓ | asleep | full ranged squad, cover-heavy arena — open it loud or stealth |
+| **Sneaky murder** ✓ (as "sneaky") | asleep | sparse patrol, you have the knife — slip in quietly |
+| **Ambush** ✓ | hot | full squad already converging on your spawn — gunfight from frame 0 |
+| **Stealth** | asleep | sparse guards, long patrol routes, alarm/reinforcements matter |
+| **Street brawl** | hot/alerted | everyone melee, no guns, tight arena, fast (needs weapon flag) |
+| **Knife fight** | varies | both sides melee-only, open floor, no ranged (needs weapon flag) |
 
 Crucially — the **"emergent is king"** part — **none of those are new AI.** They're the
 *same* alertness + flow-field + flank-scoring engine with different **parameters and a
