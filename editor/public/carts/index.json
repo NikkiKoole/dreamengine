@@ -3358,5 +3358,14 @@
       "game"
     ],
     "genre": "shooter"
+  },
+  {
+    "title": "finger drums",
+    "description": "Play a drum kit BY HAND — the performance counterpart to the cabinet's step-sequencer boxes (808/909/cr-78). Two views, each matching its sound (TAB switches): an ACOUSTIC KIT drawn in perspective — kick, snare, rack + floor toms (the modeled INSTR_MEMBRANE, since a tom IS a tuned drumhead), hi-hats, crash and ride — and an MPC PADS grid of an 808-style electronic kit (bridged-sine boom kick, noise snare, square cowbell, retriggered clap). Touch hardware gives position, never pressure, so VELOCITY comes from WHERE you hit: high on a drum/pad = soft, low = hard (8 levels). Every finger strikes independently (multitouch). Keyboard fallback hits mid-velocity, SHIFT accents: kit = F/G hats, T/Y cymbals, J snare, I/K/M toms, SPACE kick; pads = 1-4 / QWER / ASDF / ZXCV. A USB-MIDI pad controller plays it with real hardware velocity (GM drum map). TAB switch kit, H help.",
+    "file": "fingerdrums.cart.png",
+    "kind": [
+      "instrument",
+      "toy"
+    ]
   }
 ]
