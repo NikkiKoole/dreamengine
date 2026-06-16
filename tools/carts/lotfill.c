@@ -136,32 +136,64 @@ static int flower_col(int cx, int cy) {                        // one colour per
     return FC[h % 6];
 }
 
-// ── the scatter atom: fill the visible rect, one jittered instance per cell ───
-static void lf_draw(float cam_x, float cam_y, float zoom) {
+// ════════════════════════════════════════════════════════════════════════════
+//  THE WORKBENCH — shared inspection state every atom reads
+// ════════════════════════════════════════════════════════════════════════════
+// The reusability seam (docs/design/streetlevel-content.md → "the atom is a pure
+// function, the driver is what changes"): an atom never touches cam/zoom/seed
+// globals — it's handed the view rect and reads only these inspection flags. So the
+// SAME atom fn runs here (one atom on stage, overlays on) and in the future world
+// cart (composed over thousands of regions). What you tune here is what ships.
+#define MAX_LAYERS 4
+static bool layer_on[MAX_LAYERS] = { true, true, true, true };  // 1/2/3 peel each layer
+static bool dbg = false;           // G: draw the lattice grid + cull (reject) markers
+static int  ovl = 0;                // O: field overlay — 0 off / 1 cover-kind / 2 density
+static int  n_tree, n_ground, n_reject;   // tallied per draw → HUD readout
+
+static int dens_ramp(float d) {     // density field as a heat colour (low→high)
+    return d < 0.25f ? CLR_DARK_BLUE : d < 0.5f ? CLR_INDIGO : d < 0.75f ? CLR_ORANGE : CLR_RED;
+}
+static const int KIND_COL[CV_N] = { CLR_DARK_BROWN, CLR_LIME_GREEN, CLR_PINK, CLR_DARK_GREEN };
+
+// ── ATOM: scatter ─────────────────────────────────────────────────────────────
+// Layers: 0 base tint · 1 ground (flowers/bushes/tufts) · 2 canopy (trees).
+enum { SL_BASE, SL_GROUND, SL_CANOPY };
+
+static void scat_draw(float cam_x, float cam_y, float zoom) {
     if (zoom < 0.01f) zoom = 0.01f;
     float cx = cam_x + SCREEN_W / 2.0f, cy = cam_y + SCREEN_H / 2.0f;
     float hwv = (SCREEN_W / 2.0f) / zoom, hhv = (SCREEN_H / 2.0f) / zoom;
     int Lpx = (int)(cx - hwv) - 8, Rpx = (int)(cx + hwv) + 8;
     int Tpx = (int)(cy - hhv) - 8, Bpx = (int)(cy + hhv) + 8;
+    n_tree = n_ground = n_reject = 0;
 
-    // 1) base ground tint — coarse cells that grow when zoomed out (>= ~3 screen px)
-    int gc = 6, step = 1;
-    while ((float)gc * step * zoom < 3.0f && step < 6) step++;
-    int cellsz = gc * step;
-    int g0x = ifloordiv(Lpx, cellsz), g1x = ifloordiv(Rpx, cellsz);
-    int g0y = ifloordiv(Tpx, cellsz), g1y = ifloordiv(Bpx, cellsz);
-    for (int gy = g0y; gy <= g1y; gy++)
-        for (int gx = g0x; gx <= g1x; gx++) {
-            int px = gx * cellsz, py = gy * cellsz;
-            Cover cv = cover_at(px + cellsz / 2.0f, py + cellsz / 2.0f);
-            rectfill(px, py, cellsz, cellsz, ground_col(gx, gy, &cv));
-        }
+    // layer 0 — base ground tint (coarse cells that grow when zoomed out, >= ~3 px)
+    if (layer_on[SL_BASE]) {
+        int gc = 6, step = 1;
+        while ((float)gc * step * zoom < 3.0f && step < 6) step++;
+        int cellsz = gc * step;
+        int g0x = ifloordiv(Lpx, cellsz), g1x = ifloordiv(Rpx, cellsz);
+        int g0y = ifloordiv(Tpx, cellsz), g1y = ifloordiv(Bpx, cellsz);
+        for (int gy = g0y; gy <= g1y; gy++)
+            for (int gx = g0x; gx <= g1x; gx++) {
+                int px = gx * cellsz, py = gy * cellsz;
+                Cover cv = cover_at(px + cellsz / 2.0f, py + cellsz / 2.0f);
+                rectfill(px, py, cellsz, cellsz, ground_col(gx, gy, &cv));
+            }
+    }
 
-    bool show_ground = zoom >= 0.7f;     // fine layer only when close (LOD draw-gate)
-    bool show_canopy = zoom >= 0.30f;
+    // debug — draw the CANOPY lattice the candidates sit on (under the instances)
+    if (dbg) {
+        int c0x = ifloordiv(Lpx, CANOPY_P), c1x = ifloordiv(Rpx, CANOPY_P) + 1;
+        int c0y = ifloordiv(Tpx, CANOPY_P), c1y = ifloordiv(Bpx, CANOPY_P) + 1;
+        for (int cxi = c0x; cxi <= c1x; cxi++) line(cxi * CANOPY_P, Tpx, cxi * CANOPY_P, Bpx, CLR_DARKER_GREY);
+        for (int cyi = c0y; cyi <= c1y; cyi++) line(Lpx, cyi * CANOPY_P, Rpx, cyi * CANOPY_P, CLR_DARKER_GREY);
+    }
 
-    // 2) GROUND scatter — flowers (meadow) / bushes (forest) / tufts (grass)
-    if (show_ground) {
+    bool zg = zoom >= 0.7f, zc = zoom >= 0.30f;   // LOD draw-gates (real behaviour kept)
+
+    // layer 1 — GROUND scatter (flowers / bushes / tufts), one jittered item per cell
+    if (layer_on[SL_GROUND] && zg) {
         int c0x = ifloordiv(Lpx, GROUND_P), c1x = ifloordiv(Rpx, GROUND_P);
         int c0y = ifloordiv(Tpx, GROUND_P), c1y = ifloordiv(Bpx, GROUND_P);
         for (int cyi = c0y; cyi <= c1y; cyi++)
@@ -171,19 +203,17 @@ static void lf_draw(float cam_x, float cam_y, float zoom) {
                 int wy = cyi * GROUND_P + (int)(frac01(h >> 12) * GROUND_P);
                 Cover cv = cover_at(wx, wy);
                 float roll = frac01(h >> 20);
-                if (cv.kind == CV_MEADOW) {
-                    if (roll < 0.10f + cv.dens * 0.55f) draw_flower(wx, wy, flower_col(cxi, cyi));
-                } else if (cv.kind == CV_FOREST) {
-                    if (roll < 0.12f + cv.dens * 0.25f) draw_bush(wx, wy, h);    // understory
-                } else if (cv.kind == CV_GRASS) {
-                    if (roll < 0.18f) draw_tuft(wx, wy, h);
-                }
+                bool hit = true;
+                if      (cv.kind == CV_MEADOW && roll < 0.10f + cv.dens * 0.55f) draw_flower(wx, wy, flower_col(cxi, cyi));
+                else if (cv.kind == CV_FOREST && roll < 0.12f + cv.dens * 0.25f) draw_bush(wx, wy, h);
+                else if (cv.kind == CV_GRASS  && roll < 0.18f)                   draw_tuft(wx, wy, h);
+                else hit = false;
+                if (hit) n_ground++;
             }
     }
 
-    // 3) CANOPY scatter — trees. Iterating cy ascending draws north→south, so
-    // nearer (lower) trees overlap farther ones (cheap painter's sort).
-    if (show_canopy) {
+    // layer 2 — CANOPY scatter (trees). cy ascending = north→south painter's sort.
+    if (layer_on[SL_CANOPY] && zc) {
         int c0x = ifloordiv(Lpx, CANOPY_P), c1x = ifloordiv(Rpx, CANOPY_P);
         int c0y = ifloordiv(Tpx, CANOPY_P), c1y = ifloordiv(Bpx, CANOPY_P);
         for (int cyi = c0y; cyi <= c1y; cyi++)
@@ -196,16 +226,13 @@ static void lf_draw(float cam_x, float cam_y, float zoom) {
                 float prob = cv.kind == CV_FOREST ? 0.25f + cv.dens * 0.70f   // clearings emerge
                            : cv.kind == CV_MEADOW ? 0.04f                     // lone meadow trees
                            : 0.0f;
-                if (roll < prob) draw_tree(wx, wy, h, cv.kind == CV_FOREST && cv.dens > 0.55f);
+                if (roll < prob) { draw_tree(wx, wy, h, cv.kind == CV_FOREST && cv.dens > 0.55f); n_tree++; }
+                else if (dbg && prob > 0.0f) { circ(wx, wy, 1, CLR_DARK_RED); n_reject++; }  // culled candidate
             }
     }
 }
 
-static int lf_field_col(float x, float y) {                   // overlay tint by cover kind
-    static const int kc[CV_N] = { CLR_DARK_BROWN, CLR_LIME_GREEN, CLR_PINK, CLR_DARK_GREEN };
-    return kc[cover_at(x, y).kind];
-}
-static const char *lf_probe(float x, float y) {
+static const char *scat_probe(float x, float y) {
     static char buf[40];
     Cover cv = cover_at(x, y);
     snprintf(buf, sizeof buf, "%s  dens %.2f", CV_NAME[cv.kind], (double)cv.dens);
@@ -213,12 +240,28 @@ static const char *lf_probe(float x, float y) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  THE SHELL — free-fly explorer (mirrors procplaces; one generator for now)
+//  THE ATOM REGISTRY — each atom is a tab; `rows`/`footprint` drop in here next
+// ════════════════════════════════════════════════════════════════════════════
+typedef struct {
+    const char *name;
+    int n_layers;
+    const char *layer[MAX_LAYERS];
+    void (*draw)(float cam_x, float cam_y, float zoom);
+    const char *(*probe)(float wx, float wy);
+} Atom;
+
+static Atom atoms[] = {
+    { "SCATTER", 3, { "base", "ground", "canopy" }, scat_draw, scat_probe },
+};
+#define N_ATOMS ((int)(sizeof atoms / sizeof atoms[0]))
+
+// ════════════════════════════════════════════════════════════════════════════
+//  THE SHELL — free-fly explorer over the current atom
 // ════════════════════════════════════════════════════════════════════════════
 static float cam_x = 250, cam_y = 18;     // open zoomed on a forest↔meadow boundary (seed 1)
 static float zoom  = 2.8f;
 static int   seed  = 1;
-static bool  overlay = false;
+static int   cur   = 0;                   // current atom
 
 void init(void) { lf_seed = seed; }
 
@@ -233,40 +276,67 @@ void update(void) {
     zoom += mouse_wheel() * 0.08f * zoom;
     zoom = clamp(zoom, 0.18f, 6.0f);
     if (keyp('R')) { seed++; lf_seed = seed; }
-    if (keyp(KEY_TAB)) overlay = !overlay;
+    if (keyp(KEY_TAB)) { cur = (cur + 1) % N_ATOMS;             // next atom (resets layers)
+                         for (int i = 0; i < MAX_LAYERS; i++) layer_on[i] = true; }
+    for (int i = 0; i < atoms[cur].n_layers; i++)              // 1/2/3 peel layers
+        if (keyp('1' + i)) layer_on[i] = !layer_on[i];
+    if (keyp('G')) dbg = !dbg;
+    if (keyp('O')) ovl = (ovl + 1) % 3;
 }
 
+// the field that drives the atom, drawn as a semi-transparent tint over the result
 static void draw_overlay(void) {
     float cx = cam_x + SCREEN_W / 2.0f, cy = cam_y + SCREEN_H / 2.0f;
     float hwv = (SCREEN_W / 2.0f) / zoom, hhv = (SCREEN_H / 2.0f) / zoom;
-    int OV = 16;
+    int OV = 12;
     int L = ((int)(cx - hwv) / OV - 1) * OV, R = (int)(cx + hwv) + OV;
     int T = ((int)(cy - hhv) / OV - 1) * OV, B = (int)(cy + hhv) + OV;
     fillp(0xA5A5, -1);
     for (int wy = T; wy <= B; wy += OV)
-        for (int wx = L; wx <= R; wx += OV)
-            rectfill(wx, wy, OV, OV, lf_field_col(wx + OV / 2.0f, wy + OV / 2.0f));
+        for (int wx = L; wx <= R; wx += OV) {
+            Cover cv = cover_at(wx + OV / 2.0f, wy + OV / 2.0f);
+            rectfill(wx, wy, OV, OV, ovl == 1 ? KIND_COL[cv.kind] : dens_ramp(cv.dens));
+        }
     fillp_reset();
 }
 
 void draw(void) {
     cls(CLR_BLACK);
     camera_ex((int)cam_x, (int)cam_y, zoom, 0);
-    lf_draw(cam_x, cam_y, zoom);
-    if (overlay) draw_overlay();
+    atoms[cur].draw(cam_x, cam_y, zoom);
+    if (ovl) draw_overlay();
 
     camera(0, 0);
     int mx = SCREEN_W / 2, my = SCREEN_H / 2;
     line(mx - 5, my, mx + 5, my, CLR_WHITE);
     line(mx, my - 5, mx, my + 5, CLR_WHITE);
 
-    rectfill(0, 0, SCREEN_W, 10, CLR_BLACK);
-    char buf[64];
-    int x = print("SCATTER", 3, 2, CLR_YELLOW);
-    snprintf(buf, sizeof buf, "  seed %d  zoom %.2f", seed, (double)zoom);
-    print(buf, x, 2, CLR_LIGHT_GREY);
+    // top bar — atom + seed/zoom/overlay
+    rectfill(0, 0, SCREEN_W, 9, CLR_BLACK);
+    char buf[72];
+    static const char *OVN[3] = { "off", "kind", "dens" };
+    int x = print(atoms[cur].name, 3, 1, CLR_YELLOW);
+    snprintf(buf, sizeof buf, "  s%d  z%.1f  overlay:%s", seed, (double)zoom, OVN[ovl]);
+    print(buf, x, 1, CLR_LIGHT_GREY);
 
-    rectfill(0, SCREEN_H - 18, SCREEN_W, 18, CLR_BLACK);
-    print(lf_probe(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f), 3, SCREEN_H - 16, CLR_WHITE);
-    print("WASD pan  Z/X zoom  R seed  TAB overlay", 3, SCREEN_H - 8, CLR_MEDIUM_GREY);
+    // layer chips + live counts (small font)
+    rectfill(0, 9, SCREEN_W, 8, CLR_BLACK);
+    font(FONT_SMALL);
+    int lx = 3;
+    for (int i = 0; i < atoms[cur].n_layers; i++) {
+        snprintf(buf, sizeof buf, "%d:%s ", i + 1, atoms[cur].layer[i]);
+        lx = print(buf, lx, 11, layer_on[i] ? CLR_GREEN : CLR_DARK_GREY);
+    }
+    if (dbg) snprintf(buf, sizeof buf, "   trees:%d grnd:%d culled:%d", n_tree, n_ground, n_reject);
+    else     snprintf(buf, sizeof buf, "   trees:%d grnd:%d", n_tree, n_ground);
+    print(buf, lx, 11, CLR_LIGHT_GREY);
+
+    // bottom — probe + controls
+    rectfill(0, SCREEN_H - 16, SCREEN_W, 16, CLR_BLACK);
+    font(FONT_NORMAL);
+    print(atoms[cur].probe(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f), 3, SCREEN_H - 16, CLR_WHITE);
+    font(FONT_SMALL);
+    print("WASD/ZX move  R seed  TAB atom  1-3 layers  G grid  O overlay",
+          3, SCREEN_H - 7, CLR_MEDIUM_GREY);
+    font(FONT_NORMAL);
 }

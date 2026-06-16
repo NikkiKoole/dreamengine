@@ -82,6 +82,29 @@ Composition examples (the whole street level is combinations of seven atoms):
 3. **Draw and query are the same function in two modes.** `cover_at` / `building_at` / `solid_at`
    are the renderer's code run as a query. LOD gates *drawing*, never *generating*.
 
+## The workbench vs. the world (reusability — built 2026-06-16)
+
+The two wants — *fill a whole world* and *see each step on its own* — are the **same**
+architecture, not a trade-off, **if the atom is a pure function and the driver is what
+changes.** An atom takes the view rect + inspection flags and reads **no** cam/seed
+globals; so the *identical* function runs in two drivers:
+
+- **Workbench** (`lotfill.c`) — one atom on stage, overlays on. The atom REGISTRY is a
+  vtable (`atoms[]`, the `procplaces` `gens[]` pattern); each new atom is a TAB. Inspection,
+  built into the scatter atom and reusable by every future one: **layer peel** (`1/2/3`
+  toggle base/ground/canopy independently, with live placed/culled counts), a **debug grid**
+  (`G` draws the scatter lattice + a ring on every density-*culled* candidate — you watch the
+  gate accept/reject), and a **field overlay** (`O` cycles cover-kind / density heatmap — the
+  field that *drives* the atom). Because the atom is pure, the overlay reads the same values
+  the world will.
+- **World** (future cart, or sloop) — a thin driver that composes the partition + selector +
+  all atoms over thousands of regions. Same atom fns. **What you tune in the workbench is
+  bit-for-bit what ships.**
+
+Extraction to `runtime/lotfill.h` (ADR-0006) waits for the **second customer** (the world cart
+or sloop's collision) — but atoms are written extraction-ready now: explicit params, no global
+reach. The selector (the C tables) stays per-cart; the atoms are the universal unit.
+
 ## Build plan (lens-first, same playbook as L2/L3)
 
 1. **`scatter` atom — forest/meadow** *(chosen first slice, 2026-06-16)*. Highest variety-per-effort,
