@@ -67,7 +67,18 @@ node tools/wav-analyze.js /tmp/b.wav | grep -iE 'peak|rms|crest'   # watch peak 
 `tools/carts/brasspec.c` plays one sustained forte trumpet (A3=220); edit its `SPEC_*` defines to
 audition other engines/macros/notes. Baseline→shipped was: highest-h h9→h17, >4kHz 0.2%→2.3%, crest
 6.3→14.6dB. Always re-run `dc-check --quiet` after any shaper change, `tune-check --quiet` if you
-touch anything pitch-related. **Bigger, unshipped levers:** the deferred **mute/plunger axis** (the
+touch anything pitch-related.
+
+> **Tried & reverted (2026-06-16): the output stage is at its limit.** Pushed all four levers
+> together in a measured A/B (driveOut `lvl` 2.5→3.6, asym 0.7→0.82, brite `+6lvl`→`+8.5lvl`, LP
+> 0.42→0.30, trim 0.19→0.24 to hold −2.7 dBFS). Result: +3dB across the **2.8–5kHz blat band**
+> (highest-h h17→h19), DC/peak clean — but **inaudible** in a solo A/B to the owner. The energy
+> the ear wants at 8–10kHz (h36–45 on a 220Hz tone) can only be *generated* by driving the
+> waveshaper harder, which **aliases into fizz** (no oversampling). Conclusion: more brass now
+> lives in the **macros** (`instrument_timbre`/`instrument_morph`); the only real engine lever
+> for genuine top-end is **oversampling the shaper** — a separate project, not a knob tweak.
+
+**Bigger, unshipped levers:** the deferred **mute/plunger axis** (the
 harmon-cup bite — a `note_cutoff`+`note_res` cart recipe or an `instrument_mode` index, NOT a 4th
 macro) and handoff fix #3 (model the bell to fill the harmonic series natively). Full context:
 [`brass-realism-handoff.md`](brass-realism-handoff.md) + [`audio-notes.md`](audio-notes.md) §19.
