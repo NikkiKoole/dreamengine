@@ -1165,7 +1165,13 @@ mark.docs-find-hit.current {
   object-fit: cover;
   image-rendering: pixelated;
   display: block;
-  background: #000;
+  background: var(--bg2);   /* match the card so the decode placeholder doesn't flash black */
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.tutorial-thumb.loaded {
+  opacity: 1;
 }
 
 .no-thumb .tutorial-info {

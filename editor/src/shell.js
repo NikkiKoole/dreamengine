@@ -752,6 +752,8 @@ async function buildTutorialsPanel() {
     img.className = 'tutorial-thumb'
     img.src = url
     img.alt = title
+    img.onload = () => img.classList.add('loaded')   // fade in once decoded (no black-rect flash)
+    if (img.complete) img.classList.add('loaded')    // cached: already decoded, skip the fade-in
     img.onerror = () => { img.style.display = 'none'; card.classList.add('no-thumb') }
 
     const info = document.createElement('div')
