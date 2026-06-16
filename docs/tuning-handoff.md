@@ -77,12 +77,30 @@ session added it), so "add a fractional read tap" was a no-op. The real causes, 
       mode-flips — that's the jet∝bore re-voicing (residual below), a separate bigger fix.
 
 ## ☐ Open engine residuals (tracked, not urgent — [STATUS #31](STATUS.md))
-- [ ] **PIPE at morph ≲ 0.4** (hollow/low embouchure, e.g. pipe.c's `recorder`/`breathy`
-      presets) drifts flat up high, and **morph ≈ 0** is seed-unstable in its top octave.
-      Real recipes use morph ≳ 0.5, so this is mostly a "don't voice a flute hollow + high"
-      note — documented in the shelf. Fully closing it needs a jet-length re-voicing.
-- [ ] *(optional)* re-voice pipe.c's `recorder`/`breathy` presets toward morph ≳ 0.5 if you'd
-      rather they be in tune than characterful — left as-is + documented for now.
+- [ ] **PIPE morph≈0 / hollow TOP OCTAVE (above ~A5) mode-flips.** Everything *to A5* is now in
+      tune (the 2026-06-16 jet-delay fix above); what remains is only the hollow-embouchure
+      (morph ≲ 0.4) **top octave**, where the jet ≈ the bore and the oscillator jumps modes. A
+      tuning constant can't fix a mode-flip. **LOW PRIORITY / parked** (2026-06-16 decision): the
+      practical range is covered, and most flute recipes don't voice hollow *and* high.
+      - **The "complete" fix** is a jet∝bore re-voicing (jet length scales with the note's bore so
+        the jet/bore ratio — hence the regime — stays constant across pitch). **HIGH RISK:** it
+        changes the jet at *every* note → re-tunes the whole engine → would re-open the flute/
+        piccolo/preset tuning just closed, and the loop-delay comp would need re-deriving. Only as
+        a careful dedicated session with full re-validation.
+      - **Recommended lower-risk first attempt instead:** a **jet-vs-bore CLAMP** — cap `jetLen` at a
+        fraction of the note's bore so at high notes the jet can't approach the bore and trigger the
+        flip. Localized to exactly the failing corner, leaves the in-tune range untouched, fully
+        reversible + meter-gated. Try this before the full re-voicing.
+- [ ] *(optional, aesthetic)* `polopan.c`'s NANGA flute drops an octave (register 60–77) — now a
+      *musical* choice, NOT a tuning workaround (it runs morph 0.68, always in tune). Could reclaim
+      the upper octave if you want it brighter; purely taste.
+
+## ✅ Stale-workaround sweep (2026-06-16) — clean, nothing to revert
+Audited every cart for tuning workarounds made obsolete by the engine fixes (register caps / octave
+drops / `instrument_tune` offsets compensating for the old flatness on PIPE/REED/BRASS/PLUCK).
+**Result: none harmful.** All `instrument_tune()` calls are legit width/chorus detune (shimmer,
+divide-down, gamelan microtonal, sh101 trimmer). `air.c` was already reopened for the earlier PIPE
+fix. `polopan.c`'s octave drop is musical, not a bug (above). Don't re-run this sweep — it's done.
 
 ## Quick reference
 
