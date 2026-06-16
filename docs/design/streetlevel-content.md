@@ -105,18 +105,22 @@ proposed set, classified:
 | **carve** | area | ↪ partition + modifier (subtractive hole) | a negative region the makers respect; runs as a pass |
 | **ring** | placement | 🔁 placement **flavor** | `scatter` with a radial locus (one "place" verb, locus = grid/radial/along-path) |
 | **line** | placement | ✅ new atom = `ribbon` (decorate a path) | props along a path/edge; `border` is its perimeter special-case |
-| **cluster** | composite | ✅ **new category: composition** | a bounded mini-driver recursing into atoms (hamlet = footprints + route + scatter) |
+| **cluster** | composite | ✅ **new category: composition** | a bounded mini-driver recursing into atoms (hamlet = footprints + a shared green + scatter; it fronts roadnet's road, doesn't make one) |
 | **age** | modifier | ✅ **new category: modifier** | reads + transforms existing state; needs a post-process *phase* |
 | **dress** | modifier | 🔁 a finishing `scatter` pass (additive) | runs in the modifier phase but doesn't read/transform like `age` |
 
+**Scope line: lotfill FILLS; it never generates connectivity.** Roads, trails, canals, bridges — the
+whole route/network tier — are **roadnet's**, full stop. `route`/`bridge` (and `meander`-as-a-road) are
+out of scope here; lotfill *reads* roadnet's graph as an input and fills the land around it. (River/
+coastline `meander` is a water/terrain feature, not a road — that's worldgen/terrain, also upstream.)
+
 **The structural change this forces — the driver becomes a phased PIPELINE.** Today the WORLD driver is
-a single "makers" pass. Modifiers (which read prior output) and connectivity (which spans regions) only
-make sense as ordered phases:
+a single "makers" pass. Modifiers (which read prior output) only make sense as a later phase:
 
 ```
 1. fields/infra   relief, cover, climate            (read-only)
 2. partition      subdivide / blob / carve           → bounded regions (+ holes)
-3. connectivity   route / meander / bridge           (from roadnet)
+3. connectivity   roadnet's graph + worldgen terrain (INPUT — not generated here)
 4. makers         scatter rows footprint pave border line ring cluster
 5. modifiers      age, dress                         (read phase-4 output, transform)
 ```
