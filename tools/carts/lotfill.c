@@ -41,13 +41,20 @@
 #define BIO_WFREQ  0.0011f   // domain-warp frequency (organic cover edges)
 #define BIO_WAMP   140.0f    // domain-warp amplitude (px)
 #define DENS_FREQ  0.0090f   // clearing/clump frequency (bigger = patchier)
+#define ELEV_FREQ  0.0011f   // elevation frequency (smaller = bigger landmasses/lakes)
+#define ELEV_SEA   0.30f     // below this = water
+#define ELEV_SAND  0.345f    // water..this = beach ring
+#define ELEV_ROCK  0.80f     // above this = bare rock (uplands)
 
 #define CANOPY_P   16        // canopy scatter pitch (world px) — tree spacing
 #define GROUND_P   6         // ground scatter pitch — flowers/bushes/tufts
 #define CLUMP_P    44        // flower-clump pitch (one colour per patch)
 
-enum { CV_BARE, CV_GRASS, CV_MEADOW, CV_FOREST, CV_N };
-static const char *CV_NAME[CV_N] = { "bare", "grass", "meadow", "forest" };
+// Two stacked fields decide a cover kind: ELEVATION first (water / beach / rock —
+// terrain, hard constraints the atoms must respect), then the vegetation BIOME on
+// the land between. Eventually elevation comes from worldgen; here it's local.
+enum { CV_BARE, CV_GRASS, CV_MEADOW, CV_FOREST, CV_WATER, CV_SAND, CV_ROCK, CV_N };
+static const char *CV_NAME[CV_N] = { "bare", "grass", "meadow", "forest", "water", "sand", "rock" };
 
 static int lf_seed = 0;
 
@@ -78,22 +85,39 @@ static float bio_raw(float x, float y) {              // fbm, 3 octaves
     float c = noise3(x * BIO_FREQ * 5.1f, y * BIO_FREQ * 5.1f, z + 7.0f);
     return clamp(a * 0.6f + b * 0.28f + c * 0.12f, 0.0f, 1.0f);
 }
+static float elev_raw(float x, float y) {             // elevation fbm, 2 octaves
+    float z = (float)lf_seed;
+    float a = noise3(x * ELEV_FREQ,        y * ELEV_FREQ,        z + 50.0f);
+    float b = noise3(x * ELEV_FREQ * 2.4f, y * ELEV_FREQ * 2.4f, z + 57.0f);
+    return clamp(a * 0.7f + b * 0.3f, 0.0f, 1.0f);
+}
 // THE shared sampler — every cover-query (draw + probe + future collision) goes here.
+// Elevation gates terrain (water/beach/rock); the vegetation biome fills the land.
 static Cover cover_at(float x, float y) {
-    float wx, wy; bio_warp(x, y, &wx, &wy);
-    float b = bio_raw(wx, wy);
-    int kind = b < 0.34f ? CV_BARE : b < 0.46f ? CV_GRASS : b < 0.60f ? CV_MEADOW : CV_FOREST;
-    float d = noise3(x * DENS_FREQ, y * DENS_FREQ, (float)lf_seed + 5.0f);
-    return (Cover){ kind, clamp(d, 0.0f, 1.0f) };
+    float e = elev_raw(x, y);
+    float d = clamp(noise3(x * DENS_FREQ, y * DENS_FREQ, (float)lf_seed + 5.0f), 0.0f, 1.0f);
+    int kind;
+    if      (e < ELEV_SEA)  kind = CV_WATER;
+    else if (e < ELEV_SAND) kind = CV_SAND;           // thin shoreline ring
+    else if (e > ELEV_ROCK) kind = CV_ROCK;
+    else {                                            // land — read the vegetation biome
+        float wx, wy; bio_warp(x, y, &wx, &wy);
+        float b = bio_raw(wx, wy);
+        kind = b < 0.34f ? CV_BARE : b < 0.46f ? CV_GRASS : b < 0.60f ? CV_MEADOW : CV_FOREST;
+    }
+    return (Cover){ kind, d };
 }
 
 // ── base ground tint (cheap filled cells, like terrain bands) ─────────────────
 static int ground_col(int cx, int cy, const Cover *cv) {
     unsigned h = hash2(cx * 7 + lf_seed * 911, cy * 13);
     switch (cv->kind) {
-        case CV_BARE:   return (h & 1) ? CLR_DARK_BROWN   : CLR_BROWN;
-        case CV_GRASS:  return (h & 3) ? CLR_DARK_GREEN   : CLR_MEDIUM_GREEN;
-        case CV_MEADOW: return (h & 1) ? CLR_MEDIUM_GREEN : CLR_LIME_GREEN;
+        case CV_BARE:   return (h & 1) ? CLR_DARK_BROWN    : CLR_BROWN;
+        case CV_GRASS:  return (h & 3) ? CLR_DARK_GREEN    : CLR_MEDIUM_GREEN;
+        case CV_MEADOW: return (h & 1) ? CLR_MEDIUM_GREEN  : CLR_LIME_GREEN;
+        case CV_WATER:  return (h & 3) ? CLR_DARK_BLUE     : CLR_BLUE;        // ripple
+        case CV_SAND:   return (h & 1) ? CLR_LIGHT_PEACH   : CLR_PEACH;
+        case CV_ROCK:   return (h % 5 == 0) ? CLR_LIGHT_GREY : CLR_DARK_GREY;
         default: {                                                 // forest floor: dappled
             unsigned f = h % 9;
             return f == 0 ? CLR_BROWNISH_BLACK : f < 3 ? CLR_MEDIUM_GREEN : CLR_DARK_GREEN;
@@ -159,7 +183,8 @@ static const char *cnt_lbl[3];             // their labels (each atom sets these
 static int dens_ramp(float d) {     // density field as a heat colour (low→high)
     return d < 0.25f ? CLR_DARK_BLUE : d < 0.5f ? CLR_INDIGO : d < 0.75f ? CLR_ORANGE : CLR_RED;
 }
-static const int KIND_COL[CV_N] = { CLR_DARK_BROWN, CLR_LIME_GREEN, CLR_PINK, CLR_DARK_GREEN };
+static const int KIND_COL[CV_N] = { CLR_DARK_BROWN, CLR_LIME_GREEN, CLR_PINK, CLR_DARK_GREEN,
+                                    CLR_BLUE, CLR_PEACH, CLR_LIGHT_GREY };
 
 // ── ATOM: scatter ─────────────────────────────────────────────────────────────
 // Layers: 0 base tint · 1 ground (flowers/bushes/tufts) · 2 canopy (trees).
