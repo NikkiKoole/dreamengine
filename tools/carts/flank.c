@@ -69,8 +69,8 @@ static float heat[GH][GW];          // danger projected by the player's aim cone
 
 #define KEY_LSHIFT 340             // raylib left-shift — held to sneak
 #define VIS_R 96                   // player's own vision radius (fog of war)
-typedef struct { float x, y, vx, vy, aim, pinned; int hp, mag, reload, shake, spectate, sneak, calm; } Player;  // pinned 0..1; calm = frames since hit (regen)
-typedef struct { float x, y, aim, lsx, lsy, alert; int hp, alive, state, shootcd, mag, reload, callcd, type, strafe, strafeT, suppressing, everseen, invx, invy; } Enemy;  // alert 0..100; inv = spot to investigate
+typedef struct { float x, y, vx, vy, aim, pinned, bob, ox, oy; int hp, mag, reload, shake, spectate, sneak, calm; } Player;  // pinned 0..1; calm = frames since hit (regen); bob = walk-hop phase, ox/oy = prev pos
+typedef struct { float x, y, aim, lsx, lsy, alert, bob, ox, oy; int hp, alive, state, shootcd, mag, reload, callcd, type, strafe, strafeT, suppressing, everseen, invx, invy; } Enemy;  // alert 0..100; inv = spot to investigate; bob = walk-hop phase, ox/oy = prev pos
 typedef struct { float x, y, vx, vy; int alive, foe; } Bullet;
 typedef struct { int x, y, active, cd; } Pack;     // health pickup (px coords)
 static Player pl;
@@ -357,6 +357,11 @@ void update(void) {
     player_update();
     for (int i=0;i<NE;i++) enemy_update(i);
 
+    // walk-hop phase: advance while a body is actually moving, reset when still (purely cosmetic)
+    { float md = fabsf(pl.x-pl.ox)+fabsf(pl.y-pl.oy); pl.bob = md>0.2f ? pl.bob+0.5f : 0; pl.ox=pl.x; pl.oy=pl.y; }
+    for (int i=0;i<NE;i++) { float md = fabsf(en[i].x-en[i].ox)+fabsf(en[i].y-en[i].oy);
+        en[i].bob = (en[i].alive && md>0.2f) ? en[i].bob+0.5f : 0; en[i].ox=en[i].x; en[i].oy=en[i].y; }
+
     // suppression: are you pinned right now? (any suppressor with LOS to you)
     int sup = 0;
     for (int i=0;i<NE;i++) if (en[i].alive && en[i].suppressing && los_px(en[i].x,en[i].y,pl.x,pl.y)) sup = 1;
@@ -404,6 +409,28 @@ void update(void) {
 }
 
 // ---- draw ------------------------------------------------------------------
+// a hop curve (rest → up → peak → down) sampled by the walk-bob phase
+static const int HOPS[4] = { 0, 1, 2, 1 };
+// per-type cap colour, so role still reads at a glance (shirt = state, cap = type)
+static const int TYHAT[NTY] = { CLR_BLACK, CLR_WHITE, CLR_INDIGO };   // rusher / camper / flanker
+
+// a little upright pixel-man (druglord-style), feet planted at (x,y) screen px.
+// shirt = role/state colour, cap = type marker, hop lifts the body, ghost = dim last-seen.
+static void draw_man(int x, int y, float aim, int shirt, int hat, int hop, int ghost) {
+    int skin = ghost ? CLR_DARKER_GREY : CLR_PEACH;
+    int pant = ghost ? CLR_DARKER_GREY : CLR_DARK_BLUE;
+    if (ghost) { shirt = CLR_DARKER_GREY; hat = -1; }
+    rectfill(x-2, y+2, 5, 2, CLR_BLACK);                       // planted ground shadow (stays put as he hops)
+    int t = y - 5 - hop;                                        // crown of the head, lifted by the hop
+    int stride = (hop >= 2);                                     // legs split at the top of the bounce
+    rectfill(x-2, t+5, 2, 2 - stride, pant);                    // left leg
+    rectfill(x+1, t+5, 2, 2 - !stride, pant);                   // right leg
+    rectfill(x-2, t+2, 5, 3, shirt);                            // torso (role/state colour)
+    rectfill(x-1, t,   3, 2, skin);                             // head
+    if (hat >= 0) rectfill(x-1, t-1, 3, 1, hat);               // type cap
+    if (!ghost) line(x, t+3, x + (int)dx(5, aim), (t+3) + (int)dy(5, aim), CLR_LIGHT_GREY);  // gun arm toward aim
+}
+
 void draw(void) {
     cls(CLR_BLACK);
     int sh = pl.shake>0 ? rnd(3)-1 : 0;
@@ -417,9 +444,20 @@ void draw(void) {
         fillp_reset();
     }
     for (int y=0;y<GH;y++) for (int x=0;x<GW;x++) {
-        if (cell[y][x]==1) { rectfill(x*TILE+sh, y*TILE, TILE, TILE, CLR_LIGHT_GREY);        // full cover: bright solid block
-                             rect(x*TILE+sh, y*TILE, TILE, TILE, CLR_DARK_GREY); }
-        else if (cell[y][x]==2) { rectfill(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_BROWN); rect(x*TILE+sh+1, y*TILE+2, TILE-2, TILE-3, CLR_ORANGE); }  // low cover: a crate
+        int px0=x*TILE+sh, py0=y*TILE;
+        if (cell[y][x]==1) {                                                                 // FULL cover — a slab with faked height (¾ read)
+            rectfill(px0, py0, TILE, TILE, CLR_LIGHT_GREY);
+            if (y==0    || cell[y-1][x]!=1) rectfill(px0, py0, TILE, 1, CLR_WHITE);           // lit top edge
+            if (y==GH-1 || cell[y+1][x]!=1) rectfill(px0, py0+TILE-3, TILE, 3, CLR_DARK_GREY);// shaded front face = the cue it stands up
+            if (x==0    || cell[y][x-1]!=1) rectfill(px0, py0, 1, TILE, CLR_MEDIUM_GREY);     // side edges
+            if (x==GW-1 || cell[y][x+1]!=1) rectfill(px0+TILE-1, py0, 1, TILE, CLR_MEDIUM_GREY);
+        } else if (cell[y][x]==2) {                                                          // LOW cover — a crate with a lit lid
+            rectfill(px0+1, py0+2, TILE-2, TILE-3, CLR_BROWN);
+            rectfill(px0+1, py0+2, TILE-2, 1, CLR_LIGHT_PEACH);                               // lid catches light
+            rect(px0+1, py0+2, TILE-2, TILE-3, CLR_ORANGE);
+        } else if (((x*5 + y*3) & 3) == 0) {                                                 // floor speckle — a little ground texture for the men
+            rectfill_rgb(px0 + (x*3 + y) % TILE, py0 + (y*2 + x*7) % TILE, 1, 1, 0x24283a);
+        }
     }
     // health packs (a green + cross) — always visible so you can run for one
     for (int i=0;i<NPK;i++) if (d_packs && pack[i].active) { int x=pack[i].x+sh, y=pack[i].y;
@@ -443,35 +481,34 @@ void draw(void) {
         if (!en[i].alive) continue;
         float ed = fsqrt((en[i].x-pl.x)*(en[i].x-pl.x)+(en[i].y-pl.y)*(en[i].y-pl.y));
         bool vis = reveal || pl.spectate || (ed <= VIS_R && los_px(pl.x,pl.y,en[i].x,en[i].y));
-        if (vis) { int x=(int)en[i].x+sh, y=(int)en[i].y;
-            if (en[i].suppressing) circ(x,y,5,blink(4)?CLR_RED:CLR_ORANGE);    // muzzle bloom of a suppressor
-            line(x,y,(int)(en[i].x+dx(6,en[i].aim))+sh,(int)(en[i].y+dy(6,en[i].aim)),CLR_LIGHT_GREY);
-            print(str("%c", TY[en[i].type].g), x-2, y-3, ECOL[en[i].state]);
-            if (en[i].state==E_SUSPECT) print("?", x-1, y-9, CLR_YELLOW);                    // investigating
-            else if (en[i].state>=E_HUNT && en[i].state<=E_ENGAGE) print("!", x-1, y-9, CLR_RED);  // alarmed
+        if (vis) { int x=(int)en[i].x+sh, y=(int)en[i].y, hop=HOPS[((int)en[i].bob)&3];
+            if (en[i].suppressing) circ(x,y-4,5,blink(4)?CLR_RED:CLR_ORANGE);    // muzzle bloom of a suppressor
+            draw_man(x, y, en[i].aim, ECOL[en[i].state], TYHAT[en[i].type], hop, 0);  // shirt = state, cap = type
+            if (en[i].state==E_SUSPECT) print("?", x-1, y-13, CLR_YELLOW);                    // investigating
+            else if (en[i].state>=E_HUNT && en[i].state<=E_ENGAGE) print("!", x-1, y-13, CLR_RED);  // alarmed
         } else if (en[i].everseen)                                            // last-seen ghost (your memory)
-            print(str("%c", TY[en[i].type].g), (int)en[i].lsx-2+sh, (int)en[i].lsy-3, CLR_DARKER_GREY);
+            draw_man((int)en[i].lsx+sh, (int)en[i].lsy, en[i].aim, CLR_DARKER_GREY, -1, 0, 1);
     }
     // your vision ring + you (a blue ring keeps you findable in the chaos)
     if (!reveal && !pl.spectate) circ((int)pl.x+sh, (int)pl.y, VIS_R, CLR_DARK_GREY);
-    int px=(int)pl.x+sh, py=(int)pl.y;
-    circ(px,py,4, pl.sneak ? CLR_DARK_BLUE : CLR_BLUE);
-    circfill(px,py,2, pl.hp>0?CLR_WHITE:CLR_DARK_GREY);
-    line(px,py,(int)(pl.x+dx(8,pl.aim))+sh,(int)(pl.y+dy(8,pl.aim)),CLR_YELLOW);
+    int px=(int)pl.x+sh, py=(int)pl.y, phop=HOPS[((int)pl.bob)&3];
+    draw_man(px, py, pl.aim, pl.hp>0 ? (pl.sneak?CLR_DARK_BLUE:CLR_BLUE) : CLR_DARK_GREY, CLR_WHITE, phop, 0);
+    line(px, py-2-phop, (int)(pl.x+dx(8,pl.aim))+sh, (py-2-phop)+(int)dy(8,pl.aim), CLR_YELLOW);  // your aim line (longer, so "you" reads)
     if (pl.pinned > 0.3f) { rect(0,0,SCREEN_W,HUD_Y,CLR_RED); print("PINNED", px-11, py-15, blink(6)?CLR_RED:CLR_ORANGE); }
 
     // HUD
     rectfill(0,HUD_Y,SCREEN_W,SCREEN_H-HUD_Y,CLR_DARKER_BLUE);
     rect(4,HUD_Y+3,42,6,CLR_DARK_GREY); rectfill(5,HUD_Y+4,40*(pl.hp>0?pl.hp:0)/100,4,pl.hp>30?CLR_GREEN:CLR_RED);
-    print(str("HP %d", pl.hp>0?pl.hp:0), 50, HUD_Y+2, CLR_WHITE);
-    print(str("ammo %d", pl.mag), 96, HUD_Y+2, pl.mag?CLR_YELLOW:CLR_RED);
-    print(str("down %d/%d", kills, ecount), 150, HUD_Y+2, CLR_ORANGE);
-    if (pl.sneak) print("SNEAK", 206, HUD_Y+2, CLR_INDIGO);
-    print_right(pl.spectate?"SPECTATE":(pl.pinned>0.3f?"PINNED":(known?"SPOTTED":"hidden")), SCREEN_W-4, HUD_Y+2,
+    font(FONT_SMALL);                                                   // compact so the row never collides
+    print(str("HP %d", pl.hp>0?pl.hp:0), 50, HUD_Y+3, CLR_WHITE);
+    print(str("ammo %d", pl.mag), 80, HUD_Y+3, pl.mag?CLR_YELLOW:CLR_RED);
+    print(str("down %d/%d", kills, ecount), 120, HUD_Y+3, CLR_ORANGE);
+    if (pl.sneak) print("SNEAK", 162, HUD_Y+3, CLR_INDIGO);
+    print_right(pl.spectate?"SPECTATE":(pl.pinned>0.3f?"PINNED":(known?"SPOTTED":"hidden")), SCREEN_W-4, HUD_Y+3,
                 pl.pinned>0.3f?CLR_RED:(known?CLR_ORANGE:CLR_GREEN));
-    font(FONT_SMALL);
-    if (msg_t>0) print(msg, 4, HUD_Y+12, CLR_LIGHT_PEACH);
-    else print("WASD+Shift  L-click gun  R-click knife  O difficulty  H/L/V debug  TAB spectate  R reset", 4, HUD_Y+12, CLR_MEDIUM_GREY);
+    font(FONT_TINY);                                                    // controls line: tiny so it fits in one row
+    if (msg_t>0) print(msg, 4, HUD_Y+10, CLR_LIGHT_PEACH);
+    else print("WASD move  Shift sneak  LMB gun  RMB knife  O diff  HLV dbg  TAB spec  R reset", 4, HUD_Y+10, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 
     // ---- difficulty panel (O) — sim is paused; widgets are immediate-mode ui.h ----
