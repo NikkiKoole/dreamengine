@@ -1013,13 +1013,15 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       DRY reference (a dead/unwired effect). Baseline records the intrinsic per-effect state so
       `--quiet` flags only *regressions* (got worse / drifted >4 dB) — known extremes stay green.
       Stability gate, not a character gate (whether it SOUNDS good is still by ear). **Findings —
-      two real latent bugs at the extremes:** the **phaser** (fb 0.95, 8 stages) accumulates **−0.13
-      persistent DC** and the **echo** (fb 1.1 runaway) **−0.04** — both far past `dc-check`'s ~1e-4
-      clean tolerance. Consistent with the deliberate "no master DC blocker — every asymmetric/
-      feedback stage blocks its own" design ([dc-check.js header]): the phaser/echo feedback loops
-      are missing a DC blocker that only bites at high feedback. Fix = a one-pole DC blocker in those
-      two feedback paths (the `drive` effect already has one — `drv_dc_*`). Latent because real carts
-      use far lower feedback; the gate accepts it as baselined until fixed.
+      two real latent bugs at the extremes, both now FIXED:** the **phaser** (fb 0.95, 8 stages)
+      accumulated **−0.13 persistent DC** and the **echo** (fb 1.1 runaway) **−0.04** — both far past
+      `dc-check`'s ~1e-4 clean tolerance. Cause was exactly the failure mode `dc-check.js`'s header
+      warns about (no master DC blocker → every asymmetric/feedback stage must block its own): the
+      phaser allpass cascade and echo `tanh` loop pass/inject DC that high feedback accumulates
+      ~1/(1-fb)×. **Fixed** (a one-pole DC blocker, R=0.999 / ~7 Hz, on each feedback tap — the idiom
+      the `drive` effect already uses, `drv_dc_*`): phaser −0.13→−0.007, echo −0.04→+0.002, audio
+      untouched (corner is sub-sonic). Verified compile-gate + tripwire + dc/tune/level/fx all green,
+      build-all 390/390.
     - **Still open: effect STACKING.** `fx-check` fuzzes each effect ALONE; `fx_order()` chains them
       in any order on the master bus, each is tuned in isolation, and the limiter protects the ceiling
       but not the stability of two feedback effects in series. No coverage yet.

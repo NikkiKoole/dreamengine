@@ -23,17 +23,17 @@
     },
     {
       "fx": 2,
-      "peakDb": -0.08,
-      "rmsDb": -7.55,
-      "dc": -0.041,
-      "clipRatio": 0.002,
-      "sev": "bad"
+      "peakDb": -0.05,
+      "rmsDb": -8.05,
+      "dc": 0.0015,
+      "clipRatio": 0.003,
+      "sev": "ok"
     },
     {
       "fx": 3,
-      "peakDb": -2.2,
-      "rmsDb": -13.66,
-      "dc": -0.005,
+      "peakDb": -2.23,
+      "rmsDb": -14.68,
+      "dc": -0.0046,
       "clipRatio": 0,
       "sev": "ok"
     },
@@ -96,10 +96,10 @@
     {
       "fx": 11,
       "peakDb": 0,
-      "rmsDb": -1.98,
-      "dc": -0.1305,
-      "clipRatio": 0.431,
-      "sev": "bad"
+      "rmsDb": -1.55,
+      "dc": -0.0075,
+      "clipRatio": 0.501,
+      "sev": "warn"
     },
     {
       "fx": 12,

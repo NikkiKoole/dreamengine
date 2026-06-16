@@ -428,6 +428,7 @@ static float echo_time_target = 0.375f * SOUND_SAMPLE_RATE;   // default 375ms =
 static float echo_fb          = 0.35f;
 static float echo_tone_coef   = 0.0f;            // one-pole LP coefficient (set from tone; default in sound_init)
 static float echo_lp          = 0.0f;            // the loop filter's running state
+static float echo_dc_x1       = 0.0f, echo_dc_y1 = 0.0f;   // DC blocker on the feedback: tanh of an asymmetric tail injects DC that fb (up to 1.1) accumulates → a thump; ~7Hz HP corner, inaudible
 static bool  echo_used        = false;           // flips true on first echo API call, never back
 
 // ── delay INSERT (echo_insert) — an IN-LINE dry/wet delay, an honest reorderable pedal ──────────
@@ -1209,11 +1210,17 @@ static float phaser_stL[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // per-stage allp
 static float phaser_pvL[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // per-stage allpass input  (L)
 static float phaser_stR[SOUND_FX_BUSES][SOUND_PHASER_STAGES];  // … (R)
 static float phaser_pvR[SOUND_FX_BUSES][SOUND_PHASER_STAGES];
+static float phaser_dcx[SOUND_FX_BUSES][2], phaser_dcy[SOUND_FX_BUSES][2];  // DC blocker on the feedback tap (per channel): allpasses pass DC at unity, so fb (up to ±0.95) accumulates it ~1/(1-fb)× into a thump (fx-check found −0.13 at fb 0.95)
 static bool  phaser_used[SOUND_FX_BUSES];
 static bool  phaser_optical[SOUND_FX_BUSES];   // univibe(): drive the sweep with mod_optical instead of a sine
-static float phaser_chan(float in, float coeff, float fb, float mix, int stages, float *st, float *pv) {
+static float phaser_chan(float in, float coeff, float fb, float mix, int stages, float *st, float *pv, float *dcx, float *dcy) {
     float dry = in;
-    float pIn = in + st[stages - 1] * fb;
+    // DC blocker on the feedback tap: allpasses pass DC at unity, so the loop's DC gain is fb
+    // and a tiny DC seed accumulates ~1/(1-fb)× (≈20× at fb 0.95). HP it (R=0.999, ~7Hz) first.
+    float fbsig = st[stages - 1];
+    float fbhp  = fbsig - *dcx + 0.999f * (*dcy);
+    *dcx = fbsig; *dcy = fbhp;
+    float pIn = in + fbhp * fb;
     if (pIn > 1.5f) pIn = 1.5f; if (pIn < -1.5f) pIn = -1.5f;
     for (int s = 0; s < stages; s++) {
         float ap = coeff * (pIn - st[s]) + pv[s];
@@ -1231,8 +1238,8 @@ static void phaser_process(int b, float *mixL, float *mixR) {
     float coeff = 0.5f + lfo * phaser_depth[b] * 0.4f;   // navkit: cCenter 0.5 ± lfo·depth·cRange(0.4)
     int stages = phaser_stages[b];
     float fb = phaser_fb[b], mix = phaser_mix[b];
-    *mixL = phaser_chan(*mixL, coeff, fb, mix, stages, phaser_stL[b], phaser_pvL[b]);
-    *mixR = phaser_chan(*mixR, coeff, fb, mix, stages, phaser_stR[b], phaser_pvR[b]);
+    *mixL = phaser_chan(*mixL, coeff, fb, mix, stages, phaser_stL[b], phaser_pvL[b], &phaser_dcx[b][0], &phaser_dcy[b][0]);
+    *mixR = phaser_chan(*mixR, coeff, fb, mix, stages, phaser_stR[b], phaser_pvR[b], &phaser_dcx[b][1], &phaser_dcy[b][1]);
 }
 static void fx_set_phaser(int b, float rate, float depth, float feedback, float mix, int stages) {
     if (rate  < 0.0f)  rate  = 0.0f;  if (rate  > 10.0f) rate  = 10.0f;
@@ -5470,11 +5477,16 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             float tap = echo_buf[r0] + (echo_buf[r1] - echo_buf[r0]) * fr;
             // the loop filter: every repeat passes through it once → darker each pass
             echo_lp += (tap - echo_lp) * echo_tone_coef;
+            // DC blocker on the loop: a tanh of an asymmetric tail injects DC, and the
+            // feedback (up to 1.1) accumulates it into a steady thump (fx-check found −0.04
+            // at fb 1.1). One-pole HP (R=0.999, ~7Hz) on the wet kills the DC, inaudibly.
+            float echo_wet = echo_lp - echo_dc_x1 + 0.999f * echo_dc_y1;
+            echo_dc_x1 = echo_lp; echo_dc_y1 = echo_wet;
             // write input + feedback through a tanh: feedback >1.0 saturates into a
             // self-oscillation plateau instead of blowing up — the tape echo behaviour
-            echo_buf[echo_widx] = tanhf(echo_in + echo_lp * echo_fb);
+            echo_buf[echo_widx] = tanhf(echo_in + echo_wet * echo_fb);
             if (++echo_widx >= SOUND_ECHO_MAX) echo_widx = 0;
-            mixL += echo_lp; mixR += echo_lp;   // echo is a MONO bus in v1 — wet adds to both channels equally (centered)
+            mixL += echo_wet; mixR += echo_wet;   // echo is a MONO bus in v1 — wet adds to both channels equally (centered)
         }
 
         // SEND RETURN 2 — THE reverb bus (dormant until the first reverb API call)

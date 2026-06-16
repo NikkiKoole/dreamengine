@@ -1868,15 +1868,19 @@ up with the §18 note that "whatever is off about BOWED, it is not pitch" — pa
    wobble averages out. Baseline records the intrinsic state; `--quiet` flags only regressions
    (got-worse / >4 dB drift). It's a STABILITY gate, not a character gate — beauty is still by ear.
 
-   **First-run findings — two real latent bugs at the feedback extremes:** the **phaser** (fb 0.95,
-   8 stages) carries **−0.13 persistent DC**, the **echo** (fb 1.1) **−0.04** — both far past the
-   ~1e-4 `dc-check` clean tolerance, both confirmed persistent (not wobble). This is exactly the
-   failure mode `dc-check.js`'s header warns about: there is deliberately no master DC blocker, so
-   "every asymmetric / feedback stage must block its own." The phaser/echo feedback loops are missing
-   that blocker; it only bites at high feedback (the `drive` effect already has one, `drv_dc_*`). Fix
-   = a one-pole DC blocker in those two loops. Latent (real carts use lower feedback), baselined until
-   fixed. **Still untested: effect STACKING** — `fx_order()` chains effects any order on the master
-   bus; each is fuzzed alone; the limiter protects the ceiling, not two feedback effects in series.
+   **First-run findings — two real latent bugs at the feedback extremes, both now FIXED:** the
+   **phaser** (fb 0.95, 8 stages) carried **−0.13 persistent DC**, the **echo** (fb 1.1) **−0.04** —
+   both far past the ~1e-4 `dc-check` clean tolerance, both confirmed persistent (not wobble). Exactly
+   the failure mode `dc-check.js`'s header warns about: there is deliberately no master DC blocker, so
+   "every asymmetric / feedback stage must block its own," and these two forgot. The phaser allpass
+   cascade passes DC at unity (loop DC gain = fb), and the echo `tanh` injects DC; high feedback
+   accumulates it ~1/(1-fb)×. **Fix:** a one-pole DC blocker (R=0.999, ~7 Hz corner — sub-sonic, audio
+   untouched) on each feedback tap, the same idiom the `drive` effect already uses (`drv_dc_*`).
+   Result: phaser −0.13→−0.007, echo −0.04→+0.002; the phaser now reads only "limiter pinned" at the
+   extreme (the bounded self-oscillation, expected). Verified: compile-gate + 900-frame tripwire +
+   dc/tune/level/fx-check all green, build-all 390/390. **Still untested: effect STACKING** —
+   `fx_order()` chains effects any order on the master bus; each is fuzzed alone; the limiter protects
+   the ceiling, not two feedback effects in series.
 2. **The web/wasm audio path is verified only by ear.** Every gate above runs the NATIVE build.
    69 carts are "engine-stale" on the web, but the deeper gap is that nothing checks whether the
    emscripten / AudioWorklet build emits the SAME SAMPLES as native (sample rate, worklet buffering,
