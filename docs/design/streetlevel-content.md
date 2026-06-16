@@ -107,12 +107,16 @@ reach. The selector (the C tables) stays per-cart; the atoms are the universal u
 
 ## Build plan (lens-first, same playbook as L2/L3)
 
-1. **`scatter` atom — forest/meadow** *(chosen first slice, 2026-06-16)*. Highest variety-per-effort,
-   covers the rural land that's currently flat green, and proves the jittered-grid determinism rule
-   end-to-end. Build in a sandbox lens (`lotfill` cart, or a `procplaces` section) before wiring to
-   the real partition.
-2. **`rows` atom — corn/fields** — `scatter` with a lattice instead of jitter; reads as countryside
-   immediately. Needs the coarse **rural parcel** partition (Voronoi/grid + hedgerow borders).
+1. ✅ **`scatter` atom — forest/meadow** *(built 2026-06-16)*. Highest variety-per-effort, covers the
+   rural land that's currently flat green, and proves the jittered-grid determinism rule end-to-end.
+   Lives in the `lotfill` workbench.
+2. ✅ **`rows` atom — fields/corn** *(built 2026-06-16)*. The first **bounded-fill** atom: a coarse
+   square **parcel grid** (the rural partition's MVP, square not Voronoi), each cell planted with rows
+   of one crop (plough/corn/wheat/vineyard, per-parcel hash → crop + orientation + spacing) and a
+   hedgerow border. `rows_fill(rect, hash, show[])` fills ONE parcel and reads no globals — the
+   reusable unit; `rows_draw` just tiles it. *Refinements left:* field-**size** variation (uniform
+   grid now), Voronoi/irregular parcels, dirt access tracks, and gating fields to open land via the
+   selector (today every cell is a field — partition is the world driver's job, not the atom's).
 3. **`footprint` + selector — buildings** — generalise the RES `building_at` prototype via the
    C-table selector (house/shop/big-box from one atom). This is the GTA street the car drives.
 4. **`pave` / `stamp`** — parking, plazas, the football field, set-pieces.

@@ -3,24 +3,28 @@
 #include <math.h>
 
 // ============================================================================
-// LOTFILL — the street-level CONTENT language, slice 1: the `scatter` atom.
+// LOTFILL — the street-level CONTENT language + its WORKBENCH.
 //
-//   ◄ ► ▲ ▼ / WASD   pan        Z / X (or wheel)  zoom
-//   R                new seed   TAB  field overlay (tint by cover kind)
+//   ◄ ► ▲ ▼ / WASD   pan        Z / X (or wheel)  zoom        R  new seed
+//   TAB  switch atom  1/2/3  peel layers   G  debug grid   O  field overlay
 //
 // ── what this is ─────────────────────────────────────────────────────────────
 // roadnet/procplaces build the PARTITION (roads → blocks → lots, + the rural land
 // between cities). This cart fills it. Design: docs/design/streetlevel-content.md.
 // The thesis there: every street-level feature is a BOUNDED REGION + a SEEDED
 // FILL-RULE, expressed as a pure fn of (region, hash, zone) that answers draw()
-// AND the collision/query call from the SAME code.
+// AND the collision/query call from the SAME code. Each fill-rule is an ATOM; this
+// cart is the workbench where each atom is a TAB you inspect in isolation, and the
+// SAME atom fn will run in the future world cart (driver changes, atom doesn't).
 //
-// Slice 1 is the `scatter` ATOM — the CONTINUOUS-COVER fill-mode (no parcel, no
-// identity): forest, meadow, scrub. We DON'T enumerate trees; cover_at(x,y) is a
-// field, and the renderer scatters instances per visible JITTERED-GRID cell. Each
-// instance is a pure fn of its own scatter cell + seed (the node-lattice lesson:
-// lattice instances are local functions; grown sets tear at chunk borders). So the
-// forest is infinite, seam-safe, and byte-identical for a given seed.
+// ── the atoms (TAB to switch) ─────────────────────────────────────────────────
+// • scatter — CONTINUOUS-COVER fill-mode (no parcel/identity): forest, meadow. We
+//   DON'T enumerate trees; cover_at(x,y) is a field, and the renderer scatters
+//   instances per visible JITTERED-GRID cell, each a pure fn of its own cell + seed
+//   (lattice instances are local; grown sets tear at chunk borders). Infinite,
+//   seam-safe, byte-identical for a seed.
+// • rows    — BOUNDED fill-mode: a coarse parcel grid of fields, each planted with
+//   rows of a crop + a hedgerow. rows_fill() fills ONE region; the driver tiles it.
 //
 // Two field layers + two scatter layers make it "interesting" with no special cases:
 //   • biome field (warped fbm) → cover KIND (bare/grass/meadow/forest)
@@ -148,7 +152,9 @@ static int flower_col(int cx, int cy) {                        // one colour per
 static bool layer_on[MAX_LAYERS] = { true, true, true, true };  // 1/2/3 peel each layer
 static bool dbg = false;           // G: draw the lattice grid + cull (reject) markers
 static int  ovl = 0;                // O: field overlay — 0 off / 1 cover-kind / 2 density
-static int  n_tree, n_ground, n_reject;   // tallied per draw → HUD readout
+static int  n_tree, n_ground, n_reject;   // scatter's tallies
+static int  cnt[3];                        // generic per-atom live tallies → HUD
+static const char *cnt_lbl[3];             // their labels (each atom sets these in draw)
 
 static int dens_ramp(float d) {     // density field as a heat colour (low→high)
     return d < 0.25f ? CLR_DARK_BLUE : d < 0.5f ? CLR_INDIGO : d < 0.75f ? CLR_ORANGE : CLR_RED;
@@ -230,6 +236,10 @@ static void scat_draw(float cam_x, float cam_y, float zoom) {
                 else if (dbg && prob > 0.0f) { circ(wx, wy, 1, CLR_DARK_RED); n_reject++; }  // culled candidate
             }
     }
+
+    cnt[0] = n_tree;   cnt_lbl[0] = "trees";
+    cnt[1] = n_ground; cnt_lbl[1] = "grnd";
+    cnt[2] = n_reject; cnt_lbl[2] = dbg ? "cull" : NULL;
 }
 
 static const char *scat_probe(float x, float y) {
@@ -239,8 +249,99 @@ static const char *scat_probe(float x, float y) {
     return buf;
 }
 
+// ── ATOM: rows ───────────────────────────────────────────────────────────────
+// The first BOUNDED-fill atom. Where scatter answers an infinite cover field, rows
+// fills a bounded REGION: a coarse PARCEL grid (rural fields), each cell planted
+// with rows of one crop + a hedgerow border. rows_fill() is the reusable unit (a
+// pure fn of rect + hash + which layers to draw — no globals); rows_draw just tiles
+// it. The future world cart calls the SAME rows_fill on the parcels its selector
+// marks as farmland. Layers: 0 soil · 1 crop (the rows) · 2 border (hedgerows).
+#define FIELD_P 60         // parcel pitch (world px) — one field per cell
+enum { RL_SOIL, RL_CROP, RL_BORDER };
+enum { CR_PLOUGH, CR_CORN, CR_WHEAT, CR_VINE, CR_N };
+static const char *CR_NAME[CR_N] = { "plough", "corn", "wheat", "vineyard" };
+static const int   CR_SOIL[CR_N] = { CLR_BROWN, CLR_DARK_BROWN, CLR_ORANGE,      CLR_DARK_GREEN };
+static const int   CR_ROW [CR_N] = { CLR_DARK_BROWN, CLR_MEDIUM_GREEN, CLR_YELLOW, CLR_BLUE_GREEN };
+static const int   CR_SP  [CR_N] = { 5, 4, 3, 8 };   // row spacing (world px)
+
+typedef struct { int x, y, w, h; } Rect;             // a bounded region (world px)
+
+// fill ONE parcel — the reusable atom. `show[]` = which layers to draw (the driver
+// folds layer-peel + LOD into it, so this fn stays a pure fn of its inputs).
+static void rows_fill(Rect r, unsigned h, const bool show[3]) {
+    int crop = h % CR_N;
+    bool vert = (h >> 4) & 1;             // row orientation
+    int sp = CR_SP[crop];
+    int m = 3;                            // hedgerow margin
+    int ix = r.x + m, iy = r.y + m, iw = r.w - 2 * m, ih = r.h - 2 * m;
+    if (iw < 2 || ih < 2) return;
+
+    if (show[RL_SOIL]) rectfill(r.x, r.y, r.w, r.h, CR_SOIL[crop]);
+
+    if (show[RL_CROP]) {
+        if (vert) {
+            for (int x = ix + (int)(h % sp); x < ix + iw; x += sp)
+                if (crop == CR_VINE) for (int y = iy; y < iy + ih; y += 4) pset(x, y, CR_ROW[crop]);
+                else line(x, iy, x, iy + ih - 1, CR_ROW[crop]);
+        } else {
+            for (int y = iy + (int)(h % sp); y < iy + ih; y += sp)
+                if (crop == CR_VINE) for (int x = ix; x < ix + iw; x += 4) pset(x, y, CR_ROW[crop]);
+                else line(ix, y, ix + iw - 1, y, CR_ROW[crop]);
+        }
+    }
+
+    if (show[RL_BORDER]) {                // hedgerow: bushy 1px dark/medium-green ring
+        for (int x = r.x; x < r.x + r.w; x++) {
+            int c = ((x + r.y) & 1) ? CLR_DARK_GREEN : CLR_MEDIUM_GREEN;
+            pset(x, r.y, c); pset(x, r.y + r.h - 1, c);
+        }
+        for (int y = r.y; y < r.y + r.h; y++) {
+            int c = ((r.x + y) & 1) ? CLR_DARK_GREEN : CLR_MEDIUM_GREEN;
+            pset(r.x, y, c); pset(r.x + r.w - 1, y, c);
+        }
+    }
+}
+
+static void rows_draw(float cam_x, float cam_y, float zoom) {
+    if (zoom < 0.01f) zoom = 0.01f;
+    float cx = cam_x + SCREEN_W / 2.0f, cy = cam_y + SCREEN_H / 2.0f;
+    float hwv = (SCREEN_W / 2.0f) / zoom, hhv = (SCREEN_H / 2.0f) / zoom;
+    int Lpx = (int)(cx - hwv) - FIELD_P, Rpx = (int)(cx + hwv) + FIELD_P;
+    int Tpx = (int)(cy - hhv) - FIELD_P, Bpx = (int)(cy + hhv) + FIELD_P;
+
+    bool show[3] = { layer_on[RL_SOIL],
+                     layer_on[RL_CROP] && zoom >= 0.55f,   // LOD: rows only when close
+                     layer_on[RL_BORDER] };
+    int f0x = ifloordiv(Lpx, FIELD_P), f1x = ifloordiv(Rpx, FIELD_P);
+    int f0y = ifloordiv(Tpx, FIELD_P), f1y = ifloordiv(Bpx, FIELD_P);
+    int nf = 0;
+    for (int fy = f0y; fy <= f1y; fy++)
+        for (int fx = f0x; fx <= f1x; fx++) {
+            unsigned h = hash2(fx + lf_seed * 257, fy * 7 + 13);
+            Rect r = { fx * FIELD_P, fy * FIELD_P, FIELD_P, FIELD_P };
+            rows_fill(r, h, show);
+            nf++;
+        }
+
+    if (dbg) {                            // show the parcel partition + the active field
+        for (int fx = f0x; fx <= f1x + 1; fx++) line(fx * FIELD_P, Tpx, fx * FIELD_P, Bpx, CLR_DARK_RED);
+        for (int fy = f0y; fy <= f1y + 1; fy++) line(Lpx, fy * FIELD_P, Rpx, fy * FIELD_P, CLR_DARK_RED);
+        int afx = ifloordiv((int)cx, FIELD_P), afy = ifloordiv((int)cy, FIELD_P);
+        rect(afx * FIELD_P, afy * FIELD_P, FIELD_P, FIELD_P, CLR_YELLOW);
+    }
+    cnt[0] = nf; cnt_lbl[0] = "fields"; cnt_lbl[1] = NULL; cnt_lbl[2] = NULL;
+}
+
+static const char *rows_probe(float x, float y) {
+    static char buf[40];
+    int fx = ifloordiv((int)x, FIELD_P), fy = ifloordiv((int)y, FIELD_P);
+    unsigned h = hash2(fx + lf_seed * 257, fy * 7 + 13);
+    snprintf(buf, sizeof buf, "field: %s  rows %s", CR_NAME[h % CR_N], ((h >> 4) & 1) ? "V" : "H");
+    return buf;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
-//  THE ATOM REGISTRY — each atom is a tab; `rows`/`footprint` drop in here next
+//  THE ATOM REGISTRY — each atom is a tab; `footprint` drops in here next
 // ════════════════════════════════════════════════════════════════════════════
 typedef struct {
     const char *name;
@@ -252,6 +353,7 @@ typedef struct {
 
 static Atom atoms[] = {
     { "SCATTER", 3, { "base", "ground", "canopy" }, scat_draw, scat_probe },
+    { "ROWS",    3, { "soil", "crop",   "border" }, rows_draw, rows_probe },
 };
 #define N_ATOMS ((int)(sizeof atoms / sizeof atoms[0]))
 
@@ -327,9 +429,12 @@ void draw(void) {
         snprintf(buf, sizeof buf, "%d:%s ", i + 1, atoms[cur].layer[i]);
         lx = print(buf, lx, 11, layer_on[i] ? CLR_GREEN : CLR_DARK_GREY);
     }
-    if (dbg) snprintf(buf, sizeof buf, "   trees:%d grnd:%d culled:%d", n_tree, n_ground, n_reject);
-    else     snprintf(buf, sizeof buf, "   trees:%d grnd:%d", n_tree, n_ground);
-    print(buf, lx, 11, CLR_LIGHT_GREY);
+    lx += 6;
+    for (int i = 0; i < 3; i++)
+        if (cnt_lbl[i]) {
+            snprintf(buf, sizeof buf, "%s:%d ", cnt_lbl[i], cnt[i]);
+            lx = print(buf, lx, 11, CLR_LIGHT_GREY);
+        }
 
     // bottom — probe + controls
     rectfill(0, SCREEN_H - 16, SCREEN_W, 16, CLR_BLACK);
