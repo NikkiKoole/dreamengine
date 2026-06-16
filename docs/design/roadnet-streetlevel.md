@@ -75,7 +75,9 @@ field-sampled loupe was the bottleneck, not the zoom number):
 
 Related: [`roadnet.md`](roadnet.md) (L0–L2: the map + district street level),
 [`roadnet-handoff.md`](roadnet-handoff.md) (where the work stands),
-[`sloop.md`](sloop.md) (the car that will drive L3).
+[`sloop.md`](sloop.md) (the car that will drive L3),
+[`streetlevel-content.md`](streetlevel-content.md) (★ the fill language that populates this
+partition — footprints/parks/the land between — built in cart `lotfill.c`).
 
 ## The gap (why this level has to exist)
 

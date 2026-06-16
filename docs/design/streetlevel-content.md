@@ -6,6 +6,17 @@
 > them — *and* the land outside the cities (forest / meadow / field / corn) the road docs never touch.
 > Built on the same seams as everything else: pure-fn-of-cell, screen==collision, LOD-is-a-draw-gate.
 
+**Contents.** [The one idea](#the-one-idea) · [Atoms vs biomes vs recipes](#atoms-vs-biomes-vs-recipes--the-distinction-that-decides-everything)
+(incl. **[the kinds at a glance](#the-kinds-at-a-glance--whats-an-atom-and-whats-the-rest)** — what's an atom and what isn't — and
+[flavors](#flavors--one-atom-many-parameter-sets)) · [Beyond fill: families + the pipeline](#beyond-fill-the-other-atom-families-and-the-build-pipeline-proposed)
+· [The wilds (process atoms, fertility/taint, ruins)](#the-wilds--process-atoms-fertilitytaint-and-ruins)
+· [Connectivity (read seams, not generation)](#connectivity-read-seams-not-generation) · [The settlement spectrum (city)](#the-settlement-spectrum-city-scale--integration-spec-vs-buildable-now)
+· [Two fill-modes](#two-fill-modes-seeing-them-as-different-keeps-each-simple) · [The three layers](#the-three-layers-mirrors-the-interchange-dsl-exactly)
+· [The seams](#the-seams-load-bearing--restated-for-content) · [Workbench vs world](#the-workbench-vs-the-world-reusability--built-2026-06-16)
+· [Build plan](#build-plan-lens-first-same-playbook-as-l2l3) · [Open decisions](#open-decisions-for-build-time)
+>
+> *Built so far (cart `lotfill.c`): 6 fill atoms — `scatter` `rows` `footprint` `border` `pave` `stamp` (+ `subdivide`, the `world` driver, local fields). Everything else here is documented-not-built.*
+
 ## The one idea
 
 > **Everything street-level is a *bounded region* + a *seeded fill-rule*, expressed as a pure

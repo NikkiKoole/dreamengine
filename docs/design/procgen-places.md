@@ -15,6 +15,8 @@ field_col). This doc concerns **generator 1 (roads & cities)** only; generator 2
 
 Related: [`sloop.md`](sloop.md) — the eventual consumer (its world is meant to
 ride this road field; `road_at()` is the query seam).
+[`streetlevel-content.md`](streetlevel-content.md) — the fill language that this generator's
+land-use × intensity fields feed (its `density`/`zone` are these two fields, upstream of lotfill's atoms).
 
 ## The problem
 

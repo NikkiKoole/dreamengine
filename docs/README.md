@@ -57,6 +57,7 @@ docs/
 │   ├── roadnet.md  IN PROGRESS (cart roadnet.c): the infinite/deterministic SPLINE road world that breaks procgen-places' "arced roads" wall (node-lattice splines are local) — ranked hub/town hierarchy, terrain-aware bend/bridge, + the L2 street level in the magnifier (blocks/lots, grid aligned to arterials, class-aware carved roads, outskirts gradient + Voronoi fields) exposed via the road_at() query seam
 │   ├── roadnet-handoff.md  ★ START HERE for roadnet — orientation: what's built, the LOD stack (L0 map → L2 street → L3 to come), commit trail, key invariants, and the recommended NEXT-TIME order
 │   ├── roadnet-streetlevel.md  DESIGN SEED: L3, the on-the-street level (the missing access-street tier + building footprints, where sloop will drive) — the seams that keep it deterministic + the deeper "BLOCK" loupe harness; has a "starting point for next session" note
+│   ├── streetlevel-content.md  ★ the FILL LANGUAGE that populates the partition (and the land/wilds outside cities) — built in cart lotfill.c. The taxonomy ("kinds at a glance": atoms vs biomes/recipes/flavors/fields/modifiers/process/composition + a litmus test), the phased PIPELINE (fields→partition→makers→modifiers), the 7 built atoms + their flavors, the proposed set (flow/process atoms, fertility/taint fields, ruins = collapse→overgrow), connectivity = READ-seams-not-generation (road_at stub → roadnet swap), and the city integration-spec vs buildable-now split
 │   ├── roadnet2-plan.md  the vector-native rebuild plan (one graph, one road_at query); Part B = hierarchy + INTERCHANGES (the junction matrix), which spun off the road-geometry thread below
 │   ├── roadnet2-handoff.md  roadnet2 cart state / orientation
 │   ├── road-geometry-handoff.md  ★ START HERE for interchange/junction GEOMETRY — master map of the effort: carts interchange → rampkit → roadlab, what we're solving, the research, what failed, how to continue
@@ -95,7 +96,10 @@ docs/
 │   ├── debug-harness.md          deterministic record/replay/script + trace + live on-demand inspect + WAV capture/analysis + UI audit, off-screen text/overlap/hidden-panel finder (tools/play.js, tools/wav-analyze.js, tools/ui-audit.js)
 │   ├── profiler.md               one-click CPU profiler (⏱ profile button): hot functions + call paths, frame budget, draw-call counts
 │   ├── live-coding.md            how-to for the live (libtcc) run mode: edit-while-running, hot reload, STATE/S state that survives reloads
-│   └── game-music.md             generative soundtrack recipes: step clock, chord brain, voice leading, time feel, seeds, brain catalog, radio.h; worked example = bossa.c (station candidates live in design/future-stations.md)
+│   ├── game-music.md             generative soundtrack recipes: step clock, chord brain, voice leading, time feel, seeds, brain catalog, radio.h; worked example = bossa.c (station candidates live in design/future-stations.md)
+│   └── voice.md                  Nikki's writing voice (synthesized from mipolai.com) for hand-written editorial prose — first customer = the history page's editorial seam
+├── history-spine.json hand-authored STRUCTURE for the generated history page (eras, subsystems, importance tiers, marked days, editorial seam); dates/commits/ADRs/carts are derived from git
+├── history.html       GENERATED project-history timeline (tools/build-history.js) — a neo-brutalist magazine read of how the engine grew; opened via the Docs tab's "★ history" item. Re-run the generator after editing the spine. v1 = week 1
 └── archive/           superseded / done notes, kept for history
 ```
 
