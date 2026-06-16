@@ -38,6 +38,18 @@ static void bez(float ax,float ay,float c1x,float c1y,float c2x,float c2y,float 
     *ox = w0*ax+w1*c1x+w2*c2x+w3*bx;  *oy = w0*ay+w1*c1y+w2*c2y+w3*by;
 }
 
+// sample a loop arc into xs/ys; returns the count
+static int gen_loop(float cx,float cy,float r,float a0,float sweep,float*xs,float*ys){
+    int n=0; for (int i=0;i<=28;i++){ float a=a0+sweep*(float)i/28; xs[n]=cx+ux(a)*r; ys[n]=cy+uy(a)*r; n++; } return n;
+}
+// closest approach between two sampled curves (point-to-point; dense enough for this)
+static float min_gap(const float*ax,const float*ay,int an,const float*bx,const float*by,int bn){
+    float m=1e9f;
+    for (int i=0;i<an;i++) for (int j=0;j<bn;j++){
+        float d=distance((int)ax[i],(int)ay[i],(int)bx[j],(int)by[j]); if (d<m) m=d; }
+    return m;
+}
+
 // ── PORT: where a ramp attaches — a point + the tangent direction (deg) traffic flows there ──
 typedef struct { float x,y,dir; const char*name; } Port;
 
@@ -83,6 +95,8 @@ static void ramp(Port a, Port b, int type, int cas, int cen){
 // ── state ──
 static Port ports[MAXPTS]; static int nport=0;
 static int selA=0, selB=2, ptype=R_LOOP;
+static int   mode=0;        // 0 = ports/ramp demo, 1 = nested-loops SOLVE  (N toggles)
+static float nestgap=7.f;   // target clearance between the two nested loops (px)
 
 static void setup(void){
     if (nport) return;
@@ -95,16 +109,53 @@ static void setup(void){
 
 void update(void){
     setup();
-    if (keyp(KEY_LEFT))  selA=(selA+nport-1)%nport;
-    if (keyp(KEY_RIGHT)) selA=(selA+1)%nport;
-    if (keyp(KEY_DOWN))  selB=(selB+nport-1)%nport;
-    if (keyp(KEY_UP))    selB=(selB+1)%nport;
-    if (keyp(KEY_SPACE)) ptype=(ptype+1)%R_COUNT;
-    if (keyp('F'))       drive=-drive;
+    if (keyp('N')) mode = !mode;
+    if (mode==0){
+        if (keyp(KEY_LEFT))  selA=(selA+nport-1)%nport;
+        if (keyp(KEY_RIGHT)) selA=(selA+1)%nport;
+        if (keyp(KEY_DOWN))  selB=(selB+nport-1)%nport;
+        if (keyp(KEY_UP))    selB=(selB+1)%nport;
+        if (keyp(KEY_SPACE)) ptype=(ptype+1)%R_COUNT;
+        if (keyp('F'))       drive=-drive;
+    } else {
+        if (keyp(KEY_LEFT)||keyp(KEY_DOWN))  nestgap-=1;
+        if (keyp(KEY_RIGHT)||keyp(KEY_UP))   nestgap+=1;
+        if (nestgap<1) nestgap=1;
+    }
+}
+
+// nested-loops SOLVE: two loops with DIFFERENT centres (like the real trumpet pair, so it's NOT the
+// trivial concentric r_in = r_out - gap case). Relax the inner loop's radius until its closest approach
+// to the outer loop equals the target gap — a real 1-parameter relaxation. Shows measured gap + iters.
+static void draw_nest(void){
+    cls(CLR_DARK_GREEN);
+    int CX=SCREEN_W/2, CY=SCREEN_H/2;
+    rectfill(0, CY-10, SCREEN_W, 20, CLR_DARKER_GREY);          // a road for context
+    float Cox=CX-22, Coy=CY-34, Ro=46, a0=55, sweep=300;       // OUTER loop (fixed)
+    float Cix=CX+4,  Ciy=CY-16;                                 // INNER loop centre — offset toward the trunk
+    float ox[40],oy[40],ix[40],iy[40];
+    int on=gen_loop(Cox,Coy,Ro,a0,sweep,ox,oy);
+    float Ri=16; int it=0; float g=0; int in=gen_loop(Cix,Ciy,Ri,a0,sweep,ix,iy);
+    for (; it<40; it++){                                        // ← the solver
+        in=gen_loop(Cix,Ciy,Ri,a0,sweep,ix,iy);
+        g=min_gap(ox,oy,on,ix,iy,in);
+        float d=g-nestgap, ad=d<0?-d:d;
+        if (ad<0.4f) break;
+        Ri += 0.5f*d;                                          // gap too big → grow inner toward outer
+        if (Ri<6) Ri=6;  if (Ri>Ro-2) Ri=Ro-2;
+    }
+    ribbon(ox,oy,on, 4, CLR_BROWNISH_BLACK, CLR_ORANGE);       // outer
+    ribbon(ix,iy,in, 4, CLR_BROWNISH_BLACK, CLR_BLUE);         // inner (solved)
+    char b[80];
+    snprintf(b,sizeof b,"NEST SOLVE  target gap:%d  measured:%.1f  inner R:%.0f  iters:%d",
+             (int)nestgap, g, Ri, it);
+    print(b,4,4,CLR_WHITE);
+    print("</> or ^v adjust gap     N: back to ports", 4, SCREEN_H-9, CLR_LIGHT_GREY);
 }
 
 void draw(void){
     setup();
+    if (mode==1){ draw_nest(); return; }
     cls(CLR_DARK_GREEN);
     int CX=SCREEN_W/2, CY=SCREEN_H/2;
     // context roads (abstract): a horizontal road + a vertical stub up from the centre
