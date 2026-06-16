@@ -14,9 +14,12 @@
 //   MILESTONE 3: MULTI-LANE ramps via lateral offsets of the one reference line (OpenDRIVE s/t shift).
 //                Lanes = concentric offset polylines ⇒ constant gap ⇒ they NEST FOR FREE on arc ref-lines
 //                — the empirical test of "do arcs nest without a solver?" (answer: yes). 1-4 set lanes.
-//   Controls: an on-screen ui.h toolbar (A/B port pickers, R/Ls/lanes steppers, clothoid toggle) — every
-//   control is a clickable button. Keyboard still works: ←/→ A · ↑/↓ B · [ ] radius · ,/. Ls · C · 1-4 lanes.
-// Next: lane add/drop tapers (a lane peeling off at a diverge — OpenDRIVE width cubic); then port into roadnet2.
+//   MILESTONE 4: lane ADD/DROP via width(s) (OpenDRIVE lane-width model) — outer lanes taper full→0 over
+//                the ramp's tail, staggered, so a fat ramp FANS DOWN to one lane (a real diverge + gore)
+//                instead of a peeling slab. `taper` 0-100% scrubs it; t cycles. taper=0 ⇒ M3 parallel lanes.
+//   Controls: an on-screen ui.h toolbar — every control a clickable button. Keyboard: ←/→ A · ↑/↓ B ·
+//             [ ] radius · ,/. Ls · C clothoid · 1-4 lanes · t taper.
+// Next: port roadlab into roadnet2 (bake the constants, call it as the junction drawer).
 
 #define DRIVE  1     // +1 = drive on the right — the single source of truth for handedness
 #define LANEW  7     // one lane width (px)
@@ -48,15 +51,48 @@ static void fill_strip(const float*lx,const float*ly,const float*rx,const float*
 static void stroke_poly(const float*xs,const float*ys,int n,int col){
     for (int i=0;i<n-1;i++) line((int)xs[i],(int)ys[i],(int)xs[i+1],(int)ys[i+1],col);
 }
-// draw an nl-lane ramp from a reference centreline: casing + asphalt fill + white interior dividers.
-// The dividers staying parallel at constant gap IS the nesting proof — concentric offsets, no solver.
-static void draw_multilane(const float*xs,const float*ys,int n,int nl){
-    float HW=nl*LANEW*0.5f, lx[128],ly[128],rx[128],ry[128];
-    offset_poly(xs,ys,n,+(HW+1),lx,ly); offset_poly(xs,ys,n,-(HW+1),rx,ry);
-    fill_strip(lx,ly,rx,ry,n,CLR_BROWNISH_BLACK);                         // casing
-    offset_poly(xs,ys,n,+HW,lx,ly);     offset_poly(xs,ys,n,-HW,rx,ry);
-    fill_strip(lx,ly,rx,ry,n,CLR_DARK_GREY);                             // asphalt surface
-    for (int b=1;b<nl;b++){ float off=-HW+b*LANEW; offset_poly(xs,ys,n,off,lx,ly); stroke_poly(lx,ly,n,CLR_WHITE); }
+// offset where the lateral distance VARIES per sample — d[i] px along the left normal (for width tapers)
+static void offset_var(const float *xs,const float *ys,int n,const float *d,float *ox,float *oy){
+    for (int i=0;i<n;i++){
+        float ax,ay;
+        if      (i==0)   { ax=xs[1]-xs[0];       ay=ys[1]-ys[0]; }
+        else if (i==n-1) { ax=xs[n-1]-xs[n-2];   ay=ys[n-1]-ys[n-2]; }
+        else             { ax=xs[i+1]-xs[i-1];   ay=ys[i+1]-ys[i-1]; }
+        float L=sqrtf(ax*ax+ay*ay); if(L<0.001f)L=1;
+        float nx=-ay/L, ny=ax/L;
+        ox[i]=xs[i]+nx*d[i]; oy[i]=ys[i]+ny*d[i];
+    }
+}
+static float smoothstep01(float t){ if(t<0)t=0; if(t>1)t=1; return t*t*(3-2*t); }
+
+// ── M4: LANE ADD/DROP via width(s) (OpenDRIVE lane-width model). Each lane has a width that varies along
+//    the ramp. Outer lanes DROP full→0 over the last `taperFrac` of the ramp, STAGGERED (outermost first)
+//    so a fat ramp FANS DOWN to one lane — a real off-ramp diverge with its gore — instead of a slab. The
+//    width profile is a smooth cubic (smoothstep). taperFrac=0 ⇒ constant width (the M3 parallel lanes). ──
+static void draw_multilane(const float*xs,const float*ys,int n,int nl,float taperFrac){
+    int keep=1, nd=nl-keep;                              // 1 lane survives; outer nd lanes taper away
+    float HW=nl*LANEW*0.5f;
+    static float bnd[8][128];                            // per-sample offset of each lane boundary 0..nl
+    for (int i=0;i<n;i++){
+        float f=(n>1)?(float)i/(n-1):0;
+        float u=(f-(1.f-taperFrac))/(taperFrac>0.001f?taperFrac:1.f);   // 0 at taper start … 1 at ramp end
+        float off=-HW; bnd[0][i]=off;
+        for (int k=0;k<nl;k++){
+            float w=LANEW;
+            if (k>=keep && nd>0 && taperFrac>0.001f){
+                int r=(nl-1)-k;                          // 0 = outermost (drops earliest)
+                w=LANEW*(1.f - smoothstep01((u-(float)r/nd)*nd));        // staggered window of width 1/nd
+            }
+            off+=w; bnd[k+1][i]=off;
+        }
+    }
+    float ix[128],iy[128],ox[128],oy[128],e[128];
+    for(int i=0;i<n;i++) e[i]=bnd[0][i]-1;   offset_var(xs,ys,n,e,ix,iy);   // casing inner edge
+    for(int i=0;i<n;i++) e[i]=bnd[nl][i]+1;  offset_var(xs,ys,n,e,ox,oy);   // casing outer edge
+    fill_strip(ix,iy,ox,oy,n,CLR_BROWNISH_BLACK);
+    offset_var(xs,ys,n,bnd[0],ix,iy);  offset_var(xs,ys,n,bnd[nl],ox,oy);   // asphalt surface
+    fill_strip(ix,iy,ox,oy,n,CLR_DARK_GREY);
+    for (int b=1;b<nl;b++){ offset_var(xs,ys,n,bnd[b],ix,iy); stroke_poly(ix,iy,n,CLR_WHITE); }  // dividers (fan)
 }
 
 static void arrow(float x,float y,float dir,int col){      // a small travel-direction chevron
@@ -148,7 +184,7 @@ static int clothoid_spline(Port a, Port b, float R, float Ls, float *xs, float *
 }
 
 // ── state ──
-static int selA=2, selB=0; static float radius=28.f, spiral=14.f; static int use_cloth=1, nlanes=2;
+static int selA=2, selB=0; static float radius=32.f, spiral=14.f; static int use_cloth=1, nlanes=3, taperPct=60;
 
 // a "−/+" (or "</>") stepper: two ui buttons; returns -1, 0 or +1
 static int step_btn(int x,int y,int w,const char*lm,const char*rm){
@@ -182,6 +218,7 @@ void update(void){
     if (spiral<0) spiral=0;
     if (keyp('c')||keyp('C')) use_cloth=!use_cloth;
     if (keyp('1')) nlanes=1; if (keyp('2')) nlanes=2; if (keyp('3')) nlanes=3; if (keyp('4')) nlanes=4;
+    if (keyp('t')||keyp('T')){ taperPct+=20; if(taperPct>100)taperPct=0; }   // cycle lane-drop taper
 }
 
 void draw(void){
@@ -201,7 +238,7 @@ void draw(void){
         float xs[128],ys[128];
         int n = use_cloth ? clothoid_spline(ports[selA],ports[selB],radius,spiral,xs,ys)
                           : arc_spline(ports[selA],ports[selB],radius,xs,ys);
-        draw_multilane(xs,ys,n,nlanes);
+        draw_multilane(xs,ys,n,nlanes, taperPct/100.f);
     }
     for (int i=0;i<nport;i++) if (i!=selA&&i!=selB) draw_port(ports[i], CLR_MEDIUM_GREY);
     draw_port(ports[selA], CLR_GREEN);  draw_port(ports[selB], CLR_RED);
@@ -225,6 +262,9 @@ void draw(void){
     print("Port B", 128, SCREEN_H-31, CLR_RED);
     d=step_btn(160, SCREEN_H-34, 14, "<", ">"); if (d) selB=(selB+nport+d)%nport;
     print(ports[selB].name, 194, SCREEN_H-31, CLR_RED);
+    print("taper", 224, SCREEN_H-31, CLR_BLUE);
+    d=step_btn(250, SCREEN_H-34, 14, "-", "+"); if (d) taperPct+=10*d;
+    snprintf(b,sizeof b,"%d%%",taperPct); print(b, 282, SCREEN_H-31, CLR_LIGHT_GREY);
     // row 2 — geometry params (− / +) with live values + clothoid toggle
     print("radius", 4, SCREEN_H-15, CLR_WHITE);
     d=step_btn(36, SCREEN_H-18, 14, "-", "+"); if (d) radius+=2*d;
@@ -239,6 +279,7 @@ void draw(void){
     // clamps (apply to both button + keyboard edits)
     if (radius<6) radius=6;  if (spiral<0) spiral=0;
     if (nlanes<1) nlanes=1;  if (nlanes>6) nlanes=6;
+    if (taperPct<0) taperPct=0;  if (taperPct>100) taperPct=100;
 
     ui_end();
     font(FONT_NORMAL);

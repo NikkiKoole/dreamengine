@@ -98,10 +98,17 @@ Investigated OpenDRIVE, clothoids, SUMO/CommonRoad, Cities: Skylines, curve offs
   reflexively.** Reach for relaxation *only* if we hit a case arcs can't close-form: dense packing in a
   bounded footprint (a tight stack), or competing clearance from several neighbours. Until then, `rampkit`
   stays parked as the bezier-era proof.
-- **Next on `roadlab`: lane add/drop tapers** — a lane peeling off at a diverge / merging in (OpenDRIVE's
-  lane-*width* cubic that tapers a lane to zero). M3 gives *parallel* lanes; this is the genuinely harder
-  bit, and it's what makes a diverge look real. The other open shape is the **ring/circulate primitive**
-  for the British roundabout family (see `interchange-dsl.md` — out of the ramp grammar).
+- **`roadlab` M4 — lane add/drop tapers** ✅ **DONE.** `draw_multilane()` now takes a `taperFrac`: each
+  lane has a `width(s)` (OpenDRIVE lane-width model), and the outer lanes taper full→0 over the ramp's
+  tail in a **staggered staircase** (outermost drops first, `smoothstep` profile), so a fat ramp **fans
+  down to one lane** — a real diverge with its gore filled — instead of peeling off as a slab. `offset_var()`
+  is the per-sample (variable-distance) offset that makes it possible. `taper` 0-100% scrubs it (`t`
+  cycles); `taperFrac=0` is exactly the M3 parallel lanes. (Fixes the "4-lane off-ramps look weird" slab.)
+  *Open polish:* `keep` is hardwired to 1 (always fans to a single lane) — trivial to expose if we want
+  N→2; and the taper is a lane *drop* at the tail (a lane *add* at the head is the mirror, not yet wired).
+- **Next on `roadlab`: nothing structural — port it into roadnet2** (bake the constants, call it as the
+  junction drawer). The other open shape is the **ring/circulate primitive** for the British roundabout
+  family (see `interchange-dsl.md` — out of the ramp grammar).
 - **Then** `roadlab` becomes the drawer that `interchange.c` / roadnet2 call (bake constants, port in).
 - **Parked:** `interchange.c` task — the **half-diamond draw-order** (near ramps should merge at-grade,
   not duck under the highway); the **inner-loop nesting** in `interchange.c`; the **loop+loop vs
