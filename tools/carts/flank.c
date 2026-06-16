@@ -63,9 +63,10 @@ static void set_preset(int p) {          // 0 easy · 1 normal · 2 hard — LET
 enum { ST_ASLEEP, ST_ALERTED, ST_HOT };  // start posture: unaware patrol · searching (knows something's up) · hunting you from frame 0
 typedef struct { const char *name; int posture; float count; } Scen;
 static const Scen SCEN[] = {
-    { "gunfight", ST_ASLEEP, 0.66f },    // full squad, unaware — open it loud OR stealth, your call
-    { "sneaky",   ST_ASLEEP, 0.35f },    // sparse patrol, unaware — slip in, knife the isolated one
-    { "ambush",   ST_HOT,    0.66f },    // they already know — no stealth, gunfight from the first frame
+    { "fight",  ST_ASLEEP,  0.66f },    // full squad, unaware — open it loud OR stealth, your call
+    { "sneaky", ST_ASLEEP,  0.35f },    // sparse patrol, unaware — slip in, knife the isolated one
+    { "alarm",  ST_ALERTED, 0.66f },    // alarm's up: full squad SEARCHING the area, but they don't know where you are yet
+    { "ambush", ST_HOT,     0.66f },    // they already know — no stealth, gunfight from the first frame
 };
 #define NSCEN ((int)(sizeof SCEN / sizeof SCEN[0]))
 static int scenario = 0;
@@ -372,9 +373,15 @@ static void enemy_update(int i) {
             move_enemy(e, tx, ty, T->speed * 0.92f);
         } else move_enemy(e, e->invx, e->invy, T->speed * 0.9f);   // alarmed only by a noise -> head to it
         e->aim = angle_to(e->x, e->y, pl.x, pl.y);
-    } else if (e->state == E_SUSPECT) {                       // investigate the disturbance, then give up
+    } else if (e->state == E_SUSPECT) {                       // SEARCH: sweep to a point of interest, then pick another — actively investigating
+        float id = fsqrt((e->invx-e->x)*(e->invx-e->x)+(e->invy-e->y)*(e->invy-e->y));
+        if (id < 10 || rnd(180)==0) {                         // reached it (or stuck/bored) → check a fresh nearby spot
+            int rx,ry,tr=0; do { rx=(int)(e->x/TILE)+rnd(20)-10; ry=(int)(e->y/TILE)+rnd(20)-10;
+                rx=rx<2?2:rx>GW-2?GW-2:rx; ry=ry<2?2:ry>GH-2?GH-2:ry; tr++; } while (wcell(rx,ry) && tr<40);
+            e->invx = rx*TILE+4; e->invy = ry*TILE+4;
+        }
         move_enemy(e, e->invx, e->invy, T->speed * 0.55f);    // cautious
-        e->aim = (rnd(28)==0) ? rnd(360) : angle_to(e->x, e->y, e->invx, e->invy);   // glance around
+        e->aim = (rnd(28)==0) ? rnd(360) : angle_to(e->x, e->y, e->invx, e->invy);   // glance around as they go
     } else {                                                  // PATROL: small idle drift
         if (rnd(40)==0) e->aim = rnd(360);
         move_enemy(e, e->x+dx(8,e->aim), e->y+dy(8,e->aim), 0.25f);
@@ -498,10 +505,10 @@ void update(void) {
     { int a=0; for(int i=0;i<NE;i++) if(en[i].alive) a++; if(a==0){ phase=PH_OVER; won=1; } }
 
 #ifdef DE_TRACE
-    int alive=0,eng=0,reacting=0; for(int i=0;i<NE;i++) if(en[i].alive){alive++; if(en[i].state==E_ENGAGE){eng++; if(en[i].react>0)reacting++;}}
+    int alive=0,eng=0,reacting=0,searching=0; for(int i=0;i<NE;i++) if(en[i].alive){alive++; if(en[i].state==E_SUSPECT)searching++; if(en[i].state==E_ENGAGE){eng++; if(en[i].react>0)reacting++;}}
     watch("hp","%d",pl.hp); watch("alive","%d",alive); watch("engaging","%d",eng);
     watch("reacting","%d",reacting); watch("known","%d",known); watch("kills","%d",kills);
-    watch("combat","%d",combat);
+    watch("combat","%d",combat); watch("searching","%d",searching);
 #endif
 }
 

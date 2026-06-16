@@ -77,9 +77,13 @@ own strategies?", and "emergent is king" — all point at the same thing.
 difficulty: *scenario = what kind of fight*, *difficulty = how hard*. Each scenario sets
 the **starting posture** (the keystone — you can only stealth-open a fight the room starts
 unaware of) + the **headcount** (`sl_count` moved off the difficulty presets to the
-scenario; difficulty now owns lethality only). Shipped: **gunfight** (asleep, full squad),
-**sneaky** (asleep, sparse), **ambush** (HOT — already onto you, no stealth). Composition
-/ loadout / arena are the remaining scenario knobs (melee scenarios wait on the weapon flag).
+scenario; difficulty now owns lethality only). Shipped: **fight** (asleep, full squad),
+**sneaky** (asleep, sparse), **alarm** (ALERTED — combat on but `known=0`, the squad SEARCHING),
+**ambush** (HOT — already onto you, no stealth). Composition / loadout / arena are the remaining
+scenario knobs (melee scenarios wait on the weapon flag). The **alarm** posture drove an upgrade to
+`E_SUSPECT`: it's now a real **search** (reach a point → pick a fresh nearby one → keep sweeping,
+glancing around) instead of freezing on one spot — which also improves the everyday
+noise-investigation case (check the area, then give up). `watch("searching")`.
 
 **The difficulty sliders are the lethality half of exactly that.** A *scenario* is the
 bigger preset that also sets **starting posture + composition + loadout + arena**, not the
@@ -89,6 +93,7 @@ combat numbers:
 |---|---|---|
 | **Gunfight** ✓ | asleep | full ranged squad, cover-heavy arena — open it loud or stealth |
 | **Sneaky murder** ✓ (as "sneaky") | asleep | sparse patrol, you have the knife — slip in quietly |
+| **Alarm raised** ✓ (as "alarm") | alerted | full squad SEARCHING the area, `known=0` — avoid LOS, no free first kill |
 | **Ambush** ✓ | hot | full squad already converging on your spawn — gunfight from frame 0 |
 | **Stealth** | asleep | sparse guards, long patrol routes, alarm/reinforcements matter |
 | **Street brawl** | hot/alerted | everyone melee, no guns, tight arena, fast (needs weapon flag) |
