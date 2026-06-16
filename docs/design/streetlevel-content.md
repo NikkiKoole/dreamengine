@@ -131,6 +131,63 @@ addition — it's what turns a tidy map into a lived-in, weathered one. (Everyth
 4 only.) The new *categories* this reveals: **flow verbs** (meander/line/cliff), **partition generators**
 (blob/carve), **composition** (cluster), **modifiers** (age), **infra** (relief).
 
+## Connectivity: read seams, not generation
+
+lotfill **never generates a road** — that's roadnet's, full stop (see the scope line above). But its
+makers constantly *read* roads: a building fronts/sets-back from the street, shops line arteries, density
+falls off from them, and "fronts a road by construction" is only *true* if the maker can see where roads
+are. So keep the **read seams** the fills depend on, shaped like what roadnet already exposes:
+
+- **`road_at(x,y) → {on_road, class}`** — reuse roadnet/procplaces' *exact* signature; don't invent one.
+- **`frontage(lot) → edge/direction`** — which side faces a street (`footprint`'s `outward` is a local
+  version already).
+
+Ship a **trivial local stub** behind that seam so the cart runs standalone — `footprint`'s hardcoded
+block grid *is* one. Then integration is a **provider swap, not a rewrite** — the same trick as
+`cover_at` (local terrain → worldgen) and `world_kind_at` (local selector → real one):
+
+```
+road_at   ──(workbench)──▶  lotfill's stub block grid
+          ──(integrated)─▶  roadnet's road_at() + graph
+```
+
+**Do NOT keep the routing graph** (`reachable(a,b)`, navmesh) — that's roadnet's graph consumed by the
+*sim* (sloop/flank), not by fill. A fill atom reads the street; it never plans a trip. Point-query yes,
+graph no — that's the line.
+
+## The settlement spectrum (city scale) — integration spec vs. buildable now
+
+A separate proposal worked the *urban* end (density/zone/nucleus/massing/square/quay/era/conurbation).
+Two ideas from it are keepers: **`density` is the town↔metro dial** (scale-as-a-field — hamlet→
+megalopolis is a `(peak, N)` coordinate, not different generators), and **`conurbation` is to `nucleus`
+what `cluster` is to `footprint`** (composition one level up). But most of the machinery **already exists
+upstream**, so the proposal is really the *integration spec*, not new lotfill atoms:
+
+| urban piece | already lives in | so it's… |
+|---|---|---|
+| `density` | procplaces' **intensity** field | upstream (integration) |
+| `zone` | procplaces' **land-use** field; lotfill's `zone_at` is a local stub | stub now → procplaces |
+| `nucleus` siting | worldgen's **city placement** (terrain-biased) | upstream — *also* the answer to the "siting feedback loop": worldgen's terrain-biased placement IS the acyclic pre-pass; nuclei read relief, everything reads nuclei |
+| `artery` / `belt` / tier-rank | roadnet **classes** + node **ranks**; ring family parked | upstream (roadnet) |
+| `plat` (block→lot, frontage) | roadnet **L2/L3** subdivision | upstream (roadnet-streetlevel.md) |
+
+### Buildable now in lotfill (pre-integration, on local stubs)
+
+The subset that needs **no** roadnet/worldgen — it runs on the local stubs lotfill already has (`cover_at`,
+`elev_raw`, `zone_at`, the block grid). This is the actionable backlog:
+
+- **the phased pipeline + a modifier** (`dress`/`age`) — proves phases 4→5; the lived-in look. *Highest leverage.*
+- **`relief` as readable slope** — promote `elev_raw` to a slope the makers read (footprints avoid steep, water pools low, rows terrace).
+- **`massing`** — `footprint` reads a local `density` stub → cottage/midrise/tower height. A flavor, not a maker.
+- **`square` / `quay`** — composite recipes (carve+pave+ring; water-edge using `cover_at`'s water). Content.
+- **`era`** — a modifier *plus* a "distance-from-a-stub-nucleus" ring field that swaps the morphology recipe per ring.
+- **`cluster`** — a bounded composite (hamlet = footprints + green + scatter; fronts the road stub, doesn't make one).
+- **`blob` / `carve`** partition generators, **`line`/`cliff`/river-`meander`** flow verbs — all terrain/region work, no network needed.
+- **the `road_at` / `frontage` read-seam stub** — formalize `footprint`'s block grid behind the seam, so integration is a swap.
+
+Everything network-shaped (`route`/`artery`/`belt`/`bridge`, real `density`/`zone`/`nucleus`) waits for
+integration and is consumed, not built, here.
+
 ## Two fill-modes (seeing them as different keeps each simple)
 
 The features split cleanly — don't unify them in code, only in vocabulary:
