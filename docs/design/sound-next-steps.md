@@ -278,6 +278,14 @@ strip); these are *routing* changes, not new effects (decision 0015 holds). Shor
   vocoder to reuse. **The effects-bus layer is complete** (the vocoder's carrier×modulator is the only
   remaining two-input effect). See STATUS.md + [`effects-bus-architecture.md`](effects-bus-architecture.md).
 
+> **Vocoder — NOT YET NEEDED (parked 2026-06-16).** The one remaining two-input effect is deliberately
+> deferred. It only pays off with a *modulator* signal, and the natural one (`INSTR_VOICE` for the
+> sung-robot lead — AIR's "Kelly Watch the Stars", Daft Punk/Kraftwerk/Zapp territory) is itself still
+> EXPERIMENTAL and unlocked. Until VOICE locks (or a station genuinely wants drum-bus-modulated
+> "talking" pads), the **formant filter** covers ~70% of the vocal/talkbox want for far less plumbing.
+> The `sc_key` side-chain input path stays in place for whenever the vocoder *is* built — no work lost.
+> Don't build the vocoder until a concrete cart/station demands it.
+
 ## Decisions to make (deliberate — don't auto-do)
 
 - **Extract the synth kit?** Six stations hand-rebuild the same kick/snare/hat — the strongest
