@@ -1,5 +1,8 @@
 # interchange DSL — describing junctions without coordinates (design sketch, 2026-06-16)
 
+> Part of the road-geometry effort — map & how-we-got-here: [`road-geometry-handoff.md`](road-geometry-handoff.md).
+> The research that grounds the geometry layer: [`road-geometry-refs.md`](road-geometry-refs.md).
+
 A design exploration: **can every road interchange be described cleanly, declaratively — not as
 hand-placed geometry?** Investigation (our `interchange.c` atoms + the roadnet2 junction matrix +
 the [roads.org.uk](https://www.roads.org.uk/interchanges) taxonomy) says **yes**, in two layers:

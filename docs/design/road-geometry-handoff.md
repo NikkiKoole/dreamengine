@@ -1,0 +1,108 @@
+# Road geometry & the interchange DSL — master handoff (2026-06-16)
+
+**★ START HERE** if you're picking up the interchange / road-junction-geometry work cold. This is the
+map: how we got here, what we're solving, the research, what failed, and how to continue. The other
+docs are the detail; this ties them together.
+
+## The 30-second version
+roadnet2 needs to draw road junctions automatically (given crossing roads + a type → draw the ramps).
+We hand-tuned one trumpet loop in `interchange.c`, realized **junctions can be described
+declaratively** (a DSL), proved the idea in a sandbox (`rampkit`), **researched road-geometry
+representations**, and concluded the geometry should be built on **arc-splines** (`LINE|ARC|CLOTHOID`),
+not Béziers. `roadlab` is the clean foundation rebuilt on that finding. Nothing is wired into roadnet2
+yet — it's all sandboxes + design docs, all committed.
+
+## The cart lineage (how we got here)
+1. **`roadnet`** (v1) — the original deterministic spline road-world + the street-level "sloop" drive
+   idea. → [`roadnet.md`](roadnet.md), [`roadnet-handoff.md`](roadnet-handoff.md),
+   [`roadnet-streetlevel.md`](roadnet-streetlevel.md).
+2. **`roadnet2`** — the vector-native rebuild (one graph, one `road_at` query). Its **Part B** is
+   hierarchy + **interchanges**, which is this whole thread. → [`roadnet2-plan.md`](roadnet2-plan.md),
+   [`roadnet2-handoff.md`](roadnet2-handoff.md).
+3. **`interchange.c`** — the junction-geometry **sandbox** spun off roadnet2 Part B: a highway + a
+   crossing road + ramp drawers, fake-3D grade separation, a data-driven junction matrix. This session
+   we hand-tuned the **trumpet outer loop** to good (candy-cane trunk, tangent entry, reverse-curve
+   merge, a `loop end` slider) and started the **inner loop** (WIP). → [`interchange-handoff.md`](interchange-handoff.md).
+4. **`rampkit.c`** — a **proof-of-concept** for the DSL idea: a ramp = `(portA, portB, type)`, built by
+   one closed-form constructor (Béziers), + a nest-solver that proved nesting is tractable. Built
+   **before** the research, so it's on Béziers + hand-placed ports.
+5. **`roadlab.c`** — the **foundation**, rebuilt on the research: lane-accurate roads (drive-on-right
+   via `DRIVE`), ports anchored to real lanes, ramps as **arc-splines**. **Supersedes `rampkit`**
+   (which stays as the bezier proof). Milestone 1 done; M2 (clothoids) + M3 (nesting) ahead.
+
+## What we're solving
+- **The concrete goal:** roadnet2 must draw ~12 junction types × topologies × angles × lane-counts
+  automatically in worldgen. Hand-tuning each (like we tuned the one trumpet loop all session) doesn't
+  scale.
+- **The two geometry sub-problems** (the owner named these precisely):
+  1. **"lines that can be driven easily"** = **curvature continuity** (G2). Curvature must change
+     smoothly so you steer at a constant rate → **clothoids / Euler spirals**.
+  2. **"roads snugly against each other"** = **parallel offset + clearance packing** → **arcs**
+     (an arc offsets to an arc; concentric arcs nest with zero overlap for free).
+
+## The two big ideas
+1. **A junction DSL.** A junction = **legs × { movement → ramp-primitive }**. The primitive set is
+   tiny (`through / diverge / merge / loop / flyover`) — exactly the `interchange.c` atoms. Every named
+   interchange (diamond, cloverleaf, stack, trumpet…) is one assignment over a topology; they differ
+   only in how the hard (left-equivalent) turns are served. → [`interchange-dsl.md`](interchange-dsl.md).
+2. **Geometry as relations + a solver (a "language that isn't math").** Everything we said while
+   tuning was a *relation* — "tangent", "fully on the far side", "nest", "merge along the lane" — never
+   a coordinate. Two solver tiers: **closed-form per ramp** (tangent constructions) + **relaxation
+   between ramps** (nesting/clearance). `rampkit`'s nest-solver proved Tier-2 converges. →
+   [`interchange-dsl.md`](interchange-dsl.md) Layer 2.
+3. **`DRIVE` constant** = single source of truth for handedness (+1 right / −1 left). Lets us read
+   British reference diagrams and mirror in one place — and kills the chirality guesswork that bit us.
+
+## The research (done this session)
+Investigated OpenDRIVE, clothoids, SUMO/CommonRoad, Cities: Skylines, curve offsetting. Full report
++ sources + the recommendation: → **[`road-geometry-refs.md`](road-geometry-refs.md)**. Headlines:
+- **Adopt an arc-spline model** (`LINE|ARC|CLOTHOID` segment list = OpenDRIVE's reference line, minus XML).
+- **Arcs** offset/nest cleanly (deciding factor for "snug"); **Béziers don't** (a cubic's offset is a
+  degree-10 curve → sample-and-refit + cusps).
+- **Clothoid** via a **~15-line forward-integration loop** (no Fresnel, no solver) gives the drivable feel.
+- **Cities: Skylines uses plain Béziers** between nodes — i.e. exactly where we started; arcs are an
+  upgrade *for nesting*, not a fix for a mistake.
+
+## What failed / dead-ends (so they're not re-walked)
+- **Chirality flip-flop.** I claimed the reference GIF was drive-on-left — wrong; it's drive-on-right.
+  The *actual* bug was over-rotating the loop: a single **270° tangent circle** forces a **cusp** at the
+  exit. Fix: **180° bell + a reverse-curve** (bend one way, then the other to align with the road). The
+  deeper lesson → make `DRIVE` explicit so handedness can't be argued by eye.
+- **Béziers for ramps.** Fine for a single ramp, but they **fight offsetting/nesting** (degree-10). The
+  research moved the foundation to **arcs** — hence `roadlab` over `rampkit`.
+- **`rampkit`'s hand-placed ports weren't lane-accurate** (both highway ports on the same lane pointing
+  opposite ways; the trunk "up" port floating above a road that only went down). Root cause: ports
+  weren't anchored to lanes. **`roadlab` fixes this** — a port *is* a lane + its travel direction.
+- **`interchange.c` inner loop** is still WIP/rough — the nesting wasn't dialed before we pivoted to the
+  cleaner `roadlab` foundation.
+
+## How to continue
+- **`roadlab` M2 — clothoid joints** (the §2 forward-integration loop in `road-geometry-refs.md`) for
+  drivable feel.
+- **`roadlab` M3 — nesting** (port `rampkit`'s relaxation onto `roadlab`'s arcs; concentric arcs nest
+  for free).
+- **Then** `roadlab` becomes the drawer that `interchange.c` / roadnet2 call (bake constants, port in).
+- **Parked:** `interchange.c` task — the **half-diamond draw-order** (near ramps should merge at-grade,
+  not duck under the highway); the **inner-loop nesting** in `interchange.c`; the **loop+loop vs
+  loop+flyover** trumpet variant toggle.
+- **Reference:** <https://www.roads.org.uk/interchanges> — clean colour-coded movement diagrams of every
+  junction type. **British (drive-on-left) → mirror via `DRIVE`.** Shapes are identical, only handedness flips.
+
+## Working method (what worked for the owner)
+- **Annotated screenshots** drive the geometry work: bake a clean (isolated) screenshot, the owner draws
+  the *ideal path* in one colour + **X**'s the broken spots. Far faster than prose for curve bugs. (Saved
+  as the `annotated-screenshots-collab` memory.)
+- **Isolation bakes:** in `interchange.c`, temporary `TEMP`-marked static defaults isolate one atom
+  (`show_near/loop/fly`, hide panel) → bake → read `build/.bake/<cart>/screenshot.png`; revert all `TEMP`
+  before committing (`grep -n TEMP` must be empty).
+
+## Key commits this session
+`interchange` loop+slider+inner-WIP · `interchange-dsl.md` · `rampkit` (ports + nest-solver) ·
+`road-geometry-refs.md` · `roadlab` (arc-spline foundation). All by pathspec, lint-green.
+
+## The doc map (everything cross-links from here)
+- [`roadnet2-plan.md`](roadnet2-plan.md) — the parent plan; Part B = interchanges + the junction matrix.
+- [`interchange-handoff.md`](interchange-handoff.md) — `interchange.c` cart state (the trumpet work).
+- [`interchange-dsl.md`](interchange-dsl.md) — the DSL: topology layer + geometry relation-language/solver.
+- [`road-geometry-refs.md`](road-geometry-refs.md) — the research: OpenDRIVE / clothoids / offsetting + recommendation.
+- carts: `tools/carts/{interchange,rampkit,roadlab}.c`.

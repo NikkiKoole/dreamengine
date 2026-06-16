@@ -1,5 +1,8 @@
 # road geometry — references & recommendation (research, 2026-06-16)
 
+> Part of the road-geometry effort — map & how-we-got-here: [`road-geometry-handoff.md`](road-geometry-handoff.md).
+> What this research feeds: the geometry layer of [`interchange-dsl.md`](interchange-dsl.md).
+
 What curve representation should the interchange/roadnet ramps use, to get the two things we actually
 want: **(a) lines you can "drive easily"** and **(b) ramps that nest "snugly"** at a fixed clearance?
 Researched OpenDRIVE, clothoids, the open sims (SUMO/CommonRoad), Cities: Skylines, and curve

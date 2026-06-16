@@ -5,6 +5,9 @@ and what's next. This is roadnet2's **part-B** (how roads cross/connect a highwa
 picture + the junction matrix live in [`roadnet2-plan.md`](roadnet2-plan.md) and
 [`roadnet2-handoff.md`](roadnet2-handoff.md). Cart: [`tools/carts/interchange.c`](../../tools/carts/interchange.c).
 
+> **Picking this up cold?** Read [`road-geometry-handoff.md`](road-geometry-handoff.md) first — it's the
+> master map of the whole effort (interchange → rampkit → roadlab + the DSL + the research).
+
 ## ⭐ Reference: roads.org.uk/interchanges
 **THE reference for interchange geometry: <https://www.roads.org.uk/interchanges>** — clean,
 colour-coded-by-movement diagrams of every junction type. Far better than tracing fuzzy GIFs.

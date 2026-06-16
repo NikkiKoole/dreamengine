@@ -99,6 +99,11 @@ are covered → no pop on pan; then pure geometry). The old **`diag` slider is r
 points (straight base; `link_path` still bends for terrain).
 
 ### Part B — hierarchy + interchanges (in progress)
+> **The interchange-geometry work has its own thread now** — master map:
+> [`road-geometry-handoff.md`](road-geometry-handoff.md) (carts: interchange → rampkit → roadlab; the
+> junction **DSL** [`interchange-dsl.md`](interchange-dsl.md); the geometry **research**
+> [`road-geometry-refs.md`](road-geometry-refs.md); cart state [`interchange-handoff.md`](interchange-handoff.md)).
+
 Approached from both ends; they meet at one interface — *given two crossing roads + a type → draw
 the ramps.*
 - **Geometry, bottom-up (started)** — a self-contained sandbox cart **`interchange.c`**: a highway +
