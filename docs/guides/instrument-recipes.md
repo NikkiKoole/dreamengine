@@ -196,6 +196,7 @@ tuned↔inharmonic / strike-position center↔edge / pitch-bend flat↔glissando
 | membrane/bongo | tabla.c | h0.72 t0.65 m0.10 · ring~600ms | Bright inharmonic bongo, edge strike, flat pitch, snappy. |
 | membrane/djembe | tabla.c | h0.85 t0.55 m0.22 · ring~900ms | Inharmonic djembe, mid-edge slap, moderate bend, medium thud. |
 | membrane/tom | tabla.c | h0.62 t0.18 m0.55 · ring~1.5s | Center-strike boom, strong pitch drop, long resonant ring. |
+| membrane/tom-kit | fingerdrums.c | h0.28 t0.18 m0.12 · A1 D0 S7 R300 @ MIDI 62/56/45 | Tuned drum-kit tom — tighter ring + far less bend than tabla's tom, played at three fixed pitches for a rack-hi / rack-mid / floor set. |
 | membrane/upright-body | upright.c | A0 D170 S0 R60 · h0.45 m0 · LP2200 · belly t0.22 @ MIDI31–45 / neck t0.68 @ MIDI48–60 · + a NOISE knuckle | The bass body as percussion — slap the belly for a low center thump, knock the neck for a drier edge tick. Location maps pitch + strike position; same woody character. |
 
 > **Cross-ref:** addis is the first radio station to use `INSTR_MEMBRANE` for real modeled
@@ -456,6 +457,25 @@ The harp is the only explicit `instrument()`; the 6 drum rows use `hit()` conven
 | drum/ohat | NOISE | D170ms · pitch 84 | Open hi-hat, long ring (same pitch as closed). |
 | drum/clap | NOISE | D60ms · pitch 64 | Noise handclap. |
 | drum/bass | SQUARE | D110ms · pitch 36+root | Square bass following the selected chord root. |
+
+### fingerdrums (whimsical — play-by-hand kit, two views, from fingerdrums.c)
+
+Two kits, one per view (TAB switches). The ACOUSTIC kit is raw-wave + one modeled
+`INSTR_MEMBRANE` voice (the toms — see `membrane/tom-kit` above). The MPC-PADS kit is
+808-style and mostly reuses the **tr808** recipes above (boom kick, sine+noise snare,
+retrigger clap, square cowbell) — the only divergence is its hats, which are a simpler
+NOISE-highpass tick rather than tr808's 3-oscillator square bank. Fired via `schedule_hit`
+so each voice picks its own gate length; velocity (1..7) comes from vertical hit position.
+
+| name | engine | recipe | character |
+|---|---|---|---|
+| acoustic/kick | SINE | A0 D300 S0 R80 · LP220/2 · pitch-env →+28 (0/55) · drive 0.15 | Punchy acoustic kick, short pitch drop, lightly saturated. |
+| acoustic/snare-body | SINE | A0 D90 S0 R40 · LP1500/1 · pitch-env →+4 (0/18) | The drum tone under the wires — a tuned thwack. |
+| acoustic/snare-snap | NOISE | A0 D120 S0 R60 · BP1900/3 | Bandpassed noise crack — the snare wires (layered over the body). |
+| acoustic/hat-closed | NOISE | A0 D45 S0 R25 · HP8500/2 | Tight highpassed tick; chokes the open hat. |
+| acoustic/hat-open | NOISE | A0 D60 S2 R220 · HP8200/2 | Sustain>0 so it washes; killed by a closed-hat hit. |
+| acoustic/crash | NOISE | A0 D220 S0 R600 · HP5000/1 | Long bright noise wash — the crash cymbal. |
+| acoustic/ride | NOISE | A0 D90 S0 R300 · BP7000/3 | Bandpassed noise ping — a ride bell, shorter than the crash. |
 
 ### mariopaint (whimsical — 6 melodic voice stamps, from mariopaint.c)
 
