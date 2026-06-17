@@ -376,16 +376,19 @@ static Turn classify_turn(float inDir, float outDir){       // by the change in 
     if (rel>150 || rel<-150) return T_UTURN;                 // ~reversed ⇒ U-turn
     return (rel*DRIVE > 0) ? T_RIGHT : T_LEFT;               // else easy (right) vs hard (left), DRIVE-folded
 }
-// GENERATE: enumerate every movement over `nleg` legs → one Connection per served movement, per the policy
-static int make_junction(int nleg, JuncType type, Junction *out){
+// GENERATE: enumerate every movement over `nleg` legs → one Connection per served movement, per the policy.
+// `lanes` = how many lanes each ramp carries (from the lanes control). Loops get a radius scaled to the lane
+// count so the inner edge can't pinch past the centre (a tight loop can't fit a fat ribbon).
+static int make_junction(int nleg, JuncType type, int lanes, Junction *out){
+    if (lanes<1) lanes=1;
     JuncPolicy p = POLICY[type]; out->name = JT_NAME[type]; out->nConns = 0;
     for (int o=0;o<nleg;o++) for (int d=0;d<nleg;d++){
         if (o==d) continue;
         Turn t = classify_turn(ports[leg_in(o)].dir, ports[leg_out(d)].dir);
         if (t==T_UTURN && !p.serveUturn) continue;
         RampPrim prim = (t==T_THROUGH)?p.through : (t==T_RIGHT)?p.right : p.left;
-        float r = (prim==RP_LOOP)?12.f:0.f;                 // keep generated loops compact; direct uses global
-        out->conns[out->nConns++] = (Connection){ leg_in(o), leg_out(d), prim, {{-1,-1},{-2,-2}}, 2, r, 0 };
+        float r = (prim==RP_LOOP)?(lanes*4.f>12.f?lanes*4.f:12.f):0.f;   // loops: R scales with lanes; direct uses global
+        out->conns[out->nConns++] = (Connection){ leg_in(o), leg_out(d), prim, {{-1,-1},{-2,-2}}, lanes, r, 0 };
     }
     return out->nConns;
 }
@@ -473,7 +476,7 @@ void draw(void){
     for (int x=12;x<SCREEN_W;x+=40){ arrow(x, CY-LANEW/2.0f, 180, CLR_YELLOW); arrow(x, CY+LANEW/2.0f, 0, CLR_YELLOW); }
     for (int y=12;y<SCREEN_H;y+=40){ arrow(CX+LANEW/2.0f, y, 270, CLR_YELLOW); arrow(CX-LANEW/2.0f, y, 90, CLR_YELLOW); }
     const char* sand_problem = (selA!=selB) ? movement_problem(ports[selA], ports[selB]) : 0;
-    make_junction(4, (JuncType)juncType, &gen_junc);        // GENERATE the table from the type (pure fn of ports+type)
+    make_junction(4, (JuncType)juncType, nlanes, &gen_junc);  // GENERATE the table from the type (pure fn of ports+type+lanes)
     if (view){
         // JUNCTION view (M6 + §8.2) — the WHOLE junction GENERATED from the type, then drawn from the
         // connection table. This is the table-driven drawer roadnet2 will call (worldgen picks the type).
