@@ -144,10 +144,12 @@ now in `roadlab.c`: a table-driven `draw_junction()` strokes each connection wit
 This is the interchange-dsl "migration path" #4 made concrete. `prim` is wired but only `RP_DIRECT` has a
 real drawer (LOOP/FLYOVER fall back to the spline).
 
-**▶ Next after this:** (1) port into roadnet2 — have worldgen *emit* `Junction[]` deterministically from the
-seed and call `draw_junction()` as the drawer; (2) give `RP_LOOP`/`RP_FLYOVER` real geometry. **Full
-OpenDRIVE roadmap — taken (M1–M6) vs left:** [`road-geometry-refs.md`](road-geometry-refs.md) →
-**"OpenDRIVE adoption inventory"**.
+**▶ Next after this:** (1) give `RP_LOOP`/`RP_FLYOVER` real geometry; (2) build the type→`Connection[]`
+*generator*; then port into a world that emits `Junction[]` deterministically from the seed. **Five open
+reflections (post-M6), the "retrofit roadnet2 vs grow a junction-first world" fork, and concrete specs for
+both #1 and #2 are written up in [`junction-lanelink.md`](junction-lanelink.md) §7 (reflections) + §8
+(specs).** **Full OpenDRIVE roadmap — taken (M1–M6) vs left:**
+[`road-geometry-refs.md`](road-geometry-refs.md) → **"OpenDRIVE adoption inventory"**.
 
 Other roadlab continuations (not the chosen next, but queued):
 - **Port `roadlab` into roadnet2** — bake the constants, call it as the junction drawer.

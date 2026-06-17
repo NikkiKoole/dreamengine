@@ -160,6 +160,110 @@ and a ramp is `ramp(portA → portB, type)`. In this model that becomes one `Con
 - **OpenDRIVE adoption inventory** ([`road-geometry-refs.md`](road-geometry-refs.md)) — `junction`+`laneLink`
   moved from "worth taking next" to **adopted (M6)**. ✅
 
+## 7. Open reflections (post-M6) — what to weigh before the next move
+Landing M6 (the schema + table-driven drawer) surfaced five things worth a deliberate decision, plus the
+"which world consumes this" fork. Ranked by how much each shapes direction:
+
+1. **No real `RP_LOOP` / `RP_FLYOVER` drawer.** The `DEMO` is deliberately all `RP_DIRECT` (right-turn slip
+   curves) because that's all the spline draws. But interchanges *exist* for the **hard (left-equivalent)
+   turns**, which need loops/flyovers. So roadlab can express a cloverleaf in the *table* but can't *draw*
+   one. **Biggest visual gap.** → spec **§8.1**.
+2. **The schema has no generator.** `DEMO` is hand-authored. The DSL payoff — *given crossing legs + a type
+   → emit the `Connection[]`* (interchange-dsl Layer 1) — is still unbuilt. That generator is what lets
+   worldgen produce junctions from a seed-hash. → spec **§8.2**.
+3. **`Port` collapses road + lane.** roadlab's `Port` is a fixed point; the schema (and OpenDRIVE) have
+   `incomingRoad`/`connectingRoad` as *roads* with `laneLink` mapping lane ids. roadnet2 legs are real graph
+   edges (width, lane count, bearing), not hand-placed points. roadlab likely needs a thin **`Leg`/`Road`
+   layer** (ports *derived* from a road + lane index via `portOf(leg, lane)`) before the port. Thinnest part
+   of the abstraction today.
+4. **`laneLink` has no teeth.** `nLinks` only sets the lane *count*; the `from`/`to` ids are inert (never
+   `from ≠ to`). The case it doesn't exercise — a lane mapping to a *different* lane across the junction — is
+   exactly the M4 diverge/merge **gore** and lane-change. M4's taper and `laneLink` are secretly the same
+   thing; decide when to wire `from ≠ to` so the gore is data-driven, not a global `taper%`.
+5. **Determinism hook.** The per-junction `Connection[]` must be derived from the **cell hash** of the
+   crossing (like roadnet2's ranks/hubs), never from iteration order or accumulated float state. The
+   hand-authored `DEMO` sidesteps this; the generator (§8.2) is where it becomes real. Cheap up front,
+   painful to retrofit.
+
+**The world fork (owner's open question): keep feeding roadnet2, or grow a new junction-first world?**
+Take: roadlab stays the geometry lab; the determinism *substrate* (roadnet2's `seedZ` + `hash2` + perlin,
+pure-function-of-cell) is worth copying verbatim either way. But **roadnet2 wasn't designed around
+interchanges** — its worldgen is organic (POI-node β-skeleton graph, edges meeting at arbitrary
+angles/counts = the *hard* case for a generator); junctions were "Part B," bolted on. A world built
+**junction-first** (a road *hierarchy* where every crossing is, by construction, a typed junction with clean
+leg bearings) is a cleaner substrate for *this study*, not just a smaller roadnet2. Suggested tier:
+**roadlab** (one junction, tuned) → **a new seed-driven "junction field"** (sparse grid of crossings, each
+generated from its cell hash — the rehearsal that proves the generator + drawer tile deterministically) →
+*optionally* fold back into roadnet2 if you later want them in the organic world. Decider: if the goal is
+"drop junctions into the existing organic world," retrofit roadnet2; if it's "study how a network grows from
+a seed with junctions first-class," grow the new one (the read of this whole sandbox-driven thread).
+
+## 8. Next-milestone specs
+
+### 8.1 — `loop_spline()` + flyover (the hard-turn geometry)
+**Why the current splines can't.** `arc_spline` rounds the convex corner where A's and B's heading-lines
+meet; for a hard (left-equivalent) turn that corner sits *behind* a port (`avail < 2` ⇒ it bails to a
+straight stand-in — see roadlab.c). Loops and flyovers are the missing primitives.
+
+**`loop_spline(Port a, Port b, float R, float* xs, float* ys)`** — closed-form (Tier 1), drive-side from
+`DRIVE`. A loop serves a hard turn by going the **long way** (≈270°) so it never crosses opposing traffic:
+- `adA = a.dir + 180` (entry heading into the junction).
+- wanted deflection `Δ = norm(b.dir − adA)`; **loop sweep** `= Δ − 360·sgn(Δ)` (≈ ±270° for a 90° turn).
+- **diverge:** a short tangent leaving A along `adA` (peel onto the loop).
+- **loop arc:** centre `C = tangentStart + R·normal(adA)` on the side of the sweep; emit the radius-`R` arc
+  over `loopSweep` (16–24 samples).
+- **merge:** from the loop's exit (heading now `== b.dir`) a short straight / reverse-curve tangent onto B.
+- `R_loop` is its **own** parameter (larger than a corner radius) → two nested loops are just **concentric
+  offsets** (M3), no solver. Add `float R;` to `Connection` (0 ⇒ use the global radius).
+
+**flyover (`RP_FLYOVER`).** Topologically a *semi-direct* left turn that **is allowed to cross** the conflict
+point because it's grade-separated. Geometry = a **reverse-curve (S) direct connector** (not the
+corner-rounder) **+ forced deck `liftPx > 0`** so it draws over (M5 draw-order-by-z). Cheapest first cut:
+run the existing spline but (a) for this prim *don't* bail to straight when the corner is behind (allow the
+S), and (b) take a non-zero lift from the `Connection`. So flyover mostly leans on M5 — the genuinely new
+geometry is the loop. Add `int lift;` to `Connection` (0 ⇒ at grade).
+
+**Drawer wiring:** `draw_connection()` switches on `prim` — `RP_LOOP → loop_spline`, `RP_FLYOVER → spline
+(S allowed) + lift`, else the existing arc/clothoid spline.
+
+### 8.2 — `make_junction()` (the generator: type → `Connection[]`, interchange-dsl Layer 1 in code)
+A junction **type is a policy, not geometry**: which primitive serves each turn class, and which movements
+are served (completeness).
+```c
+typedef struct { int bearing, lanes; int terminates; } Leg;   // a road meeting the hub
+typedef enum { T_THROUGH, T_RIGHT, T_LEFT, T_UTURN } Turn;
+typedef struct { RampPrim through, right, left; int serveUturn; } JuncPolicy;
+static const JuncPolicy POLICY[] = {
+  [JT_DIAMOND]    = { RP_THROUGH, RP_DIRECT, RP_DIRECT,  0 },  // left = at-grade signal
+  [JT_CLOVERLEAF] = { RP_THROUGH, RP_DIRECT, RP_LOOP,    0 },
+  [JT_STACK]      = { RP_THROUGH, RP_DIRECT, RP_FLYOVER, 0 },  // trumpet/parclo = subsets/mixes of these
+};
+// classify by RELATIVE bearing; DRIVE folds handedness so "right" is always the easy side
+Turn classify_turn(int fromBearing, int toBearing){
+  int rel = norm180(toBearing - fromBearing);          // (−180,180]
+  if (abs(rel) > 150) return T_THROUGH;                // ~straight
+  if (abs(rel) <  30) return T_UTURN;
+  return (rel * DRIVE > 0) ? T_RIGHT : T_LEFT;
+}
+int make_junction(Leg legs[], int n, JuncType type, Connection out[]){
+  JuncPolicy p = POLICY[type]; int m = 0;
+  for (int i=0;i<n;i++) for (int j=0;j<n;j++){ if (i==j) continue;
+    Turn t = classify_turn(legs[i].bearing, legs[j].bearing);
+    if (t==T_UTURN && !p.serveUturn) continue;
+    RampPrim prim = t==T_THROUGH ? p.through : t==T_RIGHT ? p.right : p.left;
+    out[m++] = (Connection){ portOf(i, exitLane), portOf(j, entryLane), prim, /*laneLinks*/…, lanes };
+  }
+  return m;
+}
+```
+- **`portOf(leg, lane)`** is the `Leg`/`Road` layer from reflection #3 — places a port on a leg's lane.
+- **Determinism (reflection #5):** `legs` come from the cell hash in worldgen; `make_junction` is a **pure
+  function of `(legs, type)`** ⇒ identical `Connection[]` for a given seed. No RNG, no order-dependence.
+- **Lands in roadlab:** replace the hand-authored `DEMO` with `make_junction(legs, type, …)`; the `j` view
+  picks a `type` (diamond / cloverleaf / stack) and shows the *generated* junction — the first end-to-end
+  proof of type → table → drawer. This is also the function the new "junction field" world (or roadnet2)
+  calls per crossing.
+
 Sources: ASAM OpenDRIVE Specification v1.8.1 §12 (Junctions), §11 (Lanes) —
 <https://publications.pages.asam.net/standards/ASAM_OpenDRIVE/ASAM_OpenDRIVE_Specification/latest/specification/12_junctions/12_01_introduction.html>,
 §12.4 Connecting roads.
