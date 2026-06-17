@@ -198,6 +198,7 @@ static int             fp_anc_x   = 0;                // fillp() lattice origin 
 static int             fp_anc_y   = 0;                // — shifts the pattern phase; anchor to a
 static bool            poly_fill_fast = true;        // false → legacy per-pixel polygon fill (A/B; env DE_POLY_FILL=legacy)
 static bool            disc_fill_fast = true;        // false → legacy per-pixel circle/oval fill (A/B; env DE_DISC_FILL=legacy)
+static bool            clamp_cache_on = true;        // false → recompute the fill scan-box every call (A/B; env DE_CLAMP_CACHE=off)
 // internal patterned-fill helpers — the public fills call these when fillp() is on
 static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0);
 static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
@@ -1527,6 +1528,8 @@ int main(int argc, char **argv) {
       if (pf && strcmp(pf, "legacy") == 0) poly_fill_fast = false; }   // DE_POLY_FILL=legacy → old per-pixel path
     { const char *df = getenv("DE_DISC_FILL");          // A/B the circle/oval fill:
       if (df && strcmp(df, "legacy") == 0) disc_fill_fast = false; }   // DE_DISC_FILL=legacy → old per-pixel path
+    { const char *cc = getenv("DE_CLAMP_CACHE");        // A/B the per-frame clamp-box cache:
+      if (cc && strcmp(cc, "off") == 0) clamp_cache_on = false; }      // DE_CLAMP_CACHE=off → recompute every call
     const char *window_title           = "dreamengine";
 #ifndef PLATFORM_WEB
     int         screenshot_mode        = 0;
@@ -2954,14 +2957,34 @@ static void poly_clamp_scan(int *x0, int *y0, int *x1, int *y1) {
 #ifndef PLATFORM_WEB
     if (smooth_capturing) { vw = SMOOTH_W; vh = SMOOTH_H; }
 #endif
-    Vector2 c0 = GetScreenToWorld2D((Vector2){ 0,  0  }, cam);
-    Vector2 c1 = GetScreenToWorld2D((Vector2){ vw, 0  }, cam);
-    Vector2 c2 = GetScreenToWorld2D((Vector2){ 0,  vh }, cam);
-    Vector2 c3 = GetScreenToWorld2D((Vector2){ vw, vh }, cam);
-    int lo_x = (int)floorf(fminf(fminf(c0.x, c1.x), fminf(c2.x, c3.x)));
-    int lo_y = (int)floorf(fminf(fminf(c0.y, c1.y), fminf(c2.y, c3.y)));
-    int hi_x = (int)ceilf (fmaxf(fmaxf(c0.x, c1.x), fmaxf(c2.x, c3.x)));
-    int hi_y = (int)ceilf (fmaxf(fmaxf(c0.y, c1.y), fmaxf(c2.y, c3.y)));
+    // The visible-world box depends ONLY on the camera + viewport, which are constant for
+    // a whole frame unless the cart moves the camera mid-frame. Caching it turns the 4
+    // GetScreenToWorld2D (matrix inverses) PER FILL into 4 per camera-CHANGE — a big win
+    // for carts that issue hundreds of small fills (clampstress). Byte-identical: the
+    // signature captures every input to the computation, so a hit returns the exact box a
+    // recompute would; any camera/viewport change misses and recomputes.
+    static int   c_lox = 0, c_loy = 0, c_hix = 0, c_hiy = 0;
+    static bool  c_valid = false;
+    static float s_tx = 0, s_ty = 0, s_ox = 0, s_oy = 0, s_rot = 0, s_zoom = 0, s_vw = 0, s_vh = 0;
+    int lo_x, lo_y, hi_x, hi_y;
+    if (clamp_cache_on && c_valid &&
+        cam.target.x == s_tx && cam.target.y == s_ty &&
+        cam.offset.x == s_ox && cam.offset.y == s_oy &&
+        cam.rotation == s_rot && cam.zoom == s_zoom && vw == s_vw && vh == s_vh) {
+        lo_x = c_lox; lo_y = c_loy; hi_x = c_hix; hi_y = c_hiy;   // cache hit — no matrix inverts
+    } else {
+        Vector2 c0 = GetScreenToWorld2D((Vector2){ 0,  0  }, cam);
+        Vector2 c1 = GetScreenToWorld2D((Vector2){ vw, 0  }, cam);
+        Vector2 c2 = GetScreenToWorld2D((Vector2){ 0,  vh }, cam);
+        Vector2 c3 = GetScreenToWorld2D((Vector2){ vw, vh }, cam);
+        lo_x = (int)floorf(fminf(fminf(c0.x, c1.x), fminf(c2.x, c3.x)));
+        lo_y = (int)floorf(fminf(fminf(c0.y, c1.y), fminf(c2.y, c3.y)));
+        hi_x = (int)ceilf (fmaxf(fmaxf(c0.x, c1.x), fmaxf(c2.x, c3.x)));
+        hi_y = (int)ceilf (fmaxf(fmaxf(c0.y, c1.y), fmaxf(c2.y, c3.y)));
+        c_lox = lo_x; c_loy = lo_y; c_hix = hi_x; c_hiy = hi_y; c_valid = true;
+        s_tx = cam.target.x; s_ty = cam.target.y; s_ox = cam.offset.x; s_oy = cam.offset.y;
+        s_rot = cam.rotation; s_zoom = cam.zoom; s_vw = vw; s_vh = vh;
+    }
     if (*x0 < lo_x) *x0 = lo_x;  if (*y0 < lo_y) *y0 = lo_y;
     if (*x1 > hi_x) *x1 = hi_x;  if (*y1 > hi_y) *y1 = hi_y;
 }
