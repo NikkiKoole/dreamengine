@@ -190,12 +190,13 @@ discs — count hides the cost), `lotfill` 4.7ms (pset 9271 + rectfill 7664), `d
    `UpdateTexture` once per frame → `rlVertex3f` gone from *every* per-pixel path (incl. the
    CPU-shader carts). **This is an architecture change** (hybrid GPU+CPU compositing, camera,
    clip) — wants a **design doc before code**, not a patch. Highest leverage the data supports.
-2. **`circfill`/`ovalfill` span fill** — the last common *software* per-pixel fill not yet
-   optimized (`trifill`/`polyfill`/`ngonfill`/`starfill` already share `poly_fill_cov`). Used by
-   ~20 carts; `orbit`'s high-ms/low-count profile says its few discs are large (count hides the
-   per-pixel cost). A disc span fill is trivial (per row, span `[cx−dx, cx+dx]`, `dx=√(r²−dy²)`),
-   low-risk, validates exactly like the polyfill work (byte-identical dump + `raster_test`).
-   **The next concrete win.**
+2. **`circfill`/`ovalfill` span fill** — SHIPPED (`40c38d5`, see ledger). Disc/ellipse rows are
+   one contiguous span → one `DrawRectangle`; `disc_inside` was only 3.2% of `circfill`, so the
+   win is almost entirely the per-pixel-write batching (+ a scan clamp the disc path lacked).
+   `discstress` 8.4×; real carts that are *circfill-bound* (oersoep 2.5×, pinball 2.2×) win,
+   others don't. **Correction to the hypothesis above:** `orbit`'s 11ms is NOT discs — it has
+   only 7 circfill/frame; the span fill left it unchanged, so its cost is the 92 `pset`/frame or
+   compute (a §3-count read, not a §2, misled me — the low count was right, my guess wasn't).
 
 `rectfill` (24k/frame, GPU) is high *volume* but cheap *per call*; batching it is a bigger lift
 for a less certain gain — lower priority.
@@ -208,6 +209,7 @@ for a less certain gain — lower priority.
 |---|---|---|---|---|---|
 | 2026-06-02 | software polys | clamp scan box to on-screen region (off-screen bbox no longer scanned) | `raster_test` 0 | `trifill_stress` 46.7→2.7ms | (in rasterization-consistency.md) |
 | 2026-06 | software polys | `poly_fill_cov` scanline span fill (solid → one `DrawRectangle`) | `polystress` byte-identical, `raster_test` 0 | `roadlab` 2.7×, `polystress` 1.6× | `DE_POLY_FILL=legacy` · `8f201c5` |
+| 2026-06 | software discs | `circfill`/`ovalfill` scanline span fill + scan clamp | `discstress` byte-identical, `raster_test` 0 | `discstress` 8.4×; oersoep 2.5×, pinball 2.2× (circfill-bound only) | `DE_DISC_FILL=legacy` · `40c38d5` |
 
 ---
 
