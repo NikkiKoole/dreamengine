@@ -209,16 +209,18 @@ no per-row division) was considered and parked: `tristress` BIG (8 large) 0.33ms
 clamp cost — is sub-millisecond even in torture. A documented **seam** is left in `trifill`
 (`studio.c`) and the rig is `tools/carts/tristress.c` (BIG/MANY scenes).
 
-### Next live candidate — per-frame clamp-box cache (helps ALL software fills)
-`tristress` MANY exposed the real shared cost: `poly_clamp_scan` calls `GetScreenToWorld2D` **4×
-per fill call** (a camera-matrix inverse ×4), yet the visible-region box is **constant for the
-whole frame** unless the cart calls `camera()`. A cart with hundreds of small fills recomputes
-the same box hundreds of times (~1700 matrix inverts/frame in MANY). **Cache it once per frame**
-(invalidate in `camera()`/`camera_ex()`/reset, or on a cam-signature change) → 4 inverts per
-*camera change* instead of per *fill*. One `studio.c` change, benefits `polyfill`/`trifill`/
-`circfill`/`ovalfill` together; biggest effect on many-small-fill carts. Pre-flagged in
-[../design/rasterization-consistency.md](../design/rasterization-consistency.md) ("cache the
-clamp box once per frame"). Validates like the others (byte-identical + `raster_test`).
+### Per-frame clamp-box cache — SHIPPED (`13fdeca`)
+`poly_clamp_scan` called `GetScreenToWorld2D` **4× per fill call** (a camera-matrix inverse ×4),
+yet the visible-region box is **constant for the whole frame** unless the cart calls `camera()`.
+Now cached, keyed on a camera+viewport signature: a hit skips the inverts, any camera/viewport
+change misses and recomputes (byte-identical by construction — the signature captures every
+input). Benefits `polyfill`/`trifill`/`circfill`/`ovalfill` together. Rig: `clampstress`
+(STATIC + a PAN scene that proves invalidation). Pre-flagged in
+[../design/rasterization-consistency.md](../design/rasterization-consistency.md).
+**Honest result:** big on the many-tiny-fills *tail* (`clampstress` 1508 fills 2.03→1.47ms, 28%),
+modest on real fill-heavy carts (qbert 9%, oersoep 10%), **neutral** on large-fill carts
+(polystress unchanged — there fill *area* dominates, not the per-call clamp). Cheap (one signature
+compare/call) and never regresses, so it ships; it's a tail/many-small-fills win, not a headline.
 
 ---
 
@@ -229,6 +231,7 @@ clamp box once per frame"). Validates like the others (byte-identical + `raster_
 | 2026-06-02 | software polys | clamp scan box to on-screen region (off-screen bbox no longer scanned) | `raster_test` 0 | `trifill_stress` 46.7→2.7ms | (in rasterization-consistency.md) |
 | 2026-06 | software polys | `poly_fill_cov` scanline span fill (solid → one `DrawRectangle`) | `polystress` byte-identical, `raster_test` 0 | `roadlab` 2.7×, `polystress` 1.6× | `DE_POLY_FILL=legacy` · `8f201c5` |
 | 2026-06 | software discs | `circfill`/`ovalfill` scanline span fill + scan clamp | `discstress` byte-identical, `raster_test` 0 | `discstress` 8.4×; oersoep 2.5×, pinball 2.2× (circfill-bound only) | `DE_DISC_FILL=legacy` · `40c38d5` |
+| 2026-06 | all software fills | per-frame clamp-box cache (4 matrix inverts → per camera-change) | `clampstress` STATIC+PAN byte-identical, `raster_test` 0 | `clampstress` 28%; qbert 9%, oersoep 10%; neutral on large-fill carts | `DE_CLAMP_CACHE=off` · `13fdeca` |
 
 ---
 
