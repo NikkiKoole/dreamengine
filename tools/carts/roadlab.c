@@ -31,10 +31,15 @@
 //                fixed-R loop lands on B. RP_FLYOVER — scurve_spline() is a SEMI-DIRECT reverse curve (an
 //                equal-tangent BIARC: two tangent arcs joined at a midpoint) that crosses the conflict on a
 //                raised deck. `l` cycles the sandbox ramp primitive (direct/loop/flyover) for any port pair.
+//   GENERATOR (spec §8.2): make_junction(type) builds the connection TABLE itself — enumerate every
+//                movement, classify the turn (through/right/left via relative bearing, DRIVE-folded), assign
+//                the primitive from a per-type POLICY. diamond/cloverleaf/stack differ ONLY in how the hard
+//                LEFT turn is served (direct / loop / flyover). Pure fn of (ports, type) ⇒ deterministic. The
+//                junction view now shows this GENERATED junction; `g` cycles the type. (Was the hand DEMO.)
 //   Controls: an on-screen ui.h toolbar — every control a clickable button. Keyboard: ←/→ A · ↑/↓ B ·
-//             [ ] radius · ,/. Ls · C clothoid · 1-4 lanes · t taper · e lift · j sandbox/junction · l primitive.
-// Next: port roadlab into roadnet2 — the Junction[] table is the junction representation worldgen emits
-//       (deterministically, from the seed) and this cart's draw_junction() is the drawer it calls.
+//             [ ] radius · ,/. Ls · C clothoid · 1-4 lanes · t taper · e lift · j sandbox/junction · l primitive · g type.
+// Next: port into a world that EMITS (legs,type) per crossing from the seed and calls make_junction() +
+//       draw_junction() as the drawer — a new junction-first world, or roadnet2 (see junction-lanelink §7).
 
 #define DRIVE  1     // +1 = drive on the right — the single source of truth for handedness
 #define LANEW  7     // one lane width (px)
@@ -331,12 +336,12 @@ static int scurve_spline(Port a, Port b, float *xs, float *ys){
 //    is one movement (entry port → exit port) drawn by a ramp PRIMITIVE. The SHAPE lives in the spline
 //    drawers above (M1–M5), NOT here. A roadlab PORT already IS a laneLink endpoint ("a lane + its travel
 //    direction"), so a connection's lanes ARE its laneLinks (here 1:1 parallel ⇒ no lane change). ──
-typedef enum { RP_DIRECT, RP_LOOP, RP_FLYOVER } RampPrim;   // generative: how to draw the connecting road.
-                                                            // OpenDRIVE INFERS shape from geometry; we
-                                                            // generate FROM this. Only RP_DIRECT has a real
-                                                            // drawer yet (the arc/clothoid spline above);
-                                                            // LOOP/FLYOVER fall back to it for now.
-static const char* RP_NAME[] = { "direct", "loop", "flyover" };
+typedef enum { RP_DIRECT, RP_LOOP, RP_FLYOVER, RP_THROUGH } RampPrim;  // generative: how to draw the
+                                                            // connecting road. OpenDRIVE INFERS shape from
+                                                            // geometry; we generate FROM this. THROUGH = the
+                                                            // road continues straight across (the mainline);
+                                                            // LOOP/FLYOVER are the hard (left-equiv) turns.
+static const char* RP_NAME[] = { "direct", "loop", "flyover", "through" };
 typedef struct { int from, to; } LaneLink;                  // signed lane ids: incoming lane → connecting lane
 typedef struct {
     int      inPort, outPort;        // entry port (A — the ENTRY, tangent points IN) → exit port (B)
@@ -344,18 +349,46 @@ typedef struct {
     LaneLink links[6]; int nLinks;   // lanes carried; nLinks>1 ⇒ lane change allowed (here all parallel)
     float    R; int lift;            // per-connection radius / flyover deck (0 ⇒ use the global default)
 } Connection;
-typedef struct { const char* name; Connection conns[8]; int nConns; } Junction;
+typedef struct { const char* name; Connection conns[16]; int nConns; } Junction;  // a 4-way serves 12 movements
 
-// A demo junction declared as a connection TABLE over the 8 ports: each movement runs from an INBOUND
-// port (entry) to an OUTBOUND port (exit) — a 4-way pinwheel of free-flow RIGHT-turn slips (the easy,
-// drive-on-right turns), each a DIRECT curve carrying 2 lanes. The point is the SCHEMA driving the drawer
-// — not a tuned interchange (the hard left turns would be RP_LOOP / RP_FLYOVER).
-static const Junction DEMO = { "4-way right-turn slips", {
-    { 4, 1, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // N-in → W-out  (southbound, turn right to west)
-    { 2, 5, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // E-in → N-out  (westbound,  turn right to north)
-    { 6, 3, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // S-in → E-out  (northbound, turn right to east)
-    { 0, 7, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // W-in → S-out  (eastbound,  turn right to south)
-}, 4 };
+// ── THE GENERATOR (spec §8.2): build the connection TABLE from a junction TYPE — interchange-dsl Layer 1
+//    in code. A type is a POLICY (which primitive serves each turn class), NOT geometry. We enumerate every
+//    movement (entry leg → exit leg), classify the turn by relative bearing (DRIVE folds handedness so
+//    "right" is always the easy side), and assign the primitive. PURE function of (legs, type) ⇒ the same
+//    seed grows the same junction. The SHAPE is still the M1–M5 splines; this only decides who connects to
+//    whom, with which primitive. (Supersedes the old hand-authored DEMO table.) ──
+typedef enum { JT_DIAMOND, JT_CLOVERLEAF, JT_STACK } JuncType;
+static const char* JT_NAME[] = { "diamond", "cloverleaf", "stack" };
+typedef enum { T_THROUGH, T_RIGHT, T_LEFT, T_UTURN } Turn;
+typedef struct { RampPrim through, right, left; int serveUturn; } JuncPolicy;
+static const JuncPolicy POLICY[] = {                        // the named types differ ONLY in the LEFT column
+    /* diamond    */ { RP_THROUGH, RP_DIRECT, RP_DIRECT,  0 },   // hard left = at-grade direct (signalised)
+    /* cloverleaf */ { RP_THROUGH, RP_DIRECT, RP_LOOP,    0 },   // hard left = loop (≈270°, no crossing)
+    /* stack      */ { RP_THROUGH, RP_DIRECT, RP_FLYOVER, 0 },   // hard left = flyover (semi-direct, over)
+};
+// the 4 legs are encoded in the port layout (setup order = in,out per leg) — leg L: 0=W 1=E 2=N 3=S
+static int leg_in (int L){ return L*2;   }                  // inbound (entry) port of leg L
+static int leg_out(int L){ return L*2+1; }                  // outbound (exit) port of leg L
+static float norm180(float a){ while(a>180)a-=360; while(a<-180)a+=360; return a; }
+static Turn classify_turn(float inDir, float outDir){       // by the change in travel heading through the hub
+    float rel=norm180(outDir-inDir);
+    if (rel>-30 && rel<30)   return T_THROUGH;               // heading ~unchanged ⇒ straight across
+    if (rel>150 || rel<-150) return T_UTURN;                 // ~reversed ⇒ U-turn
+    return (rel*DRIVE > 0) ? T_RIGHT : T_LEFT;               // else easy (right) vs hard (left), DRIVE-folded
+}
+// GENERATE: enumerate every movement over `nleg` legs → one Connection per served movement, per the policy
+static int make_junction(int nleg, JuncType type, Junction *out){
+    JuncPolicy p = POLICY[type]; out->name = JT_NAME[type]; out->nConns = 0;
+    for (int o=0;o<nleg;o++) for (int d=0;d<nleg;d++){
+        if (o==d) continue;
+        Turn t = classify_turn(ports[leg_in(o)].dir, ports[leg_out(d)].dir);
+        if (t==T_UTURN && !p.serveUturn) continue;
+        RampPrim prim = (t==T_THROUGH)?p.through : (t==T_RIGHT)?p.right : p.left;
+        float r = (prim==RP_LOOP)?12.f:0.f;                 // keep generated loops compact; direct uses global
+        out->conns[out->nConns++] = (Connection){ leg_in(o), leg_out(d), prim, {{-1,-1},{-2,-2}}, 2, r, 0 };
+    }
+    return out->nConns;
+}
 
 // draw ONE connection: pick the spline by the PRIMITIVE, stroke its laneLink count as a multilane ribbon
 static void draw_connection(Connection c, int useCloth, float R, float Ls, float taperFrac, float liftPx, int warn){
@@ -372,11 +405,14 @@ static void draw_connection(Connection c, int useCloth, float R, float Ls, float
     if (warn) stroke_poly(xs, ys, n, CLR_RED);              // FLAG: not a real movement — red spine on the ramp
 }
 static void draw_junction(const Junction* j, int useCloth, float R, float Ls, float taperFrac, float liftPx){
-    for (int i = 0; i < j->nConns; i++) draw_connection(j->conns[i], useCloth, R, Ls, taperFrac, liftPx, 0);
+    for (int i = 0; i < j->nConns; i++)
+        if (j->conns[i].prim != RP_THROUGH)                 // the through movement IS the road itself, not a ramp
+            draw_connection(j->conns[i], useCloth, R, Ls, taperFrac, liftPx, 0);
 }
 
 // ── state ──
-static int selA=4, selB=3, view=0, sandPrim=1; static float radius=30.f, spiral=14.f; static int use_cloth=1, nlanes=3, taperPct=60, lift=0;
+static int selA=4, selB=3, view=1, sandPrim=1; static float radius=30.f, spiral=14.f; static int use_cloth=1, nlanes=3, taperPct=60, lift=0;
+static int juncType=1; static Junction gen_junc;           // junction view: type (default cloverleaf) + the generated table
 
 // a "−/+" (or "</>") stepper: two ui buttons; returns -1, 0 or +1
 static int step_btn(int x,int y,int w,const char*lm,const char*rm){
@@ -422,6 +458,7 @@ void update(void){
     if (keyp('e')||keyp('E')){ lift+=6; if(lift>18)lift=0; }                  // cycle flyover deck height
     if (keyp('j')||keyp('J')) view=!view;                                     // sandbox ↔ junction view
     if (keyp('l')||keyp('L')) sandPrim=(sandPrim+1)%3;                         // sandbox ramp primitive: direct/loop/flyover
+    if (keyp('g')||keyp('G')) juncType=(juncType+1)%3;                         // junction type: diamond/cloverleaf/stack
 }
 
 void draw(void){
@@ -436,10 +473,11 @@ void draw(void){
     for (int x=12;x<SCREEN_W;x+=40){ arrow(x, CY-LANEW/2.0f, 180, CLR_YELLOW); arrow(x, CY+LANEW/2.0f, 0, CLR_YELLOW); }
     for (int y=12;y<SCREEN_H;y+=40){ arrow(CX+LANEW/2.0f, y, 270, CLR_YELLOW); arrow(CX-LANEW/2.0f, y, 90, CLR_YELLOW); }
     const char* sand_problem = (selA!=selB) ? movement_problem(ports[selA], ports[selB]) : 0;
+    make_junction(4, (JuncType)juncType, &gen_junc);        // GENERATE the table from the type (pure fn of ports+type)
     if (view){
-        // JUNCTION view (M6) — the WHOLE junction drawn from the connection TABLE, each connection an
-        // arc/clothoid spline ribbon. This is the table-driven drawer roadnet2 will call.
-        draw_junction(&DEMO, use_cloth, radius, spiral, taperPct/100.f, (float)lift);
+        // JUNCTION view (M6 + §8.2) — the WHOLE junction GENERATED from the type, then drawn from the
+        // connection table. This is the table-driven drawer roadnet2 will call (worldgen picks the type).
+        draw_junction(&gen_junc, use_cloth, radius, spiral, taperPct/100.f, (float)lift);
         for (int i=0;i<nport;i++) draw_port(ports[i], CLR_MEDIUM_GREY);
     } else {
         // RAMP sandbox — one ramp between the two selected ports, as a transient Connection so it runs the
@@ -457,12 +495,12 @@ void draw(void){
     font(FONT_SMALL);
     char b[64];
     if (view){
-        snprintf(b,sizeof b,"Junction: %s   -   %d connections (table-driven)", DEMO.name, DEMO.nConns);
+        snprintf(b,sizeof b,"Junction: %s  -  %d movements (g=type)", gen_junc.name, gen_junc.nConns);
         print(b,4,5,CLR_WHITE);
         int yy=13;
-        for (int i=0;i<DEMO.nConns;i++){ Connection c=DEMO.conns[i];
-            snprintf(b,sizeof b,"%s -> %s : %s  x%d", ports[c.inPort].name, ports[c.outPort].name, RP_NAME[c.prim], c.nLinks);
-            print(b,4,yy,CLR_LIGHT_GREY); yy+=7; }
+        for (int i=0;i<gen_junc.nConns;i++){ Connection c=gen_junc.conns[i];
+            snprintf(b,sizeof b,"%s -> %s : %s", ports[c.inPort].name, ports[c.outPort].name, RP_NAME[c.prim]);
+            print(b,4,yy, c.prim==RP_THROUGH?CLR_DARKER_GREY:CLR_LIGHT_GREY); yy+=7; }
     } else {
         snprintf(b,sizeof b,"Port A: %s   to   Port B: %s    [%s]", ports[selA].name, ports[selB].name, RP_NAME[sandPrim]);
         print(b,4,5,CLR_WHITE);
@@ -505,8 +543,9 @@ void draw(void){
     print("lift", 176, SCREEN_H-15, CLR_INDIGO);
     d=step_btn(204, SCREEN_H-18, 14, "-", "+"); if (d) lift+=3*d;
     snprintf(b,sizeof b,"%dpx",lift); print(b, 236, SCREEN_H-15, CLR_LIGHT_GREY);
-    // sandbox-only: the ramp primitive (direct/loop/flyover) the picked ports are drawn with
-    if (!view){ char pb[16]; snprintf(pb,sizeof pb,"ramp:%s",RP_NAME[sandPrim]);
+    // junction view: cycle the junction TYPE (regenerates the table) · sandbox: cycle the ramp primitive
+    if (view){ if (ui_button(250, SCREEN_H-18, 66, 13, JT_NAME[juncType])) juncType=(juncType+1)%3; }
+    else { char pb[16]; snprintf(pb,sizeof pb,"ramp:%s",RP_NAME[sandPrim]);
         if (ui_button(264, SCREEN_H-18, 52, 13, pb)) sandPrim=(sandPrim+1)%3; }
     // clamps (apply to both button + keyboard edits)
     if (radius<6) radius=6;  if (spiral<0) spiral=0;

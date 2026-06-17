@@ -156,9 +156,16 @@ wired into `draw_connection()` (`RP_LOOP`/`RP_FLYOVER`) + the sandbox (`l` cycle
 `Connection` gained per-ramp `R`/`lift`. Also: ports now model **inbound + outbound carriageways** per leg
 (entries on the inbound lane — see the M5 gotcha note above).
 
-**▶ Next:** build the type→`Connection[]` *generator* (§8.2), then port into a world that emits `Junction[]`
-deterministically from the seed. **Open reflections, the "retrofit roadnet2 vs grow a junction-first world"
-fork, and the specs are in [`junction-lanelink.md`](junction-lanelink.md) §7 + §8.** **Full OpenDRIVE
+**Generator (spec §8.2) DONE (2026-06-17).** `make_junction(type)` builds the `Connection[]` itself —
+enumerate movements, `classify_turn()` (relative bearing, DRIVE-folded), assign the primitive from a per-type
+`POLICY` (diamond/cloverleaf/stack differ only in the LEFT column). Pure fn of `(ports, type)`. The junction
+view now draws the *generated* junction (`g` cycles the type); the hand `DEMO` is gone. A 4-way generates 12
+movements; `through` is emitted but not drawn (it's the road). roadlab is now a junction **factory**.
+
+**▶ Next:** port into a world that **emits `(legs, type)` per crossing from the seed** and calls
+`make_junction()` + `draw_junction()` — a **new junction-first world** vs retrofitting roadnet2 (the fork +
+take in [`junction-lanelink.md`](junction-lanelink.md) §7). Smaller open items: `laneLink` with teeth
+(`from≠to` driving the M4 gore), per-segment z-sort for real ramp-over-ramp in a stack. **Full OpenDRIVE
 roadmap — taken (M1–M6) vs left:** [`road-geometry-refs.md`](road-geometry-refs.md) → **"OpenDRIVE adoption
 inventory"**.
 

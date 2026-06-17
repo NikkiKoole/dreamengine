@@ -168,9 +168,11 @@ Landing M6 (the schema + table-driven drawer) surfaced five things worth a delib
    long way (≈270°); `scurve_spline()` draws the flyover as an equal-tangent **biarc** (semi-direct reverse
    curve) that crosses the conflict on a raised deck. `l` cycles the sandbox primitive so any port pair
    draws as direct / loop / flyover. → spec **§8.1**.
-2. **The schema has no generator.** `DEMO` is hand-authored. The DSL payoff — *given crossing legs + a type
-   → emit the `Connection[]`* (interchange-dsl Layer 1) — is still unbuilt. That generator is what lets
-   worldgen produce junctions from a seed-hash. → spec **§8.2**.
+2. **The generator — DONE (2026-06-17, §8.2).** `make_junction(type)` enumerates every movement, classifies
+   the turn (through/right/left by relative bearing, DRIVE-folded), and assigns the primitive from a per-type
+   `POLICY` (diamond/cloverleaf/stack differ only in the LEFT column). Pure function of `(ports, type)`. The
+   junction view now shows this *generated* junction; `g` cycles the type. The hand-authored `DEMO` is gone.
+   → spec **§8.2**.
 3. **`Port` collapses road + lane.** roadlab's `Port` is a fixed point; the schema (and OpenDRIVE) have
    `incomingRoad`/`connectingRoad` as *roads* with `laneLink` mapping lane ids. roadnet2 legs are real graph
    edges (width, lane count, bearing), not hand-placed points. roadlab likely needs a thin **`Leg`/`Road`
@@ -236,6 +238,20 @@ geometry is the loop. Add `int lift;` to `Connection` (0 ⇒ at grade).
 (S allowed) + lift`, else the existing arc/clothoid spline.
 
 ### 8.2 — `make_junction()` (the generator: type → `Connection[]`, interchange-dsl Layer 1 in code)
+> **✅ DONE (2026-06-17)** — `make_junction(nleg, type, &out)` is in `roadlab.c`, close to the sketch below:
+> it enumerates every leg pair, `classify_turn()` sorts each by relative bearing (DRIVE-folded), and the
+> `POLICY[]` table assigns the primitive. `g` cycles diamond/cloverleaf/stack; the junction view draws the
+> generated table (the hand `DEMO` is gone). For roadlab the **`Leg` layer is implicit** — the 4 legs are
+> encoded in the port layout (`leg_in(L)=L*2`, `leg_out(L)=L*2+1`), so `portOf` is just those two helpers;
+> the explicit `Leg{bearing,lanes}` struct below is what the *roadnet2* port will need (ports derived from
+> real graph edges). Generated loops get a compact per-connection `R`; `through` is emitted but not drawn (it
+> *is* the road). The 4-way generates 12 movements (4 through + 4 right + 4 left).
+>
+> **Primitive count reconciled:** the DSL has 5 atoms (`through/diverge/merge/loop/flyover`); roadlab's enum
+> is **4 drawers** (`RP_DIRECT/RP_LOOP/RP_FLYOVER/RP_THROUGH`) because **diverge + merge are the universal
+> lead-in/run-out segments of *every* ramp** (the spline's first/last LINE), not standalone ramp kinds — so
+> they stay implicit, exactly as the grammar's `diverge → [loop|flyover|direct] → merge` says.
+
 A junction **type is a policy, not geometry**: which primitive serves each turn class, and which movements
 are served (completeness).
 ```c
