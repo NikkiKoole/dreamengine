@@ -135,9 +135,23 @@ the bigger story — the per-pixel path spiked, the span path is steady.
 **Validation:** `polystress` byte-identical (legacy == fast == pre-change original);
 `raster_test` 20/20 `mismatches:"0"`. Commit `8f201c5`.
 
-**Open follow-up:** the dither path is still per-pixel by design. Making it fast means routing
-dithered spans through `rectfill_pat` — but session-14 deliberately unified dither onto
-`plot_pat` for the consistency invariant, so that's a design discussion, not a free win.
+**Follow-up — measured & PARKED (2026-06): dither-span batching (`draw_span_pat`).** The
+idea: batch a dithered span into same-colour runs (one `DrawRectangle` each) instead of
+per-pixel `plot_pat`. Measured first (polystress scene 0, six big dithered stars, one per
+`FILL_*` pattern) and parked:
+- The span fill **already halved the dither cost** by removing per-pixel `poly_inside`
+  (1.75 → 0.91ms on the torture scene), even though dither still plots per-pixel. So the big
+  win was already banked; `draw_span_pat` could only attack the residual ~0.9ms of per-pixel
+  `DrawPixel`.
+- That residual is **pattern-dependent** (avg run length → calls-vs-per-pixel): HLINES 2%,
+  DOTS 16%, GRID/DIAG ~33% — but **CHECKER and VLINES are 1.0 (no win, slightly worse from
+  rect overhead)**, and those are the most commonly used patterns. So it's a coin-flip with a
+  regression risk on the common case.
+- Verdict: not worth it now — sub-millisecond ceiling on a torture scene, real dither fills are
+  small accents. If a real cart ever profiles a dither hotspot, ship a **conditional** version
+  (precompute per `fillp()` whether the pattern's run-length pays; batch only then → zero
+  regression). The run-length data lives in this section. (Routing through the existing
+  `rectfill_pat` is the natural vehicle, but mind the session-14 dither-on-`plot_pat` invariant.)
 
 ---
 
