@@ -131,7 +131,7 @@ const sections = [
   { title: 'map',          keys: ['map', 'map_scale', 'mget', 'mset', 'MAP_W', 'MAP_H'] },
   { title: 'noise',       keys: ['noise', 'noise2', 'noise3'] },
   { title: '3d',           keys: ['V3', 'rot3', 'project3', 'zsort', 'quadfill'] },
-  { title: 'easing',      keys: ['ease_in', 'ease_out', 'ease_in_out'] },
+  { title: 'easing',      keys: ['ease_in', 'ease_out', 'ease_in_out', 'ease_back'] },
   { title: 'math',     keys: ['abs', 'min', 'max', 'clamp', 'lerp', 'remap', 'distance', 'length', 'fsqrt', 'angle_to', 'dx', 'dy', 'sin_deg', 'cos_deg'] },
   { title: 'collision',    keys: ['boxes_touch', 'point_in_box', 'circles_touch', 'near', 'touching_map', 'tile_at', 'touching_color'] },
   { title: 'animation',     keys: ['anim', 'blink'] },

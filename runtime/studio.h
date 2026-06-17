@@ -730,6 +730,7 @@ void quadfill(int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, in
 float ease_in(float t);      // start slow, end fast  (t²)
 float ease_out(float t);     // start fast, end slow
 float ease_in_out(float t);  // slow → fast → slow  (smoothstep)
+float ease_back(float t);    // overshoot past the end, then settle back — a snappy "pop"
 
 // ------------------------------------------------------------
 // collision

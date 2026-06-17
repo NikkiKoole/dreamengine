@@ -444,6 +444,7 @@ export const studioDocs = {
   ease_in:        { sig: 'float ease_in(float t)',       doc: 'Start slow, end fast. t must be 0..1. Compose with lerp:\nfloat x = lerp(startX, endX, ease_in(t));' },
   ease_out:       { sig: 'float ease_out(float t)',      doc: 'Start fast, end slow. t must be 0..1.' },
   ease_in_out:    { sig: 'float ease_in_out(float t)',   doc: 'Slow → fast → slow. The most natural-feeling easing. t must be 0..1.' },
+  ease_back:      { sig: 'float ease_back(float t)',      doc: 'Overshoot past the end, then settle back — a snappy "pop". Returns slightly >1 near the end, pushing a value past its target before it springs home. t must be 0..1.\nint x = lerp(startX, endX, ease_back(t));' },
   lerp:       { sig: 'float lerp(float a, float b, float t)',                          doc: 'Mix between a and b. t=0 gives a, t=1 gives b, t=0.5 the middle.\nGreat for smooth camera follow, fades, color blends.' },
   remap:      { sig: 'float remap(float v, float a, float b, float c, float d)',       doc: 'Remap v from the range a..b into the range c..d.\nremap(health, 0, 100, 0, SCREEN_W) turns health into a bar width.' },
   distance:   { sig: 'float distance(int x1, int y1, int x2, int y2)',                 doc: 'Distance between two points, in pixels.' },

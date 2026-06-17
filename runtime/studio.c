@@ -3442,6 +3442,7 @@ float noise3(float x, float y, float z) {
 float ease_in(float t)     { return t * t; }
 float ease_out(float t)    { float u = 1.0f - t; return 1.0f - u * u; }
 float ease_in_out(float t) { return t * t * (3.0f - 2.0f * t); }
+float ease_back(float t)   { const float s = 1.70158f; float u = t - 1.0f; return 1.0f + (s + 1.0f) * u * u * u + s * u * u; }
 
 // ------------------------------------------------------------
 // random helpers
