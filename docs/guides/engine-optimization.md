@@ -155,6 +155,53 @@ per-pixel `plot_pat`. Measured first (polystress scene 0, six big dithered stars
 
 ---
 
+## Fleet survey — where the engine spends time across carts (2026-06)
+
+To pick engine-level targets (not per-cart fixes), profile *many* carts and aggregate the
+draw-call composition — a primitive that's hot across 20+ carts is worth fixing once in
+`studio.c`. Re-runnable: **`node tools/profile-fleet.js`** (headless §1 + §3 across a
+graphics-heavy default set; pass cart names to scope it). It measures cost + call frequency,
+**not** per-function time (no §2 — that needs the editor `⏱` / a `sample` attach), and counts
+**under-state large software fills**, so a low-count/high-ms cart (e.g. `orbit`) is a "pull §2
+on this one" flag, not a cheap one.
+
+First run, 32 carts (calls/frame summed across the fleet):
+
+| primitive | sum/frame | #carts | path |
+|---|---|---|---|
+| **`pset`** | **59,593** | 21 | software — `DrawPixel` → 1 `rlVertex3f` **per pixel** |
+| `rectfill` | 24,214 | 29 | GPU (`DrawRectanglePro`, 1 quad each) |
+| `line` | 3,892 | 23 | GPU |
+| **`circfill`** | 1,028 | 20 | **software per-pixel (disc)** |
+| `polyfill`+`trifill` | 966 | — | software — *already span-optimized* ✓ |
+| `ovalfill` | 117 | 9 | software per-pixel (disc) |
+
+Slowest carts: `galerijflat` 12.8ms (rectfill 1194 + pset 364), `orbit` 11.0ms (few large
+discs — count hides the cost), `lotfill` 4.7ms (pset 9271 + rectfill 7664), `dpaint` 3.6ms
+(**pset 30,535**), `flyover` 3.4ms (rectfill 11,330), `interiors` 3.0ms (pset 18,036).
+
+**Two engine targets fall out of this, in priority order:**
+
+1. **`pset`/`DrawPixel` is the dominant cost by 2.5×** — 59.6k/frame across 21 carts, one
+   immediate-mode GPU vertex *per pixel* (the polyfill villain, but in the raw `pset` path carts
+   hit directly: `dpaint` 30k, `interiors` 18k, `lotfill` 9k). Raw `pset(x,y)` calls are
+   arbitrary points, so they can't be coalesced into spans like polyfill. The engine fix that
+   kills it fleet-wide is a **CPU framebuffer**: route `pset`/`DrawPixel` into a `uint32` array,
+   `UpdateTexture` once per frame → `rlVertex3f` gone from *every* per-pixel path (incl. the
+   CPU-shader carts). **This is an architecture change** (hybrid GPU+CPU compositing, camera,
+   clip) — wants a **design doc before code**, not a patch. Highest leverage the data supports.
+2. **`circfill`/`ovalfill` span fill** — the last common *software* per-pixel fill not yet
+   optimized (`trifill`/`polyfill`/`ngonfill`/`starfill` already share `poly_fill_cov`). Used by
+   ~20 carts; `orbit`'s high-ms/low-count profile says its few discs are large (count hides the
+   per-pixel cost). A disc span fill is trivial (per row, span `[cx−dx, cx+dx]`, `dx=√(r²−dy²)`),
+   low-risk, validates exactly like the polyfill work (byte-identical dump + `raster_test`).
+   **The next concrete win.**
+
+`rectfill` (24k/frame, GPU) is high *volume* but cheap *per call*; batching it is a bigger lift
+for a less certain gain — lower priority.
+
+---
+
 ## Ledger
 
 | date | area | what | proof | result | flag / commit |
