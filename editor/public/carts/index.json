@@ -1476,6 +1476,14 @@
     ]
   },
   {
+    "title": "tristress",
+    "description": "A deterministic torture test for trifill — which is poly_fill_cov with n=3, so it already inherits the polygon scanline span fill (one DrawRectangle per row). The measurement seam for a possible DEDICATED triangle rasterizer (sorted-vertex incremental edge walk, no per-row division): scene 0 BIG (key 1) = 8 large rotating triangles (per-row math over large area), scene 1 MANY (key 2) = a 26x16 grid of tiny triangles (per-CALL setup, where poly_clamp_scan's 4 matrix-inverts dominate). Pure function of the frame counter. Verdict so far: a tri-specific path isn't worth it (BIG 0.33ms / MANY 0.97ms, no real cart trifill-bound); the per-call overhead it would cut is shared by all software fills and better solved by a per-frame clamp-box cache. Kept as the rig + seam. See guides/engine-optimization.md.",
+    "file": "tristress.cart.png",
+    "kind": [
+      "tech-demo"
+    ]
+  },
+  {
     "title": "excitebike",
     "description": "Side-view NES motocross with the famous landing-angle skill, an overheat meter, and a track editor. Hit a ramp and you launch into the air with the nose drifting down on its own — hold Up/Down to control the tilt and touch down within a hair of LEVEL to keep your speed; nose-down or tail-down and you wipe out. Hold turbo for more top speed but the temp gauge climbs to a flashing-red redline and a stall, so mud (slow but cooling) becomes a real choice. Race one track against three pal()-recolored CPU rivals you bump past, chasing your best lap (saved). Then switch to BUILD: a mouse editor paints ramps, jumps, whoops and mud onto the lane grid, persisted with save_bytes — save it and test-ride instantly. RACE: Right/Z throttle, X turbo, Up/Down tilt in the air, Left brake. BUILD: 1-5 or click the palette, left-click paint / right-click erase, arrows scroll, S save, Z ride, B title.",
     "file": "excitebike.cart.png",

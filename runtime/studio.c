@@ -2423,6 +2423,14 @@ void tri(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
 
 void trifill(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
     PROF("trifill");
+    // SEAM for a dedicated triangle rasterizer. Today a triangle is just a 3-vertex
+    // polygon → poly_fill_cov already span-fills it (one DrawRectangle per row). A
+    // hand-rolled path (sort verts by y, walk the two active edges with incremental
+    // x += inv_slope — no per-row division, cheap bbox clamp instead of poly_clamp_scan's
+    // matrix inverts) would slot in HERE behind a flag. PARKED — measured not worth it:
+    // tristress BIG 0.33ms / MANY (421 tris) 0.97ms, no real cart trifill-bound; the per-
+    // call overhead it'd cut is shared by all fills and better solved by a per-frame
+    // clamp-box cache. Rig: tools/carts/tristress.c. See guides/engine-optimization.md.
     int pts[6] = {x1,y1, x2,y2, x3,y3};
     poly_fill_cov(pts, 3, color);
 }

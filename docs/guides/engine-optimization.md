@@ -201,6 +201,25 @@ discs — count hides the cost), `lotfill` 4.7ms (pset 9271 + rectfill 7664), `d
 `rectfill` (24k/frame, GPU) is high *volume* but cheap *per call*; batching it is a bigger lift
 for a less certain gain — lower priority.
 
+### Triangles — measured & PARKED (seam left)
+`trifill` is `poly_fill_cov(n=3)`, so it already gets the span fill (one `DrawRectangle`/row).
+A dedicated triangle rasterizer (sort verts by y, walk two edges with incremental `x += slope`,
+no per-row division) was considered and parked: `tristress` BIG (8 large) 0.33ms, MANY (421 tiny)
+0.97ms, and no real cart is trifill-bound. The win it'd chase — per-row division + per-call
+clamp cost — is sub-millisecond even in torture. A documented **seam** is left in `trifill`
+(`studio.c`) and the rig is `tools/carts/tristress.c` (BIG/MANY scenes).
+
+### Next live candidate — per-frame clamp-box cache (helps ALL software fills)
+`tristress` MANY exposed the real shared cost: `poly_clamp_scan` calls `GetScreenToWorld2D` **4×
+per fill call** (a camera-matrix inverse ×4), yet the visible-region box is **constant for the
+whole frame** unless the cart calls `camera()`. A cart with hundreds of small fills recomputes
+the same box hundreds of times (~1700 matrix inverts/frame in MANY). **Cache it once per frame**
+(invalidate in `camera()`/`camera_ex()`/reset, or on a cam-signature change) → 4 inverts per
+*camera change* instead of per *fill*. One `studio.c` change, benefits `polyfill`/`trifill`/
+`circfill`/`ovalfill` together; biggest effect on many-small-fill carts. Pre-flagged in
+[../design/rasterization-consistency.md](../design/rasterization-consistency.md) ("cache the
+clamp box once per frame"). Validates like the others (byte-identical + `raster_test`).
+
 ---
 
 ## Ledger
