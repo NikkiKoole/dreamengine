@@ -149,7 +149,7 @@ static float tan_deg(float d){ return sin_deg(d)/cos_deg(d); }
 // ── ARC-SPLINE ramp: LINE → ARC → LINE between two ports (a "simple curve": round the corner where
 //    A's heading-line meets B's heading-line with an arc of radius R). Returns the polyline length. ──
 static int arc_spline(Port a, Port b, float R, float *xs, float *ys){
-    float ad=a.dir+180;                                     // A is the ENTRY: ramp leaves A heading INTO the junction
+    float ad=a.dir;                                         // A is the ENTRY: leave along the inbound lane's travel dir
     float uax=ux(ad),uay=uy(ad), ubx=ux(b.dir),uby=uy(b.dir);
     float den=uax*uby-uay*ubx;                              // cross(uA,uB); ~0 ⇒ parallel
     float dA=b.dir-ad; while(dA>180)dA-=360; while(dA<-180)dA+=360;
@@ -186,7 +186,7 @@ static int arc_spline(Port a, Port b, float R, float *xs, float *ys){
 //    curve forward. Reduces EXACTLY to arc_spline as Ls→0. ──
 static int clothoid_spline(Port a, Port b, float R, float Ls, float *xs, float *ys){
     if (Ls < 0.5f) return arc_spline(a,b,R,xs,ys);          // Ls→0 IS the plain arc (avoids 1/(R·Ls) blow-up)
-    float ad=a.dir+180;                                     // A is the ENTRY: ramp leaves A heading INTO the junction
+    float ad=a.dir;                                         // A is the ENTRY: leave along the inbound lane's travel dir
     float uax=ux(ad),uay=uy(ad), ubx=ux(b.dir),uby=uy(b.dir);
     float den=uax*uby-uay*ubx;
     float dA=b.dir-ad; while(dA>180)dA-=360; while(dA<-180)dA+=360;
@@ -235,7 +235,7 @@ static int clothoid_spline(Port a, Port b, float R, float Ls, float *xs, float *
 //    on B. Unique given (A,B,R): the long-way sweep Δ∓360 fixes both the angle AND the turn side. Two loops
 //    nest as concentric offsets (M3) at different R — no solver. ──
 static int loop_spline(Port a, Port b, float R, float *xs, float *ys){
-    float adA=a.dir+180;                                    // A is the ENTRY (tangent points into junction)
+    float adA=a.dir;                                        // A is the ENTRY: leave along the inbound lane's travel dir
     float uax=ux(adA),uay=uy(adA), ubx=ux(b.dir),uby=uy(b.dir);
     float den=uax*uby-uay*ubx;                              // cross(uA,uB); ~0 ⇒ parallel ⇒ no loop solution
     int n=0;
@@ -280,14 +280,15 @@ typedef struct {
 } Connection;
 typedef struct { const char* name; Connection conns[8]; int nConns; } Junction;
 
-// A demo junction declared as a connection TABLE over the 4 ports (0 hw-W, 1 hw-E, 2 tr-N, 3 tr-S):
-// a 4-way pinwheel of free-flow slip turns, each a DIRECT curve carrying 2 lanes. The point is the
-// SCHEMA driving the drawer — not a tuned interchange (real left turns would be RP_LOOP / RP_FLYOVER).
-static const Junction DEMO = { "4-way slip turns", {
-    { 2, 0, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // tr-N → hw-W
-    { 0, 3, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // hw-W → tr-S
-    { 3, 1, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // tr-S → hw-E
-    { 1, 2, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // hw-E → tr-N
+// A demo junction declared as a connection TABLE over the 8 ports: each movement runs from an INBOUND
+// port (entry) to an OUTBOUND port (exit) — a 4-way pinwheel of free-flow RIGHT-turn slips (the easy,
+// drive-on-right turns), each a DIRECT curve carrying 2 lanes. The point is the SCHEMA driving the drawer
+// — not a tuned interchange (the hard left turns would be RP_LOOP / RP_FLYOVER).
+static const Junction DEMO = { "4-way right-turn slips", {
+    { 4, 1, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // N-in → W-out  (southbound, turn right to west)
+    { 2, 5, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // E-in → N-out  (westbound,  turn right to north)
+    { 6, 3, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // S-in → E-out  (northbound, turn right to east)
+    { 0, 7, RP_DIRECT, {{-1,-1},{-2,-2}}, 2 },   // W-in → S-out  (eastbound,  turn right to south)
 }, 4 };
 
 // draw ONE connection: pick the spline by the PRIMITIVE, stroke its laneLink count as a multilane ribbon
@@ -307,7 +308,7 @@ static void draw_junction(const Junction* j, int useCloth, float R, float Ls, fl
 }
 
 // ── state ──
-static int selA=2, selB=0, view=0, sandPrim=1; static float radius=30.f, spiral=14.f; static int use_cloth=1, nlanes=3, taperPct=60, lift=0;
+static int selA=4, selB=3, view=0, sandPrim=1; static float radius=30.f, spiral=14.f; static int use_cloth=1, nlanes=3, taperPct=60, lift=0;
 
 // a "−/+" (or "</>") stepper: two ui buttons; returns -1, 0 or +1
 static int step_btn(int x,int y,int w,const char*lm,const char*rm){
@@ -320,11 +321,19 @@ static int step_btn(int x,int y,int w,const char*lm,const char*rm){
 static void setup(void){
     if (nport) return;
     int CX=SCREEN_W/2, CY=SCREEN_H/2;
-    // drive-on-right lanes: highway N lane = westbound, S lane = eastbound; trunk E lane = northbound, W = southbound
-    addport(CX-44, CY-LANEW/2.0f, 180, "hw-W");    // 0  on the westbound (north) lane, west of the junction
-    addport(CX+44, CY+LANEW/2.0f,   0, "hw-E");    // 1  on the eastbound (south) lane, east of the junction
-    addport(CX+LANEW/2.0f, CY-44, 270, "tr-N");    // 2  on the northbound (east) lane, north of the junction
-    addport(CX-LANEW/2.0f, CY+44,  90, "tr-S");    // 3  on the southbound (west) lane, south of the junction
+    float NL=CY-44, SL=CY+44, WL=CX-44, EL=CX+44;                              // leg tips
+    float n=CY-LANEW/2.0f, s=CY+LANEW/2.0f, w=CX-LANEW/2.0f, e=CX+LANEW/2.0f;  // the four lane centres
+    // Each leg has TWO carriageways: an INBOUND lane (traffic INTO the junction — ENTRIES live here) and an
+    // OUTBOUND lane (traffic away — EXITS live here). `dir` is the lane's TRUE travel direction (drive-on-
+    // right), so an inbound port's arrow points INTO the junction and the ramp leaves along it (no flip).
+    addport(WL, s,   0, "W-in");    // 0  west leg : eastbound IN   (south lane)
+    addport(WL, n, 180, "W-out");   // 1  west leg : westbound OUT  (north lane)
+    addport(EL, n, 180, "E-in");    // 2  east leg : westbound IN   (north lane)
+    addport(EL, s,   0, "E-out");   // 3  east leg : eastbound OUT  (south lane)
+    addport(w, NL,  90, "N-in");    // 4  north leg: southbound IN  (west lane)
+    addport(e, NL, 270, "N-out");   // 5  north leg: northbound OUT (east lane)
+    addport(e, SL, 270, "S-in");    // 6  south leg: northbound IN  (east lane)
+    addport(w, SL,  90, "S-out");   // 7  south leg: southbound OUT (west lane)
 }
 
 void update(void){

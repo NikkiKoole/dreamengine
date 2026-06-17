@@ -119,11 +119,16 @@ Investigated OpenDRIVE, clothoids, SUMO/CommonRoad, Cities: Skylines, curve offs
   draw-order-by-`z` is the rule that generalises to ramp-over-ramp.) *Open polish:* piers/supports under
   the deck; a real ramp-over-ramp crossing (needs two ramps + per-segment z-sort).
   - **Gotcha fixed (don't re-walk):** a ramp's **port A is the ENTRY** — its tangent must point *into* the
-    junction (`a.dir+180` in the splines), because the ports store the lane's *outward* travel direction.
-    Using A's raw outward heading made the lead-in leave the wrong way and the curve loop back (a hook);
-    offsetting that hook by ±14px (4 lanes) + a long spiral spiked into stray casing — the "spiral+multilane
-    artifacts" bug. Also a tangent-room clamp fits R / trims the spiral / falls back to straight on
-    degenerate (loop-needing) pairs.
+    junction. Using A's outward heading made the lead-in leave the wrong way and the curve loop back (a
+    hook); offsetting that hook by ±14px (4 lanes) + a long spiral spiked into stray casing — the
+    "spiral+multilane artifacts" bug. Also a tangent-room clamp fits R / trims the spiral / falls back to
+    straight on degenerate (loop-needing) pairs.
+  - **Port model evolved (2026-06-17, supersedes the `a.dir+180` flip above):** each leg now has TWO ports
+    — an INBOUND (entry) and an OUTBOUND (exit) carriageway — and `port.dir` is the lane's *true* travel
+    direction (drive-on-right). Entries sit on the inbound lane (arrow points *into* the junction), so the
+    splines now leave A along `a.dir` directly — **no `+180`**. The old single-outbound-port-per-leg + flip
+    put entries on the wrong carriageway (the ramp ran against traffic); 8 ports fix it. This is reflection
+    #3 (the `Leg`/`Road` layer) surfacing early — see [`junction-lanelink.md`](junction-lanelink.md) §7.
 
 ## `junction` + `laneLink` (OpenDRIVE) ✅ DONE — reconciled 2026-06-17 → [`junction-lanelink.md`](junction-lanelink.md)
 The decided next focus is **done as a design pass.** Read the OpenDRIVE §12 junction/laneLink spec
