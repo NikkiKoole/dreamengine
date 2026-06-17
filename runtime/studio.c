@@ -196,6 +196,7 @@ static int             fp_global  = 0;                // current fillp() pattern
 static int             fp_hole    = -1;               // fillp() 1-bit color (-1 = transparent)
 static int             fp_anc_x   = 0;                // fillp() lattice origin (world coords)
 static int             fp_anc_y   = 0;                // — shifts the pattern phase; anchor to a
+static bool            poly_fill_fast = true;        // false → legacy per-pixel polygon fill (A/B; env DE_POLY_FILL=legacy)
 // internal patterned-fill helpers — the public fills call these when fillp() is on
 static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0);
 static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
@@ -1520,6 +1521,8 @@ static void save_dir_set(const char *dir) {
 #endif
 
 int main(int argc, char **argv) {
+    { const char *pf = getenv("DE_POLY_FILL");          // A/B the polygon fill without recompiling:
+      if (pf && strcmp(pf, "legacy") == 0) poly_fill_fast = false; }   // DE_POLY_FILL=legacy → old per-pixel path
     const char *window_title           = "dreamengine";
 #ifndef PLATFORM_WEB
     int         screenshot_mode        = 0;
@@ -2925,13 +2928,85 @@ static void poly_clamp_scan(int *x0, int *y0, int *x1, int *y1) {
     if (*x0 < lo_x) *x0 = lo_x;  if (*y0 < lo_y) *y0 = lo_y;
     if (*x1 > hi_x) *x1 = hi_x;  if (*y1 > hi_y) *y1 = hi_y;
 }
-static void poly_fill_cov(const int *xy, int n, int color) {
+// ── A/B SWITCH (temporary, 2026-06) ──────────────────────────────────────────
+// The original per-pixel fill, kept beside the new scanline span fill below so we
+// can flip back instantly while the new path soaks. Set poly_fill_fast = false to
+// route EVERY polygon fill through this exact old code (the reference behaviour).
+// poly_fill_fast lives up by the other globals (env DE_POLY_FILL=legacy flips it at
+// startup). TODO: once the span fill is trusted, delete poly_fill_cov_legacy + the flag.
+static void poly_fill_cov_legacy(const int *xy, int n, int color) {
     if (n < 3) return;
     int x0, y0, x1, y1; poly_bbox(xy, n, &x0, &y0, &x1, &y1);
     poly_clamp_scan(&x0, &y0, &x1, &y1);
     for (int y = y0; y <= y1; y++)
         for (int x = x0; x <= x1; x++)
             if (poly_inside(x + 0.5f, y + 0.5f, xy, n)) plot_pat(x, y, color);
+}
+
+// Scanline span fill: the SAME even-odd coverage as poly_inside (pixel-centre
+// x+0.5 / y+0.5), but found per ROW as sorted edge crossings instead of tested per
+// pixel — so the per-pixel point-in-polygon cost is gone, and a solid run becomes ONE
+// DrawRectangle instead of N DrawPixel (the per-pixel rlVertex3f spam). Byte-identical
+// to the old per-pixel scan, by construction:
+//   • y+0.5 never equals an integer vertex y (verts are int), so the line never grazes
+//     a vertex: crossings are clean and always come in even-count pairs;
+//   • a pixel is inside iff its centre x+0.5 lies in the half-open [cross[t], cross[t+1])
+//     of an even-odd pair (poly_inside's strict `<` makes it left-closed/right-open),
+//     bounded by THAT pair's own crossings so a span can never bleed across a sub-pixel
+//     gap into its neighbour — matches poly_inside pixel-for-pixel (verified exhaustively);
+//   • the DrawRectangle fast path is gated on an axis-aligned camera (rotation 0,
+//     zoom 1: a run of 1×1 world quads tiles to exactly the same target pixels as one
+//     w×1 quad — true under pure translation, NOT under zoom/rotation) AND a solid
+//     fill. A rotated/zoomed camera or an active fillp() dither falls back to per-pixel
+//     plot_pat, preserving the documented rotated-fill staircase and the dither lattice
+//     exactly. (Both paths still skip the per-pixel poly_inside, so both get faster.)
+static void poly_fill_cov(const int *xy, int n, int color) {
+    if (!poly_fill_fast) { poly_fill_cov_legacy(xy, n, color); return; }
+    if (n < 3) return;
+    int x0, y0, x1, y1; poly_bbox(xy, n, &x0, &y0, &x1, &y1);
+    poly_clamp_scan(&x0, &y0, &x1, &y1);
+    if (x1 < x0 || y1 < y0) return;
+    enum { MAXCROSS = 512 };
+    if (n > MAXCROSS) {                         // pathological vertex count: exact per-pixel fallback
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                if (poly_inside(x + 0.5f, y + 0.5f, xy, n)) plot_pat(x, y, color);
+        return;
+    }
+    bool fast = (cam.rotation == 0.0f) && (cam.zoom == 1.0f) && !fp_on;
+    Color col = palette[color % PALETTE_SIZE];
+    float cross[MAXCROSS];
+    for (int y = y0; y <= y1; y++) {
+        float yc = y + 0.5f;
+        int m = 0;
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            float yi = xy[i*2+1], yj = xy[j*2+1];
+            if ((yi > yc) != (yj > yc)) {
+                float xi = xy[i*2], xj = xy[j*2];
+                cross[m++] = (xj - xi) * (yc - yi) / (yj - yi) + xi;
+            }
+        }
+        for (int a = 1; a < m; a++) {           // insertion sort — m is tiny
+            float v = cross[a]; int b = a - 1;
+            while (b >= 0 && cross[b] > v) { cross[b+1] = cross[b]; b--; }
+            cross[b+1] = v;
+        }
+        for (int t = 0; t + 1 < m; t += 2) {
+            // integer pixels whose CENTRE x+0.5 falls strictly inside this pair's
+            // (cross[t], cross[t+1]) — the exact even-odd interval. Bounded by THIS
+            // pair's own crossings, so it can never spill into an adjacent span across
+            // a sub-pixel gap (the star-notch bug); matches poly_inside pixel-for-pixel.
+            // poly_inside's strict `<` makes the interval half-open [cL, cR): a pixel
+            // is inside iff cL <= x+0.5 < cR. (Matches it pixel-for-pixel — verified
+            // exhaustively; the naive floor+1 differs when a crossing is a half-integer.)
+            int a = (int)ceilf(cross[t]   - 0.5f);        // first centre >= cross[t]
+            int b = (int)ceilf(cross[t+1] - 0.5f) - 1;    // last  centre <  cross[t+1]
+            if (a < x0) a = x0;  if (b > x1) b = x1;
+            if (a > b) continue;
+            if (fast) DrawRectangle(a, y, b - a + 1, 1, col);
+            else for (int x = a; x <= b; x++) plot_pat(x, y, color);
+        }
+    }
 }
 static void poly_stroke_cov(const int *xy, int n, int color) {
     if (n < 3) return;

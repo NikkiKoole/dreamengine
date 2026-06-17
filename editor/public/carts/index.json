@@ -1460,6 +1460,14 @@
     ]
   },
   {
+    "title": "polystress",
+    "description": "A deterministic torture test for the SOFTWARE polygon rasterizer (polyfill -> poly_fill_cov -> poly_inside -> plot_pat) — polyfill's sibling to trifill stress. 159 fills/frame across every path through the filler: three big concave 9-point stars (large fill AREA through the per-pixel even-odd test), a 70-cell grid of small spinning stars (polyfill COUNT / per-call setup), six sweeping road strips (convex tapering quads, exactly roadlab's fill_strip case), one checker-dithered concave star (plot_pat's fillp() patterned branch), and a giant mostly-off-screen quad (poly_clamp_scan). Everything is a pure function of the frame counter — no time, no random — so dumped frames are byte-reproducible run-to-run and build-to-build, which is the point: it pins the rasterizer for a clean profile (hit the ⏱ profile button) AND validates a rasterizer optimization pixel-identical (--dump + shasum before/after). Not a game; a profiling + regression rig.",
+    "file": "polystress.cart.png",
+    "kind": [
+      "tech-demo"
+    ]
+  },
+  {
     "title": "excitebike",
     "description": "Side-view NES motocross with the famous landing-angle skill, an overheat meter, and a track editor. Hit a ramp and you launch into the air with the nose drifting down on its own — hold Up/Down to control the tilt and touch down within a hair of LEVEL to keep your speed; nose-down or tail-down and you wipe out. Hold turbo for more top speed but the temp gauge climbs to a flashing-red redline and a stall, so mud (slow but cooling) becomes a real choice. Race one track against three pal()-recolored CPU rivals you bump past, chasing your best lap (saved). Then switch to BUILD: a mouse editor paints ramps, jumps, whoops and mud onto the lane grid, persisted with save_bytes — save it and test-ride instantly. RACE: Right/Z throttle, X turbo, Up/Down tilt in the air, Left brake. BUILD: 1-5 or click the palette, left-click paint / right-click erase, arrows scroll, S save, Z ride, B title.",
     "file": "excitebike.cart.png",
