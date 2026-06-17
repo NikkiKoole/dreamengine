@@ -101,6 +101,24 @@ topology** (the street-web patterns). The continuity tenet is the seam.
   splitter/turn channelizing islands, signalized-vs-priority control (AASHTO Green Book intersection chapter,
   NACTO directly).
 
+## Seminal works — the "great papers/books" (⏳ pending verification by the network-topology B-dive)
+The first pass leaned on *standards* (below); these are the foundational **academic** references for the
+network-topology + procedural-generation frontiers. Listed from confident recall — the B deep-dive
+(run `wf_396756b8-b5f`) will verify exact citations + add links/DOIs, then this section gets finalised.
+- **Parish & Müller, "Procedural Modeling of Cities," SIGGRAPH 2001** — the origin of CityEngine; L-system
+  road growth, global goals + local constraints, population-density-driven. *The* procedural-streets paper.
+- **Chen, Esch, Wonka, Müller, Zhang, "Interactive Procedural Street Modeling," ACM TOG / SIGGRAPH 2008** —
+  **tensor-field** street generation (the approach that morphs grid ↔ radial ↔ organic by editing a field).
+- **Stephen Marshall, *Streets & Patterns* (Spon/Routledge, 2005)** — the route-structure typology + the
+  movement-vs-place framing; the academic backbone for classifying patterns.
+- **Allan B. Jacobs, *Great Streets* (MIT Press, 1993)** — the one-square-mile figure-ground street maps; what
+  makes a dense, walkable network (a primary visual reference).
+- **Hillier & Hanson, *The Social Logic of Space* (Cambridge, 1984)** — space syntax, the basis for most
+  network-connectivity metrics.
+- **Southworth & Ben-Joseph, *Streets and the Shaping of Towns and Cities* (1997/2003)** — the historical
+  evolution of street layouts (grid → cul-de-sac), the grid-vs-suburban debate.
+- **Fanis Grammenos / CMHC — the *Fused Grid*** — the pedestrian-permeable / vehicle-discontinuous hybrid.
+
 ## Key sources (primary unless noted)
 - FHWA Functional Classification — [§2](https://www.fhwa.dot.gov/planning/processes/statewide/related/highway_functional_classifications/section02.cfm),
   [§3](https://www.fhwa.dot.gov/planning/processes/statewide/related/highway_functional_classifications/section03.cfm)
