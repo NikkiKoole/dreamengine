@@ -220,4 +220,5 @@ Other roadlab continuations (not the chosen next, but queued):
 - [`road-geometry-refs.md`](road-geometry-refs.md) — the research: OpenDRIVE / clothoids / offsetting + recommendation.
 - [`junction-lanelink.md`](junction-lanelink.md) — OpenDRIVE junction/laneLink ↔ our DSL: matches, gaps, the C data-type sketch.
 - [`road-hierarchy-notes.md`](road-hierarchy-notes.md) — research: where roadlab sits in the whole functional road hierarchy; the at-grade + network-topology frontiers we have NOT modeled.
+- [`roadlab-method.md`](roadlab-method.md) — the replicable **working method** (the build loop + verify gates + how the next phase reuses it). Read this before starting the next frontier.
 - carts: `tools/carts/{interchange,rampkit,roadlab}.c`.
