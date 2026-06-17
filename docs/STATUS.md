@@ -1033,14 +1033,20 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       the same one-pole idiom (flanger −0.046→−0.002). So **all three feedback combs (phaser/echo/
       flanger) are now DC-blocked.** Verified: compile-gate + tripwire + dc/level/fx all green,
       build-all 390/390.
-    - **The web/wasm audio path is verified only by ear — SCOPED, not built.** Every gate above runs the
-      NATIVE build; nothing checks the emscripten/AudioWorklet build emits the *same samples*. Scoping +
-      phasing in [`design/web-audio-parity.md`](design/web-audio-parity.md). **Key finding from scoping:
-      the web `AudioContext` sample rate is set NOWHERE in our shells/stub** — it inherits the browser
-      default (commonly 48000) while the synth hardcodes 44100, so unless something resamples, web audio
-      may play **~+147 cents sharp**. *Phase 0 (read the live `AudioContext.sampleRate`, hours) is the
-      cheapest highest-leverage next step — it may be a shipped web-wide pitch bug.* Then a Phase 1
-      offline emcc-render byte-diff vs native `--wav` (the codegen/float-determinism gate, ~½ day).
+    - **The web/wasm audio path is verified only by ear — SCOPED + a CONFIRMED-on-paper pitch bug.**
+      Every gate above runs the NATIVE build; nothing checks the wasm build emits the *same samples*.
+      Scoping + phasing + the source dig: [`design/web-audio-parity.md`](design/web-audio-parity.md).
+      **CONFIRMED from source (2026-06-17): the WORKLET backend (desktop default) plays ~+147¢ sharp on
+      any non-44.1k device.** `sound_worklet_init()` calls `emscripten_create_audio_context(0)` (NULL
+      opts → `new AudioContext()` → device default SR, usually 48000) and `sound_aw_process` fills the
+      128-sample output with NO resampler from 44100-synthesized audio → 48000/44100 = +146.7¢ + 8.8%
+      fast. The **plain** backend resamples (`LoadAudioStream(44100)` via miniaudio) and is correct.
+      Device-dependent, so it ships unnoticed: macOS built-in output is often 44.1k (sounds fine on the
+      owner's Mac), most 48k devices (Windows/Linux/DACs/Bluetooth) are sharp. **One-line fix:** pass
+      `EmscriptenWebAudioCreateAttributes{.sampleRate=SOUND_SAMPLE_RATE}` to `emscripten_create_audio_context`
+      so the context is forced to 44.1k (browser resamples to hardware). NOT yet applied — wants an
+      on-device confirm (Phase 0) + a listen to the forced-context resample quality. Then Phase 1 = an
+      offline emcc-render byte-diff vs native `--wav` (codegen/float-determinism gate, ~½ day).
     - ✅ **Set-and-hold footgun — now lintable: SHIPPED `tools/lint-fx-frame.js`.** Static check (no
       render) that flags an UNCONDITIONAL per-frame call to a buffer-rebuilding effect
       (`crush`/`tape`/`eq`/`chorus`/`reverb`/`flanger`/`phaser`/…) in `update()`/`draw()` — the silent-

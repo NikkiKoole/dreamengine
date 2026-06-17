@@ -1,10 +1,46 @@
 # Web/wasm audio parity — scoping (2026-06-17)
 
-**Status: SCOPING ONLY — nothing built yet.** This is the one remaining audio blind spot from the
-2026-06-16/17 audit ([STATUS](../STATUS.md) #42, [audio-notes §20](audio-notes.md)). Every audio gate
-we have — `tune-check`, `dc-check`, `level-check`, `fx-check`, `soak-check` — renders the **native**
-build. The emscripten/wasm build that players actually hear on the web is verified by **ear only**.
-This doc scopes what "parity" even means here, what's feasible, and the cheapest first step.
+**Status: SCOPING + a CONFIRMED-on-paper bug (no fix applied yet).** This is the one remaining audio
+blind spot from the 2026-06-16/17 audit ([STATUS](../STATUS.md) #42, [audio-notes §20](audio-notes.md)).
+Every audio gate we have — `tune-check`, `dc-check`, `level-check`, `fx-check`, `soak-check` — renders the
+**native** build. The emscripten/wasm build players actually hear is verified by **ear only**. This doc
+scopes what "parity" means, what's feasible — and (2026-06-17 source dig) confirms a real pitch bug.
+
+## ⚠ CONFIRMED on paper (2026-06-17): the WORKLET backend plays sharp on non-44.1k devices
+
+A source dig (no browser needed — the code path is unambiguous) settles the SR question, and the two web
+backends behave **differently**:
+
+- **Worklet backend (default on desktop).** `sound_worklet_init()` (`sound.h` ~6465) calls
+  `emscripten_create_audio_context(0)` — **NULL options**, so emscripten does `new AudioContext()` with no
+  `sampleRate` → the browser/device **default rate** (commonly **48000** on desktop). `sound_aw_process`
+  then fills the 128-sample AudioWorklet output **with no resampler** from audio the synth generated under
+  `SOUND_SAMPLE_RATE = 44100` (every phase increment / delay length / coefficient). The browser plays those
+  samples at the context rate → **48000/44100 = 1.0884× too fast → +146.7 cents sharp** (≈ 1.5 semitones)
+  **and 8.8% fast tempo.** No resampling anywhere in this path.
+- **Plain backend (iOS fallback + the desktop "plain" toggle).** `LoadAudioStream(SOUND_SAMPLE_RATE, 32, 2)`
+  → raylib/miniaudio's data converter **resamples** 44100 → the device rate. **Pitch-correct.**
+
+**Why it could ship unnoticed — it's device-dependent.** A `new AudioContext()` adopts the output device's
+rate. macOS built-in output often runs at **44100** (so on the owner's Mac the worklet sounds *fine*), while
+most 48 kHz outputs — Windows/Linux, external DACs, Bluetooth, many laptops — play it ~1.5 semitones sharp.
+Classic "works on my machine." The `plain` audio toggle would (accidentally) sound *correct* where worklet
+is sharp, which is a strong tell if anyone's noticed "the plain mode sounds more in tune."
+
+**The fix (one line, low-risk):** force the worklet context to 44100 so it matches native and is
+device-independent — browsers honor an explicit rate and resample to the hardware themselves:
+
+```c
+EmscriptenWebAudioCreateAttributes attrs = { .latencyHint = "interactive", .sampleRate = SOUND_SAMPLE_RATE };
+sound_aw_ctx = emscripten_create_audio_context(&attrs);   // was emscripten_create_audio_context(0)
+```
+
+The alternative — making the synth sample-rate-agnostic (read the context rate, drop the `SOUND_SAMPLE_RATE`
+`#define`) — is a huge change (it sizes constant arrays and hundreds of coefficients) and unnecessary: a
+fantasy console synth at a fixed 44.1k that the browser resamples is correct and simplest. **Caveat:** this
+is verified by *source reading*, not yet by a browser. The fix is correct regardless of the actual default
+(it makes the rate deterministic), but it should still be confirmed empirically (Phase 0 below) — and the
+resample-to-hardware quality / latency of a forced-44.1k context wants an on-device listen.
 
 ## Why it matters
 
