@@ -9,7 +9,7 @@
   "weeks": [
     { "id": "w1", "label": "Week 1", "from": "2026-05-28", "to": "2026-06-03", "tagline": "Bootstrap → the first subsystems" },
     { "id": "w2", "label": "Week 2", "from": "2026-06-04", "to": "2026-06-10", "tagline": "The sound explosion" },
-    { "id": "w3", "label": "Week 3", "from": "2026-06-11", "to": "2026-06-17", "tagline": "Effects bus, MIDI & spatial audio" }
+    { "id": "w3", "label": "Week 3", "from": "2026-06-11", "to": "2026-06-17", "tagline": "MIDI, spatial audio — then roads, sims & a hardening pass" }
   ],
 
   "subsystems": [
@@ -24,13 +24,13 @@
     { "id": "live",     "title": "Live / libtcc backend", "tier": "foundational",
       "match": ["libtcc", "tcc", "de_state", "hot-reload", "(live)", "cart-as-script", "live backend", "state sugar", "live)"] },
     { "id": "debug",    "title": "Debug harness + profiler", "tier": "foundational",
-      "match": ["harness", "record/replay", "trace driver", "profiler", "fps()", "printh", "watch(", "live inspection", "raster_test", "trifill_stress"] },
+      "match": ["harness", "record/replay", "trace driver", "profiler", "fps()", "printh", "watch(", "live inspection", "raster_test", "trifill_stress", "level-check", "fx-check", "soak-check", "web-audio-check", "spec-harness", "cart-analyze", "lint-fx-frame", "make-gif", "stability gate", "regression gate"] },
     { "id": "gfx",      "title": "Graphics primitives", "tier": "mid",
-      "match": ["primitive", "trifill", "arc ", "arcfill", "ring", "oval", "rasteriz", "raster", "fillp", "gradient", "geometry", "circ", "n-gon", "ngon", "bezier", "rrect", "coverage", "dither"] },
+      "match": ["primitive", "trifill", "arc ", "arcfill", "ring", "oval", "rasteriz", "raster", "fillp", "gradient", "geometry", "circ", "n-gon", "ngon", "bezier", "rrect", "coverage", "dither", "ease_back", "easing"] },
     { "id": "3d",       "title": "3D", "tier": "mid",
       "match": ["tritex", "3d", "ps1", "flyover", "voxel", "dreamcad", "mode-7", "mode7", "elite"] },
     { "id": "web",      "title": "Web build / sharing", "tier": "mid",
-      "match": ["emscripten", "web build", "build for web", "web audio", "sharing", "netlify", "web-portable", "web-editor"] },
+      "match": ["emscripten", "web build", "build for web", "web audio", "sharing", "netlify", "web-portable", "web-editor", "worklet", "wasm-vs-native", "web pitch", "web-audio-parity", "44.1k", "AudioContext"] },
     { "id": "docs",     "title": "The docs system", "tier": "mid",
       "match": ["docs:", "docs(", "adr-", " adr ", "decisions log", "wiki", "vision", "handoff", "readme", "table-of-contents"] },
     { "id": "physics",  "title": "Physics", "tier": "mid",
@@ -48,7 +48,11 @@
     { "id": "teaching", "title": "Teaching / tutorials", "tier": "small",
       "match": ["tutorial", "lesson", "whatiscode", "what is code", "collision lab", "flappy", "curriculum"] },
     { "id": "roads",    "title": "Roads & sims", "tier": "mid",
-      "match": ["roadnet", "roadlab", "interchange", "rampkit", "sloop", "procplaces", "road-geometry", "road geometry", "clothoid", "junction", "menigte"] }
+      "match": ["roadnet", "roadlab", "interchange", "rampkit", "sloop", "procplaces", "road-geometry", "road geometry", "clothoid", "junction", "menigte", "lotfill", "interiors", "streetlevel", "street-level", "topology axis", "roundabout", "trumpet", "cloverleaf", "OpenDRIVE", "laneLink", "scurve", "loop_spline"] },
+    { "id": "sims",     "title": "Production & economy sims", "tier": "mid",
+      "match": ["thecut", "handwork", "sloop-production", "sloop-handwork", "production probe", "production bench", "process-optimization bench", "delegation", "opportunity cost", "second north star", "second-north-star"] },
+    { "id": "perf",     "title": "Performance & optimization", "tier": "mid",
+      "match": ["polyfill", "polystress", "profile-fleet", "engine-optimization", "scanline span", "span fill"] }
   ],
 
   "eras": [
@@ -98,9 +102,13 @@
       "from": "2026-06-15", "to": "2026-06-15",
       "blurb": "Positional audio in two layers, one day. v1: a listener() + positioned voices give automatic pan, distance-volume and Doppler (the OpenAL model in 2D pixel space). v2: emitter buses move a whole effected source as one object, so its reverb/shimmer tail pans and Dopplers with it. The library also crosses its scale milestones — 14 MACRO engines, 32 simultaneous voices.",
       "editorial": "" },
-    { "id": "roads-tuning", "title": "Roads, sims & engine tuning",
-      "from": "2026-06-16", "to": "2026-06-17",
-      "blurb": "Attention turns to the big sims and the long tail of polish. The deterministic spline road world grows up — roadlab (lane-accurate roads + clothoid joints), interchange (a data-driven junction matrix), rampkit — and flank, a tactical stealth-squad game, takes shape. On the audio side, the waveguide top-octave tuning is fixed (PLUCK/REED/BRASS) and a generalized all-engine tuner lands.",
+    { "id": "roads-tuning", "title": "Roads, stealth & engine tuning",
+      "from": "2026-06-16", "to": "2026-06-16",
+      "blurb": "Attention turns to the big sims and the long tail of polish. The deterministic spline road world grows up — roadlab (lane-accurate roads + clothoid joints), interchange (a data-driven junction matrix), rampkit — and flank, a tactical stealth-squad game, takes real shape (fog of war, suppression, reaction time, an ammo economy). A street-level fill language starts underneath the roads (lotfill). On the audio side the waveguide top-octave tuning is finally fixed (PLUCK/REED/BRASS), a generalized all-engine tuner lands, and the first stability gates show up — level-check and fx-check, the start of a guard-rail suite.",
+      "editorial": "" },
+    { "id": "sims-hardening", "title": "Junctions, jobs & guard-rails",
+      "from": "2026-06-17", "to": "2026-06-17",
+      "blurb": "The longest day in the window, and a quiet turn in what the project is about. roadlab stops faking roads and becomes a real geometry engine — junctions described as a table of lane-links straight off the OpenDRIVE model, the trumpet/fork/triangle topology family, ring roads, loop and S-curve ramps, all generated from a type instead of placed by hand. Next to it a new kind of cart appears: thecut and handwork aren't games or instruments, they're production sims — what a worker costs, when it's worth hiring one, what an hour of your own hands is worth against a machine's. That's the second north star — deep honest sims under a lo-fi surface — made literal. And the whole engine grows guard-rails the same day: a suite of stability gates (effect-stacking, long-run soak, wasm-vs-native parity), the web pitch bug finally pinned and fixed (48k devices had been playing everything ~147 cents sharp), DC-blocked feedback loops, and a first real optimization pass on the fill rasterizer.",
       "editorial": "" }
   ],
 
@@ -110,7 +118,9 @@
     "2026-06-05": "The radio explosion — a dozen stations and the whole Roland drum-machine family born in one day, plus radio.h and the first port engines.",
     "2026-06-10": "The engine program finishes — INSTR_BRASS lands as the last modeled timbre, so every instrument the library needs now exists.",
     "2026-06-12": "The mixing console day — the effects bus becomes reorderable (fx_order) with multi-reverb and sidechain, and MIDI keyboards play the engine (CoreMIDI + Web MIDI + keybed.h).",
-    "2026-06-15": "Spatial audio — listener + positioned voices, then whole emitter buses that move (Doppler + a shimmer tail that travels with the source), shipped in one day."
+    "2026-06-15": "Spatial audio — listener + positioned voices, then whole emitter buses that move (Doppler + a shimmer tail that travels with the source), shipped in one day.",
+    "2026-06-16": "The roads-and-tuning surge — roadlab, interchange and rampkit plus the flank stealth game in one push, the waveguide top-octave tuning finally fixed, and the first audio stability gates (level-check, fx-check) land.",
+    "2026-06-17": "The day the sims got serious — roadlab becomes a real OpenDRIVE-style junction engine, the first production/economy carts (thecut, handwork) make the deep-sim north star literal, and the engine grows a full guard-rail suite plus the web pitch fix."
   },
 
   "milestones": [
@@ -185,7 +195,19 @@
     { "title": "roadlab — lane-accurate roads + clothoid joints", "tier": "mid", "era": "roads-tuning", "subsystem": "roads", "match": "roadlab: foundation cart" },
     { "title": "interchange — the data-driven junction matrix", "tier": "mid", "era": "roads-tuning", "subsystem": "roads", "match": "data-driven junction matrix" },
     { "title": "flank — a tactical stealth-squad game", "tier": "mid", "era": "roads-tuning", "match": "flank: enemy types (rusher/camper/flanker)" },
-    { "title": "Waveguide top-octave tuning fix + all-engine tuner", "tier": "mid", "era": "roads-tuning", "subsystem": "sound", "match": "fix waveguide top-octave tuning" }
+    { "title": "Waveguide top-octave tuning fix + all-engine tuner", "tier": "mid", "era": "roads-tuning", "subsystem": "sound", "match": "fix waveguide top-octave tuning" },
+
+    { "title": "roadlab — table-driven junctions (OpenDRIVE laneLinks)", "tier": "foundational", "era": "sims-hardening", "subsystem": "roads", "match": "roadlab M6: junction schema" },
+    { "title": "roadlab — topology axis + ring roads", "tier": "mid", "era": "sims-hardening", "subsystem": "roads", "match": "topology axis — the 3-leg" },
+    { "title": "lotfill — street-level fill language (atoms → a world)", "tier": "mid", "era": "sims-hardening", "subsystem": "roads", "match": "lotfill: add the WORLD driver" },
+    { "title": "thecut — production as a game (Experiment A)", "tier": "foundational", "era": "sims-hardening", "subsystem": "sims", "match": "thecut: process-optimization bench" },
+    { "title": "handwork — hands vs machine, under opportunity cost", "tier": "mid", "era": "sims-hardening", "subsystem": "sims", "match": "handwork: embodied production probe" },
+    { "title": "The audio stability-gate suite (level / fx / soak)", "tier": "mid", "era": "sims-hardening", "subsystem": "debug", "match": "soak-check.js + denormal FTZ" },
+    { "title": "wasm-vs-native audio parity gate", "tier": "mid", "era": "sims-hardening", "subsystem": "web", "match": "web-audio-check.js: offline wasm-vs-native" },
+    { "title": "Web audio pitch fix — force the worklet to 44.1k", "tier": "mid", "era": "sims-hardening", "subsystem": "web", "match": "force the worklet AudioContext to 44.1k" },
+    { "title": "Engine optimization — scanline span fill + profile-fleet", "tier": "mid", "era": "sims-hardening", "subsystem": "perf", "match": "polyfill: scanline span fill" },
+    { "title": "ease_back + the transitions playground", "tier": "small", "era": "sims-hardening", "subsystem": "gfx", "match": "ease_back: an overshoot easing" },
+    { "title": "spec-harness + cart-analyze.js", "tier": "small", "era": "sims-hardening", "subsystem": "debug", "match": "spec-harness: design doc + cart-analyze.js" }
   ],
 
   "threads": {
@@ -208,7 +230,13 @@
         "blurb": "A desktop toy meeting a phone, and the phone winning a lot of the arguments. Real device testing turned up the stuff you can't reason about from a chair — the five-touch iPhone ceiling, phantom touches, fingers that swipe-tap-do-five-things-and-crash-it. Out of that came the loupe (a magnifier so you can actually grab a tiny knob), the shared widget kit so every cart handles mouse, touch and keyboard at once, and a couple of audits that swept every cart for whether a phone could even play it. Not glamorous. Load-bearing." },
       { "id": "spatial", "title": "Spatial audio", "seed": "spatial.md",
         "match": ["spatial", "stereo"],
-        "blurb": "Sound in space, done in two passes in basically a day. First the OpenAL move: a listener, voices with positions, automatic pan and distance-volume and Doppler in flat 2D pixel space. Then the better idea — move a whole effected source as one object, so its reverb tail and shimmer travel with it instead of staying nailed to the center. Small thread, but it's the one that makes a passing car sound like a passing car." }
+        "blurb": "Sound in space, done in two passes in basically a day. First the OpenAL move: a listener, voices with positions, automatic pan and distance-volume and Doppler in flat 2D pixel space. Then the better idea — move a whole effected source as one object, so its reverb tail and shimmer travel with it instead of staying nailed to the center. Small thread, but it's the one that makes a passing car sound like a passing car." },
+      { "id": "sims", "title": "Making work into a game", "seed": "sloop-production.md",
+        "match": ["sloop-production", "sloop-handwork", "second-north-star", "product-notes", "thecut", "handwork"],
+        "blurb": "Somewhere in here a second project woke up inside the first one. Not a game and not an instrument — a sim about work itself: what a worker costs, when it's worth hiring one, what your own two hands are worth against a machine that never gets tired. thecut and handwork are the first probes, the sloop-production notes are the thinking out loud. It's the second north star written down plainly — deep honest sims under a lo-fi surface — and it's the part most likely to quietly become the main thing." },
+      { "id": "optimization", "title": "Making it fast without breaking it", "seed": "engine-optimization.md",
+        "match": ["engine-optimization", "profile-fleet", "polyfill", "polystress", "frame-pacing", "profiler-extensions"],
+        "blurb": "Late in the window the question stopped being 'what can it do' and started being 'how cheap is it.' A fleet-wide CPU survey, a stress cart that does nothing but hammer the fill rasterizer, and a first real optimization — solid spans collapsed into a single rectangle instead of a pixel at a time — with the old path kept right beside it so you can prove the new one matches. The rule the guide writes down: optimize in a loop you can't fool — measure, change one thing, measure again, keep the A/B." }
     ]
   },
 
@@ -246,7 +274,10 @@
         "evidence": "Era sequence: engine-marathon (synthesis) → fx-truecolor (effects) → console-midi (console) → spatial (placement), 06-08 through 06-15." },
       { "title": "Long unresolved threads are only visible in aggregate",
         "body": "A single commit hides the threads that run across weeks. The auto-wah is described as 'the scar finally resolved as a bus effect' — implying an earlier parked attempt that sat unbuilt while a cheaper per-voice stand-in held the place. The engine marathon is the same shape: a goal declared early ('until every modeled timbre exists') and closed out only at BRASS. The whole-arc view is what surfaces these.",
-        "evidence": "audio-notes.md still names a 'PARKED §8.10 bus wah' beside the per-voice cousin; auto-wah milestone resolves it in the fx-truecolor era (06-11)." }
+        "evidence": "audio-notes.md still names a 'PARKED §8.10 bus wah' beside the per-voice cousin; auto-wah milestone resolves it in the fx-truecolor era (06-11)." },
+      { "title": "A second project woke up inside the first",
+        "body": "For three weeks the revealed identity was 'a synthesizer with a screen' (observation 1). The tail of the window adds a second current that isn't sound at all: production and economy sims — thecut, handwork — where the subject is labour, cost and delegation, not graphics or audio. It reads as the second-north-star reflection (06-09) finally cashed out into carts rather than prose: deep honest sims under a lo-fi surface. Too young to call a third pillar, but it's the first work in the window that's neither a game, an instrument, nor a tool — a new category, and the one the project now seems most curious about.",
+        "evidence": "Two production-sim carts born 06-17 (thecut, handwork) citing design/sloop-production.md + design/second-north-star.md (REFLECTION, 2026-06-09); they're the only window carts whose subject is economy/labour rather than graphics or sound." }
     ]
   }
 }
