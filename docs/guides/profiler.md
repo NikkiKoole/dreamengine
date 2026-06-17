@@ -210,6 +210,9 @@ build mode → **release**. Compiles with `-O2 -DDE_RELEASE`, which redefines
 
 ## See also
 
+- [engine-optimization.md](engine-optimization.md) — once the profiler tells you *where*
+  the time goes, this is the safe loop for making it faster without changing output
+  (stress cart → byte-identical oracle → A/B flag → measure) + the optimization ledger.
 - [debug-harness.md](debug-harness.md) — deterministic record/replay/trace, the
   other half of "make a run inspectable." Pair them: script the exact moment with
   the harness, profile it here.

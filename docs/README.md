@@ -102,6 +102,7 @@ docs/
 │   ├── sharing.md                ways to publish finished carts
 │   ├── debug-harness.md          deterministic record/replay/script + trace + live on-demand inspect + WAV capture/analysis + UI audit, off-screen text/overlap/hidden-panel finder (tools/play.js, tools/wav-analyze.js, tools/ui-audit.js)
 │   ├── profiler.md               one-click CPU profiler (⏱ profile button): hot functions + call paths, frame budget, draw-call counts
+│   ├── engine-optimization.md    the safe loop for making the engine faster WITHOUT changing output (stress cart → byte-identical dump oracle → keep-both env-flag A/B → perf.json measure) + the ledger; worked example = the polyfill scanline span fill (DE_POLY_FILL=legacy)
 │   ├── live-coding.md            how-to for the live (libtcc) run mode: edit-while-running, hot reload, STATE/S state that survives reloads
 │   ├── game-music.md             generative soundtrack recipes: step clock, chord brain, voice leading, time feel, seeds, brain catalog, radio.h; worked example = bossa.c (station candidates live in design/future-stations.md)
 │   ├── voice.md                  Nikki's writing voice (synthesized from mipolai.com) for hand-written editorial prose — first customer = the history page's editorial seam
