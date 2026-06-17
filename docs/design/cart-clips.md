@@ -1,17 +1,18 @@
 # cart clips — where moving images (webm/gif) live
 
-CONVENTION (proposed; exporter not landed yet). Carts have a still thumbnail today
+CONVENTION (locked; exporter landed). Carts have a still thumbnail today
 (`editor/public/carts/<cart>.cart.png`, which also stores source/sprites/map in zTXt
-chunks). A small video exporter is in the works to produce **moving images** of carts —
-this note fixes where those files go and how they're named, so the exporter targets a
-stable path from day one and consumers (the history page first) can auto-detect them.
+chunks). The video exporter — `tools/make-gif.js` (see
+[`../guides/debug-harness.md`](../guides/debug-harness.md) → "Clip capture") — produces
+**moving images** of carts and writes them to the path below. This note fixes where those
+files go and how they're named, so consumers (the history page first) can auto-detect them.
 
 ## The layout
 
-A **sparse, per-cart clips folder** — *not* the flat `carts/` dir:
+A **sparse, per-cart clips folder, a sibling of `carts/`** — not nested inside it:
 
 ```
-editor/public/carts/clips/<cart>/NN-label.webm
+editor/public/clips/<cart>/NN-label.webm
    e.g.  clips/coaster/01-the-ride.webm
          clips/coaster/02-scream-tuning.webm
          clips/roadlab/01-flyover.webm
@@ -27,35 +28,41 @@ Rules:
 - **The `.cart.png` stays put** as the data store *and* the video `poster=` / fallback.
 - **webm is primary**, gif the lo-fi fallback; mp4 fine too if the exporter prefers it.
   Consumers pick the first existing of `webm > mp4 > gif`.
-- **Served at** `/carts/clips/<cart>/...` by Vite (and copied into `site/` at publish for
-  the web gallery). **Lazy-loaded / on-hover**, never inlined — video is far too heavy for
-  the base64 data-URI trick the PNG thumbnails use.
+- **Served at** `/clips/<cart>/...` by Vite (and copied into `site/` at publish for the web
+  gallery). **Lazy-loaded / on-hover**, never inlined — video is far too heavy for the
+  base64 data-URI trick the PNG thumbnails use.
 
-## Why not the flat `carts/` folder
+## Why a sibling, not inside `carts/`
 
-It already holds 391 `.cart.png` + `.cart.js`, and the editor's cart picker globs
-`*.cart.png` there. Dropping `coaster.webm`, `coaster-2.webm`, … alongside would clutter
-it, bloat git, and give no clean home for *multiple* clips per cart. The per-cart subfolder
-answers the multiple-videos question directly.
+`carts/` is the cart **data store** — 391 `.cart.png` + `.cart.js` + `index.json`, the
+editor's picker domain (which reads `index.json`), and the target of two git-log date
+scans (both filtered to `*.cart.png`). Nothing breaks if clips nest there, but keeping
+`carts/` a flat, homogeneous folder of cart artifacts keeps every "just glob `carts/`" tool
+correct by default. `editor/public/` is already the media root (`palettes/`, the fonts live
+there), so `clips/` sits as a natural peer. The per-cart subfolder under it answers the
+multiple-videos question; the flat `carts/` dir was never a candidate (no home for multiple
+clips, and it'd bloat the data store).
 
 ## Auto-detection (the consumer contract)
 
-Anything surfacing clips globs `editor/public/carts/clips/<cart>/*.{webm,mp4,gif}`, sorts by
+Anything surfacing clips globs `editor/public/clips/<cart>/*.{webm,mp4,gif}`, sorts by
 filename, and derives the caption from `NN-label`. No per-cart registration — exactly like
 the still thumbnails. First consumer: **the history page** (`tools/build-history.js`) — the
 hero cart, the design-note spotlight, and the research-thread carts are the natural slots
 (they already show a still `.cart.png`); a clip, when present, upgrades the still in place,
-PNG as poster.
+PNG as poster. `make-cart.js --clip <label>` files straight into the path, auto-numbering
+`NN`.
 
 ## Open decisions (don't change the layout, just the plumbing)
 
 1. **Git policy for the binaries** — direct commit (simplest, but weight, and `site/` carries
    copies), git-lfs, or keep-out-of-git / emit-into-`site/`-at-publish only. Lean: direct
    commit while clips stay short/small; revisit if volume forces lfs.
-2. **Exporter output** — format (webm/gif/mp4) and whether it can write straight to
-   `clips/<cart>/NN-label.webm`. If it dumps to one folder under its own names, a tiny
-   `tools/` step files them into place.
+2. **webm vs gif default** when a cart has both — webm wins on size/quality with the PNG
+   poster, gif is the autoplay-blocked fallback; the glob accepts both (decide whether webm
+   wins or both ride as `<source>`s). *(Resolved: the exporter writes straight to
+   `clips/<cart>/NN-label.<ext>`, so no filing step is needed.)*
 
-> Status: waiting on the exporter. When it lands, wire auto-detection into
+> Status: exporter landed (`tools/make-gif.js`). Next: wire auto-detection into
 > `tools/build-history.js` (see [`../guides/history-page.md`](../guides/history-page.md) →
-> design-note spotlight / research threads) and, later, the editor cart picker.
+> "Moving thumbnails — clip support") and, later, the editor cart picker.

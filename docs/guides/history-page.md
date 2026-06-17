@@ -112,12 +112,6 @@ move it under `design/` if it should.
 > Still untapped when refreshing the retrospect: `STATUS.md`'s "Decided-against / deferred"
 > ledger (a fuller list than the cut-ADRs).
 
-> **Coming: moving thumbnails.** A video exporter is in the works; when it lands, cart
-> clips (webm/gif) will upgrade the still thumbnails in the hero / spotlight / thread-carts
-> slots, PNG as poster. The path + naming convention is fixed in
-> [`../design/cart-clips.md`](../design/cart-clips.md) so the auto-detection drops straight
-> in (glob `carts/clips/<cart>/*`, first of webm > mp4 > gif, caption from the filename).
-
 ## Tools built + milestone commit detail (automatic)
 
 Two more derived surfaces, both zero-authoring:
@@ -201,6 +195,60 @@ Once a week's worth of work has landed, extend the spine and regenerate:
 7. `node tools/build-history.js` and check the console for any unmatched-milestone warnings.
 
 > Heroes and growth stats compute themselves — you only describe the *shape*.
+
+## Moving thumbnails — clip support (proposed wiring)
+
+The page shows a still `.cart.png` in three slots — the **hero** (`heroByEra()`), the
+**spotlight** carts (the design note's "carts that grew from this"), and **thread** carts.
+Those are the natural homes for a short looping clip instead of a still. The exporter
+(`tools/make-gif.js`, [`debug-harness.md`](debug-harness.md) → "Clip capture") already
+targets the convention below, so the generator can light this up with no per-cart wiring.
+
+**The convention (locked — the exporter writes to it):**
+
+```
+editor/public/clips/<cart>/NN-label.webm    e.g. clips/coaster/01-the-ride.webm
+                                                 clips/coaster/02-scream-tuning.webm
+```
+
+- **A sibling of `carts/`, not nested inside it.** `carts/` stays a flat store of cart data
+  (the picker reads `index.json`, two git-log scans filter to `*.cart.png`); `clips/` is the
+  media root — a peer of `palettes/` under `editor/public/`. Keeps every "just glob `carts/`"
+  tool correct and the data store homogeneous. The `.cart.png` stays the poster/fallback.
+- A **per-cart subfolder** answers "multiple clips per cart" cleanly — one cart = one
+  folder, any number of clips — and folders exist only for carts that *have* video, so the
+  tree stays sparse (not 391 empty dirs).
+- `NN-label` carries **order + caption with no sidecar metadata** — same trick the tools row
+  uses: strip `NN-`, dash→space → "the ride", "scream tuning". Derive-from-structure, like
+  everything else here.
+- `node tools/make-gif.js coaster --clip the-ride --from ride.beats` files straight into
+  place (`editor/public/clips/coaster/01-the-ride.webm`) and auto-assigns the next `NN`.
+
+**Generator side (the sketch — not built yet):**
+
+1. A helper `clipsFor(name)` that globs `editor/public/clips/<name>/*.{webm,gif}`, sorts by
+   filename, and derives `{ src, caption }` for each (caption = `NN-label` → words). Empty
+   array = fall back to the still, exactly like today.
+2. At each of the three emit points (hero ~`build-history.js:953`, spotlight ~`:304`,
+   thread ~`:339`): if `clipsFor(name)` is non-empty, emit a `<video>` with the existing
+   inlined PNG as `poster=` (so autoplay-blocked viewers and the standalone-file case still
+   see the still), `autoplay muted loop playsinline preload="none"`, lazy. Otherwise the
+   current `<img>`. Keep `image-rendering:pixelated` on both.
+3. **Path, not base64.** Stills are inlined as base64 data URIs so the HTML is
+   self-contained; videos are far too heavy for that. Reference them by a **root-absolute**
+   URL — `/clips/<name>/NN.webm` — which resolves because Vite serves `editor/public/` at the
+   web root (so does the published `site/`). The poster PNG stays inlined, so the page still
+   *renders* standalone; only the motion needs the files present.
+
+**Two decisions still yours (they don't change the layout, only the plumbing):**
+
+1. **Do the binaries go in git, and how?** Direct commit is simplest but adds real weight,
+   and `site/` would carry copies. Alternatives: git-lfs, or keep them out of the repo and
+   emit into `site/` only at publish time. Lean: direct commit, keep clips short/small until
+   volume forces lfs.
+2. **`webm` vs `gif` default.** webm (VP9) is smaller + crisper with the PNG poster, but gif
+   is the safe fallback where autoplay is blocked. The glob accepts both; if a cart has a
+   `.webm` *and* a `.gif`, decide whether webm wins or both are offered as `<source>`s.
 
 ## Possible automation (not built)
 
