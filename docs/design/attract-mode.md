@@ -60,11 +60,31 @@ advancing `replay_ev`, set `inject_input = false`, and let the cart run live fro
 state. Optionally a "DEMO — PRESS START" overlay that clears on takeover. True arcade
 behaviour also re-enters ATTRACT after the player goes idle again (LIVE → idle → ATTRACT).
 
+## Where the demo track lives — two homes, one source
+
+The attract track and the video-making tracks are the *same authored data*, stored for two
+different needs (this is the load-bearing decision):
+
+- **Authored source → `tools/clips/<cart>/NN-label.{script,beats,rec}`.** One shared home:
+  it's the clip baker's input (`make-gif.js`) *and* the debug harness's input. `sloop`'s
+  `tools/clips/sloop/01-autodrive.script` is the first committed track — the native
+  prototype's repro home.
+- **The attract track → embedded *inside* the cart.** A cart should contain everything: hand
+  someone the `.cart.png` and the demo comes with it, no sibling file to lose, no fetch in
+  the web build. So the bake step (`make-cart.js`) embeds the designated attract track as a
+  new zTXt chunk — `de:demo`, beside the existing `de:source` / `de:sprites` (/ `de:map` /
+  `de:settings`) — and it compiles into the web build like the rest of the cart data.
+
+**Single source, embedded copy at bake time — never two authored copies that can drift.** The
+*rendered* clips (`editor/public/clips/<cart>/*.webm`) stay external: they're output, not
+something the cart carries. So: video tracks live in the folder; the attract demo lives in
+the cart.
+
 ## Design sketch
 
-1. **Find the track.** Bundle the demo with the cart for the runtime to locate — mirror how
-   sprites/map ride in the `.cart.png` zTXt chunks, or ship the track as a sibling file the
-   web build fetches.
+1. **The track ships inside the cart.** The attract demo is embedded as a `de:demo` zTXt
+   chunk (and compiled into the web build) — self-contained, no sibling fetch. Authored once
+   in `tools/clips/<cart>/`; the bake step embeds the chosen one. (See above.)
 2. **Enter on idle.** On load / after N idle seconds, `load_script()` the track and replay it
    with a **pinned seed** (see below).
 3. **The handoff** (the new part) — poll raw input each frame; first genuine press flips
@@ -79,9 +99,10 @@ behaviour also re-enters ATTRACT after the player goes idle again (LIVE → idle
   enter/replay/handoff/re-idle loop is the actual change. Everything else is plumbing.
 - **Determinism needs a seed pin.** A track recorded at seed S only replays faithfully at
   seed S — procedural carts (sloop's world, roadnet) especially. The demo must pin its seed.
-- **Where the track lives in the web build.** The per-cart emcc build doesn't carry
-  `tools/clips/` today; decide embed-in-cart-data vs. ship-as-sibling-and-fetch. (Web-only
-  concern — irrelevant to the native prototype.)
+- **Where the track lives in the web build — resolved: embedded.** The attract track rides in
+  the cart data (a `de:demo` zTXt chunk, compiled into the web build), so the cart is
+  self-contained and there's nothing to fetch. The new work is the bake-step embed +
+  reading it back at runtime; the *video* tracks stay external in `tools/clips/`.
 - **Web manners** (embeds only): audio muted by default (autoplay policy + many carts), and
   the demo must not steal scroll/keyboard focus until the user clicks to activate.
 
