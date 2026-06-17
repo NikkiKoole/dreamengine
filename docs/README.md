@@ -97,9 +97,10 @@ docs/
 │   ├── profiler.md               one-click CPU profiler (⏱ profile button): hot functions + call paths, frame budget, draw-call counts
 │   ├── live-coding.md            how-to for the live (libtcc) run mode: edit-while-running, hot reload, STATE/S state that survives reloads
 │   ├── game-music.md             generative soundtrack recipes: step clock, chord brain, voice leading, time feel, seeds, brain catalog, radio.h; worked example = bossa.c (station candidates live in design/future-stations.md)
-│   └── voice.md                  Nikki's writing voice (synthesized from mipolai.com) for hand-written editorial prose — first customer = the history page's editorial seam
-├── history-spine.json hand-authored STRUCTURE for the generated history page (eras, subsystems, importance tiers, marked days, editorial seam); dates/commits/ADRs/carts are derived from git
-├── history.html       GENERATED project-history timeline (tools/build-history.js) — a neo-brutalist magazine read of how the engine grew; opened via the Docs tab's "★ history" item. Re-run the generator after editing the spine. v1 = week 1
+│   ├── voice.md                  Nikki's writing voice (synthesized from mipolai.com) for hand-written editorial prose — first customer = the history page's editorial seam
+│   └── history-page.md           ★ how the generated history page works + how to ADD A WEEK (the build-history.js generator + the history-spine.json structure)
+├── history-spine.json hand-authored STRUCTURE for the generated history page (weeks, eras, subsystems, importance tiers, marked days, milestones, editorial seam); dates/commits/ADRs/carts/heroes are derived from git
+├── history.html       GENERATED project-history timeline (tools/build-history.js) — a neo-brutalist magazine read, grouped week by week; opened via the Docs tab's "★ history" item. Covers weeks 1–3; how-to + add-a-week → guides/history-page.md
 └── archive/           superseded / done notes, kept for history
 ```
 

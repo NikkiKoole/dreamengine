@@ -37,6 +37,7 @@ function showPixels() {
 }
 
 function switchTab(name) {
+  captureHistoryScroll()   // grab the history iframe's scroll WHILE it's still visible
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
   const tab = document.querySelector(`.tab[data-tab="${name}"]`)
@@ -50,6 +51,10 @@ function switchTab(name) {
   // keep the outline fresh when returning to the code tab (edits made while on
   // another tab still fire onDocChange, but this also covers the first show)
   if (name === 'code') refreshOutline()
+  // returning to the docs tab after a cart load: the panel was display:none'd,
+  // which resets the still-mounted history iframe's scroll to 0 without reloading
+  // it — so re-restore from the position the page saved in sessionStorage.
+  if (name === 'help') restoreHistoryScroll()
   if (name === 'tutorials') {
     // rebuild on every open so a freshly-added cart shows up without a reload
     buildTutorialsPanel().then(() => {
@@ -57,6 +62,37 @@ function switchTab(name) {
       if (s) s.focus()   // panel is visible by now, so focus takes
     })
   }
+}
+
+// Scroll-position memory for the history iframe across tab switches. Switching
+// tabs display:none's the Docs panel, which zeroes the (still-mounted) iframe's
+// scroll — so we snapshot scrollY while it's visible and re-apply it on return.
+// A plain variable + direct same-origin scrollTo: no sessionStorage (Chromium
+// can partition the parent's separately from the iframe's) and no message timing.
+let lastHistoryScroll = 0
+function historyFrame() {
+  const helpActive = document.getElementById('panel-help')?.classList.contains('active')
+  const frame = typeof docsContent !== 'undefined' && docsContent && docsContent.querySelector('.history-frame')
+  return { frame, helpActive }
+}
+function captureHistoryScroll() {
+  const { frame, helpActive } = historyFrame()
+  if (!frame || !helpActive) return        // only capture while it's actually on screen
+  // capture even 0 — the panel being visible means this scrollY is real (e.g. you
+  // just hit back-to-top); the helpActive guard already excludes the bogus 0 a
+  // hidden (display:none) panel reports.
+  try { const y = frame.contentWindow.scrollY; if (Number.isFinite(y)) lastHistoryScroll = y } catch {}
+}
+function restoreHistoryScroll() {
+  const { frame } = historyFrame()
+  if (!frame || !lastHistoryScroll) return
+  const y = lastHistoryScroll
+  let n = 0
+  const tick = () => {                      // retry ~400ms in case layout settles late
+    try { frame.contentWindow.scrollTo(0, y) } catch {}
+    if (++n < 8) setTimeout(tick, 50)
+  }
+  requestAnimationFrame(tick)
 }
 
 // sub-toggle inside the Pixels tab: switch between sprite and map editing
@@ -250,6 +286,7 @@ function setActiveNav(key) {
 function renderApiReference() {
   currentDocPath = ''
   setActiveNav('api')
+  docsContent.classList.remove('docs-history')
   docsContent.innerHTML = ''
 
   const intro = document.createElement('div')
@@ -315,6 +352,7 @@ function renderApiReference() {
 async function showEngineSource(file) {
   currentDocPath = 'engine:' + file
   setActiveNav('engine:' + file)
+  docsContent.classList.remove('docs-history')
   docsContent.innerHTML = ''
   const head = document.createElement('div')
   head.className = 'engine-src-head'
@@ -335,10 +373,42 @@ window.addEventListener('engine-source', (e) => {
   showEngineSource(e.detail.file)
 })
 
+// — the generated project history (docs/history.html) in an iframe —
+// it's a dedicated styled page; doc links inside it postMessage back here
+// (see the 'message' listener below) so they open in this same docs pane.
+// The page persists its own scroll in sessionStorage (it knows when its layout
+// has settled), so returning to ★ history after clicking an ADR/cart lands you
+// back where you were — no back button needed.
+function showHistory() {
+  currentDocPath = 'history'
+  setActiveNav('history')
+  docsContent.classList.add('docs-history')
+  docsContent.innerHTML = `<iframe class="history-frame" src="/docs/history.html" title="project history"></iframe>`
+  docsContent.scrollTop = 0
+}
+
+// the history iframe asks us to open a docs/ markdown file, or load a cart, when
+// something inside it is clicked
+window.addEventListener('message', (e) => {
+  const m = e.data
+  if (!m) return
+  if (m.type === 'open-doc' && typeof m.path === 'string') {
+    if (!/^[\w./-]+\.md$/.test(m.path)) return   // docs-relative .md only
+    const helpTab = document.querySelector('.tab[data-tab="help"]')
+    if (helpTab && !helpTab.classList.contains('active')) helpTab.click()
+    showDoc(m.path)
+  } else if (m.type === 'load-cart' && typeof m.file === 'string' && /^[\w-]+\.cart\.png$/.test(m.file)) {
+    if (m.title) setCartName(m.title)
+    currentCartFile = m.file.replace(/\.cart\.png$/i, '')
+    loadCartFromUrl('/carts/' + m.file)   // applies the cart + switches to the code tab
+  }
+})
+
 // — render a markdown doc from docs/ into the content pane —
 async function showDoc(relPath) {
   currentDocPath = relPath
   setActiveNav(relPath)
+  docsContent.classList.remove('docs-history')
   let md
   try {
     md = await (await fetch('/docs/' + relPath)).text()
@@ -378,6 +448,7 @@ function docNavItem(label, key, onClick) {
 async function buildDocsSidebar() {
   docsSidebar.innerHTML = ''
   docsSidebar.appendChild(docNavItem('API reference', 'api', () => renderApiReference()))
+  docsSidebar.appendChild(docNavItem('★ history', 'history', () => showHistory()))
 
   // the engine's own C files, readable right here (cmd-click an #include in
   // your cart jumps to the same view) — studio.h first, then the cart-land

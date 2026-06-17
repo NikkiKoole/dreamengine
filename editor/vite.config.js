@@ -105,7 +105,10 @@ function serveDocs() {
           const rel = url.slice('/docs/'.length)
           const abs = path.resolve(DOCS, rel)
           if (abs.startsWith(DOCS) && fs.existsSync(abs) && fs.statSync(abs).isFile()) {
-            res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            // .html (the generated history page) renders in an iframe; everything
+            // else is markdown served raw for the in-editor wiki renderer.
+            const html = abs.endsWith('.html')
+            res.setHeader('Content-Type', html ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8')
             fs.createReadStream(abs).pipe(res)
             return
           }
