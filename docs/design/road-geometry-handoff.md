@@ -167,10 +167,12 @@ A junction recipe is `(topology × policy)`; the generator finished the **policy
 axis is next, and it's the same refactor as **skew** — the **`Leg` layer** (a junction = a list of legs each
 `{bearing, present}`; `rebuild_ports()` lays ports out from it). Key finding: the **ramp geometry is already
 angle-agnostic** — only the *stage* (`setup()` port placement + `draw()` road rectangles) is hardcoded to 90°.
-1. **`Leg` layer + skew** — vary a leg's bearing; validates the ramp layer under arbitrary angles (the
-   worldgen condition).
-2. **Topology** on top → **trumpet / fork / triangle** (the 3-leg family). Trumpet needs an *asymmetric*
-   hard-turn assignment (one loop + one flyover — the parked variant), not the uniform policy.
+1. **`Leg` layer + skew — DONE (2026-06-17).** `Leg{bearing,present}` + `rebuild_ports()` + `draw_arm()`; a
+   `skew` stepper angles the trunk and the ramps + generated junction re-solve with no spline changes (the
+   ramp layer was already angle-agnostic). `make_junction` skips absent legs — ready for topology.
+2. **Topology** (NEXT) on the same machinery → **trumpet / fork / triangle** (the 3-leg family): flip leg
+   `present` + draw the matching layout. Trumpet needs an *asymmetric* hard-turn assignment (one loop + one
+   flyover — the parked variant), not the uniform policy.
 3. **Ring / roundabout family LAST** — the parked `ring`/`circulate` peer primitive.
 Then port into a world that **emits `(legs, type)` per crossing from the seed** (new junction-first world vs
 retrofit roadnet2 — fork + take in §7). Smaller open items: `laneLink` teeth (`from≠to` → the M4 gore),

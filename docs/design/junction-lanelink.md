@@ -328,9 +328,12 @@ abstraction the world port needs anyway (legs arrive as graph edges with bearing
 a detour.
 
 ### Decided sequence (2026-06-17)
-1. **`Leg` layer + skew** — smallest proof; validates the whole ramp layer under arbitrary angles (the
-   worldgen condition). Replace the hardcoded ports with `Leg{bearing,present}` + `rebuild_ports()`; a skew
-   slider on one leg; confirm ramps + generated junction re-solve.
+1. **`Leg` layer + skew — DONE (2026-06-17).** `roadlab.c` now has `Leg{bearing,present,in,out}` + a static
+   `legs[4]`; `rebuild_ports()` lays the 8 ports out from the legs (reproducing the perpendicular cross at
+   `skew=0`), and `draw_arm()` strokes each road from its bearing. A `skew` stepper angles the trunk (legs
+   2,3); the ramps **and** the generated junction re-solve with **zero changes to the spline code** —
+   confirming the ramp layer was already angle-agnostic. (`leg_in/leg_out` = `L*2`/`L*2+1`; `make_junction`
+   now skips absent legs, ready for topology.)
 2. **Topology** on the same machinery → **trumpet / fork / triangle** (the 3-leg column). Trumpet additionally
    needs an **asymmetric** hard-turn assignment — *one loop + one semi-direct flyover*, not the uniform
    per-class policy (the **loop+loop vs loop+flyover trumpet variant** parked in the handoff). Fork/triangle

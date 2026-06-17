@@ -36,8 +36,14 @@
 //                the primitive from a per-type POLICY. diamond/cloverleaf/stack differ ONLY in how the hard
 //                LEFT turn is served (direct / loop / flyover). Pure fn of (ports, type) ⇒ deterministic. The
 //                junction view now shows this GENERATED junction; `g` cycles the type. (Was the hand DEMO.)
+//   LEG LAYER (skew): a junction is a list of LEGS, each a road arm at a `bearing`; rebuild_ports() lays the
+//                ports out from the legs, so NOTHING is hardcoded to 90° — the ramp drawers were already
+//                angle-agnostic, only the stage was perpendicular. The `skew` control angles the crossing
+//                road (the trunk) and the ramps + generated junction re-solve. Varying leg `present` is the
+//                next axis (topology → trumpet/fork/triangle). See docs/design/junction-lanelink.md §9.
 //   Controls: an on-screen ui.h toolbar — every control a clickable button. Keyboard: ←/→ A · ↑/↓ B ·
 //             [ ] radius · ,/. Ls · C clothoid · 1-4 lanes · t taper · e lift · j sandbox/junction · l primitive · g type.
+//             (skew has a toolbar stepper.)
 // Next: port into a world that EMITS (legs,type) per crossing from the seed and calls make_junction() +
 //       draw_junction() as the drawer — a new junction-first world, or roadnet2 (see junction-lanelink §7).
 
@@ -140,6 +146,22 @@ typedef struct { float x,y,dir; const char*name; } Port;
 static Port ports[16]; static int nport=0;
 static void addport(float x,float y,float dir,const char*nm){ ports[nport++]=(Port){x,y,dir,nm}; }
 
+// ── LEG LAYER: a junction = a list of LEGS, each a road arm meeting the hub at a `bearing` (outward, deg)
+//    with two carriageways (inbound + outbound). The ports are LAID OUT from the legs (rebuild_ports), so
+//    nothing is hardcoded to 90° — vary a bearing → SKEW; vary `present` → topology (trumpet/fork, later).
+//    The 4 default legs are two collinear pairs (W–E highway, N–S trunk) = the perpendicular crossroads. ──
+#define NLEG   4
+#define LEGLEN 44
+typedef struct { float bearing; int present; const char* in; const char* out; } Leg;
+static Leg legs[NLEG] = {
+    { 180, 1, "W-in", "W-out" },   // 0  highway west arm
+    {   0, 1, "E-in", "E-out" },   // 1  highway east arm
+    { 270, 1, "N-in", "N-out" },   // 2  trunk north arm  (the trunk — legs 2,3 — skews to angle the crossing)
+    {  90, 1, "S-in", "S-out" },   // 3  trunk south arm
+};
+static int skew=0;                 // degrees added to the TRUNK legs (2,3): the crossing road tilts but stays straight
+static float leg_bearing(int L){ return legs[L].bearing + (L>=2 ? (float)skew : 0.f); }
+
 static void draw_port(Port p,int col){
     circfill((int)p.x,(int)p.y,2,col);
     float tx=p.x+ux(p.dir)*12, ty=p.y+uy(p.dir)*12;
@@ -153,13 +175,12 @@ static void draw_port(Port p,int col){
 // the picker stays free (handy for probing odd pairs), it just marks what isn't a real movement.
 static int port_inbound(Port p){ float cx=SCREEN_W/2.0f, cy=SCREEN_H/2.0f;
     return (cx-p.x)*ux(p.dir) + (cy-p.y)*uy(p.dir) > 0; }
-static int port_leg(Port p){ float dx=p.x-SCREEN_W/2.0f, dy=p.y-SCREEN_H/2.0f;
-    if (fabsf(dx)>fabsf(dy)) return dx>0?1:0; return dy>0?3:2; }   // 0=W 1=E 2=N 3=S
-// why a sandbox A→B pair isn't a real movement (NULL = valid). entries must be inbound, exits outbound, diff legs.
-static const char* movement_problem(Port a, Port b){
-    if (!port_inbound(a))            return "Port A (EXIT lane) - entry against traffic";
-    if ( port_inbound(b))            return "Port B (ENTRY lane) - merge against traffic";
-    if (port_leg(a)==port_leg(b))    return "same leg - a U-turn";
+// why a sandbox A→B pair (by port index) isn't a real movement (NULL = valid): entries must be inbound,
+// exits outbound, and the two must be on different legs (port i belongs to leg i/2 — two ports per leg).
+static const char* movement_problem(int ai, int bi){
+    if (!port_inbound(ports[ai]))  return "Port A (EXIT lane) - entry against traffic";
+    if ( port_inbound(ports[bi]))  return "Port B (ENTRY lane) - merge against traffic";
+    if (ai/2 == bi/2)              return "same leg - a U-turn";
     return 0;
 }
 
@@ -383,7 +404,7 @@ static int make_junction(int nleg, JuncType type, int lanes, Junction *out){
     if (lanes<1) lanes=1;
     JuncPolicy p = POLICY[type]; out->name = JT_NAME[type]; out->nConns = 0;
     for (int o=0;o<nleg;o++) for (int d=0;d<nleg;d++){
-        if (o==d) continue;
+        if (o==d || !legs[o].present || !legs[d].present) continue;   // only served between PRESENT legs (topology)
         Turn t = classify_turn(ports[leg_in(o)].dir, ports[leg_out(d)].dir);
         if (t==T_UTURN && !p.serveUturn) continue;
         RampPrim prim = (t==T_THROUGH)?p.through : (t==T_RIGHT)?p.right : p.left;
@@ -425,26 +446,34 @@ static int step_btn(int x,int y,int w,const char*lm,const char*rm){
     return d;
 }
 
-static void setup(void){
-    if (nport) return;
-    int CX=SCREEN_W/2, CY=SCREEN_H/2;
-    float NL=CY-44, SL=CY+44, WL=CX-44, EL=CX+44;                              // leg tips
-    float n=CY-LANEW/2.0f, s=CY+LANEW/2.0f, w=CX-LANEW/2.0f, e=CX+LANEW/2.0f;  // the four lane centres
-    // Each leg has TWO carriageways: an INBOUND lane (traffic INTO the junction — ENTRIES live here) and an
-    // OUTBOUND lane (traffic away — EXITS live here). `dir` is the lane's TRUE travel direction (drive-on-
-    // right), so an inbound port's arrow points INTO the junction and the ramp leaves along it (no flip).
-    addport(WL, s,   0, "W-in");    // 0  west leg : eastbound IN   (south lane)
-    addport(WL, n, 180, "W-out");   // 1  west leg : westbound OUT  (north lane)
-    addport(EL, n, 180, "E-in");    // 2  east leg : westbound IN   (north lane)
-    addport(EL, s,   0, "E-out");   // 3  east leg : eastbound OUT  (south lane)
-    addport(w, NL,  90, "N-in");    // 4  north leg: southbound IN  (west lane)
-    addport(e, NL, 270, "N-out");   // 5  north leg: northbound OUT (east lane)
-    addport(e, SL, 270, "S-in");    // 6  south leg: northbound IN  (east lane)
-    addport(w, SL,  90, "S-out");   // 7  south leg: southbound OUT (west lane)
+// lay the 8 ports out from the legs: per leg, inbound (toward centre) + outbound (away), one each side of the
+// arm centreline (drive-on-right: outbound on the RIGHT of the outward direction). Port i belongs to leg i/2.
+static void rebuild_ports(void){
+    nport=0;
+    float cx=SCREEN_W/2.0f, cy=SCREEN_H/2.0f;
+    for (int L=0; L<NLEG; L++){
+        float b=leg_bearing(L), ax=ux(b), ay=uy(b), rx=-ay, ry=ax;     // outward dir + its right normal
+        float tx=cx+ax*LEGLEN, ty=cy+ay*LEGLEN;                        // arm tip
+        addport(tx - rx*(LANEW/2.0f), ty - ry*(LANEW/2.0f), b+180, legs[L].in);   // inbound  = port L*2
+        addport(tx + rx*(LANEW/2.0f), ty + ry*(LANEW/2.0f), b,      legs[L].out);  // outbound = port L*2+1
+    }
+}
+// draw one road ARM from the centre outward along its bearing: asphalt slab + yellow centreline + lane arrows
+static void draw_arm(int L){
+    float cx=SCREEN_W/2.0f, cy=SCREEN_H/2.0f;
+    float b=leg_bearing(L), ax=ux(b), ay=uy(b), rx=-ay, ry=ax, W=LANEW;
+    float ex=cx+ax*(SCREEN_W+SCREEN_H), ey=cy+ay*(SCREEN_W+SCREEN_H);  // run well past the screen edge
+    int q[8]={(int)(cx+rx*W),(int)(cy+ry*W),(int)(cx-rx*W),(int)(cy-ry*W),
+              (int)(ex-rx*W),(int)(ey-ry*W),(int)(ex+rx*W),(int)(ey+ry*W)};
+    polyfill(q,4,CLR_DARKER_GREY);
+    line((int)cx,(int)cy,(int)ex,(int)ey,CLR_YELLOW);
+    for (float t=12;t<420;t+=40){ float px=cx+ax*t, py=cy+ay*t;
+        arrow(px+rx*(W*0.5f),py+ry*(W*0.5f), b,     CLR_YELLOW);       // outbound lane (right side)
+        arrow(px-rx*(W*0.5f),py-ry*(W*0.5f), b+180, CLR_YELLOW); }     // inbound lane
 }
 
 void update(void){
-    setup();
+    rebuild_ports();
     if (keyp(KEY_LEFT))  selA=(selA+nport-1)%nport;
     if (keyp(KEY_RIGHT)) selA=(selA+1)%nport;
     if (keyp(KEY_DOWN))  selB=(selB+nport-1)%nport;
@@ -465,17 +494,12 @@ void update(void){
 }
 
 void draw(void){
-    setup();
+    rebuild_ports();
     ui_begin();
     cls(CLR_DARK_GREEN);
-    int CX=SCREEN_W/2, CY=SCREEN_H/2;
-    // lane-accurate roads: slabs + yellow median + per-lane direction arrows
-    rectfill(0, CY-LANEW, SCREEN_W, 2*LANEW, CLR_DARKER_GREY);     // highway (E-W)
-    rectfill(CX-LANEW, 0, 2*LANEW, SCREEN_H, CLR_DARKER_GREY);     // trunk   (N-S)
-    line(0,CY,SCREEN_W,CY,CLR_YELLOW);  line(CX,0,CX,SCREEN_H,CLR_YELLOW);
-    for (int x=12;x<SCREEN_W;x+=40){ arrow(x, CY-LANEW/2.0f, 180, CLR_YELLOW); arrow(x, CY+LANEW/2.0f, 0, CLR_YELLOW); }
-    for (int y=12;y<SCREEN_H;y+=40){ arrow(CX+LANEW/2.0f, y, 270, CLR_YELLOW); arrow(CX-LANEW/2.0f, y, 90, CLR_YELLOW); }
-    const char* sand_problem = (selA!=selB) ? movement_problem(ports[selA], ports[selB]) : 0;
+    // lane-accurate roads, drawn from the LEGS (so a skewed leg draws tilted)
+    for (int L=0; L<NLEG; L++) if (legs[L].present) draw_arm(L);
+    const char* sand_problem = (selA!=selB) ? movement_problem(selA, selB) : 0;
     make_junction(4, (JuncType)juncType, nlanes, &gen_junc);  // GENERATE the table from the type (pure fn of ports+type+lanes)
     if (view){
         // JUNCTION view (M6 + §8.2) — the WHOLE junction GENERATED from the type, then drawn from the
@@ -537,7 +561,10 @@ void draw(void){
     snprintf(b,sizeof b,"%d",(int)spiral); print(b, 152, SCREEN_H-31, CLR_LIGHT_GREY);
     print("lanes", 170, SCREEN_H-31, CLR_WHITE);
     d=step_btn(198, SCREEN_H-34, 14, "-", "+"); if (d) nlanes+=d;
-    snprintf(b,sizeof b,"%d",nlanes); print(b, 230, SCREEN_H-31, CLR_LIGHT_GREY);
+    snprintf(b,sizeof b,"%d",nlanes); print(b, 228, SCREEN_H-31, CLR_LIGHT_GREY);
+    print("skew", 242, SCREEN_H-31, CLR_PINK);                 // angle the crossing road (the trunk)
+    d=step_btn(270, SCREEN_H-34, 14, "-", "+"); if (d) skew+=5*d;
+    snprintf(b,sizeof b,"%d",skew); print(b, 302, SCREEN_H-31, CLR_LIGHT_GREY);
     // row 3 — cross-section: clothoid toggle, lane taper, flyover elevation
     if (ui_button(4, SCREEN_H-18, 66, 13, use_cloth?"clothoid: on":"clothoid: off")) use_cloth=!use_cloth;
     print("taper", 80, SCREEN_H-15, CLR_BLUE);
@@ -555,6 +582,7 @@ void draw(void){
     if (nlanes<1) nlanes=1;  if (nlanes>6) nlanes=6;
     if (taperPct<0) taperPct=0;  if (taperPct>100) taperPct=100;
     if (lift<0) lift=0;  if (lift>24) lift=24;
+    if (skew<-45) skew=-45;  if (skew>45) skew=45;
 
     ui_end();
     font(FONT_NORMAL);
