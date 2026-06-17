@@ -71,11 +71,10 @@ returned **no verified claim** (sources fetched, not in the verified set).
 ## 6. THIN / unverified — treat as leads, not facts
 The verifier was strict and the key academic sources are books (not web-fetchable). These requested topics
 returned **zero verified claims**:
-- **Facet B — network topology patterns** (grid / cul-de-sac trees / loop-and-lollipop / fused-grid /
-  radial-concentric / organic / superblock and their trade-offs). Flagged as *"the biggest unmodeled gap for a
-  procedural generator."* → a focused **B-only deep dive** is the natural follow-up (roadnet2 already dabbles
-  in street patterns, so this connects directly to the world step).
-- **Games/sims modeling** (Cities: Skylines, SimCity, SUMO/OpenDRIVE as procedural precedent).
+- **Facet B — network topology patterns** — the first pass returned zero verified claims here. **✅ now
+  covered by a focused B-only deep dive → see §8 below** (22 verified claims, strong primary sources).
+- **Games/sims modeling** (Cities: Skylines, SimCity) — still thin; the procedural-generation *papers*
+  (Parish & Müller, Chen tensor fields, citygen) came through in §8, but the commercial game engines didn't.
 - **Staggered junctions & free-right slip lanes** — named in the question, not independently verified.
 
 ## 7. The layered map (road class → junction primitives → network pattern → coverage)
@@ -88,36 +87,131 @@ returned **zero verified claims**:
 
 **Bottom line:** roadlab built the *top* of the hierarchy precisely. The two unmodeled frontiers are
 **(A) at-grade intersection primitives** (a different geometry grammar) and **(B) local/collector network
-topology** (the street-web patterns). The continuity tenet is the seam.
+topology** (the street-web patterns, detailed in §8). The continuity tenet is the seam.
+
+## 8. Facet B — network topology of lesser streets (B deep-dive, 2026-06-17, verified)
+A second focused deep-research pass on the street *web* (22 verified claims, 3 refuted, synthesis). Strong
+primary sources. **This is the layer ABOVE the at-grade junctions (§2/facet A) and BELOW the interchange tier
+roadlab already builds — and it's where roadnet2 already dabbles (β-skeleton highways + street-pattern palette
++ cul-de-sacs), so it connects straight to the seed-driven-world frontier.**
+
+### 8.1 Canonical patterns → empirical types ✓
+The named planning patterns (gridiron / dendritic cul-de-sac "loops-and-lollipops" / warped curvilinear /
+radial-concentric / organic / fused-grid / superblock) are confirmed as **real, implementable archetypes** —
+real networks empirically cluster into a *small* number of types:
+- **SNDi 8-type global taxonomy** (Barrington-Leigh & Millard-Ball, PLOS ONE 2019): A = regular grids (most
+  connected) → H = least connected; F = dead-end-heavy, G = dendritic (most network bridges).
+- **3-type clustering** (Bay Area, arXiv 2025 preprint — corroboration only): Gridded / Orthogonal / Organic.
+- These map onto the **generator's named rules**: Basic = organic/natural, New York = grid, Paris = radial-
+  concentric, San Francisco = terrain-following.
+
+### 8.2 Metrics — node degree ALONE is not enough ✓ (the key finding)
+A pure grid is ~**100% four-way** intersections; **medieval-organic (10%) and cul-de-sac (9%) are nearly
+identical on four-way share** despite being connectivity *opposites*. Mean node degree ranks them
+(grid **4.0** / medieval **3.1** / cul-de-sac **2.2**) but can't capture tree-likeness. So measure a
+**four-measure composite** (→ PCA = **SNDi**, Street-Network Disconnectedness Index; higher = more sprawl):
+1. **nodal degree** (mean; plus the **degree-1 / 3 / 4 share** = dead-end / T / four-way distribution)
+2. **dendricity** — tree-likeness (branches that don't reconnect)
+3. **circuity** — network path vs straight-line distance
+4. **sinuosity** — edge length vs end-to-end
+
+Signature per type: **Gridded** = highest degree-4 + concentrated street bearings · **Orthogonal** = highest
+degree-3 (T) · **Organic** = highest degree-1 (dead-ends) + dispersed bearings.
+
+### 8.3 Trade-offs ⚠️ (medium confidence — partly contested)
+- **cul-de-sac / loop (dendritic):** land/infrastructure efficiency (~16–25% less street land at comparable
+  density), perceived safety/sociability.
+- **grid:** connectivity, route choice, orientation, walkability.
+- **fused grid / superblock:** designed to combine both (pedestrian-permeable, vehicle-discontinuous).
+
+**Honest caveats (the verifier flagged these):** the cul-de-sac advantages rest heavily on **Grammenos/CMHC —
+the fused-grid inventor's advocacy paper**, not independent validation; the 16–25% land figure is second-hand
+within a wide range (others cite up to 50%); cul-de-sac safety/walkability is genuinely **contested** (Cozens &
+Hillier 2008 mixed) — **two stronger safety claims were REFUTED** in verification. The fused-grid mode-shift
+(~10% less auto, ~40% more walk/cycle) is a single-neighbourhood **Kelowna simulation**, *relative* not
+percentage-points, *work-trips only*.
+
+### 8.4 Procedural generation — the two pillars ✓ (both two-tier major→minor)
+Both foundational methods converge on a **two-tier "major-then-minor"** sequence (arterials first, then fill
+local streets) — exactly how a seed-driven world would layer onto roadlab's interchange tier.
+
+**Parish & Müller — CityEngine (SIGGRAPH 2001)**, an extended **L-system**:
+- decouples production rules from parameter-setting via **`globalGoals`** (objectives: street pattern +
+  population density) + **`localConstraints`** (environment: water/parks, self-intersection, mark-failed-
+  modules for deletion).
+- **two tiers:** highways connect population-density *peaks* globally (each road-end shoots radial rays,
+  samples the density map inverse-distance-weighted, grows toward the largest sum); streets fill locally per
+  density + dominant pattern, **stop at zero population**.
+- named pattern rules **blendable via greyscale control maps** — sum + weight active rules → one generator
+  morphs grid ↔ radial across space.
+
+**Chen et al. — tensor fields (SIGGRAPH 2008)**, streets as **hyperstreamlines of a 2D symmetric tensor field**:
+- the field's two *perpendicular eigenvector families* = the two dominant street directions.
+- user shapes the field (brush strokes, smoothing, constraints, noise, rotation fields) or edits the street
+  graph directly.
+- **two tiers:** trace the major graph first → its edges + topo boundaries **partition the domain into
+  regions** → each region gets its own (possibly discontinuous) field → trace minor/residential streets (so
+  minors needn't follow majors).
+
+Other surfaced precedents: **citygen** (Kelly & McCabe, GDTW 2007), **agent-based** growth (Song, PCG Workshop
+2019), and the open **probabletrain tensor-field city generator** (itch.io — a readable implementation of Chen).
+
+### 8.5 Implementer synthesis — the morph knobs + how to validate ✓
+A single generator can morph **grid ↔ radial ↔ organic ↔ cul-de-sac** by tuning a few knobs:
+1. a **pattern-bias field** — greyscale control maps weighting grid/radial/terrain/natural (Parish & Müller)
+   OR a **tensor field** (Chen);
+2. a **density / threshold** driving where streets branch and where they stop;
+3. a **dendricity / loop-vs-cul-de-sac knob** — whether dead-end branches reconnect;
+4. a **curvature / noise knob** — warped vs straight.
+
+**Validate** generated output by computing **SNDi's four measures** (node degree, dendricity, circuity,
+sinuosity) **+ the degree-1/3/4 share** — these empirically separate every canonical pattern (e.g. grid 100%
+four-way vs organic 10% vs cul-de-sac 9%, disambiguated by dendricity/circuity).
 
 ## Open questions (carry into a follow-up)
-- The network-topology patterns + their connectivity / permeability / cost / intersection-count trade-offs
-  (Marshall *Streets & Patterns*, Jacobs *Great Streets*, suburban-vs-grid literature). **← the B deep dive.**
+*Facet A (at-grade junctions):*
 - Precise mapping of at-grade lane composition + junction primitives onto OpenDRIVE lane types / `roadMark`
   and SUMO's junction model.
-- How Cities: Skylines / SimCity / OpenDRIVE+SUMO concretely instantiate the hierarchy (auto-generated vs
-  authored intersections) — implementation precedent.
 - Exact geometry of the named-but-unverified at-grade primitives: staggered junctions, free-right slips,
   splitter/turn channelizing islands, signalized-vs-priority control (AASHTO Green Book intersection chapter,
   NACTO directly).
 
-## Seminal works — the "great papers/books" (⏳ pending verification by the network-topology B-dive)
-The first pass leaned on *standards* (below); these are the foundational **academic** references for the
-network-topology + procedural-generation frontiers. Listed from confident recall — the B deep-dive
-(run `wf_396756b8-b5f`) will verify exact citations + add links/DOIs, then this section gets finalised.
-- **Parish & Müller, "Procedural Modeling of Cities," SIGGRAPH 2001** — the origin of CityEngine; L-system
-  road growth, global goals + local constraints, population-density-driven. *The* procedural-streets paper.
-- **Chen, Esch, Wonka, Müller, Zhang, "Interactive Procedural Street Modeling," ACM TOG / SIGGRAPH 2008** —
-  **tensor-field** street generation (the approach that morphs grid ↔ radial ↔ organic by editing a field).
-- **Stephen Marshall, *Streets & Patterns* (Spon/Routledge, 2005)** — the route-structure typology + the
-  movement-vs-place framing; the academic backbone for classifying patterns.
-- **Allan B. Jacobs, *Great Streets* (MIT Press, 1993)** — the one-square-mile figure-ground street maps; what
-  makes a dense, walkable network (a primary visual reference).
-- **Hillier & Hanson, *The Social Logic of Space* (Cambridge, 1984)** — space syntax, the basis for most
-  network-connectivity metrics.
-- **Southworth & Ben-Joseph, *Streets and the Shaping of Towns and Cities* (1997/2003)** — the historical
-  evolution of street layouts (grid → cul-de-sac), the grid-vs-suburban debate.
-- **Fanis Grammenos / CMHC — the *Fused Grid*** — the pedestrian-permeable / vehicle-discontinuous hybrid.
+*Facet B (network topology — from the B-dive's own open questions):*
+- The **per-pattern numeric metric table** (intersection density/km², link-node/β index, γ index, block size,
+  circuity ratio) — the B-dive surfaced the *relative ordering* + the degree-share signatures, not a full
+  numbers-per-pattern table.
+- How Marshall's route-structure characteristic types + the transportgeography.org taxonomy **map onto** the
+  SNDi 8-type / the 3-type clustering — and whether they add patterns (tributary vs distributor) the empirical
+  clusterings miss.
+- A concrete **superblock / fused-grid generation algorithm** (perimeter arterial loop + calmed/discontinuous
+  interior) — neither Parish & Müller nor Chen directly model the deliberate permeable-but-discontinuous topology.
+- **State of the art beyond the 2001/2008 pillars** — OSM/example-driven synthesis, learned generative models —
+  and whether any give better control over the grid↔organic↔cul-de-sac morph than greyscale-blend / tensor fields.
+
+## Seminal works — the "great papers/books"
+The foundational academic references for the network-topology + procedural-generation frontiers.
+**✓ = verified + linked by the B-dive; ◦ = named in the brief but not surfaced/verified (still canonical).**
+- ✓ **Parish & Müller, "Procedural Modeling of Cities," SIGGRAPH 2001** — origin of CityEngine; the extended
+  **L-system** with `globalGoals`/`localConstraints`, two-tier highway→street growth, blendable named pattern
+  rules. *The* procedural-streets paper. [ACM DOI](https://dl.acm.org/doi/10.1145/383259.383292) ·
+  [PDF (ResearchGate)](https://www.researchgate.net/publication/220720591_Procedural_Modeling_of_Cities)
+- ✓ **Chen, Esch, Wonka, Müller, Zhang, "Interactive Procedural Street Modeling," ACM TOG / SIGGRAPH 2008** —
+  **tensor-field** street generation (streets as hyperstreamlines; morph grid ↔ radial ↔ organic by editing the
+  field). [ACM DOI](https://dl.acm.org/doi/10.1145/1360612.1360702) ·
+  [project page](https://www.sci.utah.edu/~chengu/street_sig08/street_project.htm)
+- ✓ **Barrington-Leigh & Millard-Ball, "A global assessment of street-network sprawl," PLOS ONE 2019** — the
+  **SNDi** four-measure framework (nodal degree + dendricity + circuity + sinuosity) + the empirical 8-type
+  taxonomy. The metric backbone for *validating* generated networks.
+  [PLOS ONE](https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0223078)
+- ✓ **Grammenos et al. / CMHC — "Residential Street Pattern Design" (the Fused Grid)** — the pedestrian-
+  permeable / vehicle-discontinuous hybrid + the land-efficiency argument (read as advocacy — see §8.3 caveat).
+  [PDF](https://www.irbnet.de/daten/iconda/CIB4226.pdf)
+- ✓ **Kelly & McCabe, "Citygen" (GDTW 2007)** — an open road-network generation system. [PDF](https://www.citygen.net/files/citygen_gdtw07.pdf)
+- ◦ **Stephen Marshall, *Streets & Patterns* (Spon/Routledge, 2005)** — the route-structure typology +
+  movement-vs-place framing. *(Named in the brief; not surfaced as a fetchable verified source — get directly.)*
+- ◦ **Allan B. Jacobs, *Great Streets* (MIT Press, 1993)** — the one-square-mile figure-ground street maps. *(Not surfaced.)*
+- ◦ **Hillier & Hanson, *The Social Logic of Space* (Cambridge, 1984)** — space syntax, basis for connectivity metrics. *(Not surfaced.)*
+- ◦ **Southworth & Ben-Joseph, *Streets and the Shaping of Towns and Cities* (1997/2003)** — grid → cul-de-sac evolution. *(Not surfaced.)*
 
 ## Key sources — verified in the first deep-dive (primary unless noted)
 The sources behind the verified findings above, grouped by topic. Quality tier per the research pass.
@@ -143,8 +237,11 @@ The sources behind the verified findings above, grouped by topic. Quality tier p
   · [§12 Junctions](https://publications.pages.asam.net/standards/ASAM_OpenDRIVE/ASAM_OpenDRIVE_Specification/latest/specification/12_junctions/12_01_introduction.html)
 - SUMO — [Road Networks](https://sumo.dlr.de/docs/Networks/SUMO_Road_Networks.html) · [Network Building Process](https://sumo.dlr.de/docs/Developer/Network_Building_Process.html)
 
-**Network topology + interconnection (facet B — thin, mostly secondary; the B-dive is fetching the academic core)**
-- [Wharton working paper #389 (PDF)](https://realestate.wharton.upenn.edu/wp-content/uploads/2017/03/389.pdf) — *primary, network-form academic; confirm exact title via the B-dive*
-- [transportgeography.org — street-network types](https://transportgeography.org/contents/chapter8/transportation-urban-form/street-network-types/) (secondary)
-- [Wikipedia — Fused grid](https://en.wikipedia.org/wiki/Fused_grid) · [Road hierarchy](https://en.wikipedia.org/wiki/Road_hierarchy) · [Access management](https://en.wikipedia.org/wiki/Access_management) (secondary)
-- [thediscourse.ca — the Fused Grid](https://thediscourse.ca/scarborough/the-fused-grid) (secondary)
+**Network topology (facet B — verified by the B-dive; see §8 + Seminal works for the core papers)**
+- *Core papers (links in Seminal works):* Parish & Müller 2001 · Chen et al. 2008 · Barrington-Leigh &
+  Millard-Ball 2019 (SNDi) · Grammenos/CMHC fused grid · Citygen 2007.
+- [arXiv 2511.06747 — Bay-Area intersection-pattern clustering (2025 preprint)](https://arxiv.org/pdf/2511.06747) — corroboration only, not peer-reviewed
+- [Song — agent-based street generation (PCG Workshop 2019)](https://pcgworkshop.com/archive/song2019agentbased.pdf) · [probabletrain — tensor-field city generator (itch.io)](https://probabletrain.itch.io/city-generator)
+- [transportgeography.org — street-network types](https://transportgeography.org/contents/chapter8/transportation-urban-form/street-network-types/) · [graph-theory measures/indices](https://transportgeography.org/contents/methods/graph-theory-measures-indices/) (secondary)
+- [CNU — Street Networks 101](https://www.cnu.org/our-projects/street-networks/street-networks-101) · [Fused grid](https://en.wikipedia.org/wiki/Fused_grid) · [Road hierarchy](https://en.wikipedia.org/wiki/Road_hierarchy) · [Access management](https://en.wikipedia.org/wiki/Access_management) (secondary)
+- [Rahman et al. — fused-grid mode-shift simulation (Travel Behaviour & Society 2019)](https://www.sciencedirect.com/science/article/abs/pii/S2214140519302269) (primary; simulation — see §8.3 caveat)
