@@ -4282,7 +4282,13 @@ static inline float sound_steiner(Voice *v, float in, float cutoff_hz) {
     v->flt_band += f * high;
     if      (v->flt_low  >  4.0f) v->flt_low  =  4.0f; else if (v->flt_low  < -4.0f) v->flt_low  = -4.0f;
     if      (v->flt_band >  4.0f) v->flt_band =  4.0f; else if (v->flt_band < -4.0f) v->flt_band = -4.0f;
-    return tanhf(v->flt_low * 1.3f);                                // output drive completes the aggressive voice
+    // multimode like the real Steiner-Parker — every tap output-driven for the aggressive voice
+    switch (v->flt_mode) {
+        case FILTER_STEINER_HP: return tanhf(high * 1.3f);
+        case FILTER_STEINER_BP: return tanhf(v->flt_band * 1.3f);
+        case FILTER_STEINER_NF: return tanhf((high + v->flt_low) * 1.3f);
+        default:                return tanhf(v->flt_low * 1.3f);   // FILTER_STEINER (lowpass)
+    }
 }
 
 // Drop any held-note ownership a voice carries (it's about to be reused or has finished),
@@ -5454,8 +5460,8 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             if (v->sfx_idx < 0 && v->flt_mode != FILTER_OFF) {
                 if (cutoff < 20.0f) cutoff = 20.0f;
                 if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
-                s = v->flt_mode == FILTER_LADDER  ? sound_ladder(v, s, cutoff)
-                  : v->flt_mode == FILTER_STEINER ? sound_steiner(v, s, cutoff)
+                s = v->flt_mode == FILTER_LADDER       ? sound_ladder(v, s, cutoff)
+                  : v->flt_mode >= FILTER_STEINER      ? sound_steiner(v, s, cutoff)   // 6..9 = Steiner LP/HP/BP/NF
                   : sound_svf(v, s, cutoff);
             }
             // drive: post-filter saturation — osc → SVF → drive → VCA, so resonance

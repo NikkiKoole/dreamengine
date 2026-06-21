@@ -2014,10 +2014,19 @@ with `tanh(flt_band)` in the feedback term and a `tanh(flt_low*1.3)` output. **R
 SVF's `flt_low`/`flt_band` state** (only one filter runs per voice) — so unlike the ladder
 it needed NO new voice fields, just the function + a dispatch arm. Honest scope: this is a
 *flavour*, not a circuit-accurate Steiner model (the real topology is obscure); the goal was
-a third, clearly-distinct aggressive character, judged by ear. Lowpass only (the cart's SVF
-already covers HP/BP/notch); `FILTER_STEINER` = mode 6, four-place wired, gated so every
+a third, clearly-distinct aggressive character, judged by ear. **Multimode** like the real
+Steiner-Parker — `FILTER_STEINER` (6) is the lowpass; `FILTER_STEINER_HP/BP/NF` (7/8/9) are
+the other taps (`sound_steiner` switches on `flt_mode`, same as the SVF). Four-place wired, gated so every
 existing voice is byte-identical (level/fx unchanged).
 
-Stability: 25 s at max resonance, swept cutoff → 0 clipped, no NaN, bounded by the tanhs.
-DC ≈ 0.013 (−37 dBFS) from the asymmetric nonlinearity — inaudible, doesn't grow, and in
-`moog.c` the default DRIVE stage's DC-blocker removes it; left raw otherwise (in character).
+Stability: 25 s at max resonance, swept cutoff → 0 clipped, no NaN, bounded by the tanhs
+(HP/BP carry even less DC than LP). DC ≈ 0.013 (−37 dBFS) on the LP from the asymmetric
+nonlinearity — inaudible, doesn't grow, and in `moog.c` the default DRIVE stage's DC-blocker
+removes it; left raw otherwise (in character).
+
+The multimode prompted restructuring `moog.c`'s filter panel from one flat 7-button row
+(which conflated *circuit* and *response*) into a **TYPE** selector (OFF/SVF/LAD/STE) × a
+**MODE** selector (LP/HP/BP/NF), with MODE greyed when the type is OFF or LADDER (LP-only).
+The cart maps the pair to the engine constant via `filter_mode()`; the preset `Patch` now
+stores `ftype`+`fresp` instead of a raw mode. The clearer model is the right surface for any
+future filter type, too.

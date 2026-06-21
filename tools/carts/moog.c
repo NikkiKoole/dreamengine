@@ -29,9 +29,9 @@
 // overdriving the filter), and KEYBOARD TRACK (the filter cutoff follows the pitch,
 // the 1/3·2/3 tracking switches — so high notes stay bright), and hard SYNC (OSC2 is
 // synced to OSC1 — sweep the ratio, by hand or with a SYNC-targeted LFO, for the
-// screaming/tearing sync lead). The FILTER offers the real 4-pole Moog LADder, a
-// Steiner-Parker-style aggressive filter (STE — the Neutron's bite), plus LP/HP/BP/NF;
-// a filter-contour + pitch ENVELOPE give
+// screaming/tearing sync lead). The FILTER is a TYPE (clean SVF · the 4-pole Moog LADder ·
+// the aggressive Steiner-Parker STE — the Neutron's bite) × a response MODE (LP/HP/BP/NF;
+// the ladder is LP-only, like the hardware); a filter-contour + pitch ENVELOPE give
 // the classic "wow"; three LFOs are the modulation. The PRESET bank (top right) loads
 // factory patches; SAVE stores your own, USER recalls it. Filter, drive, tracking, sync,
 // DETUNE and LEVEL all follow their knobs LIVE under a ringing chord (sweep the detune and
@@ -67,7 +67,8 @@ Osc osc[3] = {
 static const int SLOT_OF[3] = { SL1, SL2, SL3 };
 
 float attack  = 6,  decay = 140, sustain = 5, release = 320;   // ms, sustain 0..7
-int   fmode   = 5;                 // FILTER_LADDER — the real 4-pole Moog lowpass, on by default
+int   ftype   = 2;                 // FILTER type: 0 OFF · 1 SVF · 2 LADDER · 3 STEINER (boots on the ladder)
+int   fresp   = 0;                 // response: 0 LP · 1 HP · 2 BP · 3 NF (used by SVF + STEINER; LADDER is LP-only)
 float cutoff  = 700, res = 7;      // lower base so the FILTER CONTOUR has room to open it (the Moog "wow")
 float drive_v = 0.25f;             // post-filter saturation — a Minimoog runs a little hot by default
 float noise_l = 0;                 // mixer: noise source level 0..7 (0 = off)
@@ -90,7 +91,7 @@ int   vel  = 98;                   // 0..127
 typedef struct {
     int   w[3], oc[3], lv[3];
     float det[3];
-    int   fmode, pink;
+    int   ftype, fresp, pink;
     float cutoff, res, drive_v, noise_l, glide_ms, drift, ktrack;
     float attack, decay, sustain, release;
     float fenv_amt, fenv_atk, fenv_dec, penv_amt, penv_atk, penv_dec;
@@ -103,32 +104,32 @@ static const char *PNAME[6] = { "INIT", "BASS", "LEAD", "BRASS", "ACID", "SYNC" 
 static const Patch FACTORY[6] = {
   // INIT — the fat default
   { {OW_SAW,OW_SAW,OW_SQR}, {0,0,-1}, {7,5,4}, {0.0f,0.08f,-0.11f},
-    FILTER_LADDER, 0, 700, 7, 0.25f, 0, 0, 0.04f, 0.5f,
+    2, 0, 0,700, 7, 0.25f, 0, 0, 0.04f, 0.5f,
     6,140,5,320, 1500,4,220, 0,0,120,
     {1,0,0}, {5.0f,3.0f,0.4f}, {0.25f,0.3f,0.6f}, 1.0f },
   // BASS — two saws an octave down + a square, snappy filter contour
   { {OW_SAW,OW_SAW,OW_SQR}, {0,-1,-1}, {7,6,5}, {0.0f,0.10f,-0.08f},
-    FILTER_LADDER, 0, 520, 8, 0.40f, 0, 0, 0.05f, 0.35f,
+    2, 0, 0,520, 8, 0.40f, 0, 0, 0.05f, 0.35f,
     2,180,3,180, 1900,2,150, 0,0,120,
     {0,0,0}, {5.0f,3.0f,0.4f}, {0.0f,0.0f,0.0f}, 1.0f },
   // LEAD — three detuned saws, gliding, singing
   { {OW_SAW,OW_SAW,OW_SAW}, {0,0,0}, {7,6,6}, {0.0f,0.12f,-0.10f},
-    FILTER_LADDER, 0, 1600, 9, 0.45f, 0, 60, 0.06f, 0.7f,
+    2, 0, 0,1600, 9, 0.45f, 0, 60, 0.06f, 0.7f,
     4,220,6,300, 1200,6,260, 0,0,120,
     {1,0,0}, {5.5f,3.0f,0.4f}, {0.30f,0.0f,0.0f}, 1.0f },
   // BRASS — slow filter swell (the contour IS the brass), gentle detune
   { {OW_SAW,OW_SAW,OW_SAW}, {0,0,0}, {7,5,5}, {0.0f,0.06f,-0.06f},
-    FILTER_LADDER, 0, 700, 4, 0.25f, 0, 0, 0.04f, 0.6f,
+    2, 0, 0,700, 4, 0.25f, 0, 0, 0.04f, 0.6f,
     50,300,6,400, 2400,120,520, 0,0,120,
     {0,0,0}, {5.0f,3.0f,0.4f}, {0.0f,0.0f,0.0f}, 1.0f },
   // ACID — one saw, screaming resonance, fast snap (303-ish)
   { {OW_SAW,OW_SAW,OW_SQR}, {0,0,-1}, {7,0,0}, {0.0f,0.08f,-0.11f},
-    FILTER_LADDER, 0, 480, 14, 0.50f, 0, 40, 0.04f, 0.5f,
+    2, 0, 0,480, 14, 0.50f, 0, 40, 0.04f, 0.5f,
     2,120,0,120, 2600,0,170, 0,0,120,
     {0,0,0}, {5.0f,3.0f,0.4f}, {0.0f,0.0f,0.0f}, 1.0f },
   // SYNC — OSC2 hard-synced to OSC1, swept slowly by LFO1: the screaming sync lead
   { {OW_SAW,OW_SAW,OW_SAW}, {0,0,-1}, {7,6,0}, {0.0f,0.0f,0.0f},
-    FILTER_LADDER, 0, 2200, 5, 0.35f, 0, 30, 0.03f, 0.6f,
+    2, 0, 0,2200, 5, 0.35f, 0, 30, 0.03f, 0.6f,
     4,300,6,300, 800,4,200, 0,0,120,
     {6,0,0}, {0.3f,3.0f,0.4f}, {0.6f,0.0f,0.0f}, 2.6f },
 };
@@ -168,6 +169,17 @@ int tracked_cutoff(int midi) {
     return CLI(c, 40, 12000);
 }
 
+// compose the engine filter mode from the panel's TYPE + response. LADDER is lowpass-only
+// (true to the hardware); SVF and STEINER each get the full LP/HP/BP/NF.
+int filter_mode(void) {
+    switch (ftype) {
+        case 0:  return FILTER_OFF;
+        case 1:  return FILTER_LOW + fresp;       // SVF: LOW/HIGH/BAND/NOTCH = 1..4
+        case 2:  return FILTER_LADDER;            // ladder: lowpass only
+        default: return FILTER_STEINER + fresp;   // Steiner: LP/HP/BP/NF = 6..9
+    }
+}
+
 // program ONE slot (an oscillator or the noise source) with the shared patch.
 void program_slot(int slot, int instr, float duty) {
     instrument(slot, instr, (int)attack, (int)decay, CLI(sustain + 0.5f, 0, 7), (int)release);
@@ -178,7 +190,7 @@ void program_slot(int slot, int instr, float duty) {
         int dest = lfos[L].target - 1;
         instrument_lfo(slot, L, dest, lfos[L].rate, lfo_scaled(dest, lfos[L].depth));
     }
-    instrument_filter(slot, fmode, (int)cutoff, CLI(res + 0.5f, 0, 15));
+    instrument_filter(slot, filter_mode(), (int)cutoff, CLI(res + 0.5f, 0, 15));
     instrument_drive(slot, drive_v);
     instrument_env(slot, 0, ENV_CUTOFF, (int)fenv_atk, (int)fenv_dec, fenv_amt);
     instrument_env(slot, 1, ENV_PITCH,  (int)penv_atk, (int)penv_dec, penv_amt);
@@ -217,7 +229,7 @@ float drive_now(void) {
 // drive, LFOs. `cut` is the per-voice tracked cutoff so each note sits where it should.
 void drive_live(int h, int cut) {
     if (h < 0) return;
-    note_filter(h, fmode);
+    note_filter(h, filter_mode());
     note_cutoff(h, cut);
     note_res(h, CLI(res + 0.5f, 0, 15));
     note_drive(h, drive_now());
@@ -269,7 +281,7 @@ void capture_patch(Patch *p) {
         p->w[i] = osc[i].wave; p->oc[i] = osc[i].oct; p->lv[i] = osc[i].level; p->det[i] = osc[i].detune;
         p->lt[i] = lfos[i].target; p->lr[i] = lfos[i].rate; p->ld[i] = lfos[i].depth;
     }
-    p->fmode = fmode; p->pink = pink; p->cutoff = cutoff; p->res = res; p->drive_v = drive_v;
+    p->ftype = ftype; p->fresp = fresp; p->pink = pink; p->cutoff = cutoff; p->res = res; p->drive_v = drive_v;
     p->noise_l = noise_l; p->glide_ms = glide_ms; p->drift = drift; p->ktrack = ktrack; p->sync_amt = sync_amt;
     p->attack = attack; p->decay = decay; p->sustain = sustain; p->release = release;
     p->fenv_amt = fenv_amt; p->fenv_atk = fenv_atk; p->fenv_dec = fenv_dec;
@@ -280,7 +292,7 @@ void apply_patch(const Patch *p) {
         osc[i].wave = p->w[i]; osc[i].oct = p->oc[i]; osc[i].level = p->lv[i]; osc[i].detune = p->det[i];
         lfos[i].target = p->lt[i]; lfos[i].rate = p->lr[i]; lfos[i].depth = p->ld[i];
     }
-    fmode = p->fmode; pink = p->pink; cutoff = p->cutoff; res = p->res; drive_v = p->drive_v;
+    ftype = p->ftype; fresp = p->fresp; pink = p->pink; cutoff = p->cutoff; res = p->res; drive_v = p->drive_v;
     noise_l = p->noise_l; glide_ms = p->glide_ms; drift = p->drift; ktrack = p->ktrack; sync_amt = p->sync_amt;
     attack = p->attack; decay = p->decay; sustain = p->sustain; release = p->release;
     fenv_amt = p->fenv_amt; fenv_atk = p->fenv_atk; fenv_dec = p->fenv_dec;
@@ -496,17 +508,23 @@ void draw() {
     else if (env_view == 1) draw_adenv(14, 140, 280, 52, &fenv_atk, 600, &fenv_dec, 800, &fenv_amt, 3000, evcol[1]);
     else                    draw_adenv(14, 140, 280, 52, &penv_atk, 400, &penv_dec, 600, &penv_amt, 36,   evcol[2]);
 
-    // ---- FILTER ----
-    const char *fn[7] = { "OFF", "LP", "HP", "BP", "NF", "LAD", "STE" };
+    // ---- FILTER (TYPE selects the circuit; MODE the response — LADDER is LP-only) ----
     panel(306, 116, 148, 92, "FILTER", CLR_ORANGE);
+    const char *ftn[4] = { "OFF", "SVF", "LAD", "STE" };
+    const char *frn[4] = { "LP", "HP", "BP", "NF" };
+    int resp_used = (ftype == 1 || ftype == 3);          // only SVF + STEINER use the LP/HP/BP/NF response
     font(FONT_TINY);
-    for (int i = 0; i < 7; i++)
-        if (ui_btn(310 + i * 20, 130, 19, 13, fn[i], fmode == i, CLR_ORANGE)) fmode = i;
+    for (int i = 0; i < 4; i++)
+        if (ui_btn(310 + i * 35, 128, 33, 12, ftn[i], ftype == i, CLR_ORANGE)) ftype = i;
+    for (int i = 0; i < 4; i++) {
+        int on = resp_used && fresp == i;
+        if (ui_btn(310 + i * 35, 142, 33, 12, frn[i], on, resp_used ? CLR_ORANGE : CLR_DARK_GREY) && resp_used) fresp = i;
+    }
     font(FONT_NORMAL);
-    ui_xy(2, 312, 148, 136, 44, &cutoff, 80, 4000, &res, 0, 15, CLR_ORANGE);
-    print("RES", 314, 150, CLR_DARK_GREY);
-    print("CUT", 424, 184, CLR_DARK_GREY);
-    print(str("cut %dhz  res %d", (int)cutoff, (int)(res + 0.5f)), 312, 196, CLR_MEDIUM_GREY);
+    ui_xy(2, 312, 158, 136, 34, &cutoff, 80, 4000, &res, 0, 15, CLR_ORANGE);
+    print("RES", 314, 160, CLR_DARK_GREY);
+    print("CUT", 424, 182, CLR_DARK_GREY);
+    print(str("cut %dhz  res %d", (int)cutoff, (int)(res + 0.5f)), 312, 195, CLR_MEDIUM_GREY);
 
     // ---- 3 LFOs ----
     const char *tn[7] = { "OFF", "PITCH", "DUTY", "VOL", "CUT", "DRIVE", "SYNC" };

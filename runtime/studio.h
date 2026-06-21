@@ -354,7 +354,10 @@ float lfo_value(int shape, float phase);   // evaluate an LFO_SHAPE_* at phase 0
 #define FILTER_BAND  3   // bandpass — keep only a band around cutoff (vowel/wah)
 #define FILTER_NOTCH 4   // notch — scoop OUT a band around cutoff (phasey)
 #define FILTER_LADDER 5  // the Moog 4-pole transistor-ladder lowpass — steeper (24dB/oct) & creamier than FILTER_LOW, loses bass as resonance climbs, self-oscillates near the top
-#define FILTER_STEINER 6 // a Steiner-Parker-style nonlinear 2-pole lowpass (the Behringer Neutron's voice) — rawer & more aggressive than FILTER_LOW, with a dirty, screaming high-resonance bite
+#define FILTER_STEINER 6 // Steiner-Parker-style nonlinear 2-pole LOWPASS (the Behringer Neutron's voice) — rawer & more aggressive than FILTER_LOW, with a dirty, screaming high-resonance bite
+#define FILTER_STEINER_HP 7 // Steiner-Parker highpass — the aggressive filter's HP response
+#define FILTER_STEINER_BP 8 // Steiner-Parker bandpass — the aggressive filter's BP response
+#define FILTER_STEINER_NF 9 // Steiner-Parker notch — the aggressive filter's notch response
 void instrument_filter(int slot, int mode, int cutoff_hz, int resonance);  // mode FILTER_*, cutoff in Hz (e.g. 800), resonance 0..15 (high = whistly peak). sweep cutoff with LFO_CUTOFF
 
 // modulation envelopes per instrument — a one-shot AD contour (the envelope twin of the LFO).
