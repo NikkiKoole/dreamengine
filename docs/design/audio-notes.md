@@ -2000,3 +2000,24 @@ runaway). **Open/deferred:** no per-voice DC blocker on the raw sync output (ina
 −46 dB, left raw for character); PolyBLEP/oversampling if the aliasing ever bothers anyone
 (it's the naive-on-purpose call). The Steiner-Parker filter (the Neutron's voice) and a
 patchable modular UI remain the only un-modeled Behringer-clone ideas.
+
+## 23. Steiner-Parker filter — `FILTER_STEINER` (2026-06-22)
+
+Third filter character, after the clean SVF and the smooth ladder (§21): a
+Steiner-Parker-FLAVOURED nonlinear 2-pole lowpass — the **Behringer Neutron's** voice.
+Where `FILTER_LOW` stays clean and `FILTER_LADDER` stays creamy, the Steiner is RAW: a
+diode-style `tanh` in the resonance feedback path + an output drive make it get dirty and
+SCREAM as resonance climbs (great for acid and biting leads).
+
+Implementation (`sound_steiner`, beside `sound_ladder`): the existing Chamberlin SVF math
+with `tanh(flt_band)` in the feedback term and a `tanh(flt_low*1.3)` output. **Reuses the
+SVF's `flt_low`/`flt_band` state** (only one filter runs per voice) — so unlike the ladder
+it needed NO new voice fields, just the function + a dispatch arm. Honest scope: this is a
+*flavour*, not a circuit-accurate Steiner model (the real topology is obscure); the goal was
+a third, clearly-distinct aggressive character, judged by ear. Lowpass only (the cart's SVF
+already covers HP/BP/notch); `FILTER_STEINER` = mode 6, four-place wired, gated so every
+existing voice is byte-identical (level/fx unchanged).
+
+Stability: 25 s at max resonance, swept cutoff → 0 clipped, no NaN, bounded by the tanhs.
+DC ≈ 0.013 (−37 dBFS) from the asymmetric nonlinearity — inaudible, doesn't grow, and in
+`moog.c` the default DRIVE stage's DC-blocker removes it; left raw otherwise (in character).

@@ -29,8 +29,9 @@
 // overdriving the filter), and KEYBOARD TRACK (the filter cutoff follows the pitch,
 // the 1/3·2/3 tracking switches — so high notes stay bright), and hard SYNC (OSC2 is
 // synced to OSC1 — sweep the ratio, by hand or with a SYNC-targeted LFO, for the
-// screaming/tearing sync lead). The FILTER offers the
-// real 4-pole Moog LADder plus LP/HP/BP/NF; a filter-contour + pitch ENVELOPE give
+// screaming/tearing sync lead). The FILTER offers the real 4-pole Moog LADder, a
+// Steiner-Parker-style aggressive filter (STE — the Neutron's bite), plus LP/HP/BP/NF;
+// a filter-contour + pitch ENVELOPE give
 // the classic "wow"; three LFOs are the modulation. The PRESET bank (top right) loads
 // factory patches; SAVE stores your own, USER recalls it. Filter, drive, tracking, sync,
 // DETUNE and LEVEL all follow their knobs LIVE under a ringing chord (sweep the detune and
@@ -496,10 +497,12 @@ void draw() {
     else                    draw_adenv(14, 140, 280, 52, &penv_atk, 400, &penv_dec, 600, &penv_amt, 36,   evcol[2]);
 
     // ---- FILTER ----
-    const char *fn[6] = { "OFF", "LP", "HP", "BP", "NF", "LAD" };
+    const char *fn[7] = { "OFF", "LP", "HP", "BP", "NF", "LAD", "STE" };
     panel(306, 116, 148, 92, "FILTER", CLR_ORANGE);
-    for (int i = 0; i < 6; i++)
-        if (ui_btn(310 + i * 24, 130, 22, 13, fn[i], fmode == i, CLR_ORANGE)) fmode = i;
+    font(FONT_TINY);
+    for (int i = 0; i < 7; i++)
+        if (ui_btn(310 + i * 20, 130, 19, 13, fn[i], fmode == i, CLR_ORANGE)) fmode = i;
+    font(FONT_NORMAL);
     ui_xy(2, 312, 148, 136, 44, &cutoff, 80, 4000, &res, 0, 15, CLR_ORANGE);
     print("RES", 314, 150, CLR_DARK_GREY);
     print("CUT", 424, 184, CLR_DARK_GREY);

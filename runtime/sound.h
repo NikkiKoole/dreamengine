@@ -4269,6 +4269,22 @@ static inline float sound_ladder(Voice *v, float in, float cutoff_hz) {
     return y4;
 }
 
+// Steiner-Parker-FLAVOURED nonlinear 2-pole lowpass — one sample (the Behringer Neutron's
+// voice). A Chamberlin SVF (reuses flt_low/flt_band — only one filter runs per voice) with
+// a diode-style tanh in the RESONANCE feedback path + an output drive: where FILTER_LOW
+// stays clean and the ladder stays creamy, this one gets dirty and SCREAMS as resonance
+// climbs — the raw, aggressive Steiner bite. tanh bounds it (stable, no runaway).
+static inline float sound_steiner(Voice *v, float in, float cutoff_hz) {
+    float f = 2.0f * sinf(3.14159265f * cutoff_hz / (float)SOUND_SAMPLE_RATE);
+    if (f > 0.99f) f = 0.99f; else if (f < 0.0005f) f = 0.0005f;
+    v->flt_low += f * v->flt_band;
+    float high = in - v->flt_low - v->flt_q * tanhf(v->flt_band);   // nonlinear resonance = the bite
+    v->flt_band += f * high;
+    if      (v->flt_low  >  4.0f) v->flt_low  =  4.0f; else if (v->flt_low  < -4.0f) v->flt_low  = -4.0f;
+    if      (v->flt_band >  4.0f) v->flt_band =  4.0f; else if (v->flt_band < -4.0f) v->flt_band = -4.0f;
+    return tanhf(v->flt_low * 1.3f);                                // output drive completes the aggressive voice
+}
+
 // Drop any held-note ownership a voice carries (it's about to be reused or has finished),
 // so the handle that owned it goes stale and its setters start no-op'ing.
 static void sound_unclaim_held(int vi) {
@@ -5438,7 +5454,9 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
             if (v->sfx_idx < 0 && v->flt_mode != FILTER_OFF) {
                 if (cutoff < 20.0f) cutoff = 20.0f;
                 if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
-                s = (v->flt_mode == FILTER_LADDER) ? sound_ladder(v, s, cutoff) : sound_svf(v, s, cutoff);
+                s = v->flt_mode == FILTER_LADDER  ? sound_ladder(v, s, cutoff)
+                  : v->flt_mode == FILTER_STEINER ? sound_steiner(v, s, cutoff)
+                  : sound_svf(v, s, cutoff);
             }
             // drive: post-filter saturation — osc → SVF → drive → VCA, so resonance
             // screams INTO the saturation and quiet envelope tails don't pump it. The
