@@ -26,9 +26,12 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 // ── roles ──────────────────────────────────────────────────────────────────
-enum { R_MOBSTER, R_GANGSTER, R_CORNERBOY, R_DEALER, R_PIMP, R_GIRL, R_FIEND, R_CIVILIAN, NROLES };
+enum { R_MOBSTER, R_GANGSTER, R_CORNERBOY, R_DEALER, R_PIMP, R_GIRL, R_FIEND, R_CIVILIAN,
+       R_BEGGAR, R_LABORER, R_DRUNK, R_SENIOR, R_BALLER, R_SUIT_BIZ, R_BARISTA, R_HISTORIAN, R_TEEN,
+       NROLES };
 static const char *ROLE_NAME[NROLES] = {
-    "MADE MAN", "GANGSTER", "CORNER BOY", "DEALER", "PIMP", "WORKING GIRL", "FIEND", "CIVILIAN"
+    "MADE MAN", "GANGSTER", "CORNER BOY", "DEALER", "PIMP", "WORKING GIRL", "FIEND", "CIVILIAN",
+    "BEGGAR", "LABORER", "DRUNK", "SENIOR", "BALLER", "BUSINESSMAN", "BARISTA", "HISTORIAN", "TEENAGER"
 };
 
 // ── expressions ──────────────────────────────────────────────────────────────
@@ -65,7 +68,8 @@ enum { FS_ROUND, FS_LONG, FS_SQUARE, FS_HEAVY, FS_SLIM, FS_GAUNT };
 #define A_SHADOW   (1<<14)   // eyeshadow / makeup
 #define A_BEAUTY   (1<<15)   // beauty mark / mole
 #define A_FACETAT  (1<<16)   // face/neck tattoos (teardrop, cheek ink, brow slit)
-#define A_GLASSESFALLBACK 0  // civilian "glasses" no-op (no plain-glasses asset yet)
+#define A_GLASSES  (1<<17)   // real spectacles (not shades) — senior/historian/biz/barista
+#define A_HEADBAND (1<<18)   // sports headband — baller
 
 // ── clothing collar style ──────────────────────────────────────────────────────
 enum { C_SUIT, C_HOODIE, C_TRACKSUIT, C_WIFEBEATER, C_STRAPTOP, C_FURCOAT, C_TEE };
@@ -140,6 +144,17 @@ static const char *ST_NAME[]  = { "Smokey","Reese","Marlo","Bodie","Tre","D-Loc"
 static const char *GIRL_NAME[]= { "Candy","Roxy","Destiny","Mercedes","Lola","Cinnamon","Jade","Star","Bambi","Diamond" };
 static const char *CIV_FIRST[]= { "Marcus","Trevor","Deion","Wesley","Andre","Lamar","Carl","Reggie","Dwayne","Otis" };
 static const char *FIEND_NAME[]={ "Bubbles","Sherm","Crackhead Bob","Twitch","Greasy Pete","Skeeter","Ronnie","Fester" };
+static const char *BUM_NAME[]  = { "Old Pete","Shakes","Lucky","One-Eye","Doc","Stumbles","Gus","Boxcar","Tex","Rags" };
+static const char *WORK_NAME[] = { "Hank","Big Joe","Mike","Earl","Buddy","Frank","Dale","Chuck","Manny","Sal" };
+static const char *SEN_M[]     = { "Walter","Herb","Stan","Arthur","Mort","Cliff","Norman","Leonard","Sy","Murray" };
+static const char *SEN_F[]     = { "Edith","Mabel","Doris","Agnes","Ruth","Gloria","Pearl","Estelle","Mildred","Vera" };
+static const char *BALL_NAME[] = { "Tyrone","Jamal","DeShawn","Magic","Reggie","Pippen","Marcus","Darnell","Hakeem","AI" };
+static const char *BIZ_NAME[]  = { "Brad","Chad","Sterling","Preston","Trent","Blake","Grant","Mr. Klein","Hunter","Brock" };
+static const char *CAFE_NAME[] = { "Dylan","Aiden","River","Sky","Juno","Wren","Felix","Oat","Sage","Birch" };
+static const char *HIST_NAME[] = { "Prof. Crane","Dr. Aldous","Bartholomew","Edmund","Cornelius","Dr. Voss","Reginald","Prof. Hale" };
+static const char *TEEN_NAME[] = { "Kayden","Brayden","Tyler","Mads","Zoe","Skylar","Jayden","Chloe","Hunter","Brooklyn" };
+
+static void cpy(char *o, const char *s) { int p = 0; while (*s) o[p++] = *s++; o[p] = 0; }
 
 static void make_name(Npc *n) {
     char *o = n->name;
@@ -159,6 +174,22 @@ static void make_name(Npc *n) {
         const char *g = FIEND_NAME[rnd(8)]; int p=0; while(*g) o[p++]=*g++; o[p]=0;
     } else if (n->role == R_CIVILIAN) {
         const char *f = CIV_FIRST[rnd(10)]; int p=0; while(*f) o[p++]=*f++; o[p]=0;
+    } else if (n->role == R_BEGGAR || n->role == R_DRUNK) {
+        cpy(o, BUM_NAME[rnd(10)]);
+    } else if (n->role == R_LABORER) {
+        cpy(o, WORK_NAME[rnd(10)]);
+    } else if (n->role == R_SENIOR) {
+        cpy(o, n->sex ? SEN_F[rnd(10)] : SEN_M[rnd(10)]);
+    } else if (n->role == R_BALLER) {
+        cpy(o, BALL_NAME[rnd(10)]);
+    } else if (n->role == R_SUIT_BIZ) {
+        cpy(o, BIZ_NAME[rnd(10)]);
+    } else if (n->role == R_BARISTA) {
+        cpy(o, CAFE_NAME[rnd(10)]);
+    } else if (n->role == R_HISTORIAN) {
+        cpy(o, HIST_NAME[rnd(8)]);
+    } else if (n->role == R_TEEN) {
+        cpy(o, TEEN_NAME[rnd(10)]);
     } else {
         // street alias: maybe a prefix
         int p=0;
@@ -226,6 +257,70 @@ static const Bark BK_CIV[] = {
     {"Whatever you're selling, I ain't buying.","",X_NEUTRAL},
 };
 
+static const Bark BK_BEGGAR[] = {
+    {"Spare some change? God bless ya.","",X_NERVOUS},
+    {"Ain't eaten since yesterday, friend.","",X_SAD_FALLBACK},
+    {"I'll watch your car real good. Real good.","",X_NERVOUS},
+    {"Used to have a house. A car. A wife.","",X_SAD_FALLBACK},
+    {"Anything helps. Even a smile.","",X_NEUTRAL},
+};
+static const Bark BK_LABORER[] = {
+    {"Twelve-hour shift and the boss still ain't happy.","",X_NEUTRAL},
+    {"Mind the wet cement, pal.","",X_NEUTRAL},
+    {"Honest day's work for a dishonest day's pay.","",X_WARY},
+    {"This whole block? My crew poured it.","",X_SMUG},
+    {"Clock out at five. Beer's at five-oh-one.","",X_LAUGH},
+};
+static const Bark BK_DRUNK[] = {
+    {"Heyyy... I know you. I KNOW you, right?","",X_LAUGH},
+    {"One more for the road, barkeep!","",X_LAUGH},
+    {"I'm not drunk, YOU'RE... you're blurry.","",X_NERVOUS},
+    {"The room's spinnin' but I'm standin' still.","",X_LAUGH},
+    {"Lemme tell ya 'bout my ex-wife...","",X_SAD_FALLBACK},
+};
+static const Bark BK_SENIOR[] = {
+    {"Back in MY day, this was all orange groves.","",X_NEUTRAL},
+    {"You kids and your telephones.","",X_WARY},
+    {"Get off my lawn! ...please.","",X_ANGRY},
+    {"I've seen this city change three times over.","",X_NEUTRAL},
+    {"Would you like a butterscotch, dear?","",X_LAUGH},
+};
+static const Bark BK_BALLER[] = {
+    {"Game point. Check it up.","",X_SMUG},
+    {"Ain't nobody on this court can guard me.","",X_SMUG},
+    {"You want next? Get in line.","",X_NEUTRAL},
+    {"Ball is life, my man. Ball is life.","",X_LAUGH},
+    {"And ONE! Put that on the highlight reel.","",X_LAUGH},
+};
+static const Bark BK_BIZ[] = {
+    {"Let's circle back and touch base offline.","",X_NEUTRAL},
+    {"Time is money, and you're wasting both.","",X_WARY},
+    {"I closed three deals before your coffee.","",X_SMUG},
+    {"Synergy. That's what this city needs.","",X_SMUG},
+    {"My lawyer will be in contact.","",X_ANGRY},
+};
+static const Bark BK_BARISTA[] = {
+    {"Oat milk, half-caff, extra hot? Coming up.","",X_NEUTRAL},
+    {"We actually source these beans ourselves.","",X_SMUG},
+    {"Name for the cup? ...I'll just guess.","",X_LAUGH},
+    {"That'll be seven-fifty for the small.","",X_NEUTRAL},
+    {"The wifi password is on the chalkboard.","",X_NEUTRAL},
+};
+static const Bark BK_HISTORIAN[] = {
+    {"This district predates the founding, you know.","",X_NEUTRAL},
+    {"Ah, but the archives tell a different story.","",X_SMUG},
+    {"Those who forget the past... well. You know.","",X_WARY},
+    {"I've a monograph on precisely this matter.","",X_NEUTRAL},
+    {"Fascinating. Truly fascinating.","",X_LAUGH},
+};
+static const Bark BK_TEEN[] = {
+    {"Ugh, this is SO boring. Can we go?","",X_NERVOUS},
+    {"Whatever. You wouldn't get it.","",X_WARY},
+    {"My mom's gonna kill me. Don't tell her.","",X_NERVOUS},
+    {"Bet. That's actually kinda fire though.","",X_SMUG},
+    {"Can I get a ride? Gas money's on me. Maybe.","",X_NEUTRAL},
+};
+
 static const Bark *bark_set(int role, int *count) {
     switch (role) {
         case R_MOBSTER:  *count = 5; return BK_MOBSTER;
@@ -235,6 +330,15 @@ static const Bark *bark_set(int role, int *count) {
         case R_PIMP:     *count = 4; return BK_PIMP;
         case R_GIRL:     *count = 5; return BK_GIRL;
         case R_FIEND:    *count = 5; return BK_FIEND;
+        case R_BEGGAR:   *count = 5; return BK_BEGGAR;
+        case R_LABORER:  *count = 5; return BK_LABORER;
+        case R_DRUNK:    *count = 5; return BK_DRUNK;
+        case R_SENIOR:   *count = 5; return BK_SENIOR;
+        case R_BALLER:   *count = 5; return BK_BALLER;
+        case R_SUIT_BIZ: *count = 5; return BK_BIZ;
+        case R_BARISTA:  *count = 5; return BK_BARISTA;
+        case R_HISTORIAN:*count = 5; return BK_HISTORIAN;
+        case R_TEEN:     *count = 5; return BK_TEEN;
         default:         *count = 5; return BK_CIV;
     }
 }
@@ -352,11 +456,92 @@ static void roll_npc(Npc *n, int forced_role) {
         if (chance(20)) n->acc |= A_FACETAT;
         n->shirt = pick((const int[]){CLR_DARK_GREY, CLR_BROWN, CLR_DARK_GREEN, CLR_LIGHT_GREY}, 4);
         break;
+    case R_BEGGAR:
+        n->collar = chance(50) ? C_HOODIE : C_TEE;       // layered, ragged
+        n->hair = pick((const int[]){H_SHORT, H_BALD, H_AFRO}, 3);
+        n->facial = chance(75) ? F_FULL : F_STUBBLE;     // unkempt beard
+        if (chance(60)) n->acc |= A_CAP;                 // a knit beanie
+        if (chance(30)) n->acc |= A_SCAR;
+        n->shirt = pick((const int[]){CLR_DARK_GREY, CLR_BROWN, CLR_DARK_GREEN, CLR_DARK_BROWN}, 4);
+        break;
+    case R_LABORER:
+        n->collar = C_TEE;
+        n->hair = pick((const int[]){H_SHORT, H_BALD, H_SLICK}, 3);
+        n->facial = chance(60) ? F_STUBBLE : (chance(50)?F_MUSTACHE:F_NONE);
+        if (chance(70)) n->acc |= A_CAP;                 // hard hat / ball cap
+        n->shirt = pick((const int[]){CLR_ORANGE, CLR_YELLOW, CLR_TRUE_BLUE, CLR_DARK_RED, CLR_DARK_GREEN}, 5);
+        break;
+    case R_DRUNK:
+        n->collar = chance(50) ? C_TEE : C_HOODIE;
+        n->hair = pick((const int[]){H_SHORT, H_BALD, H_SLICK, H_AFRO}, 4);
+        n->facial = chance(70) ? F_STUBBLE : F_FULL;
+        n->nose = chance(60) ? NS_WIDE : NS_ROMAN;       // a boozer's nose
+        if (chance(35)) n->acc |= A_CAP;
+        n->shirt = pick((const int[]){CLR_DARK_RED, CLR_DARK_GREEN, CLR_BROWN, CLR_INDIGO}, 4);
+        break;
+    case R_SENIOR:
+        n->sex = chance(45) ? 1 : 0;
+        n->collar = chance(50) ? C_SUIT : C_TEE;         // cardigan-ish / shirt
+        n->hair = n->sex ? pick((const int[]){H_BUN, H_BOB, H_SHORT}, 3)
+                         : pick((const int[]){H_BALD, H_BALD, H_SHORT}, 3);
+        n->haircol = 4;                                  // grey/white
+        if (!n->sex) n->facial = chance(40) ? F_MUSTACHE : F_NONE;
+        if (chance(70)) n->acc |= A_GLASSES;
+        n->shirt = pick((const int[]){CLR_LIGHT_GREY, CLR_INDIGO, CLR_DARK_GREEN, CLR_BROWN, CLR_DARK_PURPLE}, 5);
+        break;
+    case R_BALLER:
+        n->collar = C_WIFEBEATER;                        // a jersey/tank
+        n->face = chance(60) ? FS_SLIM : FS_LONG;
+        n->hair = pick((const int[]){H_FADE, H_SHORT, H_CORNROWS, H_BALD}, 4);
+        n->facial = chance(60) ? F_NONE : F_STUBBLE;
+        n->acc |= A_HEADBAND;
+        if (chance(40)) n->acc |= A_CHAIN;
+        if (chance(25)) n->acc |= A_STUD;
+        n->shirt = pick((const int[]){CLR_RED, CLR_TRUE_BLUE, CLR_DARK_PURPLE, CLR_WHITE, CLR_DARK_GREEN}, 5);
+        break;
+    case R_SUIT_BIZ:
+        n->collar = C_SUIT;
+        n->hair = chance(60) ? H_SLICK : H_SHORT;
+        n->facial = chance(75) ? F_NONE : F_STUBBLE;     // clean-cut
+        if (chance(35)) n->acc |= A_GLASSES;
+        n->shirt = pick((const int[]){CLR_TRUE_BLUE, CLR_DARK_RED, CLR_DARK_PURPLE, CLR_INDIGO}, 4);
+        break;
+    case R_BARISTA:
+        n->sex = chance(40) ? 1 : 0;
+        n->collar = C_TEE;
+        n->hair = n->sex ? pick((const int[]){H_BUN, H_LONG, H_BOB}, 3)
+                         : pick((const int[]){H_BUN, H_SHORT, H_SLICK}, 3);   // man-bun
+        if (!n->sex) n->facial = chance(70) ? F_FULL : F_GOATEE;   // hipster beard
+        if (chance(45)) n->acc |= A_GLASSES;
+        if (chance(35)) n->acc |= A_CAP;                 // beanie
+        if (n->sex && chance(50)) n->acc |= A_HOOPS;
+        n->shirt = pick((const int[]){CLR_DARK_GREEN, CLR_DARK_RED, CLR_BROWN, CLR_MEDIUM_GREEN, CLR_INDIGO}, 5);
+        break;
+    case R_HISTORIAN:
+        n->sex = chance(35) ? 1 : 0;
+        n->collar = C_SUIT;                              // tweed
+        n->hair = n->sex ? pick((const int[]){H_BUN, H_BOB}, 2)
+                         : pick((const int[]){H_BALD, H_SHORT, H_SLICK}, 3);
+        if (chance(55)) n->haircol = 4;                  // greying
+        if (!n->sex) n->facial = chance(60) ? F_FULL : F_GOATEE;
+        n->acc |= A_GLASSES;                             // always bespectacled
+        n->shirt = pick((const int[]){CLR_DARK_GREEN, CLR_BROWN, CLR_DARK_RED, CLR_INDIGO}, 4);
+        break;
+    case R_TEEN:
+        n->sex = chance(45) ? 1 : 0;
+        n->collar = chance(55) ? C_HOODIE : C_TEE;
+        n->face = chance(60) ? FS_ROUND : FS_SLIM;       // young, smooth
+        n->facial = F_NONE;
+        if (n->sex) { n->acc |= A_SHADOW; if (chance(40)) n->acc |= A_HOOPS; n->babe = chance(35); }
+        if (chance(45)) n->acc |= A_CAP;
+        if (chance(20)) n->acc |= A_GLASSES;
+        n->shirt = pick((const int[]){CLR_RED, CLR_TRUE_BLUE, CLR_LIME_GREEN, CLR_PINK, CLR_DARK_PURPLE, CLR_ORANGE}, 6);
+        break;
     default: // civilian
         n->collar = chance(40) ? C_TEE : C_HOODIE;
         if (n->sex) { n->acc |= A_SHADOW; if (chance(50)) n->acc |= A_HOOPS; n->babe = chance(30); }
         if (chance(20)) n->acc |= A_CAP;
-        if (chance(25)) n->acc |= A_GLASSESFALLBACK; // (no plain glasses asset → skip)
+        if (chance(25)) n->acc |= A_GLASSES;
         n->shirt = pick((const int[]){CLR_BLUE, CLR_DARK_GREEN, CLR_LIGHT_GREY, CLR_ORANGE, CLR_INDIGO}, 5);
         break;
     }
@@ -378,11 +563,14 @@ static void roll_npc(Npc *n, int forced_role) {
 
     // ── weathered / wrinkly (some faces, never the babes) ────────────────
     n->wrinkly = 0;
-    if (!n->babe) {
+    if (n->role == R_SENIOR) n->wrinkly = 1;                // always
+    else if (!n->babe && n->role != R_TEEN && n->role != R_BALLER) {
         int p = 8;                                          // most are smooth
         if (n->haircol == 4)                 p = 75;        // greying → old
         if (n->role == R_MOBSTER)            p += 25;       // veteran made men
-        if (n->role == R_FIEND)              p += 40;       // hard-living
+        if (n->role == R_FIEND || n->role == R_BEGGAR || n->role == R_DRUNK) p += 45; // hard-living
+        if (n->role == R_HISTORIAN)          p += 45;       // bookish & aged
+        if (n->role == R_LABORER)            p += 25;       // weathered outdoors
         if (n->face == FS_HEAVY || n->face == FS_GAUNT) p += 20;
         n->wrinkly = chance(p);
     }
@@ -752,6 +940,21 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
         pset(nx - 3, ny + 5, FACE_OL); pset(nx + 3, ny + 5, FACE_OL);
         break;
     }
+    // drunk flush — rosy cheeks + a reddened nose (reads on lighter skin)
+    if (n->role == R_DRUNK && n->skin <= 3) {
+        ovalfill(FCX - HW/2, FCY + 12, 7, 4, CLR_DARK_PEACH);
+        ovalfill(FCX + HW/2, FCY + 12, 7, 4, CLR_DARK_PEACH);
+        ovalfill(nx, ny + 3, 3, 3, CLR_DARK_PEACH);
+    }
+    // teenage acne — a few small red spots scattered on the cheeks/forehead
+    if (n->role == R_TEEN) {
+        unsigned s = seed ^ 0x51A3u;
+        for (int i = 0; i < 5; i++) {
+            int ax = FCX - HW + 8 + (int)(prng(&s) % (HW*2 - 16));
+            int ay = FCY - 6 + (int)(prng(&s) % 32);
+            pset(ax, ay, CLR_DARK_PEACH);
+        }
+    }
 
     // ── mouth ─────────────────────────────────────────────────────────
     int my = FCY + 30;
@@ -915,6 +1118,27 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
         line(rx - 8, ey - 4, rx - 3, ey + 1, CLR_DARK_GREY);
     }
 
+    // ── spectacles (clear lenses, frames only — senior/historian/biz/etc.) ──
+    if ((n->acc & A_GLASSES) && !(n->acc & A_SHADES)) {
+        int gc = (n->skin >= 4) ? CLR_LIGHT_GREY : CLR_BROWNISH_BLACK;
+        rect(lx - ew - 1, ley - eh - 2, 2*ew + 3, 2*eh + 4, gc);   // left frame
+        rect(rx - ew - 1, rey - eh - 2, 2*ew + 3, 2*eh + 4, gc);   // right frame
+        line(lx + ew + 2, ley - 1, rx - ew - 2, rey - 1, gc);      // bridge
+        line(lx - ew - 1, ley - 1, lx - HW + 3, ley - 3, gc);      // left temple arm
+        line(rx + ew + 1, rey - 1, rx + HW - 3, rey - 3, gc);      // right temple arm
+        pset(lx + ew - 1, ley - eh, CLR_WHITE);                    // lens glint
+        pset(rx + ew - 1, rey - eh, CLR_WHITE);
+    }
+
+    // ── sports headband across the forehead (baller) ──────────────────
+    if (n->acc & A_HEADBAND) {
+        int bandc = (n->shirt == CLR_WHITE) ? CLR_RED : CLR_WHITE;
+        int by0 = FCY - VH + 18;
+        rectfill(FCX - HW + 4, by0, (HW - 4)*2, 6, bandc);
+        line(FCX - HW + 4, by0, FCX + HW - 4, by0, FACE_OL);
+        line(FCX - HW + 4, by0 + 5, FCX + HW - 4, by0 + 5, FACE_OL);
+    }
+
     // ── cigarette + smoke ─────────────────────────────────────────────
     if (n->acc & A_CIG) {
         int cgx = FCX + mw - 2, cgy = my + 2;
@@ -999,15 +1223,26 @@ static void hair_front(Npc *n) {
             ovalfill(FCX, FCY - VH + 12, HW + 22, 8, capc);   // brim
             ovalfill(FCX, FCY - VH + 2, HW - 2, 14, capc);    // crown
             ovalfill(FCX, FCY - VH + 6, HW + 2, 4, CLR_DARK_GREY); // band
-            // a feather
-            line(FCX + HW - 6, FCY - VH + 2, FCX + HW + 6, FCY - VH - 12, CLR_RED);
+            line(FCX + HW - 6, FCY - VH + 2, FCX + HW + 6, FCY - VH - 12, CLR_RED); // feather
+        } else if (n->role == R_LABORER) {
+            // hard hat — domed shell + wide brim + a ridge
+            int hc2 = CLR_YELLOW;
+            ovalfill(FCX, FCY - VH + 14, HW + 12, 7, hc2);    // brim
+            ovalfill(FCX, FCY - VH + 4, HW - 4, 14, hc2);     // shell
+            line(FCX, FCY - VH - 7, FCX, FCY - VH + 10, CLR_DARK_ORANGE); // crest ridge
+        } else if (n->role == R_BEGGAR || n->role == R_BARISTA ||
+                   n->role == R_TEEN   || n->role == R_SENIOR) {
+            // knit beanie — a rounded cap hugging the crown, with a folded brim
+            ovalfill(FCX, FCY - VH + 8, HW - 1, 16, capc);
+            rectfill(FCX - HW + 2, FCY - VH + 14, (HW-2)*2, 6, capc);   // folded band
+            for (int i = -HW + 4; i < HW - 4; i += 4)                   // knit ribbing
+                line(FCX + i, FCY - VH + 14, FCX + i, FCY - VH + 19, pick_cap(n)==capc?CLR_BLACK:capc);
         } else {
             // snapback: dome + flat brim to one side
             ovalfill(FCX, FCY - VH + 12, HW + 2, 16, capc);
             rectfill(FCX - HW, FCY - VH + 16, HW*2, 12, capc);
             rectfill(FCX - HW - 14, FCY - VH + 22, 22, 5, capc);  // brim
-            // little logo
-            rectfill(FCX - 3, FCY - VH + 12, 6, 5, CLR_WHITE);
+            rectfill(FCX - 3, FCY - VH + 12, 6, 5, CLR_WHITE);    // little logo
         }
         return;
     }
@@ -1120,7 +1355,7 @@ static void draw_box(Npc *n) {
 
     // hint line
     font(FONT_TINY);
-    print("SPACE new  Z line  1-8 role", bx + 6, by + bh + 2, CLR_DARK_GREY);
+    print("SPACE new  Z line  1-9,a-h role", bx + 6, by + bh + 2, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
 
@@ -1131,7 +1366,15 @@ static void draw_bg(Npc *n) {
         case R_MOBSTER: top = CLR_DARK_RED;    bot = CLR_BROWNISH_BLACK; break;  // warm restaurant
         case R_GIRL:    top = CLR_DARK_PURPLE; bot = CLR_DARKER_PURPLE;  break;  // pink neon
         case R_PIMP:    top = CLR_DARK_PURPLE; bot = CLR_DARKER_BLUE;    break;
-        case R_FIEND:   top = CLR_DARKER_GREY; bot = CLR_BLACK;          break;  // grim alley
+        case R_FIEND:
+        case R_BEGGAR:  top = CLR_DARKER_GREY; bot = CLR_BLACK;          break;  // grim alley
+        case R_DRUNK:   top = CLR_DARK_BROWN;  bot = CLR_BROWNISH_BLACK; break;  // dim bar
+        case R_SUIT_BIZ:top = CLR_BLUE_GREEN;  bot = CLR_DARKER_BLUE;    break;  // cool office
+        case R_BARISTA: top = CLR_BROWN;       bot = CLR_DARK_BROWN;     break;  // warm cafe
+        case R_HISTORIAN:top= CLR_DARK_BROWN;  bot = CLR_BROWNISH_BLACK; break;  // study / library
+        case R_BALLER:  top = CLR_DARK_ORANGE; bot = CLR_DARK_RED;       break;  // sunset court
+        case R_SENIOR:  top = CLR_INDIGO;      bot = CLR_DARKER_PURPLE;  break;
+        case R_LABORER: top = CLR_DARK_ORANGE; bot = CLR_BROWNISH_BLACK; break;  // dusty site
         default:        top = CLR_DARKER_BLUE; bot = CLR_BLACK;          break;  // night street
     }
     for (int y = 0; y < 150; y++) {
@@ -1194,8 +1437,11 @@ void update(void) {
     if (btnp(0, BTN_B)) tick_on = !tick_on;
     if (keyp(KEY_SPACE) || mouse_pressed(0)) new_line(1);
     if (btnp(0, BTN_A)) new_line(0);
-    for (int k = 0; k < NROLES; k++)
-        if (keyp('1' + k)) { roll_npc(&me, k); roll_frame = frame(); shown_chars = 0; }
+    // force a role: keys 1-9 → roles 0-8, then A-H → roles 9-16
+    for (int k = 0; k < NROLES; k++) {
+        int kc = (k < 9) ? ('1' + k) : ('A' + (k - 9));
+        if (keyp(kc)) { roll_npc(&me, k); roll_frame = frame(); shown_chars = 0; }
+    }
 
     // advance typewriter
     int total = bark_total(&me);
