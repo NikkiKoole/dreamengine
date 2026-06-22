@@ -157,6 +157,8 @@ cuts) assemble the reel → it headlines the **curated showcase** ([ADR-0020](..
 
 ## Related
 
+- [`big-game-backlog.md`](big-game-backlog.md) — the per-cart remaining-work list + the
+  cross-cutting seams (the world composer, the on-foot↔car avatar, money, pressure, persistence).
 - [`transitions.md`](transitions.md) — cutting shots (in-cart flips + the stitch layer).
 - [`cart-clips.md`](cart-clips.md) — baking shots; the silent-audio gap.
 - [`../decisions/0020-in-house-tool-curated-showcase.md`](../decisions/0020-in-house-tool-curated-showcase.md) — where the teaser lands.
