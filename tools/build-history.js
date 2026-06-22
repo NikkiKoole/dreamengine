@@ -26,8 +26,13 @@ const git = (args) =>
 // ---- load structure ----
 const spine = JSON.parse(fs.readFileSync(SPINE, 'utf8'))
 const carts = JSON.parse(fs.readFileSync(INDEX, 'utf8'))
-const cartTitle = {}, cartDesc = {}
-for (const c of carts) if (c.file) { cartTitle[c.file] = c.title || c.file; cartDesc[c.file] = c.description || '' }
+const cartTitle = {}, cartDesc = {}, cartTeaches = {}, cartLineage = {}
+for (const c of carts) if (c.file) {
+  cartTitle[c.file] = c.title || c.file
+  cartDesc[c.file] = c.description || ''
+  cartTeaches[c.file] = Array.isArray(c.teaches) ? c.teaches : []
+  cartLineage[c.file] = c.lineage || ''
+}
 
 const { from, to } = spine.window
 // git --until is exclusive of the day boundary; bump one day past `to`
@@ -143,6 +148,7 @@ function heroByEra() {
       const b64 = fs.readFileSync(path.join(CARTS_DIR, best.name + '.cart.png')).toString('base64')
       heroes[eid] = { name: best.name, commits: best.n,
         title: cartTitle[best.name + '.cart.png'] || best.name,
+        lineage: cartLineage[best.name + '.cart.png'] || '',
         dataUri: 'data:image/png;base64,' + b64 }
     }
   }
@@ -306,7 +312,7 @@ const eras = spine.eras.map((e) => {
     const carts = pick.relatedCarts.slice(0, 4).map((name) => {
       const file = name + '.cart.png'
       if (!hasThumb(name)) return null
-      return { name, file, title: cartTitle[file] || name,
+      return { name, file, title: cartTitle[file] || name, lineage: cartLineage[file] || '',
         dataUri: 'data:image/png;base64,' + fs.readFileSync(path.join(CARTS_DIR, file)).toString('base64') }
     }).filter(Boolean)
     spotlight = { rel: pick.rel, name: pick.name, status: pick.status, desc: pick.desc,
@@ -330,7 +336,10 @@ const eras = spine.eras.map((e) => {
 // title + description (from index.json) for every cart born in-window — feeds
 // the hover card on the "carts born" lists
 const cartMeta = {}
-for (const c of cartsBorn) if (!cartMeta[c.file]) cartMeta[c.file] = { title: c.title, desc: cartDesc[c.file] || '' }
+for (const c of cartsBorn) if (!cartMeta[c.file]) cartMeta[c.file] = {
+  title: c.title, desc: cartDesc[c.file] || '',
+  lineage: cartLineage[c.file] || '', teaches: cartTeaches[c.file] || [],
+}
 
 // ---- research threads: topics that spawned a trail of docs/handoffs/carts ----
 // declared by topic in the spine (like subsystems); members are auto-collected
@@ -338,7 +347,7 @@ for (const c of cartsBorn) if (!cartMeta[c.file]) cartMeta[c.file] = { title: c.
 const inlineThumb = (name) => {
   const file = name + '.cart.png'
   if (!hasThumb(name)) return null
-  return { name, file, title: cartTitle[file] || name,
+  return { name, file, title: cartTitle[file] || name, lineage: cartLineage[file] || '',
     dataUri: 'data:image/png;base64,' + fs.readFileSync(path.join(CARTS_DIR, file)).toString('base64') }
 }
 const threads = ((spine.threads && spine.threads.items) || []).map((t) => {
@@ -529,6 +538,9 @@ figure.hero .hk{display:inline-block;background:var(--orange);color:var(--on);
   text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;margin-bottom:5px}
 figure.hero b{display:block;font-family:var(--disp);font-size:14px;text-transform:uppercase;letter-spacing:-.3px}
 figure.hero .hc{font-family:var(--mono);color:var(--dim);font-size:10.5px}
+figure.hero .hl{margin-top:6px;font-size:11px;line-height:1.4;color:var(--ink);
+  font-style:italic;font-weight:500;
+  overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6}
 
 .mstones{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin:22px 0}
 .ms{background:var(--panel);border:3px solid var(--edge);box-shadow:var(--sh);padding:13px 15px;
@@ -606,6 +618,14 @@ ul.carts li .f{color:var(--dim);font-family:var(--mono);font-size:11px}
 .cart-preview .cp-t{display:block;font-family:var(--disp);font-size:13px;text-transform:uppercase;letter-spacing:-.2px;margin-bottom:4px}
 .cart-preview .cp-d{display:block;font-size:11.5px;line-height:1.4;color:var(--dim);
   overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7}
+/* lineage — what the cart descends from, italic; sits above the description */
+.cart-preview .cp-lin{display:block;font-size:11px;line-height:1.4;color:var(--ink);
+  font-style:italic;font-weight:500;margin-bottom:5px;
+  overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:4;display:-webkit-box}
+/* teaches — controlled-vocabulary technique chips */
+.cart-preview .cp-teach{margin-top:7px;display:flex;flex-wrap:wrap;gap:4px}
+.cart-preview .cp-teach i{font-style:normal;font-family:var(--mono);font-size:9.5px;font-weight:600;
+  background:var(--bg);border:2px solid var(--edge);color:var(--ink);padding:1px 5px}
 
 .totop{position:fixed;right:18px;bottom:18px;z-index:60;display:none;width:44px;height:44px;
   background:var(--pink);color:var(--on);border:3px solid var(--edge);box-shadow:var(--sh-sm);
@@ -835,9 +855,10 @@ function render(){
   // description from index.json. Only resolves inside the editor dev server.
   const meta = DATA.cartMeta || {}
   const prev = $('div','cart-preview')
-  prev.innerHTML = '<img alt=""><div class="cp-meta"><b class="cp-t"></b><span class="cp-d"></span></div>'
+  prev.innerHTML = '<img alt=""><div class="cp-meta"><b class="cp-t"></b><span class="cp-lin"></span><span class="cp-d"></span><span class="cp-teach"></span></div>'
   document.body.appendChild(prev)
-  const pimg = prev.querySelector('img'), pT = prev.querySelector('.cp-t'), pD = prev.querySelector('.cp-d')
+  const pimg = prev.querySelector('img'), pT = prev.querySelector('.cp-t')
+  const pD = prev.querySelector('.cp-d'), pLin = prev.querySelector('.cp-lin'), pTeach = prev.querySelector('.cp-teach')
   let curCart = ''
   document.addEventListener('mouseover', ev => {
     const li = ev.target.closest('li[data-cart]'); if (!li) return
@@ -848,6 +869,12 @@ function render(){
       pT.textContent = m.title || li.dataset.title || ''
       pD.textContent = m.desc || ''
       pD.style.display = m.desc ? '' : 'none'
+      // lineage — what the cart descends from / what's new (the authored one-liner)
+      pLin.textContent = m.lineage || ''
+      pLin.style.display = m.lineage ? '' : 'none'
+      // teaches — the controlled-vocabulary technique tags, as little chips
+      pTeach.innerHTML = (m.teaches || []).map(t => '<i>'+esc(t)+'</i>').join('')
+      pTeach.style.display = (m.teaches && m.teaches.length) ? '' : 'none'
     }
     prev.classList.add('show')
   })
@@ -954,7 +981,7 @@ function renderEra(e, i){
     const fig = $('figure','hero')
     fig.dataset.cart = e.hero.name + '.cart.png'   // click → load this cart
     fig.dataset.title = e.hero.title
-    fig.title = 'open ' + e.hero.title
+    fig.title = e.hero.lineage ? e.hero.title + ' — ' + e.hero.lineage : 'open ' + e.hero.title
     // size the thumb by how hard the cart was worked: ~165px → 320px, maxing
     // out around 40 commits in a stretch
     const W = Math.round(165 + Math.min(1, e.hero.commits / 40) * 155)
@@ -963,7 +990,9 @@ function renderEra(e, i){
       '<img src="'+e.hero.dataUri+'" alt="'+esc(e.hero.title)+'">'+
       '<figcaption><span class="hk">most worked-on</span>'+
       '<b>'+esc(e.hero.title)+'</b>'+
-      '<span class="hc">'+e.hero.commits+' commits this stretch</span></figcaption>'
+      '<span class="hc">'+e.hero.commits+' commits this stretch</span>'+
+      (e.hero.lineage ? '<span class="hl">'+esc(e.hero.lineage)+'</span>' : '')+
+      '</figcaption>'
     intro.appendChild(fig)
   }
   s.appendChild(intro)
@@ -1114,7 +1143,8 @@ function renderSpotlight(sp){
     const row = $('div','ds-carts')
     sp.carts.forEach(c => {
       const fig = $('figure','ds-cart')
-      fig.dataset.cart = c.file; fig.dataset.title = c.title; fig.title = 'open ' + c.title
+      fig.dataset.cart = c.file; fig.dataset.title = c.title
+      fig.title = c.lineage ? c.title + ' — ' + c.lineage : 'open ' + c.title
       fig.innerHTML = '<img src="'+c.dataUri+'" alt="'+esc(c.title)+'"><figcaption>'+esc(c.title)+'</figcaption>'
       row.appendChild(fig)
     })
@@ -1178,7 +1208,8 @@ function renderThread(t){
     const row = $('div','ds-carts')
     t.carts.forEach(c => {
       const fig = $('figure','ds-cart')
-      fig.dataset.cart = c.file; fig.dataset.title = c.title; fig.title = 'open ' + c.title
+      fig.dataset.cart = c.file; fig.dataset.title = c.title
+      fig.title = c.lineage ? c.title + ' — ' + c.lineage : 'open ' + c.title
       fig.innerHTML = '<img src="'+c.dataUri+'" alt="'+esc(c.title)+'"><figcaption>'+esc(c.title)+'</figcaption>'
       row.appendChild(fig)
     })

@@ -38,7 +38,13 @@ The page is served fresh by the dev server; reopen **★ history** to reload the
   growth bars, ADRs landed per era, carts born per era, the **hero cart** (the cart
   with the most *source* `.c` commits in that era's window — sized bigger the more it was
   worked), and the **design-note spotlight + "roads not taken"** (see below). Subsystem
-  *tags* on each commit come from the matchers in the spine.
+  *tags* on each commit come from the matchers in the spine. **Cart metadata —
+  `description`, `lineage`, and `teaches[]` — is pulled straight from `index.json`** (the
+  same fields that drive the ★ techniques compendium): the hero figure shows the cart's
+  `lineage` one-liner ("what it descends from / what's new"), every *carts-born* hover card
+  shows description + lineage + the `teaches` chips, and spotlight/thread thumbnails carry
+  the lineage as a tooltip. So tagging a cart for the compendium enriches the timeline for
+  free — keep `index.json` good and the page follows.
 - **Authored (the spine):** the week boundaries + taglines, the era titles + date ranges +
   blurbs, the subsystem list + matchers + tiers, the marked-day callouts, and the
   milestone cards (each a title + tier + a `match` substring that the generator resolves to

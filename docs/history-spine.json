@@ -3,13 +3,14 @@
   "title": "dreamengine — a history",
   "subtitle": "How a fantasy console grew, week by week. Built structure-first from git, the STATUS ledger, and the decision log.",
   "voiceRef": "guides/voice.md",
-  "window": { "from": "2026-05-28", "to": "2026-06-17", "label": "Weeks 1–3" },
+  "window": { "from": "2026-05-28", "to": "2026-06-24", "label": "Weeks 1–4" },
   "denseDayThreshold": 80,
 
   "weeks": [
     { "id": "w1", "label": "Week 1", "from": "2026-05-28", "to": "2026-06-03", "tagline": "Bootstrap → the first subsystems" },
     { "id": "w2", "label": "Week 2", "from": "2026-06-04", "to": "2026-06-10", "tagline": "The sound explosion" },
-    { "id": "w3", "label": "Week 3", "from": "2026-06-11", "to": "2026-06-17", "tagline": "MIDI, spatial audio — then roads, sims & a hardening pass" }
+    { "id": "w3", "label": "Week 3", "from": "2026-06-11", "to": "2026-06-17", "tagline": "MIDI, spatial audio — then roads, sims & a hardening pass" },
+    { "id": "w4", "label": "Week 4", "from": "2026-06-18", "to": "2026-06-24", "tagline": "Live instruments, a self-knowledge layer, the at-grade streets — and the turn toward a larger game" }
   ],
 
   "subsystems": [
@@ -52,7 +53,9 @@
     { "id": "sims",     "title": "Production & economy sims", "tier": "mid",
       "match": ["thecut", "handwork", "sloop-production", "sloop-handwork", "production probe", "production bench", "process-optimization bench", "delegation", "opportunity cost", "second north star", "second-north-star"] },
     { "id": "perf",     "title": "Performance & optimization", "tier": "mid",
-      "match": ["polyfill", "polystress", "profile-fleet", "engine-optimization", "scanline span", "span fill"] }
+      "match": ["polyfill", "polystress", "profile-fleet", "engine-optimization", "scanline span", "span fill"] },
+    { "id": "introspect", "title": "Self-knowledge tooling", "tier": "mid",
+      "match": ["cart-index", "technique index", "technique compendium", "compendium", "teaches", "lineage", "teaches-vocab", "cart-dupes", "teaching-gaps", "spec()", "cart-logic harness"] }
   ],
 
   "eras": [
@@ -109,6 +112,19 @@
     { "id": "sims-hardening", "title": "Junctions, jobs & guard-rails",
       "from": "2026-06-17", "to": "2026-06-17",
       "blurb": "The longest day in the window, and a quiet turn in what the project is about. roadlab stops faking roads and becomes a real geometry engine — junctions described as a table of lane-links straight off the OpenDRIVE model, the trumpet/fork/triangle topology family, ring roads, loop and S-curve ramps, all generated from a type instead of placed by hand. Next to it a new kind of cart appears: thecut and handwork aren't games or instruments, they're production sims — what a worker costs, when it's worth hiring one, what an hour of your own hands is worth against a machine's. That's the second north star — deep honest sims under a lo-fi surface — made literal. And the whole engine grows guard-rails the same day: a suite of stability gates (effect-stacking, long-run soak, wasm-vs-native parity), the web pitch bug finally pinned and fixed (48k devices had been playing everything ~147 cents sharp), DC-blocked feedback loops, and a first real optimization pass on the fill rasterizer.",
+      "editorial": "" },
+
+    { "id": "liveset-kickoff", "title": "Rebuilding the Moog, late",
+      "from": "2026-06-18", "to": "2026-06-21",
+      "blurb": "A quiet late-night start to the week, all synth. moog is torn down and rebuilt as a proper 3-oscillator Model D with a real ladder filter (FILTER_LADDER), and onenote — a one-note funk groovebox — lands beside it. A null-result probe (pset draw-call batching, native + WebGL) gets captured rather than thrown away. The deepening that fills the next day starts here.",
+      "editorial": "" },
+    { "id": "the-long-day", "title": "One day, four fronts",
+      "from": "2026-06-22", "to": "2026-06-22",
+      "blurb": "The single biggest day in the project's history — around 145 commits — and four threads advance at once, in parallel. (1) The synth grows up: oscillator hard sync, the Steiner-Parker multimode filter, and a flood of liveset playthings (euclid, turing, dubsiren, lpg, dubdesk, easel) and artist/genre radio stations (eno, plantasia, squarepusher fm, plaid fm, wba, the xx, afrobeat, vapor, lofi) — with ADR 0019 deciding the oscillators stay naive. (2) The project learns to read itself: cart-index.js and the TEACHES/LINEAGE convention, the spec() cart-logic harness, the ★ techniques compendium in the editor, teaches[] becoming a required index.json field behind a controlled-vocabulary gate, plus cart-dupes.js and teaching-gaps.md. (3) The at-grade streets: streetlab runs M1→M7 and a lane-section refactor — curb returns, T-junctions, turn lanes, the street web, sidewalks/crosswalks, the mini-roundabout, the typed OpenDRIVE cross-section, bike lanes and bulb-outs — the at-grade sibling of roadlab, spec-locked. (4) The turn toward a larger game: the clip+reel pipeline (clips carry audio; compose-clips stitches reels), the showreel-teaser note, and a wave of game carts — facegen (procedural street portraits + conversation), runecrawl (circuit-dungeon), beltworks (Factorio-lite), boom — plus cards.h, cursor.h and the 04b-mouse tutorial.",
+      "editorial": "" },
+    { "id": "publish-and-park", "title": "Midnight, publish",
+      "from": "2026-06-23", "to": "2026-06-24",
+      "blurb": "The session closes just after midnight: boom ships as an explosion-and-fire sandbox, the week's carts go live in one big site publish (boom, 04b-mouse, beltworks, facegen, logic, runecrawl, streetlab), and streetlab and facegen get end-of-session resume notes — a SEAM/STATUS for the 1px corner floor, parked ideas for the next hand.",
       "editorial": "" }
   ],
 
@@ -120,7 +136,8 @@
     "2026-06-12": "The mixing console day — the effects bus becomes reorderable (fx_order) with multi-reverb and sidechain, and MIDI keyboards play the engine (CoreMIDI + Web MIDI + keybed.h).",
     "2026-06-15": "Spatial audio — listener + positioned voices, then whole emitter buses that move (Doppler + a shimmer tail that travels with the source), shipped in one day.",
     "2026-06-16": "The roads-and-tuning surge — roadlab, interchange and rampkit plus the flank stealth game in one push, the waveguide top-octave tuning finally fixed, and the first audio stability gates (level-check, fx-check) land.",
-    "2026-06-17": "The day the sims got serious — roadlab becomes a real OpenDRIVE-style junction engine, the first production/economy carts (thecut, handwork) make the deep-sim north star literal, and the engine grows a full guard-rail suite plus the web pitch fix."
+    "2026-06-17": "The day the sims got serious — roadlab becomes a real OpenDRIVE-style junction engine, the first production/economy carts (thecut, handwork) make the deep-sim north star literal, and the engine grows a full guard-rail suite plus the web pitch fix.",
+    "2026-06-22": "The long day — around 145 commits, the biggest in the project's history. Four threads advance in parallel: the synth deepens (hard sync, Steiner-Parker, a flood of liveset playthings and artist stations), the project builds tools to read itself (cart-index, the spec() harness, the ★ techniques compendium, the teaches/lineage convention), streetlab grows a full at-grade street network (M1→M7 + lane-section refactor), and the turn toward a larger game begins (the clip/reel pipeline, facegen, runecrawl, beltworks)."
   },
 
   "milestones": [
@@ -207,7 +224,34 @@
     { "title": "Web audio pitch fix — force the worklet to 44.1k", "tier": "mid", "era": "sims-hardening", "subsystem": "web", "match": "force the worklet AudioContext to 44.1k" },
     { "title": "Engine optimization — scanline span fill + profile-fleet", "tier": "mid", "era": "sims-hardening", "subsystem": "perf", "match": "polyfill: scanline span fill" },
     { "title": "ease_back + the transitions playground", "tier": "small", "era": "sims-hardening", "subsystem": "gfx", "match": "ease_back: an overshoot easing" },
-    { "title": "spec-harness + cart-analyze.js", "tier": "small", "era": "sims-hardening", "subsystem": "debug", "match": "spec-harness: design doc + cart-analyze.js" }
+    { "title": "spec-harness + cart-analyze.js", "tier": "small", "era": "sims-hardening", "subsystem": "debug", "match": "spec-harness: design doc + cart-analyze.js" },
+
+    { "title": "moog rebuilt as a 3-oscillator Model D + FILTER_LADDER", "tier": "mid", "era": "liveset-kickoff", "subsystem": "sound", "match": "rebuild as a 3-oscillator Model D" },
+    { "title": "onenote — a one-note funk groovebox", "tier": "small", "era": "liveset-kickoff", "subsystem": "machines", "match": "onenote: a one-note funk groovebox" },
+
+    { "title": "cart-index.js + the TEACHES/LINEAGE convention", "tier": "foundational", "era": "the-long-day", "subsystem": "introspect", "match": "computed technique index" },
+    { "title": "The spec() cart-logic harness (v1)", "tier": "foundational", "era": "the-long-day", "subsystem": "introspect", "match": "v1 cart-logic harness" },
+    { "title": "The ★ techniques compendium in the editor", "tier": "mid", "era": "the-long-day", "subsystem": "introspect", "match": "cart technique compendium in the Docs tab" },
+    { "title": "teaches[] becomes a required, vocab-gated index.json field", "tier": "mid", "era": "the-long-day", "subsystem": "introspect", "match": "make teaches[] a REQUIRED index.json field" },
+    { "title": "cart-dupes.js — cross-cart duplication finder", "tier": "small", "era": "the-long-day", "subsystem": "introspect", "match": "cross-cart duplication finder" },
+    { "title": "Oscillator hard sync (instrument_sync / note_sync)", "tier": "mid", "era": "the-long-day", "subsystem": "sound", "match": "add oscillator hard sync" },
+    { "title": "The Steiner-Parker multimode filter (FILTER_STEINER)", "tier": "mid", "era": "the-long-day", "subsystem": "sound", "match": "Steiner-Parker filter goes multimode" },
+    { "title": "The liveset playthings (euclid, turing, dubsiren, lpg, dubdesk, easel)", "tier": "mid", "era": "the-long-day", "subsystem": "machines", "match": "finishes the liveset set" },
+    { "title": "A wave of artist & genre radio stations (eno, plantasia, squarepusher, plaid…)", "tier": "mid", "era": "the-long-day", "subsystem": "radio", "match": "Music for Airports" },
+    { "title": "easel — a complete Buchla Music Easel west-coast voice", "tier": "small", "era": "the-long-day", "subsystem": "sound", "match": "complete west-coast voice) v1" },
+    { "title": "streetlab — the at-grade street network (M1→M7)", "tier": "foundational", "era": "the-long-day", "subsystem": "roads", "match": "M1 — the at-grade sibling of roadlab" },
+    { "title": "The typed OpenDRIVE cross-section (M7)", "tier": "mid", "era": "the-long-day", "subsystem": "roads", "match": "the typed cross-section (OpenDRIVE lane types)" },
+    { "title": "The lane-section as the single source of truth", "tier": "mid", "era": "the-long-day", "subsystem": "roads", "match": "the lane-section as the single source of truth" },
+    { "title": "The clip & reel pipeline (clips carry audio → showreels)", "tier": "mid", "era": "the-long-day", "subsystem": "debug", "match": "stitch baked clips into a reel" },
+    { "title": "The showreel-teaser note — the turn toward a larger game", "tier": "foundational", "era": "the-long-day", "subsystem": "docs", "match": "showreel/teaser design note for the larger game" },
+    { "title": "facegen — procedural street portraits + conversation", "tier": "mid", "era": "the-long-day", "subsystem": "toys", "match": "procedural street-portrait + conversation system" },
+    { "title": "beltworks — a Factorio-lite factory builder", "tier": "mid", "era": "the-long-day", "subsystem": "sims", "match": "a Factorio-lite factory builder" },
+    { "title": "runecrawl — a circuit-dungeon (logic-gate) crawler", "tier": "small", "era": "the-long-day", "subsystem": "toys", "match": "circuit-dungeon vertical slice" },
+    { "title": "cursor.h — a cart-land pixel-cursor library", "tier": "small", "era": "the-long-day", "subsystem": "engine", "match": "cart-land pixel-cursor library header" },
+    { "title": "04b-mouse — the mouse on-ramp tutorial (teaching-gaps #1)", "tier": "small", "era": "the-long-day", "subsystem": "teaching", "match": "the mouse on-ramp" },
+
+    { "title": "boom — an explosion & fire sandbox", "tier": "small", "era": "publish-and-park", "subsystem": "toys", "match": "an explosion + fire sandbox" },
+    { "title": "The week-4 site publish", "tier": "small", "era": "publish-and-park", "subsystem": "web", "match": "publish boom 04b-mouse beltworks facegen" }
   ],
 
   "threads": {
