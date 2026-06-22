@@ -30,7 +30,10 @@ The *grammar* of roads — interchange → at-grade junction → street web — 
 - **`streetlab`** (new cart) — the at-grade sibling of roadlab. M1 curb returns · M2 skew + the T ·
   M3 turn lanes + channelizing islands · M4 the street web (grid/organic/radial/cul-de-sac).
 - **`spec()` harness** (new infrastructure, [`spec-harness.md`](spec-harness.md)) — the gameplay twin
-  of `tune-check`; `streetlab` is the first and reference cart (27 assertions on its pure generators).
+  of `tune-check`; `streetlab` is the first/reference cart (27 assertions). **`roadlab` is now spec-locked
+  too** (25 assertions: the `classify_turn` chirality, the `make_junction` generator counts, the splines
+  landing on their ports) — a regression lock and a **golden reference for the Phase-2 port**. Both road
+  sandboxes are pinned before the world step.
 
 ## The frontier — Phase 2 (not started)
 
