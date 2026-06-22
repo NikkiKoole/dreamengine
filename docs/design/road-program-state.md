@@ -28,9 +28,10 @@ The *grammar* of roads — interchange → at-grade junction → street web — 
 ## Built this cycle (2026-06-22)
 
 - **`streetlab`** (new cart) — the at-grade sibling of roadlab. M1 curb returns · M2 skew + the T ·
-  M3 turn lanes + channelizing islands · M4 the street web (grid/organic/radial/cul-de-sac).
+  M3 turn lanes + channelizing islands · M4 the street web (grid/organic/radial/cul-de-sac) · M5 sidewalks +
+  crosswalks · M6 the mini-roundabout (traversable island, give-way entries, splitters — the at-grade ring).
 - **`spec()` harness** (new infrastructure, [`spec-harness.md`](spec-harness.md)) — the gameplay twin
-  of `tune-check`; `streetlab` is the first/reference cart (34 assertions). **`roadlab` is now spec-locked
+  of `tune-check`; `streetlab` is the first/reference cart (42 assertions). **`roadlab` is now spec-locked
   too** (25 assertions: the `classify_turn` chirality, the `make_junction` generator counts, the splines
   landing on their ports) — a regression lock and a **golden reference for the Phase-2 port**. Both road
   sandboxes are pinned before the world step.
@@ -73,7 +74,10 @@ Cheap + high-value at the top. (✓ = shipped since.)
       = a real degree-1 share + far fewer Xs). Completes the SNDi readout next to degree/dead-ends/sinuosity.
 - [ ] **Real cross-section / lane types** — §5 OpenDRIVE lane types (`driving/parking/biking/sidewalk/median`),
       flagged "worth taking, never built". Today every lane is identical asphalt.
-- [ ] **Mini-roundabout** (at-grade, §2) — a junction toggle, distinct from roadlab's grade-separated one.
+- ✓ **Mini-roundabout** (M6, at-grade, §2) — a junction "treatment" (`r`, mutually exclusive with turn lanes):
+      a circulatory disc + a MINI, TRAVERSABLE (mountable/domed) central island, flush teardrop SPLITTER
+      islands, GIVE-WAY (yield) entry lines + CCW circulating arrows. Leg-model based ⇒ composes with skew/T/
+      lanes/sidewalks. Distinct from roadlab's grade-separated ring. Spec'd: island ⊂ inscribed circle, stays mini.
 - [ ] **Corner free-right slip + triangular channelizing island** (§2) — the corner treatment deferred in M3.
 - [ ] **Curb extensions / bulb-outs + pedestrian refuge islands** (§2) — small ped-safety geometry.
 - [ ] **TWLTL** (two-way centre left-turn lane) + **right-turn pockets** + **driveways as low-volume junctions** (§2).

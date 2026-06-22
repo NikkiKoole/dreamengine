@@ -37,9 +37,17 @@
 //                crossing"). 'k' toggles SIDEWALKS (the whole junction footprint inflated by SW, drawn under
 //                the road ⇒ an SW-wide kerbside ring that wraps the corners for free) + ZEBRA CROSSWALKS at
 //                each mouth (stripes along travel, stop bar set back behind them). Composes with skew/T.
-//   Controls: ui.h toolbar (clickable; keyboard too). v = junction↔network view. JUNCTION: [ ] curb radius ·
-//             -/= lanes · ,/. skew · t = T · p = turn lanes · k = sidewalks+crosswalks. NETWORK: [ ] seed ·
-//             b = pattern · c = curve (M4c: the §8.5 curvature knob bows each edge ⇒ sinuosity goes live).
+//   MILESTONE 6: the MINI-ROUNDABOUT (§2) — the at-grade counterpart of roadlab's grade-separated ring. 'r'
+//                lays a circulatory disc over the centre with a MINI + TRAVERSABLE (mountable/domed) central
+//                island, flush SPLITTER islands on each approach, GIVE-WAY (yield) entry lines (not stop
+//                bars) + CCW circulating arrows. Built on the same leg model ⇒ any leg count / skew for free;
+//                mutually exclusive with turn lanes (both are "treatments" of the crossing). island radius is
+//                the headline knob — it reuses the [ ] slot in this mode. round_icr() (island + circulatory)
+//                is pure ⇒ spec'd: the island sits strictly inside the inscribed circle and stays "mini".
+//   Controls: ui.h toolbar (clickable; keyboard too). v = junction↔network view. JUNCTION: [ ] curb radius
+//             (island R in roundabout mode) · -/= lanes · ,/. skew · t = T · p = turn lanes · r = roundabout ·
+//             k = sidewalks+crosswalks. NETWORK: [ ] seed · b = pattern · c = curve (M4c: the §8.5 curvature
+//             knob bows each edge ⇒ sinuosity goes live).
 
 #define LANEW    8     // one lane width (px)
 #define TOOLBAR  44    // bottom control strip height (two rows)
@@ -126,6 +134,8 @@ static int   skew     = 0;    // degrees added to the crossing street (the N–S
 static int   isT      = 0;    // drop the north arm → a T-junction
 static int   turnLanes= 0;    // M3: per-approach left-turn bay + raised median splitter
 static int   peds     = 0;    // M5: sidewalks (a strip outside each kerb) + zebra crosswalks at the mouths
+static int   roundabout=0;    // M6: a MINI-ROUNDABOUT (traversable island + give-way entries) — excl. turnLanes
+static float islandR  = 8.f;  // M6: central-island radius (the headline roundabout knob; reuses [ ] in this mode)
 enum { PAT_GRID, PAT_ORGANIC, PAT_RADIAL, PAT_CULDESAC, NPAT };   // M4: street-web patterns
 static int   netview  = 0;    // M4: 0 = junction detail (M1–M3), 1 = the street-web network
 static int   pattern  = PAT_GRID;
@@ -221,6 +231,54 @@ static void draw_crosswalk(float cx,float cy,float b,float HW,float df){
         line((int)(cx+ax*s0+nx*o),(int)(cy+ay*s0+ny*o),(int)(cx+ax*s1+nx*o),(int)(cy+ay*s1+ny*o),CLR_WHITE);
 }
 
+// ── M6: the MINI-ROUNDABOUT (at-grade, §2) — distinct from roadlab's GRADE-SEPARATED ring. The at-grade
+//    tells: the central island is MINI + TRAVERSABLE (mountable/domed — long vehicles drive straight OVER
+//    it), the splitters are flush, and entries GIVE WAY (yield), they don't stop. Built on the same leg
+//    model ⇒ any leg count / skew for free. Circulatory width = one direction's HW; the inscribed circle =
+//    island + circulatory. island radius is the headline knob (reuses the [ ] slot in this mode). PURE: ──
+static float round_circ_w(void){ return lanesPer*LANEW; }        // circulatory carriageway width (one way round)
+static float round_icr(void){ return islandR + round_circ_w(); } // inscribed-circle radius (island + ring)
+
+// the traversable central ISLAND: a low domed/painted disc — the mini tell. Apron (mountable) + white dome.
+static void draw_island(float cx,float cy){
+    int r=(int)islandR;
+    circfill((int)cx,(int)cy,r+1,CLR_BROWNISH_BLACK);            // thin kerb ring (low — you can mount it)
+    circfill((int)cx,(int)cy,r,  CLR_LIGHT_GREY);               // mountable apron
+    circfill((int)cx,(int)cy,(int)(islandR*0.55f),CLR_WHITE);    // painted dome
+}
+// circulating ARROWS on the ring midline. Drive-on-right ⇒ keep the island on the LEFT ⇒ travel visually
+// COUNTERCLOCKWISE; with screen y pointing down that's the a-90 tangent. Each = a little shaft + arrowhead.
+static void draw_circulation(float cx,float cy){
+    float rm = islandR + round_circ_w()*0.5f;
+    for (int k=0;k<3;k++){
+        float a = 60 + k*120;                                    // 3 arrows, between the arms
+        float px=cx+ux(a)*rm, py=cy+uy(a)*rm, t=a-90;            // CCW tangent (visual, y-down)
+        float bx=px-ux(t)*2, by=py-uy(t)*2, hx=px+ux(t)*3, hy=py+uy(t)*3;   // base → head
+        line((int)bx,(int)by,(int)hx,(int)hy,CLR_YELLOW);                                   // shaft
+        line((int)hx,(int)hy,(int)(hx+ux(t+145)*3),(int)(hy+uy(t+145)*3),CLR_YELLOW);        // barb
+        line((int)hx,(int)hy,(int)(hx+ux(t-145)*3),(int)(hy+uy(t-145)*3),CLR_YELLOW);        // barb
+    }
+}
+// a GIVE-WAY (yield) line across the inbound half of one approach at `base` — dashes, NOT a solid stop bar.
+static void give_way(float cx,float cy,float b,float base,float hw){
+    float dx=ux(b),dy=uy(b), ix=ux(b-90),iy=uy(b-90);
+    float gx=cx+dx*base, gy=cy+dy*base;
+    for (float o=1.5f; o<hw; o+=4.f)                            // transverse dashes (the give-way look)
+        line((int)(gx+ix*o),(int)(gy+iy*o),(int)(gx+ix*(o+2)),(int)(gy+iy*(o+2)),CLR_WHITE);
+}
+// a SPLITTER island: a teardrop on the approach centreline — widest at the circulatory (`inner`), tapering
+// to a point `len` upstream. Deflects entering traffic + separates entry from exit; doubles as a ped refuge.
+static void draw_splitter(float cx,float cy,float b,float inner,float len){
+    float ax=ux(b),ay=uy(b), nx=ux(b+90),ny=uy(b+90); float W=3.f;
+    float s0=inner, s1=inner+len;
+    int t[6]={ (int)(cx+ax*s0+nx*W),(int)(cy+ay*s0+ny*W),
+               (int)(cx+ax*s0-nx*W),(int)(cy+ay*s0-ny*W),
+               (int)(cx+ax*s1),     (int)(cy+ay*s1)     };     // point, upstream
+    polyfill(t,3,CLR_LIGHT_GREY);
+    line(t[0],t[1],t[4],t[5],CLR_BROWNISH_BLACK);              // kerb edges
+    line(t[2],t[3],t[4],t[5],CLR_BROWNISH_BLACK);
+}
+
 void update(void){
     if (keyp('v')||keyp('V')) netview = !netview;            // M4: junction-detail ↔ street-web view
     if (netview){
@@ -230,16 +288,18 @@ void update(void){
         if (keyp('c')||keyp('C')) curveAmt=(curveAmt+1)%4;   // M4c: cycle the winding knob 0..3
         return;
     }
-    if (keyp('['))  cornerR -= 2;
-    if (keyp(']'))  cornerR += 2;
+    if (keyp('['))  { if (roundabout) islandR -= 2; else cornerR -= 2; }   // M6: [ ] = island R in roundabout mode
+    if (keyp(']'))  { if (roundabout) islandR += 2; else cornerR += 2; }
     if (keyp('-'))  lanesPer--;
     if (keyp('='))  lanesPer++;
     if (keyp(','))  skew -= 5;
     if (keyp('.'))  skew += 5;
     if (keyp('t')||keyp('T')) isT = !isT;
-    if (keyp('p')||keyp('P')) turnLanes = !turnLanes;
+    if (keyp('p')||keyp('P')) { turnLanes = !turnLanes; if (turnLanes) roundabout=0; }   // excl. roundabout
+    if (keyp('r')||keyp('R')) { roundabout = !roundabout; if (roundabout) turnLanes=0; } // M6: excl. turn lanes
     if (keyp('k')||keyp('K')) peds = !peds;                  // M5: sidewalks + crosswalks
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
+    if (islandR<3) islandR=3;  if (islandR>20) islandR=20;   // M6: stays MINI (small, traversable)
     if (lanesPer<1) lanesPer=1; if (lanesPer>3) lanesPer=3;
     if (skew<-60) skew=-60;    if (skew>60) skew=60;
 #ifdef DE_TRACE
@@ -466,6 +526,30 @@ void draw(void){
         }
     }
 
+  if (roundabout){
+    // ── M6: lay a clean CIRCULATORY disc over the messy central overlap (it connects every arm), then the
+    //    traversable island. The disc's outer kerb is a full ring; we re-lay each arm's asphalt over it to
+    //    REOPEN the mouths, so the kerb survives only on the grass wedges between arms. ──
+    float ICR = round_icr();
+    if (peds) circfill((int)cx,(int)cy,(int)(ICR+SW),CLR_LIGHT_GREY);   // sidewalk ring around the circulatory
+    circfill((int)cx,(int)cy,(int)ICR+1,CLR_BROWNISH_BLACK);            // circulatory outer kerb (trimmed next)
+    circfill((int)cx,(int)cy,(int)ICR,  CLR_DARK_GREY);                 // circulatory asphalt
+    for (int i=0;i<n;i++){                                              // reopen each arm mouth through the kerb
+        float b=brg[i], dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
+        float ox=cx+dx*REACH, oy=cy+dy*REACH;
+        int q[8]={(int)(cx+nx*HW),(int)(cy+ny*HW),(int)(cx-nx*HW),(int)(cy-ny*HW),
+                  (int)(ox-nx*HW),(int)(oy-ny*HW),(int)(ox+nx*HW),(int)(oy+ny*HW)};
+        polyfill(q,4,CLR_DARK_GREY);
+    }
+    draw_island(cx,cy);
+    draw_circulation(cx,cy);
+    for (int i=0;i<n;i++){                                              // per approach: splitter, give-way, crossing
+        float b=brg[i];
+        draw_splitter(cx,cy,b, ICR, 16);                               // teardrop splitter (deflect + ped refuge)
+        give_way(cx,cy,b, ICR+1.5f, HW);                               // yield line at the circulatory edge
+        if (peds) draw_crosswalk(cx,cy,b,HW, ICR+3);                    // crossing set back behind the give-way
+    }
+  } else {
     // curb returns: one per CONVEX gap between adjacent arms (skip the 180° straight back of a T)
     for (int i=0;i<n;i++){
         float bA=brg[i], bB=brg[(i+1)%n];
@@ -507,21 +591,27 @@ void draw(void){
         float mx=cx+dx*sb, my=cy+dy*sb;
         line((int)mx,(int)my,(int)(mx+ix*HW),(int)(my+iy*HW),CLR_WHITE);
     }
+  }
 
     // ── HUD ──
     font(FONT_SMALL);
     char bb[64];
-    print("streetlab - at-grade junction (M5: sidewalks + crosswalks)", 4,5, CLR_WHITE);
-    snprintf(bb,sizeof bb,"%s  -  %d corners%s%s", isT?"T-junction":"4-way crossing", count_corners(),
-             turnLanes?"  -  turn bays":"", peds?"  -  sidewalks + crosswalks (k)":"  -  k = peds");
+    print(roundabout?"streetlab - at-grade junction (M6: mini-roundabout)"
+                    :"streetlab - at-grade junction (M5: sidewalks + crosswalks)", 4,5, CLR_WHITE);
+    if (roundabout)
+        snprintf(bb,sizeof bb,"mini-roundabout (traversable island)  -  %d arms  -  give-way entries%s",
+                 n, peds?"  -  sidewalks + crossings":"");
+    else
+        snprintf(bb,sizeof bb,"%s  -  %d corners%s%s", isT?"T-junction":"4-way crossing", count_corners(),
+                 turnLanes?"  -  turn bays":"", peds?"  -  sidewalks + crosswalks (k)":"  -  k = peds");
     print(bb, 4,13, CLR_ORANGE);
 
-    // ── toolbar (two rows) ──
+    // ── toolbar (two rows) ── the first knob is dual-purpose: island radius in roundabout mode, else curb radius
     rectfill(0, SCREEN_H-TOOLBAR, SCREEN_W, TOOLBAR, CLR_BLACK);
     int d;
-    print("curb radius", 4, SCREEN_H-37, CLR_ORANGE);
-    d=step_btn(64, SCREEN_H-40, 14, "-", "+"); if (d) cornerR+=2*d;
-    snprintf(bb,sizeof bb,"%d",(int)cornerR); print(bb, 98, SCREEN_H-37, CLR_LIGHT_GREY);
+    print(roundabout?"island R":"curb radius", 4, SCREEN_H-37, roundabout?CLR_BLUE:CLR_ORANGE);
+    d=step_btn(64, SCREEN_H-40, 14, "-", "+"); if (d){ if(roundabout) islandR+=2*d; else cornerR+=2*d; }
+    snprintf(bb,sizeof bb,"%d",(int)(roundabout?islandR:cornerR)); print(bb, 98, SCREEN_H-37, CLR_LIGHT_GREY);
     print("lanes/dir", 124, SCREEN_H-37, CLR_WHITE);
     d=step_btn(180, SCREEN_H-40, 14, "-", "+"); if (d) lanesPer+=d;
     snprintf(bb,sizeof bb,"%d",lanesPer); print(bb, 214, SCREEN_H-37, CLR_LIGHT_GREY);
@@ -530,8 +620,15 @@ void draw(void){
     d=step_btn(64, SCREEN_H-22, 14, "-", "+"); if (d) skew+=5*d;
     snprintf(bb,sizeof bb,"%d",skew); print(bb, 98, SCREEN_H-19, CLR_LIGHT_GREY);
     if (ui_button(124, SCREEN_H-22, 90, 13, isT?"topology: T":"topology: 4-way")) isT=!isT;
-    if (ui_button(220, SCREEN_H-22, 96, 13, turnLanes?"turn lanes: on":"turn lanes: off")) turnLanes=!turnLanes;
+    // one button cycles the junction TREATMENT: plain → turn lanes → roundabout (the last two are exclusive)
+    const char *trt = roundabout?"junction: roundabout" : turnLanes?"junction: turn lanes":"junction: plain";
+    if (ui_button(220, SCREEN_H-22, 96, 13, trt)){
+        if (!turnLanes && !roundabout) turnLanes=1;
+        else if (turnLanes){ turnLanes=0; roundabout=1; }
+        else roundabout=0;
+    }
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
+    if (islandR<3) islandR=3;  if (islandR>20) islandR=20;
     if (lanesPer<1) lanesPer=1; if (lanesPer>3) lanesPer=3;
     if (skew<-60) skew=-60;    if (skew>60) skew=60;
 
@@ -615,6 +712,25 @@ void spec(void){
     curveAmt=0; expect(spec_near(mean_sinuosity(), 1.0f), "curve=0: straight chords, sinuosity == 1");
     curveAmt=3; expect(mean_sinuosity() > 1.0f,         "curve>0: roads wind, sinuosity > 1");
     curveAmt=0;                                                            // restore
+
+    // ── M6: mini-roundabout — round_icr() is pure over (islandR, lanesPer); the island sits strictly inside
+    //    the inscribed circle and stays MINI (traversable: its radius <= the circulatory width). ──
+    islandR=8; lanesPer=2;
+    expect(round_icr() > islandR,                            "roundabout: inscribed circle is bigger than the island");
+    expect(spec_near(round_icr(), islandR + lanesPer*LANEW), "roundabout: ICR = island radius + circulatory width");
+    expect(islandR <= round_circ_w(),                        "mini-roundabout: island is traversable (R <= circulatory width)");
+    float icr2 = round_icr(); lanesPer=3;
+    expect(round_icr() > icr2,                               "more lanes widen the circulatory => a bigger inscribed circle");
+    lanesPer=2;
+    // 'r' toggles the roundabout and clears turn lanes (the two crossing treatments are mutually exclusive)
+    turnLanes=1; roundabout=0; spec_tap('r');
+    expect(roundabout==1 && turnLanes==0, "the 'r' key toggles the roundabout and clears turn lanes");
+    spec_tap('r'); expect(roundabout==0,  "'r' again clears the roundabout");
+    // in roundabout mode the [ ] knob drives the island radius (not curb radius); it stays mini-clamped
+    roundabout=1; islandR=8;
+    for (int i=0;i<40;i++) spec_tap(']'); expect(islandR <= 20.f, "roundabout: island radius caps at 20 (stays mini)");
+    for (int i=0;i<40;i++) spec_tap('['); expect(islandR >= 3.f,  "roundabout: island radius floors at 3");
+    roundabout=0;                                                          // restore before the curb-radius clamps
 
     // ── update() loop — the radius knob clamps + the turn-lanes toggle (proves step() + key injection) ──
     for (int i=0;i<40;i++) spec_tap(']');                                    // hammer the + key past the cap
