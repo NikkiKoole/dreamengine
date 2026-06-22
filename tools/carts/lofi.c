@@ -242,8 +242,8 @@ static void setup_instruments(void) {
     instrument_reverb(I_EP, 0.26f); instrument_reverb(I_DAB, 0.40f); instrument_reverb(I_SNR, 0.22f);
     instrument_echo(I_DAB, 0.16f);
 
-    instrument(I_VINYL, INSTR_NOISE, 200, 400, 6, 600);     // the crackle / hiss bed
-    instrument_filter(I_VINYL, FILTER_BAND, 3000, 2);
+    instrument(I_VINYL, INSTR_NOISE, 200, 400, 6, 600);     // a FAINT thin tape-hiss floor
+    instrument_filter(I_VINYL, FILTER_HIGH, 7200, 2);       // high-pass = airy hiss, not midrange rain
 
     for (int i = 0; i < band.n; i++) if (band.c[i].sel) apply_chair(i);
 }
@@ -285,7 +285,7 @@ void update(void) {
         setup_instruments();
         if (LOFI_SEED) { new_song(pos, LOFI_SEED); rad_hist_log(&rs); } else fresh_song(pos);
         scheduled = (long)pos; apply_tone();
-        if (vinylH < 0) vinylH = note_on(60, I_VINYL, 1);
+        if (vinylH < 0) { vinylH = note_on(60, I_VINYL, 1); note_vol(vinylH, 0.30f); }   // barely-there floor
         booted = true;
     }
 
@@ -294,8 +294,8 @@ void update(void) {
     if (ev & RAD_EV_REPLAY) new_song(pos, sng.seed);
     if (ev & RAD_EV_BACK)   { unsigned s = rad_hist_back(&rs); if (s) new_song(pos, s); }
     if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
-    if (ev & RAD_EV_POWER)  { if (!radioOn) { note_off_all(); sfx(-1); vinylH = -1; }
-                              else { scheduled = (long)pos; apply_fx(); if (vinylH < 0) vinylH = note_on(60, I_VINYL, 1); } }
+    if (ev & RAD_EV_POWER)  { if (!radioOn) { note_off_all(); sfx(-1); vinylH = -1; varispeed(1.0f); }
+                              else { scheduled = (long)pos; apply_fx(); if (vinylH < 0) { vinylH = note_on(60, I_VINYL, 1); note_vol(vinylH, 0.30f); } } }
     if (ev & RAD_EV_TONE)   apply_tone();
 
     int chair = rad_band_input(&band, &showHelp);
@@ -306,7 +306,11 @@ void update(void) {
         if (scheduled - songBase >= 64L * 16) fresh_song(pos);
         for (int i = 0; i < 4; i++) chord_label(nowChord[i], 8, LOOPS[sng.loop].c[i % loop_len()]);
         platter += dt() * (tempo / 60.0f) * 1.2f;       // the turntable spins with the tempo
-    }
+        // GENTLE CASSETTE WOBBLE — varispeed wow (slow) + flutter (faster), centered on 1.0 so
+        // the tempo holds; depth from the mood's tape wow (sweep-safe, ridden live). Kept subtle.
+        float wd = MOOD[sng.mood].wow * 0.06f;
+        varispeed(1.0f + wd * sinf((float)now() * 0.42f) + wd * 0.4f * sinf((float)now() * 1.9f));
+    } else varispeed(1.0f);
     vu *= 0.90f; if (vu > 12) vu = 12;
 
 #ifdef DE_TRACE
