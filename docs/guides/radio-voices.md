@@ -775,6 +775,24 @@ light `crush` — configured per song/mode, never per frame. **THE WOBBLE (live)
 ridden each frame, the slowed-tape sag. Sub-styles: classic / mallsoft / utopian / future-funk.
 Blind brief: [`../design/vaporwave-blind-brief.md`](../design/vaporwave-blind-brief.md).
 
+## lofi — lo-fi jazzy hip-hop (Nujabes / J Dilla)
+
+Solo layer: **none**. The lo-fi/Dilla pole — dreamier than `lowend`'s boom-bap. The headline
+is **THE DRUNK POCKET** (a dialable off-grid feel), the loose pocket `lowend` undersold.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_EP`   | lush Rhodes jazz comp | `epiano/rhodes` + chorus | EPIANO |
+| `I_BASS` | round / upright bass, behind | `tri/upright-bass` (chair → round sine) | TRI |
+| `I_DAB`  | muted-horn / vibe sampled dab | `reed/muted-horn` (chair → `mallet/vibe`) | REED |
+| kit | dusty boom kick · fat dark snare · swung hat | `sine/boom-kick` · `noise/fat-snare` | SINE/NOISE |
+| `I_VINYL`| held vinyl-crackle / hiss bed | `noise/vinyl-hiss` | NOISE |
+
+**THE DRUNK POCKET:** per-voice `schedule_hit` dly offsets — the snare drags LATE, the kick
+lazy, the hats swung, + a seeded humanize wobble — all scaled by the **pocket** knob (tight →
+drunk, default moderate). The lo-fi rack (tape + echo + reverb, set-and-hold) is reused from
+`vapor`. Blind brief: [`../design/lofi-blind-brief.md`](../design/lofi-blind-brief.md).
+
 ## napoleon — *Napoleon Dynamite* (an ARTIST station, 5 song archetypes)
 
 Solo layer: **`solo.h`** — and the jam ribbon's *voice + behavior change per archetype* (the
