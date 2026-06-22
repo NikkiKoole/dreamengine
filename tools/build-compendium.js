@@ -26,31 +26,13 @@ function tagsFor(name) {
   return { teaches: Array.isArray(m.teaches) ? m.teaches : [], lineage: m.lineage || '' };
 }
 
-// concept → category. Must cover every tag in tools/teaches-vocab.js — the guard below
-// warns if a vocab tag is missing here (so a new tag can't silently fall to "Other").
-const CAT = {
-  world: ['gene-based-procgen','wave-function-collapse','marching-squares','autotiling','noise-terrain','maze-generation','dungeon-generation','l-system','cellular-automata','road-network','at-grade-junction'],
-  ai: ['state-machine','finite-state-ai','pathfinding','flocking','car-following','steering-behaviors','traffic-sim','schedule-driven-agents','combinational-logic','sequential-logic'],
-  physics: ['verlet-integration','spring-damper','rigid-body','particle-system','fluid-sim','soft-body','segment-collision'],
-  render: ['raycasting','mode7','parallax','camera-follow','dithering-gradient','palette-cycling','software-rasterizer','procedural-mesh','sprite-stacking','no-sprite-vehicles','radial-symmetry','isometric-projection'],
-  game: ['title-play-gameover-loop','tilemap-collision','inventory-system','dialogue-tree','turn-based-loop','grid-movement','save-load-persistence','screen-shake-juice','genetic-crossover','algorithm-visualization'],
-  audio: ['subtractive-synth','granular-synth','waveguide-synth','fm-synth','additive-synth','step-sequencer','euclidean-rhythm','adsr-envelope','generative-melody','chord-voicing','drum-synthesis','analog-voice-modeling','swing-timing','sonification','audio-occlusion','positional-audio','wavetable-drawing','self-oscillation','generative-sequencer','polymeter','lowpass-gate','wavefolder','west-coast-synthesis','shift-register','scale-quantize'],
-};
+// concept → category, derived from the ONE source (tools/teaches-vocab.js CATEGORIES).
+// No second map to drift: a tag categorised there is categorised + coloured here for free.
+const { CATEGORIES } = require('./teaches-vocab.js');
 const catOf = {};
-for (const [c, tags] of Object.entries(CAT)) tags.forEach(t => catOf[t] = c);
-// guard: every vocabulary tag must be categorised here, or it renders as "Other".
-const uncategorised = require('./teaches-vocab.js').TEACHES_VOCAB.filter(t => !(t in catOf));
-if (uncategorised.length)
-  console.warn(`⚠ uncategorised teaches tags (add to CAT in build-compendium.js, else they show as "Other"): ${uncategorised.join(', ')}`);
-const CATMETA = {
-  world:   { label: 'World & procgen', color: '#00E436' },
-  ai:      { label: 'Agents & AI',     color: '#FFA300' },
-  physics: { label: 'Physics',         color: '#29ADFF' },
-  render:  { label: 'Rendering',       color: '#FF77A8' },
-  game:    { label: 'Game structure',  color: '#FFEC27' },
-  audio:   { label: 'Audio',           color: '#FF004D' },
-  other:   { label: 'Other',           color: '#C2C3C7' },
-};
+for (const [c, def] of Object.entries(CATEGORIES)) def.tags.forEach(t => catOf[t] = c);
+const CATMETA = { ...Object.fromEntries(Object.entries(CATEGORIES).map(([k, d]) => [k, { label: d.label, color: d.color }])),
+  other: { label: 'Other', color: '#C2C3C7' } };
 
 const carts = [];
 for (const name of Object.keys(meta)) {
