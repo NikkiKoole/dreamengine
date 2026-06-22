@@ -70,17 +70,19 @@ enum { FS_ROUND, FS_LONG, FS_SQUARE, FS_HEAVY, FS_SLIM, FS_GAUNT };
 // ── clothing collar style ──────────────────────────────────────────────────────
 enum { C_SUIT, C_HOODIE, C_TRACKSUIT, C_WIFEBEATER, C_STRAPTOP, C_FURCOAT, C_TEE };
 
-// ── skin ramp: pale → very dark, each with a shadow tone ────────────────────────
-typedef struct { int base, shade; } Skin;
+// ── skin ramp: pale → very dark — 3 planar tones (lit highlight / base / shadow)
+// for the Hotline-Miami hard-shading look under a GTA-style warm upper-left key.
+typedef struct { int hi, base, shade; } Skin;
 static const Skin SKINS[] = {
-    { CLR_LIGHT_PEACH, CLR_PEACH      },  // 0 pale
-    { CLR_PEACH,       CLR_DARK_PEACH },  // 1 fair
-    { CLR_MEDIUM_GREY, CLR_DARK_BROWN },  // 2 olive / tan
-    { CLR_BROWN,       CLR_DARK_BROWN },  // 3 brown
-    { CLR_DARK_BROWN,  CLR_BROWNISH_BLACK }, // 4 dark brown
-    { CLR_BROWNISH_BLACK, CLR_BLACK   },  // 5 very dark
+    { CLR_WHITE,          CLR_LIGHT_PEACH,    CLR_PEACH          },  // 0 pale
+    { CLR_LIGHT_PEACH,    CLR_PEACH,          CLR_DARK_PEACH     },  // 1 fair
+    { CLR_PEACH,          CLR_MEDIUM_GREY,    CLR_DARK_BROWN     },  // 2 olive / tan
+    { CLR_MEDIUM_GREY,    CLR_BROWN,          CLR_DARK_BROWN     },  // 3 brown
+    { CLR_BROWN,          CLR_DARK_BROWN,     CLR_BROWNISH_BLACK },  // 4 dark brown
+    { CLR_DARK_BROWN,     CLR_BROWNISH_BLACK, CLR_BLACK          },  // 5 very dark
 };
 #define NSKIN 6
+#define FACE_OL CLR_BLACK     // the heavy ink outline (Hotline-Miami trait)
 
 // ── hair colors {base, dark} ────────────────────────────────────────────────────
 typedef struct { int base, dark; } Hair;
@@ -105,6 +107,8 @@ typedef struct {
     int facial;         // facial-hair style (men)
     int nose;           // nose shape
     int babe;           // women only — got the glamour roll (not all do)
+    int wrinkly;        // weathered face — forehead lines, crow's feet, folds
+    int heavytat;       // excessive face tattoos (the fully-inked look)
     int collar;         // clothing
     int shirt;          // collar color
     int acc;            // accessory bitmask
@@ -372,6 +376,25 @@ static void roll_npc(Npc *n, int forced_role) {
         if (chance(25)) n->haircol = 4;                     // older / greying
     }
 
+    // ── weathered / wrinkly (some faces, never the babes) ────────────────
+    n->wrinkly = 0;
+    if (!n->babe) {
+        int p = 8;                                          // most are smooth
+        if (n->haircol == 4)                 p = 75;        // greying → old
+        if (n->role == R_MOBSTER)            p += 25;       // veteran made men
+        if (n->role == R_FIEND)              p += 40;       // hard-living
+        if (n->face == FS_HEAVY || n->face == FS_GAUNT) p += 20;
+        n->wrinkly = chance(p);
+    }
+
+    // ── excessive face tattoos (the fully-inked look) — a few, on the street ──
+    n->heavytat = 0;
+    if ((n->acc & A_FACETAT) && !n->babe) {
+        int p = (n->role==R_GANGSTER || n->role==R_DEALER) ? 40
+              : (n->role==R_CORNERBOY || n->role==R_FIEND) ? 30 : 0;
+        n->heavytat = chance(p);
+    }
+
     // pick a bark
     int nb; bark_set(n->role, &nb);
     n->line = rnd(nb);
@@ -383,10 +406,91 @@ static void roll_npc(Npc *n, int forced_role) {
 
 // ── geometry of the current head (set by draw_portrait, used by accessories) ────
 static int FCX, FCY, HW, VH;   // center x/y, half-width, half-height (top half of head)
+static int JW, JH;             // jaw half-width / half-height (set per face shape)
+static int JAW_DX;             // jaw pushed off-centre for facial asymmetry
 
 static void hair_back(Npc *n);
 static void hair_front(Npc *n);
 static int  pick_cap(Npc *n);
+
+// Draw the whole head SILHOUETTE (skull + jaw + chin) as one mass, translated by
+// (dx,dy) and grown by `grow` px, in one colour. Calling it at a few offsets/sizes
+// stacks shadow → base → highlight so the planar shading conforms to the head
+// shape (no spilling, no blobs) — the core of the Hotline-Miami face look.
+static void face_mass(Npc *n, int dx, int dy, int grow, int color) {
+    int jx = FCX + dx + JAW_DX;   // jaw shifted off-centre → asymmetric face shape
+    ovalfill(FCX + dx, FCY + dy, HW + grow, VH + grow, color);
+    ovalfill(jx, FCY + 24 + dy, JW + grow, JH + grow, color);
+    if (n->face == FS_SQUARE || n->face == FS_HEAVY)
+        ovalfill(jx, FCY + 22 + dy, JW + 2 + grow, JH - 4 + grow, color);
+    if (n->sex || n->face == FS_SLIM || n->face == FS_GAUNT)
+        trifill(jx - JW + 2, FCY + 22 + dy,
+                jx + JW - 2, FCY + 22 + dy,
+                jx,          FCY + JH + 24 + dy, color);
+}
+
+// tattoo content — three flavours, all drawn in the in-game bitmap fonts:
+//   WORDS    — gang/criminal lettering, tilted
+//   SYMS     — CP437 control-code glyphs (☺☻♥♦♣♠♫☼ arrows ‼ § ¶ …); codepoints
+//              1–31 are single-byte UTF-8 so they render as those glyphs (skip
+//              10/13 = newline/CR). Cryptic occult/gang ink.
+//   ART      — tiny multi-line ASCII-art motifs (crosses, skull, dagger, RIP)
+static const char *TAT_WORDS[] = {
+    "MONEY","LOYAL","PAID","SOLO","213","RIP","MOB","CASH","KING","PAIN",
+    "HUSTLE","BLESSED","OUTLAW","TRUST","REST","ACE","SUR","NORTE","DEATH","HEAT",
+};
+#define NTAT 20
+static const char *TAT_SYMS[] = {
+    "\x06\x05",      // ♠♣  card suits
+    "\x03\x04",      // ♥♦
+    "\x0F",          // ☼   sun / compass
+    "\x02",          // ☻   dark smiley
+    "\x0E\x0E",      // ♫♫  notes
+    "\x1E\x1F",      // ▲▼
+    "\x18\x19",      // ↑↓
+    "\x13",          // ‼
+    "\x14\x15",      // ¶§
+    "\x0B\x0C",      // ♂♀
+};
+#define NSYM 10
+static const char *TAT_ART[] = {
+    " + \n+++\n + ",          // cross
+    "\x02\n/|\\",             // ☻ skull over shoulders
+    "RIP\n___",               // headstone
+    "/\\\n\\/",               // diamond/blade
+    ">+<",                    // single-line dagger-ish
+    "[\x06]",                 // [♠] boxed spade
+};
+#define NART 6
+static void tat_text(const char *s, int fnt, int x, int y, float deg, int col) {
+    font(fnt);
+    print_rot_scaled(s, x, y, deg, 1, col, 1);
+    font(FONT_NORMAL);
+}
+// multi-line ascii-art tattoo (own newline split — drawn flat, centred-ish on x)
+static void tat_art(const char *s, int fnt, int x, int y, int col) {
+    font(fnt);
+    int lh = (fnt == FONT_TINY) ? 6 : 7;
+    char ln[16]; int li = 0, row = 0;
+    for (int i = 0;; i++) {
+        char c = s[i];
+        if (c == '\n' || c == 0) {
+            ln[li] = 0;
+            print(ln, x - text_width(ln)/2, y + row*lh, col);
+            li = 0; row++;
+            if (c == 0) break;
+        } else if (li < 15) ln[li++] = c;
+    }
+    font(FONT_NORMAL);
+}
+
+// gritted teeth — a dark mouth band with vertical light teeth (the HM grimace)
+static void teeth(int cx, int cy, int w, int gold) {
+    rectfill(cx - w, cy - 3, w*2, 6, FACE_OL);                 // dark gum/lip frame
+    rectfill(cx - w + 1, cy - 1, w*2 - 2, 3, gold ? CLR_YELLOW : CLR_LIGHT_PEACH);
+    for (int t = -w + 2; t < w - 1; t += 3)
+        line(cx + t, cy - 1, cx + t, cy + 1, FACE_OL);         // tooth gaps
+}
 
 // ── portrait ─────────────────────────────────────────────────────────────────
 static void draw_portrait(Npc *n, int talking, int mouth_open) {
@@ -407,6 +511,20 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
         default:        HW = 45; VH = 56; break;
     }
     if (n->sex) { HW -= 3; VH -= 1; }
+
+    // per-face seed (deterministic from genes, NOT frame) — drives stable detail
+    // (stubble/scar/tattoo placement) AND the facial asymmetry below
+    unsigned seed = (unsigned)(n->skin*131 + n->face*17 + n->nose*101
+                               + n->haircol*7 + n->role*23 + n->shirt*3 + 1);
+    // ── subtle facial ASYMMETRY — real faces (and HM/GTA portraits) aren't
+    //    mirror-symmetric. Small, deterministic per-face nudges. ───────────
+    int asx     = (seed & 1) ? 1 : -1;             // overall lean
+    JAW_DX      = asx * (1 + (int)((seed >> 1) & 1));   // jaw 1-2px to one side
+    int eldy    = ((seed >> 2) & 1) ? asx : 0;     // eyes tilt: one up, one down
+    int erdy    = -eldy;
+    int browL   = asx > 0 ? 2 : ((seed >> 4) & 1); // one brow raised higher
+    int browR   = asx < 0 ? 2 : ((seed >> 5) & 1);
+    int nosedx  = asx * (int)((seed >> 6) & 1);    // nose off-centre 0-1px
 
     // ── shoulders / clothing (behind, runs off the bottom) ──────────────
     int shy = FCY + VH + 28;
@@ -483,34 +601,37 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
         circfill(FCX + HW - 2, FCY + 19, 2, CLR_YELLOW);
     }
 
-    // ── head ──────────────────────────────────────────────────────────
-    ovalfill(FCX, FCY, HW, VH, sk);
-    // jaw / chin — wide & square for heavy, narrow & pointed for slim/gaunt/women
-    int jw = HW - 8;
-    if (n->face == FS_SQUARE)                       jw = HW - 3;
-    else if (n->face == FS_LONG)                    jw = HW - 13;
-    else if (n->face == FS_SLIM || n->face == FS_GAUNT) jw = HW - 11;
-    if (n->sex) jw -= 3;                            // softer feminine chin
-    int jh = VH - (n->face==FS_LONG ? 8 : 16);
-    ovalfill(FCX, FCY + 24, jw, jh, sk);
-    // fuller lower face for square/heavy — a wider ROUNDED jaw mass (an oval, so
-    // it never makes the hard rectangular corners that poke past the silhouette)
-    if (n->face == FS_SQUARE || n->face == FS_HEAVY)
-        ovalfill(FCX, FCY + 22, jw + 2, jh - 4, sk);
-    // tapered chin point for the lean/feminine faces
-    if (n->sex || n->face == FS_SLIM || n->face == FS_GAUNT)
-        trifill(FCX - jw + 2, FCY + 22, FCX + jw - 2, FCY + 22, FCX, FCY + jh + 24, sk);
-    // (no one-sided cheek shading — a solid darker oval reads as a blob, not form)
-    // gaunt: sunken hollows under the cheekbones (symmetric — reads as gaunt)
+    // ── head — outlined, hard planar shading (HM look, GTA upper-left key) ──
+    int skhi = SKINS[n->skin].hi;
+    // jaw / chin metrics — wide & square for heavy, narrow & pointed for slim/women
+    JW = HW - 8;
+    if (n->face == FS_SQUARE)                            JW = HW - 3;
+    else if (n->face == FS_LONG)                         JW = HW - 13;
+    else if (n->face == FS_SLIM || n->face == FS_GAUNT)  JW = HW - 11;
+    if (n->sex) JW -= 3;                                 // softer feminine chin
+    JH = VH - (n->face==FS_LONG ? 8 : 16);
+    // 1) heavy ink outline (the silhouette grown +2, behind everything)
+    face_mass(n, 0, 0, 2, FACE_OL);
+    // 2) shadow side — the whole face filled in the darkest skin tone
+    face_mass(n, 0, 0, 0, skd);
+    // 3) base/lit skin — same mass nudged up-left & shrunk, so shadow stays as a
+    //    crescent on the lower-right rim and the lit edge loses its outline
+    face_mass(n, -3, -2, -2, sk);
+    // 4) highlight — a forehead catch-light up-left (NOT a half-face wash)
+    ovalfill(FCX - 8, FCY - VH/2 - 2, HW - 18, VH/3, skhi);
+    // gaunt: sunken hollows carved under the cheekbones (symmetric → reads gaunt)
     if (n->face == FS_GAUNT) {
-        ovalfill(FCX - HW + 10, FCY + 16, 7, 12, skd);
-        ovalfill(FCX + HW - 10, FCY + 16, 7, 12, skd);
+        ovalfill(FCX - HW + 11, FCY + 16, 7, 13, skd);
+        ovalfill(FCX + HW - 12, FCY + 16, 7, 13, skd);
     }
+    // cheekbone catch-light hint (upper-left cheek)
+    ovalfill(FCX - HW/2, FCY + 4, 6, 4, skhi);
     // blush — a soft rosy cheek for the babes (subtle; reads only on pale skin)
     if (n->babe && n->skin <= 1) {
         ovalfill(FCX - HW/2 + 2, FCY + 15, 5, 2, CLR_DARK_PEACH);
         ovalfill(FCX + HW/2 - 2, FCY + 15, 5, 2, CLR_DARK_PEACH);
     }
+    int jw = JW, jh = JH;   // local aliases for the feature code below
 
     // ── hair in front / hairline ──────────────────────────────────────
     hair_front(n);
@@ -526,98 +647,109 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
     if (n->expr == X_SMUG)   { brow_drop = -1; }
     if (n->expr == X_WARY)   { brow_drop = 2; }
     if (n->expr == X_NERVOUS){ brow_drop = -3; }
+    int lby = brow_y + brow_drop - browL;   // left brow (asymmetric raise)
+    int rby = brow_y + brow_drop - browR;   // right brow
     if (!(n->acc & A_SHADES)) {
         if (n->sex) {
             // thin arched brows — two short strokes peaking in the middle
-            int by = brow_y + 1 + brow_drop;
-            line(lx - 8, by + 2, lx,     by - 1 - brow_in, browc);
-            line(lx,     by - 1 - brow_in, lx + 7, by + 1, browc);
-            line(rx + 8, by + 2, rx,     by - 1 - brow_in, browc);
-            line(rx,     by - 1 - brow_in, rx - 7, by + 1, browc);
+            line(lx - 8, lby + 3, lx,     lby - brow_in, browc);
+            line(lx,     lby - brow_in, lx + 7, lby + 2, browc);
+            line(rx + 8, rby + 3, rx,     rby - brow_in, browc);
+            line(rx,     rby - brow_in, rx - 7, rby + 2, browc);
         } else {
             for (int t = 0; t < 3; t++) {
-                line(lx - 9, brow_y + t + brow_drop, lx + 7, brow_y + t + brow_drop - brow_in, browc);
-                line(rx + 9, brow_y + t + brow_drop, rx - 7, brow_y + t + brow_drop - brow_in, browc);
+                line(lx - 9, lby + t, lx + 7, lby + t - brow_in, browc);
+                line(rx + 9, rby + t, rx - 7, rby + t - brow_in, browc);
             }
         }
     }
 
     // ── eyes ──────────────────────────────────────────────────────────
-    int blink = (frame() % 220) < 6;     // occasional blink
+    int blink = (frame() % 220) < 6;     // occasional full blink
+    // occasional idle SQUINT — eyes narrow to near-slits for a beat (a hard
+    // stare / sizing-you-up look), offset from the blink so they don't collide
+    int idle_squint = !blink && (frame() % 330) >= 300;
     int squint = (n->expr == X_ANGRY || n->expr == X_SMUG || n->expr == X_WARY);
     int ew = 8, eh = squint ? 3 : 6;
     if (n->sex) { eh = squint ? 4 : 7; }              // women: rounder (taller) eyes, same width
+    if (idle_squint) eh = 2;                          // narrowed to a menacing slit
     int irc = eh;                                     // iris ~fills the eye height (almond, not buggy)
     if (n->babe) irc = eh + 1;                        // big doe eyes for the babes
     int pup = n->babe ? 3 : 2;
+    int ley = ey + eldy, rey = ey + erdy;   // eyes sit at slightly different heights
     if (!(n->acc & A_SHADES)) {
-        if (n->acc & A_SHADOW) {  // eyeshadow
-            ovalfill(lx, ey - 3, ew + 2, 4, n->babe ? CLR_DARK_PURPLE : CLR_DARKER_PURPLE);
-            ovalfill(rx, ey - 3, ew + 2, 4, n->babe ? CLR_DARK_PURPLE : CLR_DARKER_PURPLE);
+        // sunken sockets — a darker recess under the brow ridge (HM intensity)
+        ovalfill(lx, ley - 1, ew + 3, eh + 3, skd);
+        ovalfill(rx, rey - 1, ew + 3, eh + 3, skd);
+        if (n->acc & A_SHADOW) {  // eyeshadow over the socket
+            ovalfill(lx, ley - 3, ew + 2, 4, n->babe ? CLR_DARK_PURPLE : CLR_DARKER_PURPLE);
+            ovalfill(rx, rey - 3, ew + 2, 4, n->babe ? CLR_DARK_PURPLE : CLR_DARKER_PURPLE);
         }
         if (blink) {
-            line(lx - ew, ey, lx + ew, ey, skd);
-            line(rx - ew, ey, rx + ew, ey, skd);
+            line(lx - ew, ley, lx + ew, ley, FACE_OL);
+            line(rx - ew, rey, rx + ew, rey, FACE_OL);
         } else {
-            ovalfill(lx, ey, ew, eh, CLR_WHITE);
-            ovalfill(rx, ey, ew, eh, CLR_WHITE);
+            ovalfill(lx, ley, ew, eh, CLR_WHITE);
+            ovalfill(rx, rey, ew, eh, CLR_WHITE);
             int look = (n->expr==X_WARY) ? 2 : 0;   // shifty eyes glance aside
-            // clip the iris to the white with the skin lids so it reads almond, not round
-            circfill(lx + 1 + look, ey, irc, n->eyecol);
-            circfill(rx + 1 + look, ey, irc, n->eyecol);
-            circfill(lx + 1 + look, ey, pup, CLR_BLACK);
-            circfill(rx + 1 + look, ey, pup, CLR_BLACK);
-            pset(lx + look, ey - 1, CLR_WHITE);     // catchlight
-            pset(rx + look, ey - 1, CLR_WHITE);
-            // upper lid for squint/smug
-            if (squint) {
-                trifill(lx - ew, ey - eh - 1, lx + ew, ey - eh - 1, lx + ew, ey, sk);
-                trifill(rx - ew, ey - eh - 1, rx + ew, ey - eh - 1, rx - ew, ey, sk);
-            }
+            // iris fills the eye (almond), with a glowing inner ring + bright catchlight
+            circfill(lx + 1 + look, ley, irc, n->eyecol);
+            circfill(rx + 1 + look, rey, irc, n->eyecol);
+            circfill(lx + 1 + look, ley, pup, CLR_BLACK);
+            circfill(rx + 1 + look, rey, pup, CLR_BLACK);
+            pset(lx + look - 1, ley - 1, CLR_WHITE); pset(lx + look, ley - 1, CLR_WHITE);
+            pset(rx + look - 1, rey - 1, CLR_WHITE); pset(rx + look, rey - 1, CLR_WHITE);
         }
-        // mascara lashes — outer-corner flick (women; drawn over the open or shut eye)
+        // heavy dark upper lid (2px) — the strongest eye line in the HM look
+        line(lx - ew - 1, ley - eh, lx + ew, ley - eh, FACE_OL);
+        line(lx - ew,     ley - eh + 1, lx + ew, ley - eh + 1, FACE_OL);
+        line(rx + ew + 1, rey - eh, rx - ew, rey - eh, FACE_OL);
+        line(rx + ew,     rey - eh + 1, rx - ew, rey - eh + 1, FACE_OL);
+        // tired lower-lid / bag line
+        line(lx - ew + 1, ley + eh + 1, lx + ew - 1, ley + eh + 1, skd);
+        line(rx - ew + 1, rey + eh + 1, rx + ew - 1, rey + eh + 1, skd);
+        // mascara lashes — outer-corner flick (women)
         if (n->sex) {
-            line(lx - ew, ey - eh + 1, lx - ew - 3, ey - eh - 2, CLR_BLACK);
-            line(lx - ew + 3, ey - eh, lx - ew,    ey - eh - 3, CLR_BLACK);
-            line(rx + ew, ey - eh + 1, rx + ew + 3, ey - eh - 2, CLR_BLACK);
-            line(rx + ew - 3, ey - eh, rx + ew,    ey - eh - 3, CLR_BLACK);
+            line(lx - ew, ley - eh + 1, lx - ew - 3, ley - eh - 2, CLR_BLACK);
+            line(rx + ew, rey - eh + 1, rx + ew + 3, rey - eh - 2, CLR_BLACK);
         }
     }
 
-    // ── nose ──────────────────────────────────────────────────────────
+    // ── nose — a real protruding form: shadow on the right, lit bridge on the
+    //    left (upper-left key), dark nostrils underneath (HM/GTA dimensionality)
     int ny = FCY + 14;
+    int nx = FCX + nosedx;                   // nose off-centre (asymmetry)
     switch (n->nose) {
     case NS_BUTTON:                          // small, short, upturned
-        ovalfill(FCX, ny + 1, 3, 4, skd);
-        ovalfill(FCX - 1, ny, 2, 3, sk);
-        pset(FCX - 2, ny + 4, CLR_BLACK);
-        pset(FCX + 2, ny + 4, CLR_BLACK);
+        ovalfill(nx + 1, ny + 1, 3, 4, skd);
+        ovalfill(nx - 1, ny, 2, 3, skhi);
+        pset(nx - 2, ny + 4, FACE_OL); pset(nx + 2, ny + 4, FACE_OL);
         break;
     case NS_WIDE:                            // broad, flared nostrils
-        ovalfill(FCX, ny + 1, 8, 6, skd);
-        ovalfill(FCX - 1, ny, 6, 5, sk);
-        pset(FCX - 6, ny + 4, CLR_BLACK); pset(FCX - 5, ny + 5, skd);
-        pset(FCX + 6, ny + 4, CLR_BLACK); pset(FCX + 5, ny + 5, skd);
+        ovalfill(nx + 1, ny + 1, 8, 6, skd);
+        ovalfill(nx - 2, ny, 4, 6, skhi);
+        line(nx - 7, ny + 4, nx - 5, ny + 6, FACE_OL);   // nostril wings
+        line(nx + 7, ny + 4, nx + 5, ny + 6, FACE_OL);
+        pset(nx - 5, ny + 4, FACE_OL); pset(nx + 5, ny + 4, FACE_OL);
         break;
     case NS_ROMAN:                           // long, a bump on the bridge
-        ovalfill(FCX, ny - 2, 4, 13, skd);
-        ovalfill(FCX - 1, ny - 4, 3, 12, sk);
-        ovalfill(FCX + 2, ny - 5, 2, 4, skd);     // the bump
-        pset(FCX - 3, ny + 8, CLR_BLACK);
-        pset(FCX + 3, ny + 8, CLR_BLACK);
+        ovalfill(nx + 1, ny - 2, 4, 13, skd);
+        ovalfill(nx - 1, ny - 4, 2, 12, skhi);
+        ovalfill(nx + 2, ny - 5, 2, 4, skd);     // the bump
+        pset(nx - 3, ny + 8, FACE_OL); pset(nx + 3, ny + 8, FACE_OL);
+        line(nx - 3, ny + 8, nx + 3, ny + 9, FACE_OL);
         break;
     case NS_POINTY:                          // narrow, refined, longer tip
-        ovalfill(FCX, ny, 2, 10, skd);
-        ovalfill(FCX - 1, ny - 1, 2, 8, sk);
-        ovalfill(FCX, ny + 6, 3, 3, skd);         // little tip
-        pset(FCX - 2, ny + 7, CLR_BLACK);
-        pset(FCX + 2, ny + 7, CLR_BLACK);
+        ovalfill(nx + 1, ny, 2, 10, skd);
+        ovalfill(nx - 1, ny - 1, 2, 8, skhi);
+        ovalfill(nx, ny + 6, 3, 3, skd);         // little tip
+        pset(nx - 2, ny + 7, FACE_OL); pset(nx + 2, ny + 7, FACE_OL);
         break;
     default:                                 // NS_STRAIGHT — the classic
-        ovalfill(FCX, ny, 5, 7, skd);
-        ovalfill(FCX - 1, ny - 1, 4, 6, sk);
-        pset(FCX - 3, ny + 5, CLR_BLACK);
-        pset(FCX + 3, ny + 5, CLR_BLACK);
+        ovalfill(nx + 1, ny, 5, 7, skd);
+        ovalfill(nx - 2, ny - 1, 3, 6, skhi);
+        line(nx - 3, ny + 5, nx + 3, ny + 6, FACE_OL);   // under-tip shadow
+        pset(nx - 3, ny + 5, FACE_OL); pset(nx + 3, ny + 5, FACE_OL);
         break;
     }
 
@@ -649,8 +781,8 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
             line(FCX - mw, my + 2, FCX + mw, my - 2, lip>=0?lip:skd);
             line(FCX - mw, my + 3, FCX + mw - 2, my - 1, lip>=0?lip:skd);
         } else if (n->expr == X_ANGRY) {
-            line(FCX - mw, my - 2, FCX + mw, my + 1, lip>=0?lip:skd);
-            line(FCX - mw, my - 1, FCX + mw, my + 2, lip>=0?lip:skd);
+            if (!n->sex) teeth(FCX, my, mw - 2, n->acc & (A_GRILL|A_GOLDTOOTH));  // clenched
+            else { int lc=lip>=0?lip:skd; line(FCX - mw, my - 2, FCX + mw, my + 1, lc); line(FCX - mw, my - 1, FCX + mw, my + 2, lc); }
         } else if (n->expr == X_NERVOUS) {
             line(FCX - mw + 2, my + 2, FCX + mw - 2, my + 2, lip>=0?lip:skd);
         } else {
@@ -662,9 +794,25 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
             pset(FCX + 4, my, CLR_YELLOW);
     }
 
-    // per-person seed for stable detail (stubble specks, scar side, tattoo placement)
-    unsigned seed = (unsigned)(n->skin*131 + n->face*17 + n->nose*101
-                               + n->haircol*7 + n->role*23 + n->shirt*3 + 1);
+    // ── wrinkles — weathered faces get forehead lines, crow's feet, folds ──
+    if (n->wrinkly) {
+        int fh_y = brow_y - 6;                               // forehead, above the brows
+        for (int w = 0; w < 2; w++) {                        // two forehead furrows
+            int wy = fh_y - w*4;
+            line(FCX - HW + 16, wy, FCX - 4, wy - 1, skd);
+            line(FCX - 4, wy - 1, FCX + HW - 16, wy, skd);
+        }
+        line(FCX - 3, fh_y, FCX - 3, fh_y - 7, skd);         // a vertical frown line
+        // crow's feet at the outer eye corners
+        for (int c = -1; c <= 1; c++) {
+            line(lx - ew, ey + c*2, lx - ew - 4, ey + c*3 - 1, skd);
+            line(rx + ew, ey + c*2, rx + ew + 4, ey + c*3 - 1, skd);
+        }
+        // nasolabial folds — nose wing down to the mouth corner
+        line(FCX - 7, ny + 4, FCX - mw - 1, my + 1, skd);
+        line(FCX + 7, ny + 4, FCX + mw + 1, my + 1, skd);
+    }
+
 
     // ── facial hair ───────────────────────────────────────────────────
     if (!n->sex) {
@@ -692,34 +840,52 @@ static void draw_portrait(Npc *n, int talking, int mouth_open) {
         }
     }
 
-    // ── scar ──────────────────────────────────────────────────────────
+    // ── scar — a short slash on the CHEEK (below the eye, never over it) ──
     if (n->acc & A_SCAR) {
-        int sx = FCX + ((seed & 1) ? -1 : 1)*(HW-18);
-        line(sx, ey - 14, sx + 3, ey + 10, CLR_DARK_PEACH);
-        for (int k = -10; k <= 8; k += 4) line(sx - 2, ey + k, sx + 2, ey + k, CLR_PEACH);
+        int dir = (seed & 1) ? -1 : 1;
+        int sx = FCX + dir*(HW - 16), sy = FCY + 12;
+        line(sx, sy, sx + dir*2, sy + 12, skhi);            // raised pale scar line
+        for (int k = 2; k <= 10; k += 4)                    // stitch ticks across it
+            line(sx - 2, sy + k, sx + 2, sy + k, skhi);
     }
 
-    // ── face tattoos (faded prison/gang ink — teardrops, brow slit, cheek mark) ──
+    // ── face tattoos — INKED TEXT (rotated words in a small font) + teardrops ──
     if (n->acc & A_FACETAT) {
-        int tcol = CLR_DARKER_BLUE;
+        int tcol = (n->skin >= 3) ? CLR_DARK_GREY : CLR_DARKER_BLUE;   // faded ink
         int side = (seed & 2) ? 1 : -1;
-        int tx = FCX + side * exo;                  // under one eye
-        int drops = 1 + (int)((seed >> 2) & 1);     // 1–2 teardrops
+        int tx = FCX + side * exo;                  // teardrops under one eye
+        int drops = n->heavytat ? 3 : 1 + (int)((seed >> 2) & 1);
         for (int d = 0; d < drops; d++) {
             int dy = ey + 9 + d*6;
             trifill(tx - 2, dy, tx + 2, dy, tx, dy + 4, tcol);
             pset(tx, dy + 1, sk);                   // hollow centre (outline-teardrop)
         }
+        // cheek ink (opposite the teardrops): a word OR cryptic symbols, tilted
+        if (seed & 32) tat_text(TAT_SYMS[seed % NSYM], FONT_NORMAL,
+                                FCX - side*(HW - 17), FCY + 13, -side * 14, tcol);
+        else           tat_text(TAT_WORDS[seed % NTAT], FONT_TINY,
+                                FCX - side*(HW - 17), FCY + 13, -side * 14, tcol);
         // brow slit on the other brow (men, when not behind shades)
         if (!n->sex && !(n->acc & A_SHADES) && (seed & 4))
             rectfill(FCX - side*exo - 1, brow_y - 1 + brow_drop, 3, 5, sk);
-        // a small cheek mark — a cross or three dots
-        int cxs = FCX - side*(HW - 14), cys = FCY + 22;
-        if (seed & 8) {
-            line(cxs, cys - 3, cxs, cys + 3, tcol);
-            line(cxs - 3, cys, cxs + 3, cys, tcol);
-        } else {
-            pset(cxs, cys, tcol); pset(cxs + 3, cys, tcol); pset(cxs + 6, cys, tcol);
+
+        // ── EXCESSIVE ink (fully-inked face): words + symbols + ascii art ──
+        if (n->heavytat) {
+            // forehead statement — cryptic symbols or a word (where skin shows)
+            if (!(n->acc & (A_BANDANA|A_DURAG|A_SCARF))) {
+                if (seed & 64) tat_text(TAT_SYMS[(seed >> 5) % NSYM], FONT_NORMAL,
+                                        FCX, brow_y - 10, (seed & 16) ? 5 : -5, tcol);
+                else           tat_text(TAT_WORDS[(seed >> 5) % NTAT], FONT_TINY,
+                                        FCX, brow_y - 9, (seed & 16) ? 5 : -5, tcol);
+            }
+            // a bolder word low on the jaw
+            tat_text(TAT_WORDS[(seed >> 8) % NTAT], FONT_SMALL,
+                     FCX + side*(HW - 20), FCY + 30, side * 18, tcol);
+            // a little ASCII-ART motif on the temple, above the eye (flat)
+            tat_art(TAT_ART[(seed >> 10) % NART], FONT_TINY,
+                    FCX + side*(HW - 10), FCY - 14, tcol);
+            // chin numerals
+            tat_text("213", FONT_TINY, FCX, my + 12, 0, tcol);
         }
     }
 
@@ -969,9 +1135,13 @@ static void draw_bg(Npc *n) {
         default:        top = CLR_DARKER_BLUE; bot = CLR_BLACK;          break;  // night street
     }
     for (int y = 0; y < 150; y++) {
-        int c = (y < 60) ? top : (y < 100 ? bot : CLR_BLACK);
-        if (y >= 60 && y < 75) c = (frame()%2 || y<68) ? bot : top; // dither seam
+        int c = (y < 60) ? top : (y < 105 ? bot : CLR_BLACK);
         line(0, y, SCREEN_W, y, c);
+    }
+    // STATIC ordered-dither seams (deterministic in x,y — no per-frame flicker)
+    for (int x = 0; x < SCREEN_W; x += 2) {
+        pset(x,     57, bot);  pset(x + 1, 59, bot);          // top → bot
+        pset(x + 1, 101, CLR_BLACK);  pset(x, 103, CLR_BLACK); // bot → black
     }
     // building silhouettes / lit windows for street roles
     if (n->role != R_MOBSTER) {
