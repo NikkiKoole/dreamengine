@@ -1209,7 +1209,8 @@
   "stylophone": {
     "teaches": [
       "subtractive-synth",
-      "adsr-envelope"
+      "adsr-envelope",
+      "wavetable-drawing"
     ],
     "lineage": "Modelled on the Dubreq Stylophone Deluxe; novel for being the first cabinet instrument to expose live pulse-width morphing (note_duty) and a hand-drawn wavetable editor feeding INSTR_USER0."
   },
@@ -1999,7 +2000,9 @@
     "lineage": "Same rect-mover as platform-rects; the novel element is using a painted sprite slot as level data — sget() reads each pixel's palette index to classify block type at init, so repainting the sprite changes the level without touching code."
   },
   "floorwalker": {
-    "teaches": [],
+    "teaches": [
+      "segment-collision"
+    ],
     "lineage": "Generated from a real Floorplanner .fml file via fmltools/fml2cart.js; reuses hotline.c's move-first per-axis slide idiom but against arbitrary-angle wall segments instead of a tile grid."
   },
   "garden": {
@@ -2017,7 +2020,9 @@
     "lineage": "Proof-of-concept for the interchange-DSL geometry layer (docs/design/interchange-dsl.md); superseded by roadlab which replaces the Bezier ramps with arc-splines and adds lane-accurate ports."
   },
   "seinelaan": {
-    "teaches": [],
+    "teaches": [
+      "segment-collision"
+    ],
     "lineage": "Sibling of floorwalker.c; novel in using a real Floorplanner .fml export as level geometry, with arbitrary-angle segment and oriented-box collision instead of a tile grid."
   },
   "zelda-walk": {
@@ -2111,7 +2116,8 @@
   },
   "waveed": {
     "teaches": [
-      "additive-synth"
+      "additive-synth",
+      "wavetable-drawing"
     ],
     "lineage": "A live waveform painter built around the engine's INSTR_USER0-3 slots; mellotron's tapeloop trick (wave_set for timbre construction) is its direct downstream."
   },

@@ -120,7 +120,7 @@ const TEACHES_VOCAB = new Set([
   'drum-synthesis', 'analog-voice-modeling', 'swing-timing', 'radial-symmetry', 'genetic-crossover',
   'algorithm-visualization', 'sonification', 'audio-occlusion', 'schedule-driven-agents',
   // adopted from the full backfill (recurring across the library)
-  'isometric-projection', 'positional-audio',
+  'isometric-projection', 'positional-audio', 'wavetable-drawing', 'segment-collision',
 ]);
 
 // ── sidecar (backfilled tags for carts whose .c has no header yet) ───────────
