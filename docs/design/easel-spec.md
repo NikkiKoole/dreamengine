@@ -124,7 +124,9 @@ MIDI/pressure from a real controller.
 2. The low-pass gate: drive `note_vol`+`note_cutoff` from a per-voice gate level.
 3. The function generator: rise/fall slope, one-shot + cycle; route to the gate. Tune the pluck.
 4. The pressure ribbon: X-pitch (snap/free + scale marks), Y-pressure → gate/fold; A–K keys; PRESS/
-   PLUCK modes.
+   PLUCK modes. **Guard the ribbon's raw-touch read with `ui_captured(touch_id)` + sticky-until-lift
+   ownership** (added to `ui.h` + `dubdesk.c` 2026-06-22) so a finger that started on a knob and
+   drags over the ribbon doesn't trigger it — the density-overlap fix the dense layout needs.
 5. The pulser + random self-play (RUN).
 6. Visuals (signal flow + slope), ui-audit, bake, register (teaches: `west-coast-synthesis`,
    `fm-synth`, `wavefolder`, `lowpass-gate`, `adsr-envelope`), shelf row, demo clip.

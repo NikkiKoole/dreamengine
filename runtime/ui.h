@@ -529,6 +529,17 @@ static int ui_released(void *v) {
     return 0;
 }
 
+// true while touch-contact `id` is captured by a ui.h widget (a knob/slider/button it
+// grabbed and still holds). Lets a cart's OWN pad/ribbon IGNORE fingers that started on a
+// widget, so a knob drag that wanders over the pad never triggers it. Capture is seen from
+// the frame after the press (ui runs at ui_end), so it covers the whole ongoing drag:
+//     for (i ...touches...) { if (ui_captured(touch_id(i))) continue; ...pad reads...; }
+static int ui_captured(int id) {
+    for (int i = 0; i < ui_cap_n; i++)
+        if (ui_caps[i].id == id && !ui_caps[i].released) return 1;
+    return 0;
+}
+
 // ── the widgets ──────────────────────────────────────────────────────────
 
 // horizontal slider editing *v in 0..1; absolute (press sets the value).

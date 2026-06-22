@@ -75,6 +75,14 @@ static void store_knobs(void) {
     else                { kwob = g0; kecho = g1; kverb = g2; }
 }
 
+// sticky widget-ownership: once a finger is captured by a ui knob it stays "owned" until it
+// LIFTS, so a knob drag that wanders over the pad never triggers it — robust even if ui.h's
+// per-frame capture flickers. (ui_captured alone can drop for a frame mid-drag.)
+static int own_ids[8], own_n = 0;
+static bool is_owned(int id) { for (int i = 0; i < own_n; i++) if (own_ids[i] == id) return true; return false; }
+static void own(int id)      { if (!is_owned(id) && own_n < 8) own_ids[own_n++] = id; }
+static void unown(int id)    { for (int i = 0; i < own_n; i++) if (own_ids[i] == id) { own_ids[i] = own_ids[--own_n]; return; } }
+
 static void fire_lpg(int pitch) {
     int v = 0; float lo = env_l[0];
     for (int i = 1; i < NV; i++) if (env_l[i] < lo) { lo = env_l[i]; v = i; }
@@ -132,8 +140,11 @@ void update(void) {
     for (int b = 0; b < 8; b++) if (keyp(LKEY[b])) fire_lpg(penta_pitch(b));
 
     // siren fire pad
+    for (int i = 0; i < touch_count(); i++) if (ui_captured(touch_id(i))) own(touch_id(i));
+    for (int i = 0; i < touch_ended_count(); i++) unown(touch_ended_id(i));
     bool touching = false;
     for (int i = 0; i < touch_count(); i++) {
+        if (is_owned(touch_id(i))) continue;   // finger started on a knob → don't let it trigger the pad
         int tx = touch_x(i), ty = touch_y(i);
         if (tx >= PAD_X && tx < PAD_X + PAD_W && ty >= PAD_Y && ty < PAD_Y + PAD_H) {
             touching = true;
