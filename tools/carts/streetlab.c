@@ -662,7 +662,8 @@ void draw(void){
     draw_circulation(cx,cy);
     for (int i=0;i<n;i++){                                              // per approach: cross-section, splitter, give-way, crossing
         float b=brg[i];
-        cross_markings(cx,cy,b, ICR+3, ICR+3, REACH);                  // #4: the typed lanes render on the approaches (no turn bay here)
+        cross_markings(cx,cy,b, ICR, ICR+3, REACH);                    // #4: lanes on the approaches; bike datum = ICR so the
+                                                                       // approach bike lane reaches the kerb and meets the ring
         draw_splitter(cx,cy,b, ICR, 16);                               // teardrop splitter (deflect + ped refuge)
         give_way(cx,cy,b, ICR+1.5f, HW);                               // yield line at the circulatory edge
         if (peds) draw_crosswalk(cx,cy,b,HW, ICR+3);                    // crossing set back behind the give-way
