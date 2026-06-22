@@ -234,27 +234,30 @@ static void lane_band(float cx,float cy,float b,float a,float c,int s,float star
               (int)(x1+nx*s*c),(int)(y1+ny*s*c),(int)(x1+nx*s*a),(int)(y1+ny*s*a)};
     polyfill(q,4,col);
 }
-// markings along one arm: the typed cross-section (centre line / median, lane dividers, bike + parking lanes)
-static void cross_markings(float cx,float cy,float b,float startd,float reach){
+// markings along one arm: the typed cross-section. TWO start datums: the CENTRE markings (centreline/median +
+// driving dividers) start at `cstd` — pushed past the turn bay so they don't draw over the median splitter; the
+// KERB-side lanes (bike/parking) start at `kstd` (the corner clearance), since they sit at the kerb and are
+// unaffected by a central turn bay (the fix: a turn bay no longer shoves the bike lane back off the arm).
+static void cross_markings(float cx,float cy,float b,float kstd,float cstd,float reach){
     float dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
-    float x0=cx+dx*startd, y0=cy+dy*startd, x1=cx+dx*reach, y1=cy+dy*reach;
+    float cx0=cx+dx*cstd, cy0=cy+dy*cstd, x1=cx+dx*reach, y1=cy+dy*reach;
     float inner = drive_inner();                            // driving lanes start here (outside the median)
     if (medOn){                                             // a raised centre median (light-grey + kerbs)
-        lane_band(cx,cy,b, 0, MEDHW, +1, startd,reach, CLR_LIGHT_GREY);
-        lane_band(cx,cy,b, 0, MEDHW, -1, startd,reach, CLR_LIGHT_GREY);
-        edge_line(cx,cy,b, MEDHW,+1, startd,reach, CLR_BROWNISH_BLACK);
-        edge_line(cx,cy,b, MEDHW,-1, startd,reach, CLR_BROWNISH_BLACK);
+        lane_band(cx,cy,b, 0, MEDHW, +1, cstd,reach, CLR_LIGHT_GREY);
+        lane_band(cx,cy,b, 0, MEDHW, -1, cstd,reach, CLR_LIGHT_GREY);
+        edge_line(cx,cy,b, MEDHW,+1, cstd,reach, CLR_BROWNISH_BLACK);
+        edge_line(cx,cy,b, MEDHW,-1, cstd,reach, CLR_BROWNISH_BLACK);
     } else {
-        dashed(x0,y0,x1,y1,CLR_YELLOW);                     // the centreline (no median)
+        dashed(cx0,cy0,x1,y1,CLR_YELLOW);                   // the centreline (no median)
     }
     for (int k=1;k<lanesPer;k++){                           // dashed driving-lane dividers
         float o=inner+k*LANEW;
-        dashed(x0+nx*o,y0+ny*o, x1+nx*o,y1+ny*o, CLR_WHITE);
-        dashed(x0-nx*o,y0-ny*o, x1-nx*o,y1-ny*o, CLR_WHITE);
+        dashed(cx0+nx*o,cy0+ny*o, x1+nx*o,y1+ny*o, CLR_WHITE);
+        dashed(cx0-nx*o,cy0-ny*o, x1-nx*o,y1-ny*o, CLR_WHITE);
     }
     // PARKING (inboard of the bike lane) — #8: ends in a CLEAR ZONE back from the junction (no parking near it)
     if (parkOn){
-        float pi=park_inner(); float ps=startd+PCLEAR;
+        float pi=park_inner(); float ps=kstd+PCLEAR;
         float px0=cx+dx*ps, py0=cy+dy*ps;
         edge_line(cx,cy,b, pi,+1, ps,reach, CLR_WHITE);     // inner solid line, only past the clear zone
         edge_line(cx,cy,b, pi,-1, ps,reach, CLR_WHITE);
@@ -266,13 +269,14 @@ static void cross_markings(float cx,float cy,float b,float startd,float reach){
                      (int)(qx+nx*s*(pi+PARKW)),(int)(qy+ny*s*(pi+PARKW)),CLR_WHITE);
             }
     }
-    // BIKE lane (outermost, at the kerb) — runs the full arm; it WRAPS the corner via corner_bike() (drawn there)
+    // BIKE lane (outermost, at the kerb) — runs the full arm from the corner clearance; WRAPS the corner via
+    // corner_bike(). Keyed to kstd (not cstd) so a turn bay never pushes it back off the arm.
     if (bikeOn){
         float bi=bike_inner();
-        lane_band(cx,cy,b, bi, bi+BIKEW, +1, startd,reach, CLR_BROWN);
-        lane_band(cx,cy,b, bi, bi+BIKEW, -1, startd,reach, CLR_BROWN);
-        edge_line(cx,cy,b, bi,+1, startd,reach, CLR_WHITE); // inner (carriageway-side) edge line
-        edge_line(cx,cy,b, bi,-1, startd,reach, CLR_WHITE);
+        lane_band(cx,cy,b, bi, bi+BIKEW, +1, kstd,reach, CLR_BROWN);
+        lane_band(cx,cy,b, bi, bi+BIKEW, -1, kstd,reach, CLR_BROWN);
+        edge_line(cx,cy,b, bi,+1, kstd,reach, CLR_WHITE);   // inner (carriageway-side) edge line
+        edge_line(cx,cy,b, bi,-1, kstd,reach, CLR_WHITE);
     }
 }
 // Pass 3 (#5b, OPTIONAL): the straight-through bike CROSSING — "elephant's feet", a dashed row of terracotta
@@ -649,11 +653,16 @@ void draw(void){
                   (int)(ox-nx*HW),(int)(oy-ny*HW),(int)(ox+nx*HW),(int)(oy+ny*HW)};
         polyfill(q,4,CLR_DARK_GREY);
     }
+    if (bikeOn){                                                       // the bike lane CIRCULATES — a terracotta ring
+        circfill((int)cx,(int)cy,(int)ICR,        CLR_BROWN);          // just inside the kerb (the outer circulatory),
+        circfill((int)cx,(int)cy,(int)(ICR-BIKEW),CLR_DARK_GREY);      // carved back to a BIKEW-wide ring; it meets the
+        circ((int)cx,(int)cy,(int)(ICR-BIKEW),CLR_WHITE);             // approach bike lanes at each (reopened) mouth
+    }
     draw_island(cx,cy);
     draw_circulation(cx,cy);
     for (int i=0;i<n;i++){                                              // per approach: cross-section, splitter, give-way, crossing
         float b=brg[i];
-        cross_markings(cx,cy,b, ICR+3, REACH);                         // #4: the typed lanes now render on the approaches too
+        cross_markings(cx,cy,b, ICR+3, ICR+3, REACH);                  // #4: the typed lanes render on the approaches (no turn bay here)
         draw_splitter(cx,cy,b, ICR, 16);                               // teardrop splitter (deflect + ped refuge)
         give_way(cx,cy,b, ICR+1.5f, HW);                               // yield line at the circulatory edge
         if (peds) draw_crosswalk(cx,cy,b,HW, ICR+3);                    // crossing set back behind the give-way
@@ -680,9 +689,9 @@ void draw(void){
         // (arm_face). Every mouth marking — stop bar, crosswalk, median, turn bay, arrow — keys off this
         // `mouth` datum, NOT df, so they sit at the rounded mouth instead of poking back into the fillet.
         float mouth = df + cornerR;
-        float startd = mouth + 3;
-        if (turnLanes && mouth+POCKET+PTAPER+3 > startd) startd = mouth+POCKET+PTAPER+3;
-        cross_markings(cx,cy,b,startd,REACH);
+        float kstd = mouth + 3;                            // kerb-side lanes (bike/parking): just past the corner
+        float cstd = (turnLanes && mouth+POCKET+PTAPER+3 > kstd) ? mouth+POCKET+PTAPER+3 : kstd;  // centre: past the turn bay
+        cross_markings(cx,cy,b,kstd,cstd,REACH);
         float dx=ux(b),dy=uy(b), ix=ux(b-90),iy=uy(b-90);
         if (turnLanes){
             // #2: the channelizing splitter draws ONLY when there's no continuous median; with a median, the

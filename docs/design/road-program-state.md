@@ -140,6 +140,11 @@ offsets their own way — they predate the lane model. Collected issues:
   because it's contextual (signalised vs priority), exactly "some junctions want it, others don't". Spec'd the
   3-state cycle (60). (#7 transition-zone polish left as acceptable — the unmarked junction box is normal, and the
   bike crossing now optionally carries the lane through.)
+- ✓ **Bike-lane composition follow-ups** (2026-06-22) — the bike lane now shows where the other treatments are:
+  (a) with TURN LANES, `cross_markings` split into a kerb-side datum (bike/parking, at the corner clearance) and
+  a centre datum (centreline/median/dividers, pushed past the turn bay) — a central turn bay no longer shoves the
+  kerb-side bike lane off the arm; (b) at the ROUNDABOUT, the bike lane CIRCULATES — a terracotta ring just inside
+  the kerb that meets the approach bike lanes at each mouth.
 
 ## Known deferrals (pick up when convenient)
 
