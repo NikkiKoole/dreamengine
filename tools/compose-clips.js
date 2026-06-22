@@ -29,8 +29,11 @@
 // pixelize · radial · smoothleft/…  (our iris≈circleopen, wipe≈wipeleft, dissolve≈dissolve).
 //
 // Clips of different sizes are letterboxed (nearest-neighbour, pixels stay crisp) onto the
-// target canvas. Clips bake with audio by default; a silent clip gets silence so the
-// crossfade still lines up.  Flags: --fps --crf --size WxH  (override the manifest).
+// target canvas. A reel is a standalone *watchable* file, so it's NEAREST-upscaled at encode
+// time (default 3×) and written yuv444p — crisp in any video player (the native clips rely on
+// the gallery's CSS image-rendering:pixelated, which a raw player doesn't apply). Clips bake
+// with audio by default; a silent clip gets silence so the crossfade still lines up.
+// Flags / `# meta`: --fps --crf --size WxH --scale N  (N = integer nearest upscale; `# scale N`).
 
 const fs   = require('fs')
 const path = require('path')
@@ -56,7 +59,7 @@ if (!out) out = reelName ? path.join(REELS_OUT, `${reelName}.webm`) : path.join(
 out = path.resolve(out)
 
 // ── parse the manifest ────────────────────────────────────────
-const meta = { fps: 30, crf: 28, size: null, xtype: 'fade', xdur: 0.5 }
+const meta = { fps: 30, crf: 28, size: null, scale: 3, xtype: 'fade', xdur: 0.5 }
 const shots = []
 for (const raw of fs.readFileSync(manifest, 'utf8').split('\n')) {
   const line = raw.trim()
@@ -65,6 +68,7 @@ for (const raw of fs.readFileSync(manifest, 'utf8').split('\n')) {
   if ((m = line.match(/^#\s*fps\s+(\d+)/)))        { meta.fps  = +m[1]; continue }
   if ((m = line.match(/^#\s*crf\s+(\d+)/)))        { meta.crf  = +m[1]; continue }
   if ((m = line.match(/^#\s*size\s+(\d+)x(\d+)/))) { meta.size = [+m[1], +m[2]]; continue }
+  if ((m = line.match(/^#\s*scale\s+(\d+)/)))      { meta.scale = +m[1]; continue }
   if ((m = line.match(/^#\s*xfade\s+(\w+)\s+([\d.]+)/))) { meta.xtype = m[1]; meta.xdur = +m[2]; continue }
   if (line.startsWith('#')) continue
   const [refPart, xPart] = line.split('|').map(s => s.trim())
@@ -80,6 +84,7 @@ if (shots.length < 2) { console.error('a reel needs at least 2 clips'); process.
 if (opt('--fps', null)) meta.fps = +opt('--fps')
 if (opt('--crf', null)) meta.crf = +opt('--crf')
 if (opt('--size', null)) { const s = opt('--size').match(/(\d+)x(\d+)/); if (s) meta.size = [+s[1], +s[2]] }
+if (opt('--scale', null)) meta.scale = +opt('--scale')
 
 // ── probe each clip: duration + size + has-audio ──────────────
 const ffprobe = (a) => spawnSync('ffprobe', ['-v', 'error', ...a], { encoding: 'utf8' }).stdout.trim()
@@ -90,7 +95,11 @@ for (const s of shots) {
   s.hasAudio = ffprobe(['-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', s.file]).length > 0
   if (s.dur <= 0) { console.error('could not read duration of', s.file); process.exit(1) }
 }
-const [W, H] = meta.size || [shots[0].w, shots[0].h]
+// canvas = base size × an integer NEAREST upscale, so the reel is crisp in any video
+// player (unlike the native clips, which rely on the gallery's CSS image-rendering:pixelated).
+const base = meta.size || [shots[0].w, shots[0].h]
+const S = Math.max(1, meta.scale)
+const W = base[0] * S, H = base[1] * S
 
 // clamp each transition shorter than both neighbouring clips (xfade can't outlast a clip)
 for (let i = 1; i < shots.length; i++) {
@@ -128,10 +137,10 @@ const filter = [...vparts, ...aparts, ...chain].join(';')
 fs.mkdirSync(path.dirname(out), { recursive: true })
 const ffArgs = ['-y', ...inputs, '-filter_complex', filter,
   '-map', `[${vcur}]`, '-map', `[${acur}]`,
-  '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv420p', '-crf', String(meta.crf), '-b:v', '0',
+  '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv444p', '-crf', String(meta.crf), '-b:v', '0',
   '-c:a', 'libopus', '-b:a', '128k', out]
 
-console.log(`composing ${shots.length} clips → ${path.relative(mk.ROOT_DIR, out)}  (${W}×${H} @ ${meta.fps}fps, crf ${meta.crf})`)
+console.log(`composing ${shots.length} clips → ${path.relative(mk.ROOT_DIR, out)}  (${W}×${H} = ${S}× nearest @ ${meta.fps}fps, crf ${meta.crf})`)
 shots.forEach((s, i) => console.log(`  ${i === 0 ? '▸' : `↳ ${shots[i].xtype} ${shots[i].xdur}s`}  ${s.ref}  (${s.dur.toFixed(1)}s${s.hasAudio ? '' : ', silent'})`))
 const r = spawnSync('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
 if (r.status !== 0) { console.error(r.stderr?.toString() || 'ffmpeg failed'); process.exit(1) }
