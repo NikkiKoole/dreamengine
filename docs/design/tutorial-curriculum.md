@@ -3,7 +3,10 @@
 > **Exploratory.** A plan (2026-06-03) for the next wave of tutorial carts, sourced from
 > studying the [Nerdy Teachers PICO-8 course](https://nerdyteachers.com/PICO-8/). Companion
 > to [`cart-library-direction.md`](cart-library-direction.md) — that memo says *stop cloning
-> games, fill the tutorial cliff*; this is the actual lesson list. Not a committed backlog;
+> games, fill the tutorial cliff*; this is the actual lesson list. See also
+> [`teaching-gaps.md`](teaching-gaps.md) — the measured API-coverage evidence (mouse/camera/
+> audio-fx/touch/3D are used heavily but taught by zero tutorials) that ranks what to add first.
+> Not a committed backlog;
 > re-check the shipped set before building.
 
 ## The principle: adapt the arc, rewrite in C

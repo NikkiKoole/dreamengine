@@ -45,6 +45,7 @@ docs/
 │   ├── physics-notes.md  brainstorm: a tiny in-engine physics layer? (sparked by ragdoll.c; nothing decided)
 │   ├── probe-carts.md   LEDGER (kept current): which cart was built to answer which API question, and the verdicts
 │   ├── cart-library-direction.md  snapshot of the ~201-cart shelf + opinionated "what carts to build next" (tutorial on-ramp, more toys, the few missing teachable games; NOT more clones)
+│   ├── teaching-gaps.md       what the API offers but no tutorial teaches — mouse/camera/audio-fx/touch/3D gaps, ranked; measured from cart-index.js + api-usage.js; the attack list for the on-ramp
 │   ├── tutorial-curriculum.md  plan for the next wave of tutorial carts (25+): the language-fundamentals / collision / whole-game-capstone tracks, adapted from the Nerdy Teachers PICO-8 course (adapt the arc, rewrite in C)
 │   ├── cart-survey-api-priorities.md   cart-evidence-first memo: what real carts prove, filtered through existing decisions
 │   ├── api-usage-audit.md   which API functions the carts actually use (least-used tail, the 11 never-used, doc-coverage gaps); re-runnable via `node tools/api-usage.js`
