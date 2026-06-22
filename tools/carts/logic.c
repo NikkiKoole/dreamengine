@@ -118,6 +118,11 @@ static int  stepReq = 0;        // single-step request when paused
 static int  usingMouse = 1;
 static int  pmx = -1, pmy = -1; // previous mouse pos (to detect movement)
 static int  btnCellX = -1, btnCellY = -1;   // cell holding a momentary button press
+static int  lastCursor = -1;    // last shape pushed to mouse_cursor() (only push on change)
+
+static void set_cursor(int kind) {
+    if (kind != lastCursor) { mouse_cursor(kind); lastCursor = kind; }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -405,11 +410,14 @@ static void draw_palette(void) {
     rectfill(PANEL_X, 0, PANEL_W, SCREEN_H, CLR_BROWNISH_BLACK);
     line(PANEL_X, 0, PANEL_X, SCREEN_H - 1, CLR_DARKER_GREY);
     int rh = 13;
+    int mx = mouse_x(), my = mouse_y();
+    int hov = (mx >= PANEL_X && my >= 2) ? (my - 2) / rh : -1;
     for (int t = 0; t < CT_COUNT; t++) {
         const Meta *m = &META[t];
         int ry = 2 + t * rh;
         int sel = (t == brush);
-        if (sel) rectfill(PANEL_X + 1, ry - 1, PANEL_W - 2, rh, CLR_DARK_BLUE);
+        if (sel)           rectfill(PANEL_X + 1, ry - 1, PANEL_W - 2, rh, CLR_DARK_BLUE);
+        else if (t == hov) rectfill(PANEL_X + 1, ry - 1, PANEL_W - 2, rh, CLR_DARKER_GREY);
         // swatch
         if (m->draw == DS_CIRCLE) circfill(PANEL_X + 6, ry + 4, 3, m->acol);
         else if (t == CT_EMPTY)   rect(PANEL_X + 3, ry + 1, 7, 7, CLR_DARKER_GREY);
@@ -507,6 +515,13 @@ void update(void) {
     int mx = mouse_x(), my = mouse_y();
     if (mx != pmx || my != pmy) usingMouse = 1;
     pmx = mx; pmy = my;
+
+    // ---- pointer shape reflects the active tool / region ----
+    if (mx >= PANEL_X)            set_cursor(CURSOR_HAND);       // palette: clickable list
+    else if (my >= STRIP_Y)       set_cursor(CURSOR_DEFAULT);    // status strip
+    else if (brush == CT_HAND)    set_cursor(CURSOR_HAND);       // grid + hand: press things
+    else if (brush == CT_EMPTY)   set_cursor(CURSOR_NO);         // grid + eraser: removal
+    else                          set_cursor(CURSOR_CROSSHAIR);  // grid + a tool: precise placing
 
     // ---- brush selection (keys) ----
     select_brush_keys();

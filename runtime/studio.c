@@ -1969,6 +1969,18 @@ bool mouse_released(int button) { return inp_mouse_released(button); }
 float mouse_wheel(void)         { return GetMouseWheelMove(); }
 int mouse_world_x(void)         { return (int)GetScreenToWorld2D((Vector2){ (float)mouse_x(), (float)mouse_y() }, cam).x; }
 int mouse_world_y(void)         { return (int)GetScreenToWorld2D((Vector2){ (float)mouse_x(), (float)mouse_y() }, cam).y; }
+void mouse_cursor(int kind) {
+    int rl;
+    switch (kind) {
+        case CURSOR_HAND:      rl = MOUSE_CURSOR_POINTING_HAND; break;
+        case CURSOR_CROSSHAIR: rl = MOUSE_CURSOR_CROSSHAIR;     break;
+        case CURSOR_MOVE:      rl = MOUSE_CURSOR_RESIZE_ALL;    break;
+        case CURSOR_TEXT:      rl = MOUSE_CURSOR_IBEAM;         break;
+        case CURSOR_NO:        rl = MOUSE_CURSOR_NOT_ALLOWED;   break;
+        default:               rl = MOUSE_CURSOR_DEFAULT;       break;
+    }
+    SetMouseCursor(rl);
+}
 
 static int last_cls_color = 0;   // remembered so smooth_zoom's offscreen clears to the same bg
 void cls(int color) {

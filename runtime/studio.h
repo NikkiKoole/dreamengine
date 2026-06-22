@@ -116,6 +116,15 @@ float mouse_wheel(void);             // scroll this frame: + up / - down, 0 if n
 int   mouse_world_x(void);           // mouse x in world space — undoes the active camera() shift (handy for click-on-world)
 int   mouse_world_y(void);           // mouse y in world space — undoes the active camera() shift
 
+// mouse cursor shape — set it when it changes, not every frame (works on web too: maps to the canvas CSS cursor)
+#define CURSOR_DEFAULT   0   // normal arrow
+#define CURSOR_HAND      1   // pointing hand — for clickable / pressable things
+#define CURSOR_CROSSHAIR 2   // crosshair — for precise placement / drawing
+#define CURSOR_MOVE      3   // four-way move arrows — for dragging / panning
+#define CURSOR_TEXT      4   // I-beam — for text-entry fields
+#define CURSOR_NO        5   // not-allowed — for an illegal action
+void  mouse_cursor(int kind);        // set the pointer shape (CURSOR_*); persists until you change it
+
 // keyboard (desktop) — for letters/digits just pass the character: key('A'), key('0')
 #ifndef STUDIO_INTERNAL              // these match raylib's KeyboardKey values; hidden from studio.c to avoid clashing with them
 #define KEY_SPACE      32
