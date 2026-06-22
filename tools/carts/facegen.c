@@ -1032,11 +1032,34 @@ void update(void) {
     }
 }
 
+// ── mini avatar — the SAME face at ~100px, as it'd appear as an in-game ID/
+// contact icon. zoom_rect() copies the rendered head region (frame-so-far)
+// scaled down into a framed card; no re-draw, no second code path to drift.
+static void draw_avatar(Npc *n) {
+    // tight capture box around the head + a little neck/collar
+    int top    = FCY - VH - 18; if (top < 2) top = 2;
+    int bottom = FCY + VH + 22;
+    int sx = FCX - HW - 12, sy = top;
+    int sw = 2 * (HW + 12), sh = bottom - sy;
+    int dh = 100, dw = sw * dh / sh;
+    if (dw > 82) dw = 82;                 // keep the card clear of the big head's pixels
+    int dx = 10, dy = 18;
+    // ID card frame
+    rectfill(dx - 4, dy - 4, dw + 8, dh + 8, CLR_DARKER_BLUE);
+    rect(dx - 4, dy - 4, dw + 8, dh + 8, CLR_LIGHT_GREY);
+    zoom_rect(sx, sy, sw, sh, dx, dy, dw, dh);    // the same face, shrunk
+    rect(dx - 1, dy - 1, dw + 2, dh + 2, CLR_DARK_GREY);
+    font(FONT_TINY);
+    print_centered("100px", dx + dw/2, dy + dh + 3, CLR_LIGHT_GREY);
+    font(FONT_NORMAL);
+}
+
 void draw(void) {
     draw_bg(&me);
     int total = bark_total(&me);
     int talking = shown_chars < total;
     int mouth_open = (frame()/4) % 2;
     draw_portrait(&me, talking, mouth_open);
+    draw_avatar(&me);
     draw_box(&me);
 }
