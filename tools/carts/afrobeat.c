@@ -43,6 +43,7 @@
 #include "studio.h"
 #include "radio.h"
 #include "improv.h"
+#include "ampcab.h"   // opt-in guitar amp/cab voicing for the "amp" guitars chair
 #include <stdio.h>
 #include <math.h>
 
@@ -424,6 +425,16 @@ static void apply_chair(int idx) {
         }
         instrument_pan(I_GTR1, -0.55f);                  // the weave, spread wide
         instrument_pan(I_GTR2,  0.55f);
+        // sel 2 = "amp": run the clean voicing through the CHIME amp/cab (presence + a
+        // touch of even-harmonic warmth, glued) — opt-in, the default (sel 0) is untouched.
+        if (sel == 2) {
+            ampcab_apply(I_GTR1, 1, 0.35f, AMP_VC[1].lo, AMP_VC[1].mid, AMP_VC[1].hi, 0.20f);
+            ampcab_apply(I_GTR2, 1, 0.35f, AMP_VC[1].lo, AMP_VC[1].mid, AMP_VC[1].hi, 0.20f);
+        } else {                                         // bare again — clear any amp residue
+            instrument_drive(I_GTR1, 0); instrument_drive(I_GTR2, 0);
+            instrument_eq(I_GTR1, 0, 0, 0); instrument_eq(I_GTR2, 0, 0, 0);
+            glue(0, 0.0f, 8, 120);
+        }
     } else if (idx == chHorn) {
         hornsOn = (sel != 2);
         if (sel == 0) {                                  // "sax+tpt" — the full section
@@ -463,7 +474,7 @@ static void apply_band_overrides(void) {
 }
 
 static void setup_instruments(void) {
-    chGtr  = rad_chair(&band, "guitars", "muted", "clean",  NULL, NULL);
+    chGtr  = rad_chair(&band, "guitars", "muted", "clean",  "amp", NULL);
     chHorn = rad_chair(&band, "horns",   "sax+tpt", "sax only", "off", NULL);
     chOrg  = rad_chair(&band, "comp",    "organ", "rhodes", NULL, NULL);
     for (int i = 0; i < band.n; i++) apply_chair(i);     // base sounds (sel 0)

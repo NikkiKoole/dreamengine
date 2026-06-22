@@ -52,6 +52,22 @@ vibraphone on slower ballads.
 
 ---
 
+## afrobeat
+
+**Current:** two interlocking `INSTR_GUITAR`s (muted tenor + open rhythm, panned wide),
+horn section (REED sax + BRASS trumpet), organ/Rhodes comp — all on the `B` "guitars/
+horns/comp" chairs.
+
+**Retrofit shipped (opt-in):** the **guitars** chair gained a third option, **"amp"** — the
+clean voicing run through the `ampcab.h` **CHIME** voicing (DRIVE_ASYM presence + airy EQ +
+light power-amp glue), for highlife/funk electric-guitar presence and a bit of cohesion
+between the two guitars. **Default stays sel 0 (muted), so the shipped sound is untouched;**
+A/B confirmed level-safe (peak/RMS unchanged, 0 clipped). The first amp/cab retrofit onto an
+older station — the model for any future one (always opt-in via a chair, never forced). The
+acoustic-guitar stations (`air` nylon, `mariachi` vihuela) deliberately do **not** get it.
+
+---
+
 ## jangle
 
 **Current:** chorus guitar (TRI+pitch-LFO / INSTR_PLUCK A/B), sine bass,
