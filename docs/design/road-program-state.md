@@ -114,9 +114,11 @@ early; exhaust what can be built in isolation first.
 
 **Stage 1 — finish the at-grade JUNCTION (Facet A).** Close out `streetlab`'s junction view, increasing effort:
 1. ✓ **Bulb-outs / curb extensions** (done 2026-06-22) — `draw_bulb()` fills the parking clear-zone (#8) with a
-   sidewalk-grey kerb extension + inboard kerb, auto when pavement+parking, and the zebra shortens to the
-   driving lanes (sits between the bulbs). Bike off ⇒ a classic bulb to the kerb; bike on ⇒ a corner refuge
-   island inboard of the wrapping bike lane (a protected-intersection corner). Reuses the existing lane offsets.
+   sidewalk-grey kerb extension + inboard kerb, auto when pavement+parking **and no kerb-side bike lane**, and the
+   zebra shortens to the driving lanes (sits between the bulbs). Per-side start datums (`side_clearance`) so it
+   works under skew. NOT drawn with a bike lane on: a classic bulb (parking→sidewalk) and a protected bike-lane
+   corner (bike-wrap + corner island) are different treatments — the bike-wrap is the corner treatment there, and
+   stacking a straight bulb under the wrapping lane frays at skewed corners. (Protected-corner island = future.)
 2. **Corner free-right slip + triangular channelizing island** *(medium)* — the corner treatment deferred in
    M3; reuses the island primitive (median/splitter/roundabout-island lineage). The one notable item left.
 3. **Minor markings pass** *(low, batched)* — TWLTL (two-way centre left-turn) + right-turn pockets + driveways.

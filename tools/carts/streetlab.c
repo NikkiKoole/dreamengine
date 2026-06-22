@@ -732,8 +732,10 @@ void draw(void){
             }
             turn_arrow(cx,cy,b,mouth,CLR_WHITE);
         }
-        // Stage-1 #1: bulb-out — the kerb extends into the parking clear-zone, narrowing the crossing (pavement+parking).
-        if (peds && parkOn) draw_bulb(cx,cy,b,kstdP,kstdM);
+        // Stage-1 #1: bulb-out — the kerb extends into the parking clear-zone, narrowing the crossing. Only when
+        // there's NO kerb-side bike lane: a classic bulb (parking→sidewalk) and a protected bike-lane corner are
+        // different treatments, and with bike on the corner-wrap IS the corner treatment (stacking them frays under skew).
+        if (peds && parkOn && !bikeOn) draw_bulb(cx,cy,b,kstdP,kstdM);
         // M5: zebra crosswalk at the mouth. With bulbs it shortens to the driving lanes (the zebra sits between the bulbs).
         if (peds) draw_crosswalk(cx,cy,b, parkOn?drive_outer():HW, mouth);
         // #3: stop bar across the inbound DRIVING lanes only (drive-on-right: inbound = the b-90 side) — it spans
