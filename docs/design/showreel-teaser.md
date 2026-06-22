@@ -79,8 +79,8 @@ rough versions of 5/7 from the standalone carts) into one reel. Requires no game
 it requires finishing the **clip/showreel pipeline** we already scoped:
 1. Author good demo tracks per cart → `tools/clips/<cart>/NN-label.{script,beats,rec}`.
 2. Bake them — `make-gif.js --all` (today only 1 of ~10 committed tracks is baked).
-3. **Audio in clips** — mux `--wav` into the bake (clips are silent today; for sloop's engine,
-   flank's gunfire, roadhouse's music this is non-negotiable). See [`cart-clips.md`](cart-clips.md) "Sound".
+3. ~~**Audio in clips**~~ — **SHIPPED (2026-06-22):** webm/mp4 clips now carry sound (rendered
+   in the same `play.js` pass, muxed as Opus/AAC). See [`cart-clips.md`](cart-clips.md) "Sound".
 4. **Stitch** — `tools/compose-clips.js` (Layer B in [`transitions.md`](transitions.md)): glue
    the shots with [transitions](transitions.md) (the LUMA/iris/wipe work) into one video.
 

@@ -32,6 +32,9 @@
 //                                              for a hero clip, ~40 for max-tiny grid loops)
 //   --start <n>     drop the first n cart-frames (skip boot/title)
 //   --format <fmt>  webm | webp | gif | mp4 | apng   (default webm)
+//   --mute          skip audio. By default webm/mp4 carry SOUND — the cart's audio is
+//                   rendered to WAV in the SAME deterministic run and muxed in (webm=Opus,
+//                   mp4=AAC). gif/webp/apng can't carry audio and are always silent.
 //   --clip <label>  file into editor/public/clips/<name>/NN-label.<ext>, auto-numbering NN
 //                   (a bare "NN-label" is verbatim). --recipe implies this, verbatim.
 //   --out <path>    explicit output (overrides --clip/--recipe; default docs/media/<name>.<ext>)
@@ -150,17 +153,24 @@ function resolveOut() {
 }
 const out = resolveOut()
 
-// ── 1. dump frames via play.js (headless) ─────────────────────
+// ── 1. dump frames (+ render audio) via play.js (headless) ────
 const dumpDir = path.join(mk.BUILD_DIR, '.gif', name)
 fs.rmSync(dumpDir, { recursive: true, force: true })
 fs.mkdirSync(dumpDir, { recursive: true })
 
+// Audio: only containers that carry it (webm/mp4); opt out with --mute. The WAV is
+// rendered in the SAME deterministic play.js pass as the frames, so picture and sound
+// share one timeline and stay in sync (no second run, no drift).
+const wavPath = path.join(dumpDir, 'audio.wav')
+const wantAudio = /^(webm|mp4)$/.test(format) && !hasFlag('--mute')
+
 const playArgs = [path.join(__dirname, 'play.js'), name, playMode]
 if (playFile) playArgs.push(playFile)
 playArgs.push('--headless', '--frames', String(frames), '--dump', dumpDir, '--dump-every', String(every))
+if (wantAudio) playArgs.push('--wav', wavPath)
 for (const f of ['--seed', '--bpm', '--screen']) if (opt(f, null)) playArgs.push(f, opt(f, null))
 
-console.log(`\n[1/3] dumping ${frames} frames (every ${every} → ${fps}fps) of '${name}' ${from ? `from ${path.basename(from)}` : '(headless run)'}…`)
+console.log(`\n[1/3] dumping ${frames} frames (every ${every} → ${fps}fps)${wantAudio ? ' + audio' : ''} of '${name}' ${from ? `from ${path.basename(from)}` : '(headless run)'}…`)
 if (spawnSync('node', playArgs, { stdio: 'inherit' }).status !== 0) { console.error('frame dump failed'); process.exit(1) }
 
 // ── 2. select + renumber frames into a contiguous %05d sequence ──
@@ -179,19 +189,26 @@ const up = scale > 1 ? `scale=iw*${scale}:ih*${scale}:flags=neighbor` : 'null'  
 const ff = (a) => { const r = spawnSync('ffmpeg', a, { stdio: ['ignore', 'pipe', 'pipe'] })
   if (r.status !== 0) { console.error(r.stderr?.toString() || 'ffmpeg failed'); process.exit(1) } }
 
+// audio input (webm/mp4 only): the WAV from the same run, shifted by --start so the
+// dropped boot frames drop the matching audio. -shortest trims any rounding tail.
+const haveAudio = wantAudio && fs.existsSync(wavPath) && fs.statSync(wavPath).size > 1024
+const aIn = haveAudio ? [...(start > 0 ? ['-ss', (start / 60).toFixed(3)] : []), '-i', wavPath] : []
+
 if (format === 'gif') {
   const pal = path.join(dumpDir, 'palette.png')
   ff(['-y', '-framerate', String(fps), '-i', inPat, '-vf', `${up},palettegen=max_colors=256:stats_mode=full`, pal])
   ff(['-y', '-framerate', String(fps), '-i', inPat, '-i', pal, '-lavfi', `${up}[x];[x][1:v]paletteuse=dither=none`, '-loop', '0', out])
 } else if (format === 'webm') {
-  ff(['-y', '-framerate', String(fps), '-i', inPat, '-vf', up, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv444p', '-crf', String(crf), '-b:v', '0', '-an', out])
+  ff(['-y', '-framerate', String(fps), '-i', inPat, ...aIn, '-vf', up, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv444p', '-crf', String(crf), '-b:v', '0',
+      ...(haveAudio ? ['-c:a', 'libopus', '-b:a', '128k', '-shortest'] : ['-an']), out])
 } else if (format === 'webp') {
   ff(['-y', '-framerate', String(fps), '-i', inPat, '-vf', up, '-c:v', 'libwebp', '-lossless', '1', '-q:v', '100', '-loop', '0', out])
 } else if (format === 'apng') {
   ff(['-y', '-framerate', String(fps), '-i', inPat, '-vf', up, '-c:v', 'apng', '-plays', '0', out])
 } else if (format === 'mp4') {
-  ff(['-y', '-framerate', String(fps), '-i', inPat, '-vf', `${up},pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p`, '-c:v', 'libx264', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out])
+  ff(['-y', '-framerate', String(fps), '-i', inPat, ...aIn, '-vf', `${up},pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p`, '-c:v', 'libx264', '-crf', String(crf), '-pix_fmt', 'yuv420p',
+      ...(haveAudio ? ['-c:a', 'aac', '-b:a', '128k', '-shortest'] : []), '-movflags', '+faststart', out])
 }
 
 if (!hasFlag('--keep')) fs.rmSync(dumpDir, { recursive: true, force: true })
-console.log(`[3/3] ✓ ${path.relative(mk.ROOT_DIR, out)}  (${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${all.length} frames @ ${fps}fps${scale > 1 ? `, ${scale}×` : ', native'})`)
+console.log(`[3/3] ✓ ${path.relative(mk.ROOT_DIR, out)}  (${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${all.length} frames @ ${fps}fps${scale > 1 ? `, ${scale}×` : ', native'}${haveAudio ? ', +audio' : ''})`)
