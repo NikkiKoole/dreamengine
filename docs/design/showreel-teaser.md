@@ -88,10 +88,13 @@ it requires finishing the **clip/showreel pipeline** we already scoped:
 > **v0 teaser BUILT (2026-06-22): `tools/reels/teaser.reel` → `editor/public/reels/teaser.webm`**
 > (27 s, with sound). Five shots across the pillars: **sloop** (drive) → **interiors** (explore)
 > → **dialogue** (talk) → **thecut** (make) → **moog** (sound), with fade/wipe/circle-open/
-> dissolve cuts. Tracks committed at `tools/clips/<cart>/01-*.{script}`. **flank (combat) is
-> deferred** from this cut — it needs mouse-aim, which is awkward to script blind; revisit with a
-> keyboard/spectate track or a hand-recorded `.rec`. This is the *vision* cut, not a continuous
-> game (see the honesty note below).
+> dissolve cuts. Tracks committed at `tools/clips/<cart>/01-*.{script}`. This is the *vision*
+> cut, not a continuous game (see the honesty note below).
+>
+> **A second reel — `tools/reels/mixtape.reel` → `editor/public/reels/mixtape.webm`** (23 s,
+> action + sound): flank → turfwar → beatcrypt → epiano → spatial. Notably **flank's combat
+> shot is keyboard-only** — it boots straight into the fight, so walking in trips the squad's
+> tactical AI (no mouse-aim needed; mouse is only for the player's own shooting).
 
 v0 is honest if it's a *vision* teaser ("here's the world we're building") and dishonest if it
 implies the shots are one continuous game — a call for the maker (below).

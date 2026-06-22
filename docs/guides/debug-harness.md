@@ -313,9 +313,12 @@ gallery applies CSS `image-rendering:pixelated`; a raw reel can't rely on that.)
 (`editor/public/clips/<cart>/*.webm`), the manifest (`tools/reels/<name>.reel`), and the reel
 (`editor/public/reels/<name>.webm`). Worked example: `tools/reels/teaser.reel`.
 
-> Mouse-driven carts (aim, drag) are awkward to script blind — author them as a hand-recorded
-> `.rec` (`node tools/play.js <cart> record out.rec`) instead of a `.script`. `flank`'s combat
-> is the standing example (deferred from the first teaser for this reason).
+> Mouse-driven carts (aim, drag) are awkward to script blind — for a clip that needs the
+> *player* to aim/drag, hand-record a `.rec` (`node tools/play.js <cart> record out.rec`)
+> instead of a `.script`. But often you don't need the mouse: `flank` looks like a mouse cart,
+> yet a great combat shot is pure keyboard — it boots straight into the fight, so walking in
+> (`W`/`A`/`S`/`D`) gets the unaware squad to spot you and go loud (the tactical-AI showcase);
+> the mouse is only for the player's own shooting (`tools/clips/flank/01-firefight.script`).
 
 ## WAV capture — hear what the engine actually rendered
 
