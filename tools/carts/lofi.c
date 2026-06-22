@@ -64,10 +64,10 @@ typedef struct {
 } MoodDef;
 static const MoodDef MOOD[NMO] = {
     //  name      tlo tsp sc pk  rev   wow   sat   efb   ems
-    { "sleepy",   72,  8, 0, 2, 0.50f,0.22f,0.34f,0.26f, 400 },
-    { "dusty",    82,  8, 1, 2, 0.48f,0.18f,0.42f,0.22f, 340 },
-    { "rainy",    78,  8, 2, 1, 0.52f,0.20f,0.30f,0.32f, 440 },
-    { "sunny",    88, 10, 0, 1, 0.44f,0.14f,0.26f,0.18f, 300 },
+    { "sleepy",   72,  8, 0, 2, 0.50f,0.34f,0.34f,0.26f, 400 },
+    { "dusty",    82,  8, 1, 2, 0.48f,0.30f,0.42f,0.22f, 340 },
+    { "rainy",    78,  8, 2, 1, 0.52f,0.36f,0.30f,0.32f, 440 },
+    { "sunny",    88, 10, 0, 1, 0.44f,0.24f,0.26f,0.18f, 300 },
 };
 // the POCKET dial — drag scale 0 (on the grid) .. 1.0 (deep Dilla)
 static const float POCKETV[4] = { 0.0f, 0.45f, 0.75f, 1.0f };
@@ -131,7 +131,7 @@ static void new_song(double pos, unsigned seed) {
     tempo = MOOD[sng.mood].tlo + srnd(MOOD[sng.mood].tspan);
     bpm(tempo);
     apply_fx();
-    songBase = (long)pos + 8;
+    songBase = (long)pos + 4;
     epInit = false; bassLast = 40;
     songCount++;
 }
@@ -293,7 +293,7 @@ void update(void) {
     if (ev & RAD_EV_REPLAY) new_song(pos, sng.seed);
     if (ev & RAD_EV_BACK)   { unsigned s = rad_hist_back(&rs); if (s) new_song(pos, s); }
     if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
-    if (ev & RAD_EV_POWER)  { if (!radioOn) { note_off_all(); sfx(-1); vinylH = -1; varispeed(1.0f); }
+    if (ev & RAD_EV_POWER)  { if (!radioOn) { note_off_all(); sfx(-1); vinylH = -1; }
                               else { scheduled = (long)pos; apply_fx(); } }
     if (ev & RAD_EV_TONE)   apply_tone();
 
@@ -305,11 +305,9 @@ void update(void) {
         if (scheduled - songBase >= 64L * 16) fresh_song(pos);
         for (int i = 0; i < 4; i++) chord_label(nowChord[i], 8, LOOPS[sng.loop].c[i % loop_len()]);
         platter += dt() * (tempo / 60.0f) * 1.2f;       // the turntable spins with the tempo
-        // GENTLE CASSETTE WOBBLE — varispeed wow (slow) + flutter (faster), centered on 1.0 so
-        // the tempo holds; depth from the mood's tape wow (sweep-safe, ridden live). Kept subtle.
-        float wd = MOOD[sng.mood].wow * 0.06f;
-        varispeed(1.0f + wd * sinf((float)now() * 0.42f) + wd * 0.4f * sinf((float)now() * 1.9f));
-    } else varispeed(1.0f);
+    }
+    // (cassette wobble now lives in tape()'s wow/flutter — no varispeed: holding it off-speed
+    //  keeps the resample ring engaged and drifts the timing; tape's wow is built for this.)
     vu *= 0.90f; if (vu > 12) vu = 12;
 
 #ifdef DE_TRACE
