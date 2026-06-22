@@ -19,8 +19,6 @@
 //
 //   click a car → HONK     click the light / L → flip it     SPACE → re-roll the fleet
 //
-// TEACHES: gene-based-procgen, car-following, traffic-sim, no-sprite-vehicles
-// LINEAGE: rectangular-vehicle style after boulderdash / donkeykong; first traffic-sim toy
 
 // ── palettes ────────────────────────────────────────────────────────────────────
 static const int CARCOL[] = {

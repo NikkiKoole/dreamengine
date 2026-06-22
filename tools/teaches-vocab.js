@@ -32,13 +32,11 @@ module.exports = {
     'euclidean-rhythm', 'adsr-envelope', 'generative-melody', 'chord-voicing', 'drum-synthesis',
     'analog-voice-modeling', 'swing-timing', 'sonification', 'audio-occlusion', 'positional-audio',
     'wavetable-drawing',
-    // harvested from carts another agent tagged via .c headers before we centralised on
-    // index.json. Kept verbatim so their work isn't lost; some are granular (no-engine-dsp,
-    // nested-ring-ui, held-voice-fx-sends, coupled-vol-cutoff) — candidates to normalise.
-    'self-oscillation', 'feedback-throw', 'pitch-lfo', 'held-voice-fx-sends', 'gesture-instrument',
-    'generative-sequencer', 'polymeter', 'nested-ring-ui', 'lowpass-gate', 'vactrol-envelope',
-    'coupled-vol-cutoff', 'wavefolder', 'west-coast-synthesis', 'polyphonic-voice-pool',
-    'combinational-logic', 'sequential-logic', 'signal-propagation', 'shift-register', 'probability',
-    'scale-quantize', 'no-engine-dsp',
+    // synthesis / sequencer / logic concepts from carts another agent tagged via .c
+    // headers; normalised to the reusable ones (granular/one-off coinages dropped or
+    // folded: vactrol-envelope + coupled-vol-cutoff → lowpass-gate, etc).
+    'self-oscillation', 'generative-sequencer', 'polymeter', 'lowpass-gate', 'wavefolder',
+    'west-coast-synthesis', 'combinational-logic', 'sequential-logic', 'shift-register',
+    'scale-quantize',
   ],
 };
