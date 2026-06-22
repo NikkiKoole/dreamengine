@@ -161,25 +161,17 @@ static float arm_face(const float *brg,int n,int i,float HW){
     if (gN>0.5f&&gN<179.5f){ float d=HW/tanf(gN*0.5f*DEG2RAD); if(d>m)m=d; }
     return m;
 }
-static void chevron(float x,float y,float dir,float L,int col){       // a small arrowhead pointing `dir`
-    float tx=x+ux(dir)*L, ty=y+uy(dir)*L;
-    line((int)x,(int)y,(int)tx,(int)ty,col);
-    line((int)tx,(int)ty,(int)(tx+ux(dir+150)*3),(int)(ty+uy(dir+150)*3),col);
-    line((int)tx,(int)ty,(int)(tx+ux(dir-150)*3),(int)(ty+uy(dir-150)*3),col);
-}
-// LEFT-TURN BAY: widen the inbound side (drive-on-right ⇒ the b-90 side) by one lane over [df,df+POCKET],
-// tapering back over PTAPER. The turn lane is the inbound lane next to the centreline; the widening makes
-// room for it. Drawn as asphalt + a kerb on the new outer edge.
-static void draw_turnbay(float cx,float cy,float b,float HW,float df){
+// LEFT-TURN ARROW: shaft pointing into the junction (inbound) with a head hooking LEFT (across the
+// centreline) — the glyph that marks a lane as turn-only. Lives in the arm's local frame ⇒ skew-safe.
+static void turn_arrow(float cx,float cy,float b,float df,int col){
     float ax=ux(b),ay=uy(b), ix=ux(b-90),iy=uy(b-90);     // axis + inbound-side normal
-    float s0=df, s1=df+POCKET, s2=df+POCKET+PTAPER;
-    int q[8]={ (int)(cx+ax*s0+ix*HW),         (int)(cy+ay*s0+iy*HW),
-               (int)(cx+ax*s0+ix*(HW+LANEW)), (int)(cy+ay*s0+iy*(HW+LANEW)),
-               (int)(cx+ax*s1+ix*(HW+LANEW)), (int)(cy+ay*s1+iy*(HW+LANEW)),
-               (int)(cx+ax*s2+ix*HW),         (int)(cy+ay*s2+iy*HW) };
-    polyfill(q,4,CLR_DARK_GREY);
-    line(q[2],q[3],q[4],q[5],CLR_BROWNISH_BLACK);          // kerb: pocket outer edge
-    line(q[4],q[5],q[6],q[7],CLR_BROWNISH_BLACK);          // kerb: taper back to the carriageway
+    float bx=cx+ax*(df+9)+ix*(LANEW*0.5f), by=cy+ay*(df+9)+iy*(LANEW*0.5f);   // base, in the inner inbound lane
+    float tx=cx+ax*(df+2)+ix*(LANEW*0.5f), ty=cy+ay*(df+2)+iy*(LANEW*0.5f);   // tip, nearer the stop bar
+    line((int)bx,(int)by,(int)tx,(int)ty,col);                                // shaft (inbound)
+    float hx=tx+ux(b+90)*3, hy=ty+uy(b+90)*3;                                 // hook LEFT across the centreline
+    line((int)tx,(int)ty,(int)hx,(int)hy,col);
+    line((int)hx,(int)hy,(int)(hx+ux(b-30)*3),(int)(hy+uy(b-30)*3),col);      // arrowhead on the hook
+    line((int)hx,(int)hy,(int)(hx+ux(b+150)*3),(int)(hy+uy(b+150)*3),col);
 }
 // RAISED MEDIAN SPLITTER (the channelizing island): a thin island on the centreline from df out to
 // df+POCKET+PTAPER with a rounded nose upstream — separates opposing traffic and frames the left-turn bay.
@@ -244,10 +236,6 @@ void draw(void){
         }
     }
 
-    // M3: turn-bay asphalt (widen the inbound side near each mouth) — laid before the curb returns so the
-    // corner fillets/kerbs draw on top where they meet.
-    if (turnLanes) for (int i=0;i<n;i++) draw_turnbay(cx,cy, brg[i], HW, arm_face(brg,n,i,HW));
-
     // curb returns: one per CONVEX gap between adjacent arms (skip the 180° straight back of a T)
     for (int i=0;i<n;i++){
         float bA=brg[i], bB=brg[(i+1)%n];
@@ -267,18 +255,20 @@ void draw(void){
         float startd = df + cornerR + 3;
         if (turnLanes && df+POCKET+PTAPER+3 > startd) startd = df+POCKET+PTAPER+3;
         arm_markings(cx,cy,b,HW,startd,REACH);
-        float dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90), ix=ux(b-90),iy=uy(b-90);
+        float dx=ux(b),dy=uy(b), ix=ux(b-90),iy=uy(b-90);
         if (turnLanes){
             draw_median(cx,cy,b,df);                       // the channelizing island on the centreline
-            // left-turn arrowhead in the bay (inbound lane next to the median), pointing toward the hub
-            float qx=cx+dx*(df+6)+ix*(LANEW*0.5f), qy=cy+dy*(df+6)+iy*(LANEW*0.5f);
-            chevron(qx,qy, b+180, 6, CLR_WHITE);
+            // mark the inner inbound lane (next to the median) as the LEFT-TURN lane: a SOLID white
+            // delineation from the stop bar back over the bay, where the dashed dividers leave off. No
+            // carriageway widening — the lane lives inside the existing road, so it's skew-safe.
+            if (lanesPer>=2)
+                line((int)(cx+dx*df+ix*LANEW),(int)(cy+dy*df+iy*LANEW),
+                     (int)(cx+dx*(df+POCKET)+ix*LANEW),(int)(cy+dy*(df+POCKET)+iy*LANEW),CLR_WHITE);
+            turn_arrow(cx,cy,b,df,CLR_WHITE);
         }
-        // stop bar across the inbound half (drive-on-right: inbound lanes sit on the b-90 side); the turn
-        // bay adds a lane, so the bar spans HW+LANEW there.
-        float bar = turnLanes ? HW+LANEW : HW;
+        // stop bar across the inbound lanes (drive-on-right: inbound sits on the b-90 side)
         float mx=cx+dx*(df+1), my=cy+dy*(df+1);
-        line((int)mx,(int)my,(int)(mx+ix*bar),(int)(my+iy*bar),CLR_WHITE);
+        line((int)mx,(int)my,(int)(mx+ix*HW),(int)(my+iy*HW),CLR_WHITE);
     }
 
     // ── HUD ──
