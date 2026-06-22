@@ -15,13 +15,20 @@
 //                both curb lines (radius R kept SMALL — it slows turns + shortens the pedestrian crossing,
 //                the opposite goal of a high-speed ramp). curb_return() is the closed-form tangent-arc
 //                construction (pure fn of K, the two edge directions, R) — and the first spec() target.
-// Next milestones (mirror roadlab's arc): M2 skew + the T (3-corner) family · M3 turn lanes / pockets +
-//                channelizing islands · M4 the street WEB (network topology — grid/cul-de-sac/radial, the
-//                Parish-Müller / tensor-field generators from §8). Then a seed-driven world emits it.
-//   Controls: on-screen ui.h toolbar (clickable; keyboard too). [ ] curb radius · -/+ lanes.
+//   MILESTONE 2: SKEW + the T (3-leg) family. Like roadlab's leg layer: a junction is a list of LEGS, each
+//                an arm at a `bearing`; the arms are laid out from the legs, NOTHING hardcoded to 90°. The
+//                curb-return grammar was already angle-agnostic (it takes arbitrary edge directions), so it
+//                re-solves for free — only the STAGE generalised (rotated bands; corners = where adjacent
+//                inner edges cross). `skew` tilts the crossing street; `T` drops the north arm → 3 legs, 2
+//                corners (the straight "back" of the through road has no corner). count_corners() is pure.
+// Next milestones (mirror roadlab's arc): M3 turn lanes / pockets + channelizing islands · M4 the street
+//                WEB (network topology — grid/cul-de-sac/radial, the Parish-Müller / tensor-field generators
+//                from §8). Then a seed-driven world emits it.
+//   Controls: on-screen ui.h toolbar (clickable; keyboard too). [ ] curb radius · -/= lanes · ,/. skew · t = T.
 
 #define LANEW    8     // one lane width (px)
-#define TOOLBAR  30    // bottom control strip height
+#define TOOLBAR  44    // bottom control strip height (two rows)
+#define DEG2RAD  0.01745329252f
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -82,21 +89,77 @@ static void dashed(float x0,float y0,float x1,float y1,int col){       // a dash
         line((int)(x0+dx*a),(int)(y0+dy*a),(int)(x0+dx*b),(int)(y0+dy*b),col); }
 }
 
-// ── state ──
+// ── LEG model (mirrors roadlab): a junction is a list of arms, each at a bearing. The two arms of a street
+//    are collinear (b and b+180). `crossing` marks the street that SKEWS; T drops the north arm. ──
+#define NLEG 4
+typedef struct { float base; int crossing; } Leg;          // base bearing (deg); crossing = part of skewable street
+static Leg legs[NLEG] = {
+    {   0, 0 },   // 0 East  (through street)
+    {  90, 1 },   // 1 South (crossing street — skews)
+    { 180, 0 },   // 2 West  (through street)
+    { 270, 1 },   // 3 North (crossing street — skews)  ← dropped for a T
+};
 static float cornerR = 8.f;   // curb-return radius (the headline at-grade knob)
-static int   lanesPer = 2;     // lanes PER DIRECTION (street width = 2 * lanesPer)
+static int   lanesPer = 2;    // lanes PER DIRECTION (street width = 2 * lanesPer)
+static int   skew     = 0;    // degrees added to the crossing street (the N–S pair)
+static int   isT      = 0;    // drop the north arm → a T-junction
+
+static float leg_bearing(int i){ float b=legs[i].base + (legs[i].crossing?(float)skew:0.f); return fmodf(b+3600,360); }
+static int   leg_present(int i){ return !(isT && i==3); }              // T drops North (leg 3)
+
+// present legs, sorted by bearing 0..360; fills idx[]/brg[], returns n
+static int present_legs(int *idx, float *brg){
+    int n=0;
+    for (int i=0;i<NLEG;i++) if (leg_present(i)){ idx[n]=i; brg[n]=leg_bearing(i); n++; }
+    for (int a=0;a<n;a++) for (int b=a+1;b<n;b++) if (brg[b]<brg[a]){
+        float tb=brg[a]; brg[a]=brg[b]; brg[b]=tb; int ti=idx[a]; idx[a]=idx[b]; idx[b]=ti; }
+    return n;
+}
+// number of CONVEX corners = adjacent gaps strictly between 0 and 180 (a 180° gap is the straight T back). PURE.
+static int count_corners(void){
+    int idx[NLEG]; float brg[NLEG]; int n=present_legs(idx,brg);
+    if (n<2) return 0;
+    int c=0;
+    for (int i=0;i<n;i++){ float g=fmodf(brg[(i+1)%n]-brg[i]+3600,360); if (g>0.5f && g<179.5f) c++; }
+    return c;
+}
+// corner K = where the two band edges FACING the gap between arms A,B cross (each offset HW toward bisector bm)
+static void edge_corner(float cx,float cy,float HW,float bA,float bB,float bm,float*kx,float*ky){
+    float dAx=ux(bA),dAy=uy(bA), nAx=ux(bA+90),nAy=uy(bA+90);
+    float sA = (nAx*ux(bm)+nAy*uy(bm))>0 ? 1.f : -1.f;     // pick the edge on the gap (grass) side
+    float PAx=cx+sA*HW*nAx, PAy=cy+sA*HW*nAy;
+    float dBx=ux(bB),dBy=uy(bB), nBx=ux(bB+90),nBy=uy(bB+90);
+    float sB = (nBx*ux(bm)+nBy*uy(bm))>0 ? 1.f : -1.f;
+    float PBx=cx+sB*HW*nBx, PBy=cy+sB*HW*nBy;
+    float det = dAx*(-dBy) - (-dBx)*dAy;                   // solve PA + t·DA = PB + u·DB
+    if (fabsf(det)<1e-4f){ *kx=(PAx+PBx)*0.5f; *ky=(PAy+PBy)*0.5f; return; }
+    float t = ((PBx-PAx)*(-dBy) - (-dBx)*(PBy-PAy)) / det;
+    *kx=PAx+dAx*t; *ky=PAy+dAy*t;
+}
+// markings along one arm (centre line + lane dividers), from startd out to the screen
+static void arm_markings(float cx,float cy,float b,float HW,float startd,float reach){
+    float dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
+    float x0=cx+dx*startd, y0=cy+dy*startd, x1=cx+dx*reach, y1=cy+dy*reach;
+    dashed(x0,y0,x1,y1,CLR_YELLOW);
+    for (int k=1;k<lanesPer;k++){
+        dashed(x0+nx*k*LANEW,y0+ny*k*LANEW, x1+nx*k*LANEW,y1+ny*k*LANEW, CLR_WHITE);
+        dashed(x0-nx*k*LANEW,y0-ny*k*LANEW, x1-nx*k*LANEW,y1-ny*k*LANEW, CLR_WHITE);
+    }
+}
 
 void update(void){
     if (keyp('['))  cornerR -= 2;
     if (keyp(']'))  cornerR += 2;
     if (keyp('-'))  lanesPer--;
     if (keyp('='))  lanesPer++;
+    if (keyp(','))  skew -= 5;
+    if (keyp('.'))  skew += 5;
+    if (keyp('t')||keyp('T')) isT = !isT;
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
     if (lanesPer<1) lanesPer=1; if (lanesPer>3) lanesPer=3;
+    if (skew<-60) skew=-60;    if (skew>60) skew=60;
 #ifdef DE_TRACE
-    { CurbReturn c=curb_return(100,100,270,0,cornerR);     // NE-shaped corner, for the trace/spec
-      watch("cornerR", "%.1f", cornerR);
-      watch("fillet_ox", "%.1f", c.ox); watch("fillet_oy", "%.1f", c.oy); }
+    watch("cornerR","%.1f",cornerR); watch("skew","%d",skew); watch("corners","%d",count_corners());
 #endif
 }
 
@@ -113,72 +176,84 @@ void draw(void){
     cls(CLR_DARK_GREEN);
     float cx=SCREEN_W/2.f, cy=(SCREEN_H-TOOLBAR)/2.f;
     float HW=lanesPer*LANEW;                               // carriageway half-width (both directions)
-    int   top=(int)(SCREEN_H-TOOLBAR);
+    float REACH=SCREEN_W+SCREEN_H;                         // run each arm well past the screen edge
+    int idx[NLEG]; float brg[NLEG]; int n=present_legs(idx,brg);
 
-    // casing (kerb base): strips 1px proud of the asphalt, drawn first so a 1px curb edge shows
-    rectfill(0,(int)(cy-HW-1), SCREEN_W,(int)(2*HW+2), CLR_BROWNISH_BLACK);
-    rectfill((int)(cx-HW-1),0, (int)(2*HW+2), top,     CLR_BROWNISH_BLACK);
-    // asphalt strips (the cross)
-    rectfill(0,(int)(cy-HW), SCREEN_W,(int)(2*HW), CLR_DARK_GREY);
-    rectfill((int)(cx-HW),0, (int)(2*HW), top,     CLR_DARK_GREY);
-
-    // the 4 curb returns. K = a box corner; the two edges leave K up/down the two streets.
-    CurbReturn ne=curb_return(cx+HW,cy-HW,270,  0,cornerR);   // up + east
-    CurbReturn se=curb_return(cx+HW,cy+HW, 90,  0,cornerR);   // down + east
-    CurbReturn sw=curb_return(cx-HW,cy+HW, 90,180,cornerR);   // down + west
-    CurbReturn nw=curb_return(cx-HW,cy-HW,270,180,cornerR);   // up + west
-    fill_corner(cx+HW,cy-HW, ne,cornerR,CLR_DARK_GREY); fill_corner(cx+HW,cy+HW, se,cornerR,CLR_DARK_GREY);
-    fill_corner(cx-HW,cy+HW, sw,cornerR,CLR_DARK_GREY); fill_corner(cx-HW,cy-HW, nw,cornerR,CLR_DARK_GREY);
-    stroke_corner(ne,cornerR,CLR_BROWNISH_BLACK); stroke_corner(se,cornerR,CLR_BROWNISH_BLACK);
-    stroke_corner(sw,cornerR,CLR_BROWNISH_BLACK); stroke_corner(nw,cornerR,CLR_BROWNISH_BLACK);
-
-    // ── road markings (only OUTSIDE the intersection box) ──
-    // yellow centre line separates opposing directions; white dashed dividers separate same-direction lanes,
-    // so `lanes/dir` reads as actual lanes (the road also widens per lane, like a real road).
-    for (int s=0;s<2;s++){                                 // horizontal street, the two arms (W then E)
-        float x0=s?cx+HW:0, x1=s?SCREEN_W:cx-HW;
-        dashed(x0,cy, x1,cy, CLR_YELLOW);
-        for (int k=1;k<lanesPer;k++){ dashed(x0,cy-k*LANEW,x1,cy-k*LANEW,CLR_WHITE);
-                                      dashed(x0,cy+k*LANEW,x1,cy+k*LANEW,CLR_WHITE); }
+    // asphalt = the union of arm bands (collinear arm pairs ⇒ a continuous strip ⇒ the centre is always
+    // covered, no gap). casing pass (1px proud) first, asphalt pass second, so a kerb edge shows at the
+    // outer band edges while the central overlap stays clean asphalt.
+    for (int pass=0; pass<2; pass++){
+        float w = HW + (pass?0:1);
+        int col = pass ? CLR_DARK_GREY : CLR_BROWNISH_BLACK;
+        for (int i=0;i<n;i++){
+            float b=brg[i], dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
+            float ox=cx+dx*REACH, oy=cy+dy*REACH;
+            int q[8]={(int)(cx+nx*w),(int)(cy+ny*w),(int)(cx-nx*w),(int)(cy-ny*w),
+                      (int)(ox-nx*w),(int)(oy-ny*w),(int)(ox+nx*w),(int)(oy+ny*w)};
+            polyfill(q,4,col);
+        }
     }
-    for (int s=0;s<2;s++){                                 // vertical street, the two arms (N then S)
-        float y0=s?cy+HW:0, y1=s?top:cy-HW;
-        dashed(cx,y0, cx,y1, CLR_YELLOW);
-        for (int k=1;k<lanesPer;k++){ dashed(cx-k*LANEW,y0,cx-k*LANEW,y1,CLR_WHITE);
-                                      dashed(cx+k*LANEW,y0,cx+k*LANEW,y1,CLR_WHITE); }
+
+    // curb returns: one per CONVEX gap between adjacent arms (skip the 180° straight back of a T)
+    for (int i=0;i<n;i++){
+        float bA=brg[i], bB=brg[(i+1)%n];
+        float gap=fmodf(bB-bA+3600,360);
+        if (gap<=0.5f || gap>=179.5f) continue;
+        float bm=bA+gap*0.5f, kx,ky;
+        edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
+        CurbReturn c=curb_return(kx,ky, bA, bB, cornerR);
+        fill_corner(kx,ky, c, cornerR, CLR_DARK_GREY);
+        stroke_corner(c, cornerR, CLR_BROWNISH_BLACK);
     }
-    // white stop bars — at each box face, across the inbound (right-hand) lanes only (drive-on-right)
-    line((int)(cx-HW),(int)(cy-HW),(int)(cx),   (int)(cy-HW),CLR_WHITE);  // N face (S-bound stops, west half)
-    line((int)(cx),   (int)(cy+HW),(int)(cx+HW),(int)(cy+HW),CLR_WHITE);  // S face (N-bound stops, east half)
-    line((int)(cx-HW),(int)(cy),   (int)(cx-HW),(int)(cy+HW),CLR_WHITE);  // W face (E-bound stops, south half)
-    line((int)(cx+HW),(int)(cy-HW),(int)(cx+HW),(int)(cy),   CLR_WHITE);  // E face (W-bound stops, north half)
+
+    // markings + stop bar per arm. startd clears the arm's corners (acute corners reach further down the arm).
+    for (int i=0;i<n;i++){
+        float b=brg[i];
+        float gPrev=fmodf(brg[i]-brg[(i-1+n)%n]+3600,360);
+        float gNext=fmodf(brg[(i+1)%n]-brg[i]+3600,360);
+        float maxdc=0;
+        if (gPrev>0.5f && gPrev<179.5f){ float dc=HW/tanf(gPrev*0.5f*DEG2RAD); if(dc>maxdc)maxdc=dc; }
+        if (gNext>0.5f && gNext<179.5f){ float dc=HW/tanf(gNext*0.5f*DEG2RAD); if(dc>maxdc)maxdc=dc; }
+        float startd = maxdc + cornerR + 3;
+        arm_markings(cx,cy,b,HW,startd,REACH);
+        // stop bar across the inbound half (drive-on-right: inbound lanes sit on the b-90 side)
+        float dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
+        float mx=cx+dx*(startd-1), my=cy+dy*(startd-1);
+        line((int)mx,(int)my,(int)(mx-nx*HW),(int)(my-ny*HW),CLR_WHITE);
+    }
 
     // ── HUD ──
     font(FONT_SMALL);
-    char b[64];
-    print("streetlab - at-grade crossing (M1: curb returns)", 4,5, CLR_WHITE);
-    snprintf(b,sizeof b,"curb radius %dpx   -   small = tight turn, short ped crossing",(int)cornerR);
-    print(b, 4,13, CLR_ORANGE);
+    char bb[64];
+    print("streetlab - at-grade junction (M2: skew + the T)", 4,5, CLR_WHITE);
+    snprintf(bb,sizeof bb,"%s   -   %d corners   -   curb radius %dpx", isT?"T-junction":"4-way crossing",
+             count_corners(), (int)cornerR);
+    print(bb, 4,13, CLR_ORANGE);
 
-    // ── toolbar ──
+    // ── toolbar (two rows) ──
     rectfill(0, SCREEN_H-TOOLBAR, SCREEN_W, TOOLBAR, CLR_BLACK);
     int d;
-    print("curb radius", 4, SCREEN_H-22, CLR_ORANGE);
-    d=step_btn(64, SCREEN_H-25, 14, "-", "+"); if (d) cornerR+=2*d;
-    snprintf(b,sizeof b,"%d",(int)cornerR); print(b, 98, SCREEN_H-22, CLR_LIGHT_GREY);
-    print("lanes/dir", 124, SCREEN_H-22, CLR_WHITE);
-    d=step_btn(180, SCREEN_H-25, 14, "-", "+"); if (d) lanesPer+=d;
-    snprintf(b,sizeof b,"%d",lanesPer); print(b, 214, SCREEN_H-22, CLR_LIGHT_GREY);
+    print("curb radius", 4, SCREEN_H-37, CLR_ORANGE);
+    d=step_btn(64, SCREEN_H-40, 14, "-", "+"); if (d) cornerR+=2*d;
+    snprintf(bb,sizeof bb,"%d",(int)cornerR); print(bb, 98, SCREEN_H-37, CLR_LIGHT_GREY);
+    print("lanes/dir", 124, SCREEN_H-37, CLR_WHITE);
+    d=step_btn(180, SCREEN_H-40, 14, "-", "+"); if (d) lanesPer+=d;
+    snprintf(bb,sizeof bb,"%d",lanesPer); print(bb, 214, SCREEN_H-37, CLR_LIGHT_GREY);
+    print("skew", 4, SCREEN_H-19, CLR_PINK);
+    d=step_btn(64, SCREEN_H-22, 14, "-", "+"); if (d) skew+=5*d;
+    snprintf(bb,sizeof bb,"%d",skew); print(bb, 98, SCREEN_H-19, CLR_LIGHT_GREY);
+    if (ui_button(124, SCREEN_H-22, 90, 13, isT?"topology: T":"topology: 4-way")) isT=!isT;
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
     if (lanesPer<1) lanesPer=1; if (lanesPer>3) lanesPer=3;
+    if (skew<-60) skew=-60;    if (skew>60) skew=60;
 
     ui_end();
     font(FONT_NORMAL);
 }
 
 // ── spec() — the cart-logic safety net (docs/design/spec-harness.md). streetlab is the FIRST cart to
-//    carry one: curb_return() is a pure, deterministic geometry fn (clean seam), so it pins exactly the
-//    M1 primitive. Run: `node tools/spec.js streetlab` (or all carts: `node tools/spec.js`). ──
+//    carry one: curb_return() + count_corners() are pure, deterministic fns (clean seam), so they pin the
+//    M1 primitive AND the M2 topology. Run: `node tools/spec.js streetlab` (or all: `node tools/spec.js`). ──
 #ifdef DE_SPEC
 #include "spec.h"
 static float sp_dist(float ax,float ay,float bx,float by){ return sqrtf((ax-bx)*(ax-bx)+(ay-by)*(ay-by)); }
@@ -189,7 +264,7 @@ static int   sp_near(float a,float b){ float d=a-b; return (d<0?-d:d) < 0.2f; }
 static void  sp_tap(int k){ key_down(k); step(1); key_up(k); step(1); }    // one clean press→release edge
 
 void spec(void){
-    // ── curb_return() geometry — the M1 primitive, pinned ──
+    // ── curb_return() geometry — the M1 primitive, pinned (perpendicular) ──
     CurbReturn c = curb_return(100,100, 270, 0, 10.f);                     // perpendicular corner, edges up + east, R=10
     expect(sp_near(sp_dline(100,100,270, c.ox,c.oy), 10.f), "fillet centre is R from curb edge 1 (tangent)");
     expect(sp_near(sp_dline(100,100,  0, c.ox,c.oy), 10.f), "fillet centre is R from curb edge 2 (tangent)");
@@ -204,6 +279,17 @@ void spec(void){
 
     CurbReturn zero = curb_return(100,100,270,0, 0.f);
     expect(sp_near(zero.ox,100) && sp_near(zero.oy,100),    "R=0 collapses to a sharp corner (no fillet)");
+
+    // ── M2: tangency holds at a SKEWED (non-90°) corner — proves the grammar is angle-agnostic ──
+    CurbReturn sk = curb_return(100,100, 270, 40, 10.f);                   // a 70° corner
+    expect(sp_near(sp_dline(100,100,270, sk.ox,sk.oy), 10.f), "skew: centre is R from edge 1 (tangent at 70deg)");
+    expect(sp_near(sp_dline(100,100, 40, sk.ox,sk.oy), 10.f), "skew: centre is R from edge 2 (tangent at 70deg)");
+
+    // ── M2: topology — count_corners() is pure over (skew, isT) ──
+    skew=0;  isT=0;  expect_eq(count_corners(), 4, "4-way crossing has 4 corners");
+    skew=20; isT=0;  expect_eq(count_corners(), 4, "a skewed 4-way still has 4 corners");
+    skew=0;  isT=1;  expect_eq(count_corners(), 2, "a T-junction has 2 corners (straight back, no corner)");
+    skew=0;  isT=0;                                                        // restore for the loop test
 
     // ── update() loop — the radius knob clamps (proves step() + key injection drive the cart) ──
     for (int i=0;i<40;i++) sp_tap(']');                                    // hammer the + key past the cap
