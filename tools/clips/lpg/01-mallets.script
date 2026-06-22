@@ -1,0 +1,22 @@
+# lpg — a west-coast mallet melody; watch each bar glow then dull as the gate closes
+# frames 420  fps 60  scale 3  crf 30
+click 12 33 95
+click 32 105 95
+click 52 177 95
+click 72 105 95
+click 92 213 95
+click 112 177 95
+click 132 105 95
+click 152 177 95
+click 172 69 95
+click 192 141 95
+click 212 213 95
+click 232 141 95
+click 252 285 95
+click 272 213 95
+click 292 177 95
+click 312 105 95
+click 332 33 95
+click 352 177 95
+click 372 285 95
+click 392 177 95

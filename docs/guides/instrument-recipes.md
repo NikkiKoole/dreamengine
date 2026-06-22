@@ -501,6 +501,16 @@ through its own resonant filter, summed; the cutoffs are ridden live from an Alp
 > `instrument_reverb` BEFORE `note_on`** — the sends are sampled at trigger, so a held voice set after
 > never feeds the buses.
 
+### lpg (machine — 8 west-coast marimba bars, from lpg.c)
+
+| recipe | engine | params | notes |
+|---|---|---|---|
+| lpg/bar | TRI | A4 D0 S9 R90 · FILTER_LOW 300–8000 (rides env) · DRIVE_FOLD 0–`fold`×env · held | The low-pass-gate voice: a sustaining triangle whose VCA *and* lowpass close together from one vactrol envelope (note_vol = env, note_cutoff = 300 + 7700·env^1.6 so highs die first), with a wavefolder (note_drive = fold·env) blooming metallic on the strike and settling to a pure tone. 8 voices = a C-pentatonic, 2-octave marimba. |
+
+> The instrument is the **coupling**, not the patch. COUPLE morphs note_cutoff from "always open"
+> (a plain VCA — tone stays bright as it fades) to "tracks the envelope" (the organic plonk). All
+> per-voice (`note_vol`/`note_cutoff`/`note_drive` on `note_on` handles), so it's polyphonic on one slot.
+
 ### loopstation (synth — 7 fixed tracks, from loopstation.c)
 
 | name | engine | recipe | character |

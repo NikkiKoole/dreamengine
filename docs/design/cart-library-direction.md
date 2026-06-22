@@ -223,13 +223,14 @@ etc.) are deliberately deferred.
 | ★★★★★ | **euclid** ✅*shipped 2026-06-22* | Mutable Instruments Grids / Euclidean rhythm | 5 nested drum rings (KICK/SNARE/HAT/OHAT/PERC); dial **density (k hits in n)** + **rotation** live per track → grooves morph in and out generatively | shipped on the `euclid()` Bjorklund helper + the onenote/kaoss drum recipes; **per-track step counts differ → polymeter** (rings drift against each other). SPACE = MUTATE (nudge every density). Selector strip + HITS/STEPS/ROT knobs; arrow keys drive the selected track. The rhythm companion to the others' voices — its loop is exactly what `kaoss` is built to mangle (kept a *separate* cart, not merged, per the one-gesture rule) |
 | ★★★★☆ | **turing** ✅*shipped 2026-06-22* | Music Thing Modular Turing Machine | one **CHAOS** knob slides a shift-register from locked-loop ↔ pure-random, feeding a synth voice + a drum → a self-evolving riff you sculpt by hand | shipped: a cart-side 16-bit shift register (rotate + prob-flip the recirculated bit), read out scale-locked → `INSTR_SAW` Berlin-school voice, bits 0/2 → kick/hat. 16 LEDs you TAP to flip bits by hand + a SEQUENCE strip to watch it lock/drift. CHAOS = lock↔random↔flip-lock; LENGTH/RANGE/TEMPO; SPACE scrambles |
 | ★★★★☆ | **dubsiren** ✅*shipped 2026-06-22* | King Tubby / a dub mixing desk | a wobbling siren oscillator into a huge feedback delay you **throw** (fire bursts) + detune; spring-reverb crash | shipped: two detuned held voices + `note_lfo(LFO_PITCH)` warble → an `echo()` send; the FIRE PAD's X rides feedback past 1.0 (self-osc HOWL), Y rides pitch; `reverb()` splash. 4 siren shapes (whoop/two-tone/ramp/zigzag). **Gotcha found & fixed:** `instrument_echo`/`instrument_reverb` sends are sampled at `note_on` — set them BEFORE `note_on` or held voices never feed the buses. The hands-on twin of the `dub` auto-radio |
-| ★★★☆☆ | **lpg** | Buchla / Make Noise (west-coast) | tap → the voice decays in volume **and** brightness *together* (the lowpass-gate signature) + a wavefolder bonk→bright morph | `INSTR_MALLET`/`USER0` + coupled `note_vol`/`note_cutoff` + waveshaping. The one with the most genuinely *new timbre* |
+| ★★★☆☆ | **lpg** ✅*shipped 2026-06-22* | Buchla / Make Noise (west-coast) | tap → the voice decays in volume **and** brightness *together* (the lowpass-gate signature) + a wavefolder bonk→bright morph | shipped: 8 held `INSTR_TRI` marimba bars, a per-bar vactrol envelope drives `note_vol`+`note_cutoff`+`note_drive` (DRIVE_FOLD) in lockstep. COUPLE knob A/Bs plain-VCA ↔ full-LPG (the teachable bit); FOLD adds harmonics for the gate to chew; bars glow white→wood as the gate closes (you SEE the timbre decay). The genuinely-new timbre, as predicted |
 
-Recommended order: ~~**kaoss** first~~ ✅, ~~**euclid** as its rhythm partner~~ ✅, ~~**turing**~~ ✅,
-~~**dubsiren**~~ ✅ *(all shipped 2026-06-22)*; **lpg** is the last one left. Each should reuse the
-keybed + XY-pad chassis from `onenote.c` / `grenadier.c` (and now the ring-sequencer chassis in
-`euclid.c`, the shift-register + sequence-strip chassis in `turing.c`, the fire-pad + held-voice +
-feedback-throw chassis in `dubsiren.c`).
+Recommended order: ~~**kaoss**~~ ✅, ~~**euclid**~~ ✅, ~~**turing**~~ ✅, ~~**dubsiren**~~ ✅,
+~~**lpg**~~ ✅ — **all five shipped 2026-06-22; the liveset-plaything vein is complete.** The
+reusable chassis they left behind: the keybed + XY-pad (`onenote.c` / `grenadier.c`), the
+ring-sequencer (`euclid.c`), the shift-register + sequence-strip (`turing.c`), the fire-pad +
+held-voice + feedback-throw (`dubsiren.c`), and the held-voice-pool + coupled-envelope LPG
+(`lpg.c`). A future two-handed "jam station" composing several of these is the natural next move.
 
 ### 3. The few genuinely-missing, *teachable* game types
 
