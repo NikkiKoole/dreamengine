@@ -166,11 +166,9 @@ and Sakamoto unprompted.
 
 **Also very doable:**
 
-- **Motorik / Stereolab** — one-chord pulse, strict-8ths motorik kit, Farfisa-ish
-  drones on held voices, maj7 planing on top. The experimental axis. **→ now
-  fully spec'd: [`motorik.md`](motorik.md)** (promoted once `INSTR_ORGAN`
-  unblocked the Farfisa drone; proves THE PROCESS FORM — the first sectionless
-  station).
+- ~~**Motorik / Stereolab**~~ — ✅ shipped as `motorik.c`: one-chord pulse, strict-8ths
+  motorik kit, Farfisa-ish `INSTR_ORGAN` drones, maj7 planing. Proved THE PROCESS FORM —
+  the first sectionless station. Design: [`motorik.md`](motorik.md).
 - **Chicha / Peruvian cumbia** — wobbly surf guitar (jangle's warble at higher
   depth), minor vamps, güiro 16ths. Crate-digger royalty.
 - ~~**Afrobeat**~~ — ✅ shipped as `afrobeat.c`: the interlocking guitars (the
@@ -281,12 +279,12 @@ stations 11–14 ranked the remaining candidates:
 
 | candidate | new brains | what they are |
 |---|---|---|
-| **gamelan** | **4** | seed-rolled TUNING (first exit from 12-TET) · colotomic time (form as nested gong cycles) · kotekan (melody as two interlocking voices, trace-verifiable) · ombak (paired-voice beating as the timbral identity) |
-| **Aphex / IDM wing** | 3 | RHYTHM BRAIN #1: drums as grammar with a volatility knob (0 = loop, 1 = never the same bar) · ratchets (sample-exact sub-hits) · two deliberately CROSSED density curves |
+| ~~**gamelan**~~ | **4** | ✅ shipped `gamelan.c`. seed-rolled TUNING (first exit from 12-TET) · colotomic time (form as nested gong cycles) · kotekan (melody as two interlocking voices, trace-verifiable) · ombak (paired-voice beating as the timbral identity) |
+| ~~**Aphex / IDM wing**~~ | **3** | ✅ shipped `braindance.c` (Path B, drill'n'bass): RHYTHM BRAIN #1 (drums as grammar + volatility knob 0=loop..1=never-repeats), ratchets (sample-exact sub-hits), two CROSSED density curves (sweet top vs violent drums). His OTHER modes are still open — esp. **acid/Analord** (the fast per-step `note_cutoff`/`note_res` squelch, still unclaimed) |
 | **KPM library** | 2 | MOOD METADATA AS THE FRONT DOOR ("give me tension" — the API games actually want; could retrofit the whole family as a mood-keyed library) · the drums-only BREAK as an arrangement feature |
-| **motorik / Stereolab** | 1–2 | THE PROCESS FORM: no sections at all — one unbroken line, accumulation/subtraction as a continuous function of song-time (house's ride, committed to per-song) · the modulation as a once-per-song EVENT (a story beat, not a position). Sneaky-high taste fit (Farfisa+Moog+lounge = exotica∩Plantasia∩ymo) and the best *game-loop* music on the list — no boundaries to interrupt |
+| ~~**motorik / Stereolab**~~ | 1–2 | ✅ shipped `motorik.c`. THE PROCESS FORM: no sections at all — one unbroken line, accumulation/subtraction as a continuous function of song-time (house's ride, committed to per-song) · the modulation as a once-per-song EVENT (a story beat, not a position). The first sectionless station |
 | ~~**Plantasia**~~ | **1** | ✅ shipped `plantasia.c`. The MELODY-FORWARD arrangement — first station where the lead is the protagonist — landed as **THE SONGWRITER (melody brain #3)**: a SEEDED theme-and-variation hook (not the improviser promoted — improv.h is performance-only and can't be pinned; this is a new seeded brain), developed A-A'-B-A + key-lift. Plus the growing-houseplant face and the five track-feels |
-| **Eno / Reich phasing** | 1 | prime-length cells drifting against each other; nearly free |
+| **Eno** ✅ / **Reich** phasing | 1 | ✅ Eno shipped `eno.c` (coprime-length loops in seconds, emergent harmony). **Reich still open** — the same loop engine applied to a repeating melodic CELL with a per-voice step offset; nearly free now |
 | **Boards of Canada** | 1 | systematic MISTUNING as warmth (inconsistent per-voice detune + slow pitch LFOs as tape memory) |
 | ~~**Italo disco**~~ | **0** | ✅ shipped `italo.c` (#20). Pure recombination, as predicted: ymo's arp (→ octave-bounce sequencer bass) + house's pump + citypop's gear change + FM keys + new minor templates. The dessert, served — plus the Simmons tom fill as the one new-to-the-dial gesture |
 
@@ -314,15 +312,15 @@ mistuning. The other half of the engine's expressiveness, mostly unexplored.
 
 **Aphex Twin, decomposed** (the anchor of the batch):
 
-> **SCOPED (2026-06-10) → the `braindance` station, Path B.** Aphex isn't a genre, he's a
+> **✅ SHIPPED → `braindance.c`, Path B (scoped 2026-06-10).** Aphex isn't a genre, he's a
 > *range* (ambient / acid / drill'n'bass / solo piano / hardcore) — too wide for one coherent
-> "texture re-keyed." Decision: **don't** try to be all of him; build the **drill'n'bass /
+> "texture re-keyed." Decision held: **don't** try to be all of him; built the **drill'n'bass /
 > braindance mode only** — the richest in new brains, and the modes we'd skip are already
-> covered (ambient → `ambient.c`, solo piano → `satie.c` / the unbuilt Eno-piano). Full
+> covered (ambient → `ambient.c` / `eno.c`, solo piano → `satie.c` / `eno.c`'s 1/1). Full
 > intent-first design: [`braindance-blind-brief.md`](braindance-blind-brief.md). The three
-> rhythm brains below are the **core engine**; the brief decides the four layers they *don't*
-> cover (the sweet melodic top, the chopped-break question, the mistuning timbre, the lurching
-> form).
+> rhythm brains below are the **core engine**; the brief covered the four layers they *don't*
+> (the sweet melodic top, the chopped-break question, the mistuning timbre, the lurching form).
+> **Still-open Aphex modes:** acid/Analord (the fast per-step `note_cutoff`/`note_res` squelch).
 
 1. **No repeating patterns = drums as composition.** The kit is a GRAMMAR, not
    a pattern: anchors persist (kick near 1, snare backbeat-ish), everything
