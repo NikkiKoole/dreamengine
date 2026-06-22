@@ -1,5 +1,6 @@
 #include "studio.h"
 #include "gestures.h"   // pinch_scale() — two-finger zoom on touch (the wheel has no finger)
+#include "cursor.h"     // pixel mouse cursor (grab while dragging a knob/cable/module/canvas)
 #include <math.h>   // sinf — bakes the org/vox/bel/fld user-wave tables in init()
 
 // MODRACK — a tiny modular synth (see docs/design/modular-synth.md).
@@ -2048,4 +2049,9 @@ void draw(void) {
     }
 
     font(FONT_NORMAL);
+
+    // pixel cursor (screen space — camera was reset above). Grab shape whenever
+    // something is being dragged: a knob, a cable end, a module, or the canvas.
+    int grabbing = held_knob || drag_jack >= 0 || drag_mod >= 0 || panning || palette_drag >= 0;
+    cursor_draw(grabbing ? CUR_GRAB : CUR_ARROW);
 }
