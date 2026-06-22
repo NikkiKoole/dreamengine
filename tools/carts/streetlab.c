@@ -238,7 +238,7 @@ static void lane_band(float cx,float cy,float b,float a,float c,int s,float star
 // driving dividers) start at `cstd` — pushed past the turn bay so they don't draw over the median splitter; the
 // KERB-side lanes (bike/parking) start at `kstd` (the corner clearance), since they sit at the kerb and are
 // unaffected by a central turn bay (the fix: a turn bay no longer shoves the bike lane back off the arm).
-static void cross_markings(float cx,float cy,float b,float kstd,float cstd,float reach){
+static void cross_markings(float cx,float cy,float b,float kstdP,float kstdM,float cstd,float reach){
     float dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
     float cx0=cx+dx*cstd, cy0=cy+dy*cstd, x1=cx+dx*reach, y1=cy+dy*reach;
     float inner = drive_inner();                            // driving lanes start here (outside the median)
@@ -255,28 +255,24 @@ static void cross_markings(float cx,float cy,float b,float kstd,float cstd,float
         dashed(cx0+nx*o,cy0+ny*o, x1+nx*o,y1+ny*o, CLR_WHITE);
         dashed(cx0-nx*o,cy0-ny*o, x1-nx*o,y1-ny*o, CLR_WHITE);
     }
-    // PARKING (inboard of the bike lane) — #8: ends in a CLEAR ZONE back from the junction (no parking near it)
-    if (parkOn){
-        float pi=park_inner(); float ps=kstd+PCLEAR;
-        float px0=cx+dx*ps, py0=cy+dy*ps;
-        edge_line(cx,cy,b, pi,+1, ps,reach, CLR_WHITE);     // inner solid line, only past the clear zone
-        edge_line(cx,cy,b, pi,-1, ps,reach, CLR_WHITE);
-        float L=sqrtf((x1-px0)*(x1-px0)+(y1-py0)*(y1-py0));
-        for (float t=2; t<L; t+=16)                         // bay-delimiter ticks across the parking lane
-            for (int s=-1;s<=1;s+=2){
+    // the kerb-side lanes start PER SIDE (kstdP on the +90 side, kstdM on the -90 side) so a skewed arm's
+    // gentler corner doesn't leave a gap to the corner-wrap. (Both equal on a straight 4-way.)
+    float pi=park_inner(), bi=bike_inner();
+    for (int s=-1;s<=1;s+=2){
+        float kstd = (s>0)?kstdP:kstdM;
+        if (parkOn){                                        // PARKING (inboard) — ends PCLEAR back (the clear zone)
+            float ps=kstd+PCLEAR;
+            edge_line(cx,cy,b, pi,s, ps,reach, CLR_WHITE);
+            float qx0=cx+dx*ps, qy0=cy+dy*ps; float L=sqrtf((x1-qx0)*(x1-qx0)+(y1-qy0)*(y1-qy0));
+            for (float t=2; t<L; t+=16){                     // bay-delimiter ticks
                 float qx=cx+dx*(ps+t), qy=cy+dy*(ps+t);
-                line((int)(qx+nx*s*pi),(int)(qy+ny*s*pi),
-                     (int)(qx+nx*s*(pi+PARKW)),(int)(qy+ny*s*(pi+PARKW)),CLR_WHITE);
+                line((int)(qx+nx*s*pi),(int)(qy+ny*s*pi),(int)(qx+nx*s*(pi+PARKW)),(int)(qy+ny*s*(pi+PARKW)),CLR_WHITE);
             }
-    }
-    // BIKE lane (outermost, at the kerb) — runs the full arm from the corner clearance; WRAPS the corner via
-    // corner_bike(). Keyed to kstd (not cstd) so a turn bay never pushes it back off the arm.
-    if (bikeOn){
-        float bi=bike_inner();
-        lane_band(cx,cy,b, bi, bi+BIKEW, +1, kstd,reach, CLR_BROWN);
-        lane_band(cx,cy,b, bi, bi+BIKEW, -1, kstd,reach, CLR_BROWN);
-        edge_line(cx,cy,b, bi,+1, kstd,reach, CLR_WHITE);   // inner (carriageway-side) edge line
-        edge_line(cx,cy,b, bi,-1, kstd,reach, CLR_WHITE);
+        }
+        if (bikeOn){                                        // BIKE (outermost, at the kerb) — wraps the corner via corner_bike()
+            lane_band(cx,cy,b, bi, bi+BIKEW, s, kstd,reach, CLR_BROWN);
+            edge_line(cx,cy,b, bi,s, kstd,reach, CLR_WHITE);
+        }
     }
 }
 // Pass 3 (#5b, OPTIONAL): the straight-through bike CROSSING — "elephant's feet", a dashed row of terracotta
@@ -299,6 +295,16 @@ static float arm_face(const float *brg,int n,int i,float HW){
     if (gP>0.5f&&gP<179.5f){ float d=HW/tanf(gP*0.5f*DEG2RAD); if(d>m)m=d; }
     if (gN>0.5f&&gN<179.5f){ float d=HW/tanf(gN*0.5f*DEG2RAD); if(d>m)m=d; }
     return m;
+}
+// PER-SIDE corner clearance — a SKEWED arm's two sides face DIFFERENT gaps (one acute, one obtuse), so the
+// kerb-side lanes (bike/parking) must start per side, not at the arm's worst corner (arm_face = the max), or the
+// gentler side leaves a gap to the corner-wrap. For convex gaps the +90 side faces the NEXT arm's gap, the -90
+// side the PREV arm's. Returns that gap's axial corner distance (HW/tan(half)); 0 for a straight/180 gap. PURE.
+static float side_clearance(const float *brg,int n,int i,float HW,int side){
+    float g = (side>0) ? fmodf(brg[(i+1)%n]-brg[i]+3600,360)
+                       : fmodf(brg[i]-brg[(i-1+n)%n]+3600,360);
+    if (g<=0.5f || g>=179.5f) return 0;                     // straight (T back) — no corner on this side
+    return HW/tanf(g*0.5f*DEG2RAD);
 }
 // LEFT-TURN ARROW: shaft pointing into the junction (inbound) with a head hooking LEFT (across the
 // centreline) — the glyph that marks a lane as turn-only. Lives in the arm's local frame ⇒ skew-safe.
@@ -340,14 +346,14 @@ static void draw_crosswalk(float cx,float cy,float b,float HW,float df){
 //    the parking CLEAR ZONE (#8) we already leave, shortening the ped crossing and tightening the turn. Sidewalk-
 //    grey + an inboard kerb edge, in the parking band on both sides of the arm, from the mouth out to where
 //    parking begins. Only with pavement+parking (you bulb INTO the parking lane, never a travel lane). ──
-static void draw_bulb(float cx,float cy,float b,float kstd){
-    float pi=park_inner(), s1=kstd+PCLEAR;
+static void draw_bulb(float cx,float cy,float b,float kstdP,float kstdM){
+    float pi=park_inner();
+    float ax=ux(b),ay=uy(b), nx=ux(b+90),ny=uy(b+90);
     for (int s=-1;s<=1;s+=2){
+        float kstd=(s>0)?kstdP:kstdM, s1=kstd+PCLEAR;       // per side (a skewed corner differs each side)
         lane_band(cx,cy,b, pi, pi+PARKW, s, kstd, s1, CLR_LIGHT_GREY);   // the kerb extension (sidewalk surface)
         edge_line(cx,cy,b, pi, s, kstd, s1, CLR_BROWNISH_BLACK);         // its inboard kerb (against the carriageway)
-        // the nose: a transverse kerb where the bulb tapers back to the parking lane
-        float ax=ux(b),ay=uy(b), nx=ux(b+90),ny=uy(b+90);
-        line((int)(cx+ax*s1+nx*s*pi),(int)(cy+ay*s1+ny*s*pi),
+        line((int)(cx+ax*s1+nx*s*pi),(int)(cy+ay*s1+ny*s*pi),           // the nose, tapering back to the parking lane
              (int)(cx+ax*s1+nx*s*(pi+PARKW)),(int)(cy+ay*s1+ny*s*(pi+PARKW)),CLR_BROWNISH_BLACK);
     }
 }
@@ -681,7 +687,7 @@ void draw(void){
         // sqrt(ICR^2+HW^2) > ICR — it never reaches the ring, leaving a grey wedge. Start it at sqrt(ICR^2-HW^2),
         // the axial distance where its kerb-side edge actually crosses the ring radius ⇒ it FLARES in and meets it.
         float din = sqrtf(ICR*ICR - HW*HW); if (din < 1.f) din = 1.f;
-        cross_markings(cx,cy,b, din, ICR+3, REACH);                    // #4: kerb lanes flare to the ring; centre markings clear the circulatory
+        cross_markings(cx,cy,b, din, din, ICR+3, REACH);              // #4: kerb lanes flare to the ring (symmetric — the ring handles skew)
         draw_splitter(cx,cy,b, ICR, 16);                               // teardrop splitter (deflect + ped refuge)
         give_way(cx,cy,b, ICR+1.5f, HW);                               // yield line at the circulatory edge
         if (peds) draw_crosswalk(cx,cy,b,HW, ICR+3);                    // crossing set back behind the give-way
@@ -708,9 +714,10 @@ void draw(void){
         // (arm_face). Every mouth marking — stop bar, crosswalk, median, turn bay, arrow — keys off this
         // `mouth` datum, NOT df, so they sit at the rounded mouth instead of poking back into the fillet.
         float mouth = df + cornerR;
-        float kstd = mouth + 3;                            // kerb-side lanes (bike/parking): just past the corner
-        float cstd = (turnLanes && mouth+POCKET+PTAPER+3 > kstd) ? mouth+POCKET+PTAPER+3 : kstd;  // centre: past the turn bay
-        cross_markings(cx,cy,b,kstd,cstd,REACH);
+        float kstdP = side_clearance(brg,n,i,HW,+1) + cornerR + 3;   // PER SIDE: +90 faces the next gap...
+        float kstdM = side_clearance(brg,n,i,HW,-1) + cornerR + 3;   // ...-90 faces the prev gap (skew-correct)
+        float cstd = (turnLanes && mouth+POCKET+PTAPER+3 > mouth+3) ? mouth+POCKET+PTAPER+3 : mouth+3;  // centre: past the turn bay
+        cross_markings(cx,cy,b,kstdP,kstdM,cstd,REACH);
         float dx=ux(b),dy=uy(b), ix=ux(b-90),iy=uy(b-90);
         if (turnLanes){
             // #2: the channelizing splitter draws ONLY when there's no continuous median; with a median, the
@@ -726,7 +733,7 @@ void draw(void){
             turn_arrow(cx,cy,b,mouth,CLR_WHITE);
         }
         // Stage-1 #1: bulb-out — the kerb extends into the parking clear-zone, narrowing the crossing (pavement+parking).
-        if (peds && parkOn) draw_bulb(cx,cy,b,kstd);
+        if (peds && parkOn) draw_bulb(cx,cy,b,kstdP,kstdM);
         // M5: zebra crosswalk at the mouth. With bulbs it shortens to the driving lanes (the zebra sits between the bulbs).
         if (peds) draw_crosswalk(cx,cy,b, parkOn?drive_outer():HW, mouth);
         // #3: stop bar across the inbound DRIVING lanes only (drive-on-right: inbound = the b-90 side) — it spans
@@ -909,6 +916,18 @@ void spec(void){
     islandR=8; parkOn=1; expect(spec_near(round_icr(), 8 + lanesPer*LANEW + PARKW),
         "roundabout ICR includes parking (circulatory = full approach half-width)");
     parkOn=0;
+    // per-SIDE corner clearance — the skew fix: a skewed arm's two sides face different gaps, so the kerb-side
+    // lanes (bike/parking) must start per side (else the gentler side gaps from the corner-wrap).
+    { float fb[4]={0,90,180,270};                                          // a perpendicular 4-way
+      expect(spec_near(side_clearance(fb,4,0,16.f,+1), side_clearance(fb,4,0,16.f,-1)),
+             "perpendicular 4-way: an arm's two sides have equal corner clearance");
+      expect(spec_near(side_clearance(fb,4,0,16.f,+1), 16.f), "perpendicular: side clearance = HW"); }
+    { float fs[4]={0,120,180,300};                                         // a SKEWED 4-way (the N-S pair tilted 30deg)
+      float p=side_clearance(fs,4,0,16.f,+1), m=side_clearance(fs,4,0,16.f,-1);
+      expect(!spec_near(p,m),  "skew: an arm's two sides have DIFFERENT clearances (acute vs obtuse corner)");
+      expect(m > p,            "the acute-corner side reaches further down the arm than the obtuse side");
+      expect(spec_near(arm_face(fs,4,0,16.f), m),
+             "arm_face is the MAX of the two sides — using it for BOTH was the skew gap"); }
     int m0=medOn;  spec_tap('m'); expect(medOn!=m0,  "the 'm' key toggles the centre median");
     int pk0=parkOn; spec_tap(';'); expect(parkOn!=pk0,"the ';' key toggles the parking lane");
     // Pass 3: 'b' cycles the bike lane through 3 states — off → lanes(+corner-wrap) → +straight-through crossing
