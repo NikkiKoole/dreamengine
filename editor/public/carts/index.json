@@ -5357,5 +5357,21 @@
       "adsr-envelope"
     ],
     "lineage": "Homage to the Buchla Music Easel (1973); the complete west-coast voice around lpg.c's gate — novel: a complex oscillator (FM cross-mod) + wavefolder feeding a low-pass gate, a triggerable/cycling function generator, and a pressure ribbon (x=pitch, y=pressure), all cart-side."
+  },
+  {
+    "title": "runecrawl",
+    "description": "A logic-puzzle roguelike. Explore a dungeon by torchlight — turn-based, with a fog-of-war you reveal as you move — and reach the stairs. The way is barred by a portcullis wired to ancient runes: a glyph-gate fed by two levers through an AND-rune. Throw BOTH levers and the line powers up, the bars grind open. The signal sim from the `logic` cart made diegetic — one circuit tick per step, so the dungeon and the machine share a turn. Hand-authored single floor (the vertical slice of a planned circuit-dungeon). Arrows/WASD move (walk into a lever to throw it), Z/. wait, R restart after escaping.",
+    "file": "runecrawl.cart.png",
+    "kind": [
+      "game"
+    ],
+    "genre": "puzzle",
+    "teaches": [
+      "turn-based-loop",
+      "raycasting",
+      "grid-movement",
+      "combinational-logic"
+    ],
+    "lineage": "rogue.c's FOV + turn loop fused with the logic cart's signal sim (a MechUpdateSignals subset) — mechanisms as dungeon locks; the circuit-dungeon vertical slice."
   }
 ]
