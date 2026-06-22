@@ -662,8 +662,11 @@ void draw(void){
     draw_circulation(cx,cy);
     for (int i=0;i<n;i++){                                              // per approach: cross-section, splitter, give-way, crossing
         float b=brg[i];
-        cross_markings(cx,cy,b, ICR, ICR+3, REACH);                    // #4: lanes on the approaches; bike datum = ICR so the
-                                                                       // approach bike lane reaches the kerb and meets the ring
+        // the approach lanes are laterally offset, so a straight bike lane's nearest point to the hub is
+        // sqrt(ICR^2+HW^2) > ICR — it never reaches the ring, leaving a grey wedge. Start it at sqrt(ICR^2-HW^2),
+        // the axial distance where its kerb-side edge actually crosses the ring radius ⇒ it FLARES in and meets it.
+        float din = sqrtf(ICR*ICR - HW*HW); if (din < 1.f) din = 1.f;
+        cross_markings(cx,cy,b, din, ICR+3, REACH);                    // #4: kerb lanes flare to the ring; centre markings clear the circulatory
         draw_splitter(cx,cy,b, ICR, 16);                               // teardrop splitter (deflect + ped refuge)
         give_way(cx,cy,b, ICR+1.5f, HW);                               // yield line at the circulatory edge
         if (peds) draw_crosswalk(cx,cy,b,HW, ICR+3);                    // crossing set back behind the give-way
