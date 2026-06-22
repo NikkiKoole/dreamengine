@@ -304,7 +304,10 @@ static void draw_crosswalk(float cx,float cy,float b,float HW,float df){
 //    it), the splitters are flush, and entries GIVE WAY (yield), they don't stop. Built on the same leg
 //    model ⇒ any leg count / skew for free. Circulatory width = one direction's HW; the inscribed circle =
 //    island + circulatory. island radius is the headline knob (reuses the [ ] slot in this mode). PURE: ──
-static float round_circ_w(void){ return lanesPer*LANEW; }        // circulatory carriageway width (one way round)
+static float round_circ_w(void){ return cross_hw(); }            // circulatory = the FULL approach half-width (incl.
+                                                                 // bike/parking/median) ⇒ the disc always bulges a
+                                                                 // consistent islandR past the arms + the sidewalk ring
+                                                                 // meets the arm sidewalks (else parking undersizes it)
 static float round_icr(void){ return islandR + round_circ_w(); } // inscribed-circle radius (island + ring)
 
 // the traversable central ISLAND: a low domed/painted disc — the mini tell. Apron (mountable) + white dome.
@@ -829,6 +832,10 @@ void spec(void){
     medOn=1; expect(spec_near(drive_inner(), MEDHW), "median: driving lanes start outside it (drive_inner == MEDHW)");
     expect(spec_near(drive_outer(), MEDHW+lanesPer*LANEW), "drive_outer = drive_inner + the driving lanes");
     medOn=0; bikeOn=0; parkOn=0;
+    // the roundabout circulatory tracks the FULL cross-section (so parking can't undersize the disc/pavement)
+    islandR=8; parkOn=1; expect(spec_near(round_icr(), 8 + lanesPer*LANEW + PARKW),
+        "roundabout ICR includes parking (circulatory = full approach half-width)");
+    parkOn=0;
     int m0=medOn;  spec_tap('m'); expect(medOn!=m0,  "the 'm' key toggles the centre median");
     int bk0=bikeOn; spec_tap('b'); expect(bikeOn!=bk0,"the 'b' key toggles the bike lane");
     int pk0=parkOn; spec_tap(';'); expect(parkOn!=pk0,"the ';' key toggles the parking lane");
