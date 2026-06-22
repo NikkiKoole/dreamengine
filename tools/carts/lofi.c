@@ -285,8 +285,7 @@ void update(void) {
         setup_instruments();
         if (LOFI_SEED) { new_song(pos, LOFI_SEED); rad_hist_log(&rs); } else fresh_song(pos);
         scheduled = (long)pos; apply_tone();
-        if (vinylH < 0) { vinylH = note_on(60, I_VINYL, 1); note_vol(vinylH, 0.30f); }   // barely-there floor
-        booted = true;
+        booted = true;   // (no continuous noise bed — it read as hard hiss; tape sat + the wobble carry the lo-fi)
     }
 
     int ev = rad_input(&tempo, 64, 104, 2, &pocketSel, &toneSel, 4, &radioOn, &showHelp);
@@ -295,7 +294,7 @@ void update(void) {
     if (ev & RAD_EV_BACK)   { unsigned s = rad_hist_back(&rs); if (s) new_song(pos, s); }
     if (ev & RAD_EV_FWD)    { unsigned s = rad_hist_fwd(&rs);  if (s) new_song(pos, s); }
     if (ev & RAD_EV_POWER)  { if (!radioOn) { note_off_all(); sfx(-1); vinylH = -1; varispeed(1.0f); }
-                              else { scheduled = (long)pos; apply_fx(); if (vinylH < 0) { vinylH = note_on(60, I_VINYL, 1); note_vol(vinylH, 0.30f); } } }
+                              else { scheduled = (long)pos; apply_fx(); } }
     if (ev & RAD_EV_TONE)   apply_tone();
 
     int chair = rad_band_input(&band, &showHelp);
