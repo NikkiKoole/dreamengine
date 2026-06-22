@@ -200,13 +200,7 @@ static int swing_ms(int step) {
 // ══ THE WALKING BASS — the promised ~20 lines ═════════════════════════════
 // beat 1: the root (voice-led register). beats 2-3: chord/scale motion.
 // beat 4: a CHROMATIC APPROACH into the next bar's root — the walk's engine.
-static int bass_near(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 26) n += 12;
-    while (n > 45) n -= 12;
-    return n;
-}
+static int bass_near(int pc) { return rad_bass_to(pc, bassLast, 26, 45); }
 static int walk_note(long bar, int beat) {
     int f = fn_at(bar);
     int root = bass_near(root_pc(f));

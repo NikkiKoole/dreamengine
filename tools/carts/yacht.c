@@ -227,13 +227,7 @@ static int mel_note(long bar) {
     return melLast = best;
 }
 
-static int bass_near(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 26) n += 12;
-    while (n > 43) n -= 12;
-    return bassLast = n;
-}
+static int bass_near(int pc) { return bassLast = rad_bass_to(pc, bassLast, 26, 43); }
 
 // the Purdie swing: off-beat 8ths land at 58%, not 50% (ms added to dly)
 static int swing_ms(int step) {

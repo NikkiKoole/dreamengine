@@ -312,13 +312,7 @@ static void lead_to(Ch c, int *v, int n, int lo, int hi, bool *init) {
 }
 
 // voice-led bass register: E1..A2
-static int bass_near(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 28) n += 12;
-    while (n > 45) n -= 12;
-    return bassLast = n;
-}
+static int bass_near(int pc) { return bassLast = rad_bass_to(pc, bassLast, 28, 45); }
 
 // ── 808 voices, on loan from tr808.c (the measured circuits) ──────────────
 static void clap_808(int dly, int vol) {       // three retriggers + a room tail

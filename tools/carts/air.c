@@ -347,13 +347,7 @@ static int pick_mel(Ch c, int lo, int hi) {
 
 // the bass: nearest octave copy of a pitch class (the line stays smooth + the
 // chromatic falls survive any key)
-static int bass_peek(int pc, int lo, int hi) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < lo) n += 12;
-    while (n > hi) n -= 12;
-    return n;
-}
+static int bass_peek(int pc, int lo, int hi) { return rad_bass_to(pc, bassLast, lo, hi); }
 static int bass_near(int pc, int lo, int hi) { return bassLast = bass_peek(pc, lo, hi); }
 
 // ── the step player ────────────────────────────────────────────────────────

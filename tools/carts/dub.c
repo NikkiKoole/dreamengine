@@ -236,13 +236,7 @@ static void apply_echo_bus(void) {
 }
 
 // voice-led bass register, deep: G1..G2
-static int bass_peek(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 31) n += 12;
-    while (n > 43) n -= 12;
-    return n;
-}
+static int bass_peek(int pc) { return rad_bass_to(pc, bassLast, 31, 43); }
 static int bass_near(int pc) { return bassLast = bass_peek(pc); }
 
 // nearest-tone voice leading — rad_lead_to (radio.h) is the shared block;

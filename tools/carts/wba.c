@@ -200,10 +200,7 @@ static int pick_mel(Ch c, int lo, int hi) {
     }
     melPitch = best; return best;
 }
-static int bass_peek(int pc, int lo, int hi) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6, n = bassLast + d;
-    while (n < lo) n += 12; while (n > hi) n -= 12; return n;
-}
+static int bass_peek(int pc, int lo, int hi) { return rad_bass_to(pc, bassLast, lo, hi); }
 static int bass_near(int pc, int lo, int hi) { return bassLast = bass_peek(pc, lo, hi); }
 
 // ── the step player — the restraint duet: clean guitar chops ↔ melodic bass ──

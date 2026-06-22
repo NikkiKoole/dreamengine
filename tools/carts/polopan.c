@@ -306,13 +306,7 @@ static void chord_label(char *out, int n, Ch c) {
 }
 
 // the bass, voice-led: each root lands on the octave copy nearest the last one
-static int bass_peek(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 36) n += 12;
-    while (n > 52) n -= 12;
-    return n;
-}
+static int bass_peek(int pc) { return rad_bass_to(pc, bassLast, 36, 52); }
 static int bass_near(int pc) { return bassLast = bass_peek(pc); }
 
 // nearest-tone voice leading for the mallet/pizz comp (radio.h shared block)

@@ -363,12 +363,7 @@ static int root_pc(int f)    { return (sng.keyPc + F_OFF[f]) % 12; }
 static int lift_of(long bar) { return sect_of(bar) == S_OUT ? 2 : 0; }
 
 // ── the springy bass ─────────────────────────────────────────────────────────
-static int bass_near(int pc, int lo, int hi) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < lo) n += 12; while (n > hi) n -= 12;
-    return n;
-}
+static int bass_near(int pc, int lo, int hi) { return rad_bass_to(pc, bassLast, lo, hi); }
 
 // ── the step player (everything but the lead, which is driven per-frame) ─────
 static void play_step(long abs, double pos) {

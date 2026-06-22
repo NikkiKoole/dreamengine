@@ -268,13 +268,7 @@ static float rub_target(double barF) {
 }
 
 // ── voices ────────────────────────────────────────────────────────────────
-static int bass_peek(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 26) n += 12;
-    while (n > 43) n -= 12;
-    return n;
-}
+static int bass_peek(int pc) { return rad_bass_to(pc, bassLast, 26, 43); }
 static int bass_near(int pc) { return bassLast = bass_peek(pc); }
 
 // the canto: nearest chord tone to where the line sits (the re-pitched cell)

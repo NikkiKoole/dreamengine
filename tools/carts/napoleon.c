@@ -179,13 +179,7 @@ static void chord_label(char *out, int n, Ch c) {
 }
 
 // the bass is voice-led: each root lands on the octave copy nearest the last one
-static int bass_peek(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 33) n += 12;
-    while (n > 50) n -= 12;
-    return n;
-}
+static int bass_peek(int pc) { return rad_bass_to(pc, bassLast, 33, 50); }
 static int bass_near(int pc) { return bassLast = bass_peek(pc); }
 
 static void lead_voices(Ch c, int lo, int hi) {

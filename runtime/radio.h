@@ -127,6 +127,19 @@ static void rad_lead_to(int rootpc, const int *iv, int *v, int n,
     }
 }
 
+// nearest-octave voice leading for a single bass line: step `from` to the nearest
+// instance of pitch-class `pc` (±6 semitones), then fold into the [lo,hi] register.
+// Pure — no commit: it's the "peek". A cart wraps it with its own range and decides
+// whether to commit (bassLast = rad_bass_to(...)) or just look ahead. Sibling of
+// rad_lead_to, for the bass that owns the root.
+static int rad_bass_to(int pc, int from, int lo, int hi) {
+    int d = ((pc - from) % 12 + 18) % 12 - 6;
+    int n = from + d;
+    while (n < lo) n += 12;
+    while (n > hi) n -= 12;
+    return n;
+}
+
 // ── the schedule-ahead step clock ─────────────────────────────────────────
 // Never trigger on the frame (up to 16ms of jitter = a drunk drummer): run a step
 // counter against the beat clock and schedule one step ahead with schedule_hit().

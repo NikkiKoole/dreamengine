@@ -224,13 +224,7 @@ static int mel_note(Ch c) {
     return melLast = best;
 }
 
-static int bass_near(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 26) n += 12;
-    while (n > 43) n -= 12;
-    return bassLast = n;
-}
+static int bass_near(int pc) { return bassLast = rad_bass_to(pc, bassLast, 26, 43); }
 
 // ── THE AVIARY — never seeded: the same tune, a different jungle every time ─
 static void bird_call(int dly) {

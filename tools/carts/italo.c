@@ -236,13 +236,7 @@ static void apply_voicing(void) {
 
 // voice-led bass register: C1..C3, nearest the last note (the octave bounce
 // rides on top of this — bassLast tracks the LOW octave)
-static int bass_near(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 24) n += 12;
-    while (n > 40) n -= 12;
-    return bassLast = n;
-}
+static int bass_near(int pc) { return bassLast = rad_bass_to(pc, bassLast, 24, 40); }
 
 // ── 808 voices, on loan from house.c / tr808.c ─────────────────────────────
 static void clap_808(int dly, int vol) {       // three retriggers + a room tail

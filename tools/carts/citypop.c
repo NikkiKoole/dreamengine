@@ -216,13 +216,7 @@ static void apply_voicing(void) {
 }
 
 // voice-led bass register, A1..A2 — bright enough to pop
-static int bass_peek(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 33) n += 12;
-    while (n > 45) n -= 12;
-    return n;
-}
+static int bass_peek(int pc) { return rad_bass_to(pc, bassLast, 33, 45); }
 static int bass_near(int pc) { return bassLast = bass_peek(pc); }
 
 // nearest-tone voice leading — rad_lead_to (radio.h) is the shared block, the

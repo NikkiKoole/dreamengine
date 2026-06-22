@@ -199,13 +199,7 @@ static void chord_label(char *out, int n, Ch c) {
 
 // the bass is voice-led too: each root lands on the octave copy nearest the
 // last one, clamped to D2..D3 — chromatic descents survive any key
-static int bass_peek(int pc) {
-    int d = ((pc - bassLast) % 12 + 18) % 12 - 6;
-    int n = bassLast + d;
-    while (n < 36) n += 12;
-    while (n > 50) n -= 12;
-    return n;
-}
+static int bass_peek(int pc) { return rad_bass_to(pc, bassLast, 36, 50); }
 static int bass_near(int pc) { return bassLast = bass_peek(pc); }
 
 // nearest-tone voice leading — rad_lead_to (radio.h) is the shared block, the
