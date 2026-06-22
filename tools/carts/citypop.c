@@ -545,18 +545,19 @@ void draw(void) {
         rad_help_panel("CITY POP RADIO", HELP, 9, NOTES, 3, CLR_PINK);
     }
 
-    // the jam strip — CHORD-LOCK (Omnichord): the strip is the live chord's own
-    // tones (root/3rd/5th/7th), re-shaped each chord change as the Royal Road and
-    // the +2 gear change move under you — city pop's changes are too rich for a
-    // single scale to fit. You can't miss; the harmony slides beneath your hand.
+    // the jam strip — CHORD-LOCK + CHORD-TRIGGER (Omnichord): every cell is the
+    // live chord's own tones, re-shaped each chord change as the Royal Road and the
+    // +2 gear change move under you. A press fires the whole TRIAD as a Juno-style
+    // comp stab; the station holds the harmony, you just strum it — vertical drag
+    // = strum spread (top = tight block, bottom = a harp roll). You can't miss.
     int chord[4]; {
         Ch c = chord_at(bar);
         for (int k = 0; k < 4; k++) chord[k] = (root_pc(c, bar) + QT[c.q][k]) % 12;
     }
     int soloRoot = (sng.keyPc + (bar >= MOD_BAR ? 2 : 0)) % 12;
     static const int PENT[5] = { 0, 2, 4, 7, 9 };  // the "sc" toggle's fallback: free pentatonic over the changes
-    // vertical = filter brightness (the synth opens up as you push)
-    SoloCtx jc = { soloRoot, PENT, 5, chord, 4, I_SOLO, 72, 91, false, SOLO_Y_BRIGHT, 1200, 6000, false, true };
+    //                root      scale nsc chord nc instr   lo  hi  quant  ymode(unused) yMin yMax struck chordLock chordTrig
+    SoloCtx jc = { soloRoot, PENT, 5, chord, 4, I_SOLO, 72, 91, false, SOLO_Y_OFF, 0, 0, false, true, true };
     solo_strip(&jc, 28, 170, 250, 18, CLR_PINK);
 
     ui_end();

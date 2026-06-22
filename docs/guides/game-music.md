@@ -825,7 +825,7 @@ parked sibling header. **Two of the four ship today.**
 |---|---|---|---|---|---|---|---|
 | 1 | **Sustained lead** | mono | held + portamento glide | a `SOLO_Y_*` macro (vol / cutoff / echo send) — or nothing | stylophone single-finger lead | `struck=0` (default) | **shipped** |
 | 2 | **Struck mallet** | mono | re-strikes each new cell, old notes **ring out** | usually `SOLO_Y_OFF` (you can't bend a ringing bar) | **xylophone / marimba run** | `struck=1` | **shipped** (`polopan.c`) |
-| 3 | **Chord-trigger** | chord | the whole chord at once — the Juno-demo / Omnichord chord button | the **strum pattern**: top = tight **block**, lower = a **rolled/spread strum** (staggered `note_on`s, block ↔ slow harp-roll) | press a button, get a chord; tilt for how hard you "strum" it | sibling header | **parked** |
+| 3 | **Chord-trigger** | chord | the whole diatonic triad at once — the Juno-demo / Omnichord chord button | the **strum spread**: top = tight **block** (0ms), bottom = a **rolled strum** (~38ms harp-roll) | press a cell, get a chord; tilt for how hard you "strum" it | `chordTrig=1` | **shipped** (`citypop.c`) |
 | 4 | **Strum / piano** | chord | a chord you **rake across by hand** — drag/roll over the cells to arpeggiate its tones, like a strum plate | strum direction + spread, but driven by the **motion** of the finger, not a fixed Y band | expressive Omnichord strum plate — you perform the roll | sibling header | **parked** |
 
 **Modes 1–2 are the mono pair** and already exist: `struck` flips between a held,
@@ -834,28 +834,38 @@ ringing one (the mallet run — polopan's French-dream-pop marimba). Mode 2 *is*
 "xylophone" — perceptually polyphonic because old bars keep ringing, even though
 it's one voice handle re-triggered.
 
-**Modes 3–4 are the chord pair** and are parked. **Chord-trigger** is the literal
-Juno/Omnichord chord button — one cell = a named chord, Y sets block-vs-roll; the
-easiest mode of all to sound great with, since you can pick neither a wrong chord
-(the ribbon only offers in-key ones) nor a wrong voicing. **Strum / piano** is its
-expressive sibling: Y stops being a preset and your finger's travel *is* the
-strum, so you rake a chord slow or snap it tight by hand.
+**Mode 3 shipped 2026-06-22** as a `SoloCtx` flag (`chordTrig`), NOT the parked
+sibling header — see the note below for why it fit in solo.h after all. It's the
+literal Juno/Omnichord chord button: a press fires the **diatonic triad rooted at
+the cell**, stacked in-scale (`notes[cell]` + the cells two and four up), so the
+chord *quality* (maj/min/dim) falls out of the mode for free — you can pick neither
+a wrong chord (the ribbon only offers in-key ones) nor a wrong voicing. Y is the
+strum spread (block ↔ harp-roll). Ring-out, like struck (no held voice). First home
+`citypop` — combined with `chordLock` it's "the station holds the chord, you just
+strum it," a Juno comp-stab over the changes. **Mode 4 (Strum / piano)** is still
+parked: Y stops being a preset and your finger's travel *is* the strum, so you rake
+a chord slow or snap it tight by hand.
 
 All four are **lenses on one ribbon** — lead, mallet, chord-button, strum-plate —
 which between them cover the whole Omnichord (melody + chord buttons + strum
 plate) plus the mallet toy.
 
-**Why the chord pair is a sibling header, not just two more `SoloCtx` flags.**
-solo.h is built around **one** `solo_handle` — even struck mode re-triggers that
-single voice. Chord-trigger and strum need a small **voice pool + staggered
-`note_on`s** (the spread/roll), which is a different machine underneath. So they
-belong in a sibling — working title **`strum.h`** / **`omnichord.h`** — that
-reuses solo.h's ribbon geometry and ui.h capture but owns the voice pool. Build it
-on one **changes-heavy** station first (citypop or bossa — both already
-chord-locked, so the chord-per-cell data is right there). The standalone
-**`omnichord` instrument cart** is the nearest reference for the voice-pool +
-spread mechanics; the `strum()` sound-API call is the low-level note-stagger
-primitive both modes sit on.
+**Why chord-trigger fit in solo.h after all (and why mode 4 still won't).**
+solo.h is built around **one** `solo_handle`. The original plan parked *both* chord
+modes in a sibling header because they seemed to need a **voice pool + staggered
+`note_on`s**. But that's only true if the chord must *sustain while held and stop on
+release*. Accept **ring-out** — the chord plays and decays on its own envelope, like
+struck mode — and there's no voice to pool: you just fire-and-forget the notes. So
+mode 3 became a third articulation flag (`chordTrig`) sitting on a tiny new sound
+primitive, **`strum_notes(midis, n, instr, vol, delay_ms)`** (the explicit-notes
+sibling of `strum()`; `delay_ms` = the block↔roll spread). ~6 lines in `sound.h` +
+~15 in `solo.h`, no new header, no pool.
+
+**Mode 4 (Strum / piano) still wants the sibling header** — `strum.h` / `omnichord.h`
+— because raking a chord by hand and *holding* it (the sustained pad, re-voicing on a
+chord change under a still finger) is the case ring-out can't cover. Build it on a
+changes-heavy station; the standalone **`omnichord` instrument cart** is the
+voice-pool + spread reference.
 
 **Why this is the right shape for the toy thesis.** The radios sound good
 *because you can't touch them*. An editable step-grid would let a player tap

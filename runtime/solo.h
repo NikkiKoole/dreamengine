@@ -155,6 +155,16 @@ typedef struct {
                               // This is just the STARTING state — the player flips it live
                               // with the "ch"/"sc" button (or SOLO_LOCK_KEY), so chord-lock is
                               // never a trap: too constraining? tap to free scale play.
+    bool chordTrig;           // CHORD-TRIGGER (Omnichord chord button): a press fires the whole
+                              // diatonic TRIAD rooted at the cell — stacked in-scale (root + the
+                              // notes two and four cells up), so the chord QUALITY (maj/min/dim)
+                              // falls out of the mode for free; you can't pick a wrong chord. The
+                              // vertical axis becomes the STRUM SPREAD (top = a tight block, bottom
+                              // = a slow harp roll), not yMode. Ring-out, like struck: no held
+                              // voice, the chord decays on its own envelope and a drag onto a new
+                              // cell re-fires. Best on a plucked/keys I_SOLO. Default 0 = single
+                              // notes (modes 1/2 above). Combine with chordLock for the literal
+                              // "the station holds the chord, you just strum it" feel.
 } SoloCtx;
 
 static bool solo_open_f  = false;
@@ -216,6 +226,18 @@ static bool solo_is_chord_pc(const SoloCtx *cx, int midi) {
     for (int i = 0; i < cx->nchordPcs; i++)
         if (cx->chordPcs[i] % 12 == pc) return true;
     return false;
+}
+
+// CHORD-TRIGGER: fire the diatonic triad rooted at cell `cl` (root + the notes
+// two and four cells up the in-key list — stacking thirds within whatever the
+// strip is locked to). vy (0..1, top=1) sets the strum spread: ~0ms block at the
+// top, a ~38ms harp roll at the bottom. Ring-out — no handle kept.
+static void solo_fire_chord(const SoloCtx *cx, const int *notes, int nn, int cl, float vy) {
+    int chm[3], nc = 0;
+    for (int k = 0; k < 3 && cl + 2 * k < nn; k++) chm[nc++] = notes[cl + 2 * k];
+    if (nc == 0) return;
+    int spread = (int)((1.0f - (vy < 0 ? 1.0f : vy)) * 38);
+    strum_notes(chm, nc, cx->instr, SOLO_VOL, spread);   // 0 spread = block; bigger = roll
 }
 
 // the whole layer: toggle tab when closed, the playable strip when open.
@@ -312,7 +334,10 @@ static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent
     // STRUCK voices skip the glide (you can't slur a struck bar) and never note_off on drag —
     // each new bar is a fresh note_on, the previous one decaying on its own (the xylophone run).
     if (ui_grabbed(&strip_id) && midi >= 0) {
-        if (cx->quantize) { solo_pending = true; solo_pendMidi = midi; solo_pendStep = (long)pos; solo_curCell = cell; }
+        if (cx->chordTrig) {                                // strum the whole triad; ring-out, no handle
+            solo_fire_chord(cx, notes, nn, cell, vy);
+            solo_curMidi = midi; solo_curCell = cell;
+        } else if (cx->quantize) { solo_pending = true; solo_pendMidi = midi; solo_pendStep = (long)pos; solo_curCell = cell; }
         else {
             solo_handle = note_on(midi, cx->instr, SOLO_VOL);
             if (!cx->struck) note_glide(solo_handle, SOLO_GLIDE_MS);
@@ -327,13 +352,18 @@ static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent
     }
     // re-pitch only when the FINGER moves to a new cell — not when notes[cell] shifts
     // under a still finger (chord-lock chord change → the held note rides on, re-maps next press).
-    if (c && !c->released && solo_handle >= 0 && midi >= 0 && cell != solo_curCell) {
+    if (cx->chordTrig) {                                                    // CHORD-TRIG: drag to a new cell re-strums
+        if (c && !c->released && midi >= 0 && cell != solo_curCell) {
+            solo_fire_chord(cx, notes, nn, cell, vy);
+            solo_curMidi = midi; solo_curCell = cell;
+        }
+    } else if (c && !c->released && solo_handle >= 0 && midi >= 0 && cell != solo_curCell) {
         if (cx->struck) solo_handle = note_on(midi, cx->instr, SOLO_VOL);  // RE-STRIKE; old note rings out
         else            note_pitch(solo_handle, midi);                     // SUSTAINED: slide to the new degree
         solo_curMidi = midi; solo_curCell = cell;
     }
     if (ui_released(&strip_id)) {
-        if (cx->struck) { solo_curMidi = -1; solo_curY = -1; solo_pending = false; }  // let the last bar ring
+        if (cx->struck || cx->chordTrig) { solo_curMidi = -1; solo_curCell = -1; solo_curY = -1; solo_pending = false; }  // ring out
         else solo_kill();
     }
 
@@ -360,7 +390,15 @@ static void solo_strip(const SoloCtx *cx, int x, int y, int w, int h, int accent
                                                   : CLR_DARK_GREY;
         rectfill(x + i * cw + 1, y + 1, cw - 2, h - 2, col);
     }
-    if (cell >= 0 && solo_handle >= 0) {                    // the played note + its Y level
+    if (cx->chordTrig) {                                   // chord-trigger: light the whole triad it'll fire
+        if (cell >= 0 && c && !c->released) {
+            for (int k = 0; k < 3 && cell + 2 * k < nn; k++) {
+                int cx0 = x + (cell + 2 * k) * cw;
+                if (k == 0) rectfill(cx0 + 1, y + 1, cw - 2, h - 2, CLR_WHITE);  // the root, solid
+                rect(cx0, y, cw, h, CLR_WHITE);                                   // the third/fifth, outlined
+            }
+        }
+    } else if (cell >= 0 && solo_handle >= 0) {            // the played note + its Y level
         int cx0 = x + cell * cw;
         if (cx->ymode == SOLO_Y_OFF || vy < 0)
             rectfill(cx0 + 1, y + 1, cw - 2, h - 2, CLR_WHITE);

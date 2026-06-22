@@ -667,6 +667,7 @@ void tone(int scale, int octave, int instr, int vol);  // play a random note fro
 
 void chord(int root, int type, int instr, int vol);   // play a chord stacked on root (MIDI note)
 void strum(int root, int type, int instr, int vol, int delay_ms);  // chord with delay between notes; negative = down-strum
+void strum_notes(const int *midis, int n, int instr, int vol, int delay_ms);  // strum an explicit list of MIDI notes (not a chord type); negative delay_ms = down-strum
 
 // musical timing
 void  schedule(int delay_ms, int midi, int instr, int vol);  // play a note in the future
