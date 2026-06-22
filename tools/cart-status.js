@@ -151,12 +151,18 @@ if (fs.existsSync(SITE_DIR)) {
   }
 }
 
+// COMPENDIUM-STALE — docs/cart-compendium.html (the ★ techniques page) drifted from the
+// tag data (a TEACHES header or teaches.json changed without a regen). One command fixes it.
+let compendiumStale = false;
+try { execSync(`node ${path.join(__dirname, "build-compendium.js")} --check`, { stdio: "ignore" }); }
+catch { compendiumStale = true; }
+
 if (JSON_OUT) {
-  console.log(JSON.stringify({ needRebake, notPublished, stalePublished, engineStale, noEmbed, orphanSite }, null, 2));
+  console.log(JSON.stringify({ needRebake, notPublished, stalePublished, engineStale, noEmbed, orphanSite, compendiumStale }, null, 2));
   process.exit(0);
 }
 
-const pending = needRebake.length + notPublished.length + stalePublished.length;
+const pending = needRebake.length + notPublished.length + stalePublished.length + (compendiumStale ? 1 : 0);
 const list = (arr) => arr.length ? arr.map(n => "  " + n).join("\n") : "  (none)";
 
 if (!QUIET || needRebake.length)
@@ -170,6 +176,8 @@ if (engineStale.length) {
   const more = engineStale.length - shown.length;
   console.log(`\nENGINE-STALE (advisory) — instrument cart published before the latest runtime/sound.h commit  (${engineStale.length})\n${list(shown)}${more > 0 ? `\n  …and ${more} more (--json for the full list)` : ""}\n  → republish individually, or site-wide: node tools/build-site.js`);
 }
+if (!QUIET || compendiumStale)
+  console.log(`\nCOMPENDIUM — docs/cart-compendium.html (★ techniques)  ${compendiumStale ? "STALE → node tools/build-compendium.js" : "up to date"}`);
 if (noEmbed.length)
   console.log(`\nNOTE — .cart.png with no de:source chunk  (${noEmbed.length})\n${list(noEmbed)}`);
 if (orphanSite.length)

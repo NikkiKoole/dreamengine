@@ -244,6 +244,11 @@ eventually2/
 │   │                   #   classifies sources registered/harness/probe/orphan (--classify),
 │   │                   #   lists the verification-probe shelf (--probes), soft-lints TEACHES
 │   │                   #   coverage + vocabulary (--lint). --lineage / --cart <n> / --json
+│   ├── build-compendium.js # generate docs/cart-compendium.html — the browsable CART
+│   │                   #   TECHNIQUE COMPENDIUM (editor Docs tab → ★ techniques), "what
+│   │                   #   teaches what" + lineage, from the same tag data as cart-index.js.
+│   │                   #   Re-run after re-tagging / adding a tagged cart. --check exits 1 if
+│   │                   #   the page is stale (cart-status.js + the pre-commit hook use it).
 │   ├── lint-docs.js    #   validate docs/ cross-references: relative .md links resolve
 │   │                   #   + doc-qualified §-refs ("audio-notes §8.9") hit a real
 │   │                   #   heading (resolving via a split-stub/parent = soft note, not
@@ -471,8 +476,12 @@ Source-of-truth files live in `tools/carts/`; the build tool sits beside that fo
 > **After editing carts, check what's out of date:** `node tools/cart-status.js` reports
 > thumbnails whose embedded source drifted from `tools/carts/<name>.c` (NEEDS REBAKE — the
 > editor loads the *embedded* source, so this is the "cart ignores my changes" trap), carts
-> with no web build (NOT PUBLISHED), and carts whose source changed after their last
-> `site/` build (STALE PUBLISHED). `--quiet` exits non-zero if anything's pending.
+> with no web build (NOT PUBLISHED), carts whose source changed after their last
+> `site/` build (STALE PUBLISHED), and whether the technique compendium drifted
+> (COMPENDIUM — fix: `node tools/build-compendium.js`). `--quiet` exits non-zero if
+> anything's pending. **The pre-commit hook** (if enabled: `git config core.hooksPath
+> .githooks`) blocks a commit that leaves the compendium stale and warns on a new cart
+> with no `// TEACHES:` line — so new carts can't silently slip in untagged.
 
 **Other `make-cart.js` commands:**
 ```bash

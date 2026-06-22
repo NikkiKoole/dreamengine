@@ -71,12 +71,21 @@ const conceptList = Object.entries(concepts).map(([tag, cs]) => ({ tag, cat: cat
 
 const DATA = JSON.stringify({ carts, conceptList, catOf, CATMETA });
 
+// embed the editor's own font (Comic Mono) so the page matches the IDE and stays
+// self-contained as a standalone artifact (the CSP there blocks external fonts).
+let FONT_FACE = '';
+try {
+  const b64 = fs.readFileSync(path.join(ROOT, 'editor/public/ComicMono.ttf')).toString('base64');
+  FONT_FACE = `@font-face{font-family:'Comic Mono';src:url(data:font/ttf;base64,${b64}) format('truetype');font-display:swap;}`;
+} catch {}
+
 const html = `<title>dreamengine · cart technique compendium</title>
 <style>
+  ${FONT_FACE}
   :root{
     --ground:#1D2B53; --panel:#22356A; --text:#FFF1E8; --dim:#8E9BC4; --line:#3A4E86;
     --green:#00E436; --orange:#FFA300; --blue:#29ADFF; --pink:#FF77A8; --yellow:#FFEC27; --red:#FF004D; --grey:#C2C3C7;
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --mono:'Comic Mono',ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--ground);color:var(--text);font-family:var(--mono);
@@ -215,5 +224,18 @@ function render(){
 render();
 </script>`;
 
-fs.writeFileSync(path.join(ROOT, 'docs/cart-compendium.html'), html);
+const OUT = path.join(ROOT, 'docs/cart-compendium.html');
+// --check: is the committed page in sync with the tag data? (deterministic render,
+// no timestamps, so a byte-diff is exact). Used by cart-status.js + the pre-commit hook.
+if (process.argv.includes('--check')) {
+  let cur = '';
+  try { cur = fs.readFileSync(OUT, 'utf8'); } catch {}
+  if (cur !== html) {
+    console.error('STALE: docs/cart-compendium.html is out of date — run: node tools/build-compendium.js');
+    process.exit(1);
+  }
+  console.log('docs/cart-compendium.html up to date — ' + carts.length + ' carts');
+  process.exit(0);
+}
+fs.writeFileSync(OUT, html);
 console.log('wrote docs/cart-compendium.html —', carts.length, 'carts,', conceptList.length, 'concepts');
