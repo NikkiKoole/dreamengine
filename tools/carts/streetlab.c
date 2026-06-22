@@ -48,6 +48,7 @@
 #define MEDW     2     // M3: raised median splitter half-width
 #define SW       4     // M5: sidewalk width (the strip outside each kerb)
 #define CWDEP    6     // M5: crosswalk depth (how far the zebra band reaches out from the box)
+#define NETTOP   28    // M4: network-view top edge (leaves room for 3 header lines: title/metrics/degree mix)
 #define DEG2RAD  0.01745329252f
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -285,8 +286,8 @@ static int ufind(int x){ while(uf[x]!=x){ uf[x]=uf[uf[x]]; x=uf[x]; } return x; 
 // RADIAL: a hub + concentric rings of sectors, joined by spokes (hub→ring0, then ring→ring) and ring
 // cycles. The hub is the high-degree node (degree = R_SECTORS) — a radial-concentric signature.
 static void gen_radial(int seed){
-    float cx=SCREEN_W/2.f, cy=(22 + (SCREEN_H-TOOLBAR-10))/2.f;
-    float maxR=((SCREEN_H-TOOLBAR-10)-22)/2.f - 2;
+    float cx=SCREEN_W/2.f, cy=(NETTOP + (SCREEN_H-TOOLBAR-10))/2.f;
+    float maxR=((SCREEN_H-TOOLBAR-10)-NETTOP)/2.f - 2;
     nnodes[nn++]=(NetNode){ cx, cy };                                  // node 0 = hub
     int ring0=1;
     for (int r=0;r<R_RINGS;r++){ float rad=maxR*(r+1)/R_RINGS;
@@ -323,7 +324,7 @@ static void gen_culdesac(int id[GH][GW], int seed){
 static void gen_network(int pat,int seed){
     nn=0; ne=0;
     if (pat==PAT_RADIAL){ gen_radial(seed); return; }
-    float x0=18, y0=22, x1=SCREEN_W-18, y1=SCREEN_H-TOOLBAR-10;
+    float x0=18, y0=NETTOP, x1=SCREEN_W-18, y1=SCREEN_H-TOOLBAR-10;
     float cw=(x1-x0)/(GW-1), ch=(y1-y0)/(GH-1);
     float jit = (pat==PAT_ORGANIC) ? 0.42f : (pat==PAT_CULDESAC ? 0.22f : 0.f);
     int id[GH][GW];
@@ -341,6 +342,12 @@ static void gen_network(int pat,int seed){
 static int   node_degree(int i){ int d=0; for(int e=0;e<ne;e++) if(nedges[e].a==i||nedges[e].b==i) d++; return d; }
 static float mean_degree(void){ if(!nn)return 0; int s=0; for(int i=0;i<nn;i++) s+=node_degree(i); return (float)s/nn; }
 static int   dead_ends(void){ int c=0; for(int i=0;i<nn;i++) if(node_degree(i)==1) c++; return c; }
+// DEGREE DISTRIBUTION — §8.2's real discriminator: "mean degree ALONE is not enough" (a sparse grid and a
+// dense dendritic tree can read the same mean). The SHARE of nodes by degree separates them — cul-de-sac(1),
+// T/Y(3), X-crossroads(4+) in Marshall's node taxonomy. PURE over the graph; the network-view readout + spec.
+static int   deg_count(int d){    int c=0; for(int i=0;i<nn;i++) if(node_degree(i)==d) c++; return c; }
+static int   deg_count_ge(int d){ int c=0; for(int i=0;i<nn;i++) if(node_degree(i)>=d) c++; return c; }
+static int   deg_pct(int c){ return nn ? (100*c + nn/2)/nn : 0; }   // rounded share of all nodes (%)
 
 // draw one street segment as a road quad (perpendicular extrusion of the centreline)
 static void road_segment(float ax,float ay,float bx,float by,float hw,int col){
@@ -402,6 +409,10 @@ static void draw_network_view(void){
     snprintf(bb,sizeof bb,"%s  -  %d nodes  -  deg %.1f  -  %d dead-ends  -  sinuosity %.2f",
              PAT_NAME[pattern], nn, mean_degree(), dead_ends(), mean_sinuosity());
     print(bb, 4,13, CLR_ORANGE);
+    // §8.2 degree distribution — the SNDi discriminator mean degree hides (Marshall node taxonomy)
+    snprintf(bb,sizeof bb,"node mix:  cul(1) %d%%   T(3) %d%%   X(4+) %d%%",
+             deg_pct(deg_count(1)), deg_pct(deg_count(3)), deg_pct(deg_count_ge(4)));
+    print(bb, 4,21, CLR_LIGHT_GREY);
 
     rectfill(0, SCREEN_H-TOOLBAR, SCREEN_W, TOOLBAR, CLR_BLACK);
     int d;
@@ -585,6 +596,16 @@ void spec(void){
     expect(ne >= nn-1, "cul-de-sac is connected (>= n-1 edges — a spanning tree + sparse loops)");
     expect(dead_ends() > 0, "cul-de-sac has dead-ends (grid has none — the topology differs)");
     expect(mean_degree() < 3.0f, "cul-de-sac mean degree < a full grid's (dendritic, not gridded)");
+    // §8.2: the DEGREE DISTRIBUTION is the real discriminator (mean degree alone can blur two networks).
+    // grid = zero cul-de-sacs + a big X-crossroads share; cul-de-sac = real degree-1 share + far fewer Xs.
+    gen_network(PAT_GRID, 1);
+    expect_eq(deg_count(1), 0,             "grid node mix: zero cul-de-sac (degree-1) nodes");
+    expect(deg_count_ge(4) > 0,            "grid node mix: has X-crossroads (degree-4+) nodes");
+    int grid_xshare = deg_pct(deg_count_ge(4));
+    gen_network(PAT_CULDESAC, 3);
+    expect(deg_count(1) > 0,               "cul-de-sac node mix: a real degree-1 (dead-end) share");
+    expect(deg_pct(deg_count_ge(4)) < grid_xshare,
+           "node mix separates the patterns: cul-de-sac's X(4+) share < grid's");
     // M4c: the curvature knob — straight chords pin sinuosity at 1; winding pushes it above 1 (a live SNDi measure)
     gen_network(PAT_GRID, 1);
     curveAmt=0; expect(spec_near(mean_sinuosity(), 1.0f), "curve=0: straight chords, sinuosity == 1");
