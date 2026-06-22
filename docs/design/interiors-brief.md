@@ -6,6 +6,11 @@
 > gap: *"A building's floor-plan is literally a bounded room+corridor atom filling the `footprint`
 > rect."* This is that cart. Build it as a **workbench-of-atoms**, exactly like `lotfill.c`.
 
+> **Status (2026-06-22):** the workbench below is BUILT — `tools/carts/interiors.c` generates
+> believable R/C/I floor plans (shell → BSP partition → circulation → emergent labels → furnish →
+> program driver). This brief was then **extended with [Round 2 — the gameplay layers](#round-2--gameplay-layers-interiors-with-a-purpose-extends-this-brief-2026-06-22)**:
+> making interiors *worth entering* — places you want to **be in, steal from, fight in, and OWN.**
+
 ## Your mission, in one sentence
 
 Build `tools/carts/interiors.c` — a workbench cart that, given a building footprint rect + a
@@ -115,6 +120,69 @@ draw everything with primitives like lotfill does), build + bake a screenshot th
 you author a good demo fly-through, park the input track in `tools/clips/interiors/`. Add a sibling
 design doc (`docs/design/interiors-content.md`) once the atom set settles, and cross-link it from
 `streetlevel-content.md` and `docs/README.md`.
+
+## Round 2 — gameplay layers: interiors with a PURPOSE (extends this brief, 2026-06-22)
+
+The cart above generates *believable* floor plans. Round 2 makes them *worth entering* — places
+you want to **be in, steal from, fight in, and OWN.** Same philosophy as everything above: the
+gameplay **emerges from the room labels** via selectors (never hand-placed set-pieces), stays
+**seam-true** (a query mirroring `room_at`/`solid_at`), and is a **pure fn of (plan, hash)**. Three
+new layers, each a tab + a query.
+
+### LOOT — "steal from"
+Emergent valuables keyed by room label — the reason to break in. `loot_at(x,y) → {kind, value,
+secured}` + a LOOT overlay.
+- shop → register (cash, low, open); office / back-of-house → **safe** (high, needs cracking, alarm);
+  bedroom → cash + jewelry; store → contraband; bay → tools/parts (feeds sloop's scrap economy).
+- A **selector, not a placement list** — e.g. *"the smallest secured back room holds the safe; the
+  entry-fronting room holds the register."* Value scales with the building's ROLE (below): a
+  target's safe ≫ a home's drawer.
+- Hooks: grabbed loot → the money economy; `secured`/alarm → flank guards + a wanted response.
+
+### COVER — "fight in"
+The bones already exist (BSP walls = sightlines, door gaps = chokepoints). Two additions:
+- **classify** each prop + wall as cover *height* — *waist* (desk/counter/sofa → shoot over / duck
+  behind) vs *full* (walls). `cover_at(x,y) → height` is what flank's tactical AI reads.
+- **a back entrance** — an emergent second door on a non-frontage wall, so a squad can *flank*
+  instead of funneling the front. (Reuses the entry-gap machinery on another edge.)
+
+### ROLE — "want to be in" AND "own"
+A building **purpose** above R/C/I, layered on the footprint, driving loot density, occupants,
+alarm, and acquisition. The selector reads zone + size + hash → a role:
+- **shop** — buy/sell (the economy storefront; a clerk NPC → dialogue).
+- **home** — an occupant lives here (their stuff to steal; a schedule; dialogue).
+- **stash** — production + guards + contraband (a thecut bench as a room; high risk).
+- **target** — a heist: high-value secured loot + alarm + a guard squad (flank).
+- **for-sale → YOUR base** — see below.
+
+### The player-owned base (the progression hook)
+Some buildings are **acquirable**: a `for_sale` role with a price → on purchase it becomes **yours**,
+and its rooms map to **base functions** (emergently, by label/area):
+- a big room / bay → **garage** (store + swap vehicles — sloop).
+- a secured back room → **stash** (store your loot; that safe is now yours).
+- a bench spot → **production** (run thecut here; systems tick while you're away — the DIY→manage arc).
+- a bed → **save / sleep / time-skip** (the save point + the pressure clock's rest).
+- (later) wardrobe, planning board, trophy wall.
+
+This is the CDDA/GTA base-building spine: buy a place → it's your home + storage + workshop + garage
+→ upgrade it. **Interiors' only job is to generate the rooms and *tag which would make which base
+function*** (the same emergent selector — "this bay would make a good garage"). Ownership state +
+the function logic live in the game/composer, **not** the interiors atom — keep that seam clean.
+
+### New atoms / queries
+| atom (tab) | verb | query |
+|---|---|---|
+| **loot** | place valuables by label | `loot_at(x,y) → {kind,value,secured}` |
+| **cover** | classify cover height (+ a back door) | `cover_at(x,y) → height` (waist/full) |
+| **role** | building purpose + base-function tagging | `role_of(plan) → {role, price?}` · `base_fn_at(x,y) → fn` |
+
+Same seams as the rest (pure-fn, draw==query, LOD-gated, no globals). A **GAME overlay** (one tab)
+draws all three at once, so you can reseed and read, per building: *what's worth robbing, where the
+cover is, what it'd cost to own and what base it'd make.* Build order: **loot first** (the reason to
+enter, self-contained, visible, defines the economy hook) → **cover** (small: classify what's drawn
++ one back door) → **role + base** (the connective tissue, best once loot/cover give it something to
+vary). These tie interiors into the economy, flank, thecut, dialogue, and save —
+see [`big-game-backlog.md`](big-game-backlog.md).
 
 ## Repo gotchas (will bite you — they're in CLAUDE.md but worth restating)
 
