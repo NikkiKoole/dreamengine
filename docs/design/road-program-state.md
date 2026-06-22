@@ -83,7 +83,9 @@ Cheap + high-value at the top. (✓ = shipped since.)
       islands, GIVE-WAY (yield) entry lines + CCW circulating arrows. Leg-model based ⇒ composes with skew/T/
       lanes/sidewalks. Distinct from roadlab's grade-separated ring. Spec'd: island ⊂ inscribed circle, stays mini.
 - [ ] **Corner free-right slip + triangular channelizing island** (§2) — the corner treatment deferred in M3.
-- [ ] **Curb extensions / bulb-outs + pedestrian refuge islands** (§2) — small ped-safety geometry.
+- ✓ **Curb extensions / bulb-outs** (§2) — `draw_bulb()` fills the parking clear-zone at each mouth, shortening
+      the crossing (auto with pavement+parking). Pedestrian refuge islands are already covered (the turn median +
+      the roundabout splitter both serve as refuges).
 - [ ] **TWLTL** (two-way centre left-turn lane) + **right-turn pockets** + **driveways as low-volume junctions** (§2).
 
 **Network topology (Facet B — §8), in the network view:**
@@ -111,8 +113,10 @@ sandboxes pay off most when each is complete. Three stages, bottom-up. Do NOT ju
 early; exhaust what can be built in isolation first.
 
 **Stage 1 — finish the at-grade JUNCTION (Facet A).** Close out `streetlab`'s junction view, increasing effort:
-1. **Bulb-outs / curb extensions** *(small)* — fill the parking clear-zone (the gap #8 already leaves) with a
-   kerb extension; auto when pavement+parking; shortens the crossing. Reuses the existing lane offsets. ← NEXT
+1. ✓ **Bulb-outs / curb extensions** (done 2026-06-22) — `draw_bulb()` fills the parking clear-zone (#8) with a
+   sidewalk-grey kerb extension + inboard kerb, auto when pavement+parking, and the zebra shortens to the
+   driving lanes (sits between the bulbs). Bike off ⇒ a classic bulb to the kerb; bike on ⇒ a corner refuge
+   island inboard of the wrapping bike lane (a protected-intersection corner). Reuses the existing lane offsets.
 2. **Corner free-right slip + triangular channelizing island** *(medium)* — the corner treatment deferred in
    M3; reuses the island primitive (median/splitter/roundabout-island lineage). The one notable item left.
 3. **Minor markings pass** *(low, batched)* — TWLTL (two-way centre left-turn) + right-turn pockets + driveways.

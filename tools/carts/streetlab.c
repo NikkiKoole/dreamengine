@@ -336,6 +336,21 @@ static void draw_crosswalk(float cx,float cy,float b,float HW,float df){
     for (float o=-HW+1.5f; o<HW; o+=3.f)                    // a stripe per ~3px across the width
         line((int)(cx+ax*s0+nx*o),(int)(cy+ay*s0+ny*o),(int)(cx+ax*s1+nx*o),(int)(cy+ay*s1+ny*o),CLR_WHITE);
 }
+// ── Stage-1 #1: a BULB-OUT (curb extension). The kerb extends into the PARKING lane at the crossing — it fills
+//    the parking CLEAR ZONE (#8) we already leave, shortening the ped crossing and tightening the turn. Sidewalk-
+//    grey + an inboard kerb edge, in the parking band on both sides of the arm, from the mouth out to where
+//    parking begins. Only with pavement+parking (you bulb INTO the parking lane, never a travel lane). ──
+static void draw_bulb(float cx,float cy,float b,float kstd){
+    float pi=park_inner(), s1=kstd+PCLEAR;
+    for (int s=-1;s<=1;s+=2){
+        lane_band(cx,cy,b, pi, pi+PARKW, s, kstd, s1, CLR_LIGHT_GREY);   // the kerb extension (sidewalk surface)
+        edge_line(cx,cy,b, pi, s, kstd, s1, CLR_BROWNISH_BLACK);         // its inboard kerb (against the carriageway)
+        // the nose: a transverse kerb where the bulb tapers back to the parking lane
+        float ax=ux(b),ay=uy(b), nx=ux(b+90),ny=uy(b+90);
+        line((int)(cx+ax*s1+nx*s*pi),(int)(cy+ay*s1+ny*s*pi),
+             (int)(cx+ax*s1+nx*s*(pi+PARKW)),(int)(cy+ay*s1+ny*s*(pi+PARKW)),CLR_BROWNISH_BLACK);
+    }
+}
 
 // ── M6: the MINI-ROUNDABOUT (at-grade, §2) — distinct from roadlab's GRADE-SEPARATED ring. The at-grade
 //    tells: the central island is MINI + TRAVERSABLE (mountable/domed — long vehicles drive straight OVER
@@ -710,8 +725,10 @@ void draw(void){
             }
             turn_arrow(cx,cy,b,mouth,CLR_WHITE);
         }
-        // M5: zebra crosswalk at the mouth (peds cross here); the stop bar sits BEHIND it (cars stop short).
-        if (peds) draw_crosswalk(cx,cy,b,HW,mouth);
+        // Stage-1 #1: bulb-out — the kerb extends into the parking clear-zone, narrowing the crossing (pavement+parking).
+        if (peds && parkOn) draw_bulb(cx,cy,b,kstd);
+        // M5: zebra crosswalk at the mouth. With bulbs it shortens to the driving lanes (the zebra sits between the bulbs).
+        if (peds) draw_crosswalk(cx,cy,b, parkOn?drive_outer():HW, mouth);
         // #3: stop bar across the inbound DRIVING lanes only (drive-on-right: inbound = the b-90 side) — it spans
         // [drive_inner, drive_outer], so it clears the raised median and stops short of the bike/parking lanes.
         float sb = peds ? mouth+1+CWDEP+1 : mouth+1;
