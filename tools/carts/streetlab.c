@@ -79,6 +79,9 @@
 // length (the two halves of a through road then mismatch by 1px at the hub). 1e-4 is far below any real bearing.
 static float ux(float d){ float c=cos_deg(d); return (c>-1e-4f&&c<1e-4f)?0.f:c; }
 static float uy(float d){ float s=sin_deg(d); return (s>-1e-4f&&s<1e-4f)?0.f:s; }
+// round-to-nearest pixel — symmetric about 0, unlike a plain (int) cast which truncates TOWARD zero and so
+// breaks left/right mirror on fractional coords (cx+12.7→172 but cx-12.7→147 = 13 away). Use on curved kerbs.
+static int ri(float v){ return (int)roundf(v); }
 
 // ── CURB RETURN = the at-grade corner primitive. Two curb edges leave the corner K in directions e1,e2
 //    (degrees, pointing AWAY from K along each curb). The return is the arc of radius R TANGENT to both
@@ -114,8 +117,8 @@ static void fill_corner(float kx, float ky, CurbReturn c, float R, int col){
     float d  = a1-a0; while(d> M_PI)d-=2*M_PI; while(d<-M_PI)d+=2*M_PI;   // shorter sweep (the ≤90° arc)
     enum { N=10 };
     int xy[2*(N+2)]; int k=0;
-    xy[k++]=(int)kx; xy[k++]=(int)ky;                      // apex = the sharp corner (pavement side)
-    for (int i=0;i<=N;i++){ float a=a0+d*i/N; xy[k++]=(int)(c.ox+cosf(a)*R); xy[k++]=(int)(c.oy+sinf(a)*R); }
+    xy[k++]=ri(kx); xy[k++]=ri(ky);                        // apex = the sharp corner (pavement side)
+    for (int i=0;i<=N;i++){ float a=a0+d*i/N; xy[k++]=ri(c.ox+cosf(a)*R); xy[k++]=ri(c.oy+sinf(a)*R); }
     polyfill(xy, N+2, col);
 }
 // stroke just the curb arc (the rounded kerb line)
@@ -125,7 +128,7 @@ static void stroke_corner(CurbReturn c, float R, int col){
     float d  = a1-a0; while(d> M_PI)d-=2*M_PI; while(d<-M_PI)d+=2*M_PI;
     enum { N=10 }; float px=c.t1x, py=c.t1y;
     for (int i=1;i<=N;i++){ float a=a0+d*i/N, x=c.ox+cosf(a)*R, y=c.oy+sinf(a)*R;
-        line((int)px,(int)py,(int)x,(int)y,col); px=x; py=y; }
+        line(ri(px),ri(py),ri(x),ri(y),col); px=x; py=y; }
 }
 // Pass 2 (#5a): the bike lane WRAPS the corner — a terracotta annular band JUST INSIDE the curb-return arc
 // (radii R..R+BIKEW about the return centre O), sweeping the same t1→t2 the kerb does. The carriageway sits on
@@ -135,12 +138,12 @@ static void corner_bike(CurbReturn c, float R){
     float a0=atan2f(c.t1y-c.oy,c.t1x-c.ox), a1=atan2f(c.t2y-c.oy,c.t2x-c.ox);
     float d=a1-a0; while(d>M_PI)d-=2*M_PI; while(d<-M_PI)d+=2*M_PI;
     enum { N=10 }; int xy[4*(N+1)]; int k=0;
-    for (int i=0;i<=N;i++){ float a=a0+d*i/N; xy[k++]=(int)(c.ox+cosf(a)*R);         xy[k++]=(int)(c.oy+sinf(a)*R); }
-    for (int i=N;i>=0;i--){ float a=a0+d*i/N; xy[k++]=(int)(c.ox+cosf(a)*(R+BIKEW)); xy[k++]=(int)(c.oy+sinf(a)*(R+BIKEW)); }
+    for (int i=0;i<=N;i++){ float a=a0+d*i/N; xy[k++]=ri(c.ox+cosf(a)*R);         xy[k++]=ri(c.oy+sinf(a)*R); }
+    for (int i=N;i>=0;i--){ float a=a0+d*i/N; xy[k++]=ri(c.ox+cosf(a)*(R+BIKEW)); xy[k++]=ri(c.oy+sinf(a)*(R+BIKEW)); }
     polyfill(xy, 2*(N+1), CLR_BROWN);
     float px=c.ox+cosf(a0)*(R+BIKEW), py=c.oy+sinf(a0)*(R+BIKEW);   // the carriageway-side edge line (white)
     for (int i=1;i<=N;i++){ float a=a0+d*i/N, x=c.ox+cosf(a)*(R+BIKEW), y=c.oy+sinf(a)*(R+BIKEW);
-        line((int)px,(int)py,(int)x,(int)y,CLR_WHITE); px=x; py=y; }
+        line(ri(px),ri(py),ri(x),ri(y),CLR_WHITE); px=x; py=y; }
 }
 static void dashed(float x0,float y0,float x1,float y1,int col){       // a dashed lane/centre line
     float dx=x1-x0, dy=y1-y0, L=sqrtf(dx*dx+dy*dy); if(L<1)return; dx/=L; dy/=L;
