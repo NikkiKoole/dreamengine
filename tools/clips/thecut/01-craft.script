@@ -1,0 +1,20 @@
+# the cut — dismiss title, build a recipe (HERB+CAFF+MENTH+SOLV), hand-stir, market, sell.
+# frames 240
+# fps 30
+# crf 28
+down 10 ENTER
+up 12 ENTER
+down 32 1
+up 34 1
+down 48 2
+up 50 2
+down 64 4
+up 66 4
+down 80 6
+up 82 6
+down 104 SPACE
+up 114 SPACE
+down 140 ENTER
+up 142 ENTER
+down 188 ENTER
+up 190 ENTER

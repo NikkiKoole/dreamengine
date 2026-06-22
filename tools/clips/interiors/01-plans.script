@@ -1,0 +1,12 @@
+# interiors — the PROGRAM driver: believable floor-plans regenerating on new seeds.
+# frames 230
+# fps 30
+# crf 28
+down 36 R
+up 38 R
+down 96 R
+up 98 R
+down 156 R
+up 158 R
+down 200 Z
+up 214 Z

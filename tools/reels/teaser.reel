@@ -1,0 +1,9 @@
+# teaser — the lo-fi GTA1 pillars: drive · explore · talk · make · sound
+# fps 30
+# crf 28
+# xfade fade 0.5
+sloop/01-autodrive
+interiors/01-plans  | fade 0.5
+dialogue/01-chat    | wipeleft 0.5
+thecut/01-craft     | circleopen 0.5
+moog/01-fat         | dissolve 0.6

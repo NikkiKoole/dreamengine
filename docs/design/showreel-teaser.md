@@ -83,7 +83,15 @@ it requires finishing the **clip/showreel pipeline** we already scoped:
    in the same `play.js` pass, muxed as Opus/AAC). See [`cart-clips.md`](cart-clips.md) "Sound".
 4. ~~**Stitch**~~ — **SHIPPED (2026-06-22):** `tools/compose-clips.js` glues baked clips with
    ffmpeg `xfade`/`acrossfade` from a committed `.reel` manifest → one reel (picture + sound
-   dissolve together). Layer B in [`transitions.md`](transitions.md). Proof: `editor/public/reels/demo.webm`.
+   dissolve together). Layer B in [`transitions.md`](transitions.md).
+
+> **v0 teaser BUILT (2026-06-22): `tools/reels/teaser.reel` → `editor/public/reels/teaser.webm`**
+> (27 s, with sound). Five shots across the pillars: **sloop** (drive) → **interiors** (explore)
+> → **dialogue** (talk) → **thecut** (make) → **moog** (sound), with fade/wipe/circle-open/
+> dissolve cuts. Tracks committed at `tools/clips/<cart>/01-*.{script}`. **flank (combat) is
+> deferred** from this cut — it needs mouse-aim, which is awkward to script blind; revisit with a
+> keyboard/spectate track or a hand-recorded `.rec`. This is the *vision* cut, not a continuous
+> game (see the honesty note below).
 
 v0 is honest if it's a *vision* teaser ("here's the world we're building") and dishonest if it
 implies the shots are one continuous game — a call for the maker (below).

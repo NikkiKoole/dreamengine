@@ -1,0 +1,14 @@
+# dialogue — walk the branching chat-up; her face + vibe meter react to each reply.
+# frames 210
+# fps 30
+# crf 28
+down 28 Z
+up 30 Z
+down 66 Z
+up 68 Z
+down 104 DOWN
+up 106 DOWN
+down 116 Z
+up 118 Z
+down 156 Z
+up 158 Z
