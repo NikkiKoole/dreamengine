@@ -44,7 +44,7 @@ const CATEGORIES = {
     tags: [
       'raycasting', 'mode7', 'parallax', 'camera-follow', 'dithering-gradient', 'palette-cycling',
       'software-rasterizer', 'procedural-mesh', 'sprite-stacking', 'no-sprite-vehicles', 'radial-symmetry',
-      'isometric-projection',
+      'isometric-projection', 'voronoi',
     ],
   },
   game: {
@@ -52,6 +52,7 @@ const CATEGORIES = {
     tags: [
       'title-play-gameover-loop', 'tilemap-collision', 'inventory-system', 'dialogue-tree', 'turn-based-loop',
       'grid-movement', 'save-load-persistence', 'screen-shake-juice', 'genetic-crossover', 'algorithm-visualization',
+      'collision-detection',
     ],
   },
   audio: {
