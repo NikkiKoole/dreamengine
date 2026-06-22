@@ -33,15 +33,21 @@
 //                rings, degree ~3.9) · cul-de-sac (a random spanning tree + sparse loops ⇒ dendritic, degree
 //                ~2.2, many dead-ends). Next: the §8.4 two-tier major→minor generator, then a seed-driven
 //                WORLD that emits (pattern, region) per place.
+//   MILESTONE 5: the PEDESTRIAN layer (§2 — the reason at-grade exists: small radii are "to shorten the ped
+//                crossing"). 'k' toggles SIDEWALKS (the whole junction footprint inflated by SW, drawn under
+//                the road ⇒ an SW-wide kerbside ring that wraps the corners for free) + ZEBRA CROSSWALKS at
+//                each mouth (stripes along travel, stop bar set back behind them). Composes with skew/T.
 //   Controls: ui.h toolbar (clickable; keyboard too). v = junction↔network view. JUNCTION: [ ] curb radius ·
-//             -/= lanes · ,/. skew · t = T · p = turn lanes. NETWORK: [ ] seed · b = pattern · c = curve
-//             (M4c: the §8.5 curvature knob bows each edge into a winding road ⇒ sinuosity becomes a live SNDi measure).
+//             -/= lanes · ,/. skew · t = T · p = turn lanes · k = sidewalks+crosswalks. NETWORK: [ ] seed ·
+//             b = pattern · c = curve (M4c: the §8.5 curvature knob bows each edge ⇒ sinuosity goes live).
 
 #define LANEW    8     // one lane width (px)
 #define TOOLBAR  44    // bottom control strip height (two rows)
 #define POCKET   22    // M3: turn-bay length at the stop bar
 #define PTAPER   14    // M3: upstream taper of the turn bay
 #define MEDW     2     // M3: raised median splitter half-width
+#define SW       4     // M5: sidewalk width (the strip outside each kerb)
+#define CWDEP    6     // M5: crosswalk depth (how far the zebra band reaches out from the box)
 #define DEG2RAD  0.01745329252f
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -118,6 +124,7 @@ static int   lanesPer = 2;    // lanes PER DIRECTION (street width = 2 * lanesPe
 static int   skew     = 0;    // degrees added to the crossing street (the N–S pair)
 static int   isT      = 0;    // drop the north arm → a T-junction
 static int   turnLanes= 0;    // M3: per-approach left-turn bay + raised median splitter
+static int   peds     = 0;    // M5: sidewalks (a strip outside each kerb) + zebra crosswalks at the mouths
 enum { PAT_GRID, PAT_ORGANIC, PAT_RADIAL, PAT_CULDESAC, NPAT };   // M4: street-web patterns
 static int   netview  = 0;    // M4: 0 = junction detail (M1–M3), 1 = the street-web network
 static int   pattern  = PAT_GRID;
@@ -203,6 +210,15 @@ static void draw_median(float cx,float cy,float b,float df){
     line(q[0],q[1],q[6],q[7],CLR_BROWNISH_BLACK);          // kerb edges
     line(q[2],q[3],q[4],q[5],CLR_BROWNISH_BLACK);
 }
+// ── M5: a ZEBRA CROSSWALK across one approach at the junction mouth (df). Stripes run ALONG the travel
+//    direction (cars drive over them lengthwise), spaced across the full carriageway width. The whole-street
+//    sidewalks are drawn as the footprint inflated by SW (in draw()); this is the per-approach crossing. ──
+static void draw_crosswalk(float cx,float cy,float b,float HW,float df){
+    float ax=ux(b),ay=uy(b), nx=ux(b+90),ny=uy(b+90);
+    float s0=df+1, s1=df+1+CWDEP;
+    for (float o=-HW+1.5f; o<HW; o+=3.f)                    // a stripe per ~3px across the width
+        line((int)(cx+ax*s0+nx*o),(int)(cy+ay*s0+ny*o),(int)(cx+ax*s1+nx*o),(int)(cy+ay*s1+ny*o),CLR_WHITE);
+}
 
 void update(void){
     if (keyp('v')||keyp('V')) netview = !netview;            // M4: junction-detail ↔ street-web view
@@ -221,6 +237,7 @@ void update(void){
     if (keyp('.'))  skew += 5;
     if (keyp('t')||keyp('T')) isT = !isT;
     if (keyp('p')||keyp('P')) turnLanes = !turnLanes;
+    if (keyp('k')||keyp('K')) peds = !peds;                  // M5: sidewalks + crosswalks
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
     if (lanesPer<1) lanesPer=1; if (lanesPer>3) lanesPer=3;
     if (skew<-60) skew=-60;    if (skew>60) skew=60;
@@ -408,6 +425,21 @@ void draw(void){
     float REACH=SCREEN_W+SCREEN_H;                         // run each arm well past the screen edge
     int idx[NLEG]; float brg[NLEG]; int n=present_legs(idx,brg);
 
+    // M5: SIDEWALK footprint = the whole junction inflated by SW, drawn FIRST (under the road). The asphalt
+    // then covers the inner part, leaving an SW-wide sidewalk ring around everything — wrapping the corners
+    // for free (same fillet geometry, wider). Sidewalks line the full length of each arm.
+    if (peds){
+        for (int i=0;i<n;i++){ float b=brg[i],dx=ux(b),dy=uy(b),nx=ux(b+90),ny=uy(b+90); float w=HW+SW;
+            float ox=cx+dx*REACH, oy=cy+dy*REACH;
+            int q[8]={(int)(cx+nx*w),(int)(cy+ny*w),(int)(cx-nx*w),(int)(cy-ny*w),
+                      (int)(ox-nx*w),(int)(oy-ny*w),(int)(ox+nx*w),(int)(oy+ny*w)};
+            polyfill(q,4,CLR_LIGHT_GREY); }
+        for (int i=0;i<n;i++){ float bA=brg[i], bB=brg[(i+1)%n]; float gap=fmodf(bB-bA+3600,360);
+            if (gap<=0.5f || gap>=179.5f) continue;
+            float bm=bA+gap*0.5f, kx,ky; edge_corner(cx,cy,HW+SW, bA,bB,bm, &kx,&ky);
+            CurbReturn c=curb_return(kx,ky, bA, bB, cornerR); fill_corner(kx,ky, c, cornerR, CLR_LIGHT_GREY); }
+    }
+
     // asphalt = the union of arm bands (collinear arm pairs ⇒ a continuous strip ⇒ the centre is always
     // covered, no gap). casing pass (1px proud) first, asphalt pass second, so a kerb edge shows at the
     // outer band edges while the central overlap stays clean asphalt.
@@ -453,17 +485,20 @@ void draw(void){
                      (int)(cx+dx*(df+POCKET)+ix*LANEW),(int)(cy+dy*(df+POCKET)+iy*LANEW),CLR_WHITE);
             turn_arrow(cx,cy,b,df,CLR_WHITE);
         }
+        // M5: zebra crosswalk at the mouth (peds cross here); the stop bar sits BEHIND it (cars stop short).
+        if (peds) draw_crosswalk(cx,cy,b,HW,df);
         // stop bar across the inbound lanes (drive-on-right: inbound sits on the b-90 side)
-        float mx=cx+dx*(df+1), my=cy+dy*(df+1);
+        float sb = peds ? df+1+CWDEP+1 : df+1;
+        float mx=cx+dx*sb, my=cy+dy*sb;
         line((int)mx,(int)my,(int)(mx+ix*HW),(int)(my+iy*HW),CLR_WHITE);
     }
 
     // ── HUD ──
     font(FONT_SMALL);
     char bb[64];
-    print("streetlab - at-grade junction (M3: turn lanes + islands)", 4,5, CLR_WHITE);
-    snprintf(bb,sizeof bb,"%s   -   %d corners%s", isT?"T-junction":"4-way crossing",
-             count_corners(), turnLanes?"   -   left-turn bays + raised median":"");
+    print("streetlab - at-grade junction (M5: sidewalks + crosswalks)", 4,5, CLR_WHITE);
+    snprintf(bb,sizeof bb,"%s  -  %d corners%s%s", isT?"T-junction":"4-way crossing", count_corners(),
+             turnLanes?"  -  turn bays":"", peds?"  -  sidewalks + crosswalks (k)":"  -  k = peds");
     print(bb, 4,13, CLR_ORANGE);
 
     // ── toolbar (two rows) ──
@@ -562,5 +597,6 @@ void spec(void){
     for (int i=0;i<40;i++) spec_tap('[');                                    // hammer the - key past the floor
     expect(cornerR >= 0.f,  "curb radius floors at 0");
     int t0=turnLanes; spec_tap('p'); expect(turnLanes!=t0, "the 'p' key toggles turn lanes");
+    int k0=peds;      spec_tap('k'); expect(peds!=k0,      "the 'k' key toggles sidewalks + crosswalks");
 }
 #endif

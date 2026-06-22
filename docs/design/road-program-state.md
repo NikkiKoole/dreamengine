@@ -53,7 +53,8 @@ crossing from the seed").
 - Sandboxes prove the **grammar**, not production fidelity: `streetlab`'s network is toy-scale (54 nodes,
   a jitter/spanning-tree morph) — **not** the actual L-system or tensor-field generators the papers describe.
 - **Unbuilt Facet A primitives** the research named: staggered junctions, free-right slip lanes,
-  signalized-vs-priority control, pedestrian refuge islands. M3 did the headline ones (turn bays, medians).
+  signalized-vs-priority control, pedestrian refuge islands. M3/M5 did the headline ones (turn bays, medians,
+  sidewalks, crosswalks).
 - **Open research questions** remain — the per-pattern numeric metric table, a superblock/fused-grid
   algorithm, and state-of-the-art beyond the 2001/2008 pillars (learned generative models). See
   [`road-hierarchy-notes.md`](road-hierarchy-notes.md) → "Open questions".
@@ -64,9 +65,8 @@ Pulled from `road-hierarchy-notes` §2 / §5 / §8 — named in the research, in
 Cheap + high-value at the top. (✓ = shipped since.)
 
 **At-grade junction (Facet A — §2/§5), in `streetlab`'s junction view:**
-- [ ] **Sidewalks + crosswalks** — the *pedestrian layer*. §2's whole rationale for small curb radii is "shorten
-      the ped crossing", yet there are no sidewalks/crosswalks at all. Cheapest way to make the view say what
-      it's about. **Top pick.**
+- ✓ **Sidewalks + crosswalks** (M5) — the *pedestrian layer*. 'k' toggles an SW-wide kerbside sidewalk ring
+      (the footprint inflated by SW, wrapping the corners) + zebra crosswalks at each mouth. Composes with skew/T.
 - [ ] **Degree-1/3/4 share metric** (network view) — §8.2's real discriminator ("mean degree ALONE is not
       enough"). Nearly free (we have `node_degree`); completes the SNDi readout next to degree/dead-ends/sinuosity.
 - [ ] **Real cross-section / lane types** — §5 OpenDRIVE lane types (`driving/parking/biking/sidewalk/median`),
