@@ -539,6 +539,61 @@ to the SAW string-machine pile, the rest is its own texture. The quiet end of th
 
 ---
 
+## eno — "Music for Airports" (Brian Eno, 1978)
+
+Solo layer: **none** (beatless — no kit, no soloist; ambient's quieter cousin).
+
+The 2nd beatless station, and the first with **no chord brain at all**. Each voice is a LOOP of
+its own length in *seconds*, the lengths mutually coprime, so they drift in and out of phase and
+never line up the same way twice; each loop just HOLDS one note of a rolled in-mode pitch-set, so
+the harmony is **emergent** — whatever loops coincide. The seed rolls one of four SETUPS (the
+album's four pieces), which is the variety lever — every voice below is conditional on the setup.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_PIANO` | struck piano, rings down on its own (1/1, duet) — **first radio `INSTR_PIANO`** | `piano/airports` (grand→celesta voicing roll) | PIANO |
+| `I_VOICE` | sustained sung-vowel choir (2/1, duet) — **first sustained radio `INSTR_VOICE`** | `voice/choir-swell` (A2400 R1400, vowel roll, `voice_nasal` 0.1) | VOICE |
+| `I_PAD`   | warm saw drone / bed (synth, + faint bed under 1/1) | `saw/airports-pad` (kin: `saw/ambient-pad`) | SAW |
+| `I_PAD2`  | morphing PD pad (the 2/2 drone partner) | `pd/airports-drift` (morph roll) | PD |
+
+Per-voice **ombak** detune (`note_pitch` float) makes paired loops beat; held voices get a slow
+pitch-LFO (tape wow) + cutoff-LFO (breathing). Bed: `reverb(0.92, 0.35)` big bloom + high
+per-note sends.
+
+**Borrowing at a glance:** none copied — a **second drone island**, kin to ambient only in being
+beatless and holding voices. Its pad is kin to ambient's SAW pad; everything else (real piano,
+the choir, the coprime-loop form brain) is new to the dial. Blind brief +
+palette shop: [`../design/eno-blind-brief.md`](../design/eno-blind-brief.md).
+
+---
+
+## plantasia — "Music for Plants" (Mort Garson, 1976)
+
+Solo layer: **none** — but for a new reason: the LEAD is the protagonist (the first
+melody-forward station), so there's no separate solo strip; the whole song *is* the tune.
+
+The band is the **dream-synth (`moog.c`) signal path four ways** — `INSTR_SAW` →
+`FILTER_LADDER` + per-note `ENV_CUTOFF` "wow" + `DRIVE`, one slot per role (the `carlos.c`
+loan, generalized). The headline is **the songwriter** (melody brain #3): a *seeded*
+theme-and-variation hook, not a solo.
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_LEAD` | the gliding mono Moog lead (held, portamento + vibrato) | `saw/moog-lead` (moog.c LEAD: LADDER 1600/4, drive .42, fenv wow, glide, `instrument_tune` .05) | SAW |
+| `I_BASS` | springy filter-pluck bass | `saw/moog-bass` (moog.c BASS: LADDER 540/6, snappy `ENV_CUTOFF` 2/150/1700) | SAW |
+| `I_ARP`  | burbling sequencer line | `saw/moog-burble` (resonant LADDER 1200/7, tight env) | SAW |
+| `I_PAD`  | warm chord bed (slow filter swell) | `saw/moog-bed` (moog.c BRASS-ish: A60 LADDER 820/3) | SAW |
+| `I_BELL` | celesta sparkle | `mallet/celesta` (h0.85 t0.40 m0.50) | MALLET |
+| kit | light synth woodblock / soft kick / hat (per feel) | `sine/wood-kick` · `noise/soft-hat` | SINE/NOISE |
+
+**Borrowing at a glance:** the Moog path is `carlos.c`'s loan, here spread across four roles
+(carlos used it for two counterpoint voices). The MALLET celesta is kin to `cocktail`'s vibes
+chair. Otherwise its identity — a seeded *tune* developed over a songform, the five track-feels,
+the growing-plant face — is new. Blind brief + palette shop:
+[`../design/plantasia-blind-brief.md`](../design/plantasia-blind-brief.md).
+
+---
+
 ## afrobeat — Afrobeat (Fela Kuti & Africa 70 / Tony Allen)
 
 Solo layer: **`improv.h`** (the tenor sax takes the solo over the vamp).

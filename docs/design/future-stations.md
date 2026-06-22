@@ -30,8 +30,8 @@ This is the station-side mirror of the instrument new-sound score in
 
 | new demand | candidate | what it forces that nothing uses |
 |---|---|---|
-| ★★★★★ | **Eno "Music for Airports"** | real `INSTR_PIANO` **and** `INSTR_VOICE` choir (the sung vowels) — two untapped shelves at once + a prime-length-loops generative-form brain |
-| ★★★☆☆ | **Plantasia (Mort Garson)** | a Mellotron → the wind/bowed/voice shelf (`PIPE` flutes, `BOWED` strings, `VOICE` choir) — *downgraded: all three now have consumers (air, mariachi); the pull is now the Mellotron combination + a melody-forward lead, not first-use* |
+| ✅ shipped | ~~**Eno "Music for Airports"**~~ → `eno.c` | delivered both untapped shelves: **first radio `INSTR_PIANO`** (struck, 1/1) + **first sustained `INSTR_VOICE` choir** (2/1). New brain: **COPRIME-LENGTH LOOPS** — beatless, each voice a loop of its own length in seconds, phasing so the harmony is EMERGENT (no chord brain at all, a station first). Variety lever held: the seed rolls one of the album's FOUR SETUPS (1/1 piano · 2/1 voices · 1/2 duet · 2/2 synth), so each song is a different instrumentation, not one texture re-keyed. Ties to the Reich phasing idea (reusable form brain). Blind brief: [`eno-blind-brief.md`](eno-blind-brief.md). |
+| ✅ shipped | ~~**Plantasia (Mort Garson)**~~ → `plantasia.c` | delivered the melody-forward lead + the new brain (THE SONGWRITER, melody brain #3 — a SEEDED theme-and-variation hook over an A-A'-B-A songform), the dream-synth (`moog.c`) Moog voiced four ways, the five track-feels variety roll, and the growing-houseplant face. The Mellotron-combination angle was dropped — the cart is all-Moog, true to the record. |
 | ★★★★☆ | **Steve Reich minimalism** | real `INSTR_PIANO` + a **phase brain** (two voices drifting out of step — a new TIME mechanism) |
 | ✅ shipped | ~~**Afrobeat**~~ → `afrobeat.c` | delivered all three: first radio `INSTR_GUITAR` (the interlocking guitars) + first radio `INSTR_BRASS` & a `REED`+`BRASS` horn section + the `euclid()` polyrhythm bell/conga. The prediction held. |
 | ✅ shipped | ~~**Mariachi / son jalisciense**~~ → `mariachi.c` | **first radio `INSTR_BOWED`** (the violin section, with a portamento scoop) + `INSTR_BRASS` trumpet call-and-response + `INSTR_GUITAR` ×3 (vihuela/guitarra/guitarrón). New brain: **THE SESQUIALTERA** — a TIME brain reading one 12-step bar as 6/8 and 3/4 at once (2-against-3 hemiola). |
@@ -212,6 +212,9 @@ and Sakamoto unprompted.
   obvious next polish.
 - **Steve Reich minimalism** — two voices, same pattern, slightly different step
   lengths → phasing. The most experimental station possible, nearly free to build.
+  **Now even cheaper: `eno.c` shipped the coprime-loop phasing form brain** — Reich
+  is that brain applied to a repeating melodic CELL (not held single notes) with a
+  step grid, so it's a re-skin of eno's loop engine + a pattern.
 - **Lofi hip-hop jazz** — still in game-music's style cheat-sheet; most of its parts
   (swing, rhodes, crackle, groove template) now exist across other carts.
 
@@ -282,7 +285,7 @@ stations 11–14 ranked the remaining candidates:
 | **Aphex / IDM wing** | 3 | RHYTHM BRAIN #1: drums as grammar with a volatility knob (0 = loop, 1 = never the same bar) · ratchets (sample-exact sub-hits) · two deliberately CROSSED density curves |
 | **KPM library** | 2 | MOOD METADATA AS THE FRONT DOOR ("give me tension" — the API games actually want; could retrofit the whole family as a mood-keyed library) · the drums-only BREAK as an arrangement feature |
 | **motorik / Stereolab** | 1–2 | THE PROCESS FORM: no sections at all — one unbroken line, accumulation/subtraction as a continuous function of song-time (house's ride, committed to per-song) · the modulation as a once-per-song EVENT (a story beat, not a position). Sneaky-high taste fit (Farfisa+Moog+lounge = exotica∩Plantasia∩ymo) and the best *game-loop* music on the list — no boundaries to interrupt |
-| **Plantasia** | 1 | the MELODY-FORWARD arrangement — first station where the lead is the protagonist (could promote the improviser from soloist to frontman) + the growing-houseplant face |
+| ~~**Plantasia**~~ | **1** | ✅ shipped `plantasia.c`. The MELODY-FORWARD arrangement — first station where the lead is the protagonist — landed as **THE SONGWRITER (melody brain #3)**: a SEEDED theme-and-variation hook (not the improviser promoted — improv.h is performance-only and can't be pinned; this is a new seeded brain), developed A-A'-B-A + key-lift. Plus the growing-houseplant face and the five track-feels |
 | **Eno / Reich phasing** | 1 | prime-length cells drifting against each other; nearly free |
 | **Boards of Canada** | 1 | systematic MISTUNING as warmth (inconsistent per-voice detune + slow pitch LFOs as tape memory) |
 | ~~**Italo disco**~~ | **0** | ✅ shipped `italo.c` (#20). Pure recombination, as predicted: ymo's arp (→ octave-bounce sequencer bass) + house's pump + citypop's gear change + FM keys + new minor templates. The dessert, served — plus the Simmons tom fill as the one new-to-the-dial gesture |
@@ -353,9 +356,10 @@ mistuning. The other half of the engine's expressiveness, mostly unexplored.
   percussion params (pitch, cutoff, decay) drift per hit; the drum machine as
   a slowly-decaying organism. Needs the rotating-slot trick (audio-notes §2.2).
 - **Plaid / B12** — melodic IDM, arps in odd meters, bells. Gentlest entry.
-- **Eno "Music for Airports"** — melody cells of different PRIME lengths
-  (7/11/13 bars) phasing against each other. Nearly free; ties to the Reich
-  idea above.
+- ~~**Eno "Music for Airports"**~~ — ✅ shipped as `eno.c`: held single notes (not
+  melody cells) on coprime-length loops in *seconds*, phasing against each other,
+  emergent harmony, the four-setup variety roll. Reich (melody cells of prime
+  *bar* lengths) is the natural next customer of the same loop engine.
 
 ### Batch three: the functional-music wing
 
@@ -364,13 +368,15 @@ didn't exist yet. The meta-joke is the point: these radios already ARE library
 music — generative tracks with mood metadata waiting for a game to license
 them. This wing makes that explicit.
 
-- **Plantasia (Mort Garson, 1976)** — "warm earth music for plants." Early
-  Moog, and the first MELODY-FORWARD station: every cart so far buries the
-  lead in the arrangement; here the mono Moog lead is the protagonist — a held
-  voice with note_glide portamento + vibrato (jangle's lead, promoted),
-  bouncy staccato bass, celesta bells, innocent major harmony with vaudeville
-  chromatic passing chords. Face gimmick: a generative houseplant that GROWS
-  as the piece plays — fresh plant per seed, fully grown by the outro.
+- ~~**Plantasia (Mort Garson, 1976)**~~ — ✅ shipped as `plantasia.c`. The first
+  MELODY-FORWARD station: the mono Moog lead is the protagonist — a held voice with
+  `note_glide` portamento + vibrato, driven per-frame so it slides. The headline
+  turned out to be a NEW brain, **THE SONGWRITER (melody brain #3)** — a *seeded*
+  theme-and-variation hook (not jangle's lead or improv.h promoted; both re-roll and
+  can't be pinned), developed A-A'-B-A + a final key-lift. Springy filter-pluck bass,
+  burbling arp, celesta bells, bright major + vaudeville passing chords, the five
+  track-feels, and the generative houseplant that GROWS as the piece plays (fresh
+  plant per seed, flowering by the outro).
 - **Muzak / sounds of the supermarket** — the Muzak Corporation's "Stimulus
   Progression" (1948): 15-minute blocks of ASCENDING INTENSITY engineered to
   pace workers — literally game-music's density curve, invented as a corporate

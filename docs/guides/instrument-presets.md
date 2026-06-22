@@ -1508,6 +1508,72 @@ The soft vintage kit + jam-strip lead: `sine/air-kick` (SINE, ENV_PITCH 0/42/16)
 
 ---
 
+## eno (Music for Airports) — new recipes
+
+The beatless station that brought real `INSTR_PIANO` and a sustained `INSTR_VOICE` choir onto
+the dial. All four voices are conditional on the seed-rolled SETUP (1/1 piano · 2/1 voices ·
+1/2 duet · 2/2 synth); none uses a chord brain — each loop holds one in-mode note and the
+harmony emerges from phase. Per-voice `note_pitch`-float detune (the ombak) makes paired loops
+beat; held voices get a slow pitch-LFO (tape wow) + cutoff-LFO (breathing); bed reverb
+`reverb(0.92, 0.35)`.
+
+### piano/airports
+`INSTR_PIANO` · A4 D2800 S0 R1400 · voicing rolled (grand h~0.1 most songs, glassy celesta
+h~0.9 sometimes) · hammer `timbre` tracks the tone knob · `morph 0.85` (open pedal) · LP 2600·tone/1
+The first radio piano — struck, rings down on its own (sustain 0); the loop just strikes it and
+the long decay/release is the ring. The "can't sustain" trait that kept PIANO off the dial is
+*correct* here: Eno's 1/1 piano IS struck-and-rings.
+- tier: unique · origin: eno · used by: eno (`I_PIANO`, setups 1/1 + duet)
+- kin: the faked TRI pianos (`tri/felt-grand`) everywhere else — this is the real engine.
+
+### voice/choir-swell
+`INSTR_VOICE` · A2400 D0 S7 R1400 · vowel `harmonics` rolled (O→A→E) · `timbre 0.45` (size) ·
+effort `morph` tracks tone · `voice_nasal 0.10` · LP 2400·tone/1
+The first SUSTAINED radio choir — a long-swell held vowel that holds while sounding then
+releases into the gap. air's VOICE was a vocoder *lead*; this is held vowel pads.
+- tier: unique · origin: eno · used by: eno (`I_VOICE`, setups 2/1 + duet)
+
+### saw/airports-pad · pd/airports-drift
+The synth bed. `saw/airports-pad` (`INSTR_SAW` A1800 D600 S7 R2600 · LP 650·tone/2) is the warm
+drone bed (and the faint bed under the 1/1 piano); `pd/airports-drift` (`INSTR_PD` A2200 D600 S7
+R2800 · `morph` rolled · LP 760·tone/2) is its morphing partner — together they are the 2/2
+synth-only drone.
+- tier: unique (saw bed kin `saw/ambient-pad`) · origin: eno · used by: eno (`I_PAD`/`I_PAD2`, setup 2/2 + 1/1 bed)
+
+---
+
+## plantasia (Music for Plants) — new recipes
+
+The first melody-forward station, all-Moog: the **dream-synth (`moog.c`) signal path on loan,
+voiced FOUR ways** — `INSTR_SAW` → `FILTER_LADDER` + per-note `ENV_CUTOFF` "wow" + `DRIVE`, the
+same loan `carlos.c` took for two counterpoint voices, here spread across lead/bass/arp/bed.
+The lead is a held mono voice driven per-frame so it glides (the seeded SONGWRITER tune).
+
+### saw/moog-lead
+`INSTR_SAW` · A6 D200 S6 R280 · `FILTER_LADDER` 1600·tone/4 · drive .42 · `ENV_CUTOFF` 6/260/1000 ·
+`instrument_tune` .05 (a hair of Moog fat) · held + `note_glide` (per-feel 26–130ms) + vibrato `note_lfo` 5.5Hz/.18
+The gliding, singing mono lead — the protagonist. Straight off moog.c's LEAD factory patch.
+- tier: variant (moog.c LEAD, one-slot) · origin: plantasia · used by: plantasia (`I_LEAD`)
+- kin: `carlos.c`'s Moog voices (same loan); the B-panel swaps the wave (saw/square/tri) live.
+
+### saw/moog-bass
+`INSTR_SAW` · A2 D170 S3 R160 · `FILTER_LADDER` 540/6 · drive .40 · `ENV_CUTOFF` 2/150/1700 (the snap)
+The springy filter-pluck bass — the bounce is the fast filter contour. moog.c's BASS patch.
+- tier: variant (moog.c BASS) · origin: plantasia · used by: plantasia (`I_BASS`)
+
+### saw/moog-burble · saw/moog-bed
+`saw/moog-burble` (`INSTR_SAW` A2 D90 S0 R110 · `FILTER_LADDER` 1200·tone/7 · `ENV_CUTOFF` 1/80/900)
+is the percolating sequencer arp; `saw/moog-bed` (`INSTR_SAW` A60 D300 S5 R360 · `FILTER_LADDER`
+820·tone/3 · slow `ENV_CUTOFF` 80/400/1500) is the warm chord bed (moog.c BRASS-ish swell).
+- tier: variant (moog.c path) · origin: plantasia · used by: plantasia (`I_ARP`/`I_PAD`)
+
+### mallet/celesta
+`INSTR_MALLET` · h0.85 t0.40 m0.50 · S7 R700 — glassy celesta sparkle answering the lead.
+- tier: unique · origin: plantasia · used by: plantasia (`I_BELL`)
+- kin: `cocktail`'s vibes solo-chair (same MALLET, different macros).
+
+---
+
 ## Notes for growing this file
 
 - One station at a time. Add its voices, and for any recipe that **matches** one already

@@ -54,10 +54,14 @@ Plus the fresh ideas: **clanky pots & pans** (an FM-clang/detuned-square junk-me
 
 Scored in [`future-stations.md`](future-stations.md) ("newest demand"):
 
-1. **Eno "Music for Airports"** — forces `INSTR_PIANO` *and* `INSTR_VOICE` choir **plus** the
-   prime-length phasing brain: three firsts at once.
-2. **Plantasia (Mort Garson)** — a Mellotron → the whole `PIPE`/`BOWED`/`VOICE` shelf.
-3. **Steve Reich minimalism** — real `INSTR_PIANO` + the phase brain.
+1. ✅ ~~**Eno "Music for Airports"**~~ → `eno.c` — shipped all three firsts: real `INSTR_PIANO`,
+   the first sustained `INSTR_VOICE` choir, and the coprime-length loop-phasing brain (in
+   absolute seconds, beatless) with emergent harmony + the four-setup variety roll.
+2. **Steve Reich minimalism** — real `INSTR_PIANO` + the phase brain. **Now cheap: it's `eno`'s
+   loop engine applied to a repeating melodic CELL on a step grid** (next customer of the brain).
+3. ✅ ~~**Plantasia (Mort Garson)**~~ → `plantasia.c` — the first melody-forward station;
+   shipped **THE SONGWRITER (melody brain #3)**, a seeded theme-and-variation hook over an
+   A-A'-B-A songform, the dream-synth Moog voiced four ways, and a growing-plant window.
 
 ## New generative brains (build once, reuse across stations)
 
@@ -66,8 +70,9 @@ From the gap ledger's aggregate:
 1. **Section-terrace brain** — named breakdown / pre-chorus kick-drop / riser / ritard-out
    events. Closes *brain* holes in 6+ stations (italo, dub, roadhouse, exotica, jingle, addis,
    gamelan). The highest-leverage single brain.
-2. **Prime-length loop phasing in absolute seconds** — the Eno/Reich engine; fixes `ambient`'s
-   skeleton (today a finite 16-chord loop on a 60-BPM grid).
+2. ✅ ~~**Prime-length loop phasing in absolute seconds**~~ — shipped in `eno.c` (per-voice
+   wall-clock loops off `now()`, coprime lengths, gate-window + silence per cycle). Reusable
+   for Reich; `ambient`'s finite-16-chord skeleton could be retrofitted onto it.
 3. **Drum-led elastic tempo that lands on a structural beat** — extend `tango`'s live-`bpm()`
    TEMPO-AS-A-VOICE to gamelan (kendang→gong) and the Doors jam.
 

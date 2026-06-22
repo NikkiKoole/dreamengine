@@ -2426,6 +2426,26 @@
     ]
   },
   {
+    "title": "eno radio",
+    "description": "A beatless ambient station after Brian Eno's Music for Airports (1978). Each voice is a LOOP of its own length in seconds, the lengths mutually coprime, so they drift in and out of phase and never line up the same way twice - and there is NO chord progression: each loop just holds one note of a rolled pitch-set, so the harmony is whatever loops happen to coincide (emergent, not authored). The window shows it: one lane per loop, a playhead creeping at the loop's own speed, a bloom where two playheads meet - you watch the chord form. Not-samey by design: the album is four SETUPS and the seed rolls one per song - 1/1 piano (real INSTR_PIANO struck), 2/1 voices (sustained INSTR_VOICE choir), 1/2 duet, 2/2 synth drone - plus key + mode (lush, never dark), register, a fresh coprime period set, per-voice detune (ombak), and timbre macros; each loop also waxes/wanes over ~90s. SPACE/tune next, R same seed, [ ] history, drift/tone/density knobs, B picks the movement, M power, H help. Pin a favourite via ENO_SEED. First radio station to use real INSTR_PIANO and a sustained INSTR_VOICE choir, and the first with no chord brain at all.",
+    "file": "eno.cart.png",
+    "kind": [
+      "toy",
+      "instrument"
+    ],
+    "homage": "Brian Eno - Ambient 1: Music for Airports (1978)"
+  },
+  {
+    "title": "plantasia radio",
+    "description": "Warm earth music for plants, after Mort Garson's Mother Earth's Plantasia (1976): bright, bouncy, whimsical little Moog SONGS, each for a different houseplant. The family's first MELODY-FORWARD station - the lead is the protagonist, not buried in the mix. Two new things: THE SONGWRITER (melody brain #3), a SEEDED theme-and-variation generator - a singable hook invented from the seed (the SAME every replay, unlike a solo) and developed across an A-A'-B-A songform with a final key-lift, sung by the mono Moog lead with portamento glide + vibrato (a held voice driven per-frame so it can slide); and the TRACK FEELS - the seed rolls one of five named feels (sprightly / swing / waltz / rubato / green), each bundling tempo, meter, groove, kit and density. The band is the dream-synth (moog) signal path four ways: gliding lead, springy filter-pluck bass, burbling sequencer arp, warm pad bed, celesta sparkle, a light synth kit. The window GROWS A HOUSEPLANT as the song plays - sprout, leaves unfurling, a flower opening on the outro; species seed-rolled, the seed on a nursery price-tag. SPACE next, R same seed, [ ] history, LEFT/RIGHT density, UP/DOWN tempo, T tone, M power, B band, H help. Pin via PLANTASIA_SEED.",
+    "file": "plantasia.cart.png",
+    "kind": [
+      "toy",
+      "instrument"
+    ],
+    "homage": "Mort Garson - Mother Earth's Plantasia (1976)"
+  },
+  {
     "title": "jangle radio",
     "description": "The afternoon sibling of bossa/ambient radio: endless feel-good mixolydian slacker pop, the Mac DeMarco / One Wayne G homage. Every song is a 2-4 chord vamp with NO bridge - the arrangement (intro/groove/solo/outro layers per loop) is the form. Chorused jangle guitar (constant 5.5Hz pitch-LFO warble), drum machine running 2-10ms loose behind the bass (sample-exact groove timing), tape tempo wobble, and a lazy legato lead that slides between mixolydian tones on one held voice via note_glide. Most songs are titled by date stamp, like the tape. Seed on the display pins the composition (JANGLE_SEED / R / [ ] history); the performance re-rolls. SPACE next, LEFT/RIGHT feel, UP/DOWN tempo, M power, H help. Worked example #3 for docs/guides/game-music.md.",
     "file": "jangle.cart.png",
