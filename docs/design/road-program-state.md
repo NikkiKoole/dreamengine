@@ -124,10 +124,11 @@ offsets their own way — they predate the lane model. Collected issues:
    the same cleanup the corner-wrap (5a) needs.
 
 **The through-line: there's no single shared lane model.** The fix is one refactor + a follow-up:
-- **Pass 1 — the lane-section as the single source of truth.** Extract a typed lane list (centre→out, each with
-  type/width/`[inner,outer]` offsets; carriageway lanes sum to HW at the kerb, sidewalk lives beyond it) and
-  have turn lanes (#1,#2), the stop bar (#3), the roundabout approaches (#4) and pavement (#6) all read from it.
-  Model the HALF-section as the unit (one-way readiness, above). Spec the offset helpers.
+- ✓ **Pass 1 — the lane-section as the single source of truth** (shipped 2026-06-22). `drive_inner()`/
+  `drive_outer()` are the shared offsets; turn lanes (#1 delineation+arrow off the inner driving lane, #2 the
+  splitter only when there's no median — the bay is the median's gap), the stop bar (#3 spans the driving lanes
+  only), the roundabout approaches (#4 `cross_markings` now runs there) and pavement (#6 its own lane-type
+  toggle on the cross-section row) all read from it. Half-section is the unit (one-way readiness). Spec'd (53).
 - **Pass 2 — bike corner-wrap (#5a) + parking clear-zone (#8)** — the concentric arc band, parking ends back.
 - **Pass 3 (optional)** — straight-through crossing (#5b), transition-zone polish (#7).
 
