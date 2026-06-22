@@ -56,6 +56,7 @@
 //
 // ════════════════════════════════════════════════════════════════════════════
 #include "studio.h"
+#include "cursor.h"
 #include <math.h>
 #include <string.h>
 #include <stdint.h>
@@ -1182,4 +1183,12 @@ void draw(void) {
     draw_sidebar();
     if (!uv_mode) draw_statusbar();
     if (show_help) draw_help();
+
+    // pixel cursor: grab while dragging, crosshair for precise picking in the
+    // viewport, plain arrow over the side/top/status UI panels.
+    int mx = mouse_x(), my = mouse_y();
+    int over_vp = mx >= VP_X && my >= VP_Y && my < SCREEN_H - BOT_H;
+    if (dragging || vdragging || obj_dragging) cursor_draw(CUR_GRAB);
+    else if (over_vp)                          cursor_draw(CUR_CROSS);
+    else                                       cursor_draw(CUR_ARROW);
 }
