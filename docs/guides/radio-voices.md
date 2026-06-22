@@ -713,6 +713,29 @@ stations share. The genre's effects-blocked wants (reverb, chorus, true vocoder,
 `INSTR_PIPE` intonation note — are catalogued in
 [`../design/air-effects-wants.md`](../design/air-effects-wants.md).
 
+## wba — The Whitest Boy Alive (an ARTIST station, 5 song archetypes)
+
+Solo layer: **none** — the texture is the guitar↔bass DUET, not a soloist. The whole identity
+is RESTRAINT and SPACE; the first station to use the **`ampcab.h` guitar amp/cab** + a clean-guitar
+pedalboard. Five archetypes (Burning / Golden Cage / 1517 / Courage / Done With You).
+
+| slot | role | preset | engine |
+|---|---|---|---|
+| `I_GTR`  | clean electric guitar (palm-mute chops) — **first station on the CLEAN amp/cab** | `guitar/steel` (h0.55 m0.38) → `ampcab` **CLEAN** (DRIVE_SOFT, scooped-bright, light sag) + slapback `instrument_echo .12` + `instrument_chorus .20` | GUITAR |
+| `I_BASS` | the melodic co-lead bass (round, dry, prominent) | `tri/round-bass` (LP 560–720·arch) | TRI |
+| `I_EP`   | warm Rhodes comp | `epiano/rhodes` + `instrument_chorus(0.7,0.28,0.26)` (Rhodes width, ⟳ air) | EPIANO |
+| `I_LEAD` | soft vocal topline | `voice/soft-tenor` (O→A vowel, soft effort, low nasal) | VOICE |
+| `I_ORG`  | a little analog synth/organ stab | `saw/organ-stab` (`instrument_tune` .04) | SAW |
+| kit | tight clean machine kit (kick/clap/hat) | `sine/clean-kick` · `noise/clean-snare` · `noise/tight-hat` | SINE/NOISE |
+
+Bus: `reverb(0.35,0.5)` small warm room (⟳) + `tape(0.10,0.07,0.22)` gentle glue + `glue(0,0.20)`
+knitting the dry band. **No distortion** — CLEAN amp only; the restraint is the sound.
+
+**Borrowing at a glance:** an artist-station cousin of `air`/`napoleon` (the archetype roll). Reuses
+the Rhodes-width chorus (≈ air), the slapback echo, the small-warm-room verb. Its new ground: the
+**clean `INSTR_GUITAR` through `ampcab.h`** (no station had used the amp/cab) and the **negative-space
+guitar↔bass duet**. Blind brief: [`../design/wba-blind-brief.md`](../design/wba-blind-brief.md).
+
 ## napoleon — *Napoleon Dynamite* (an ARTIST station, 5 song archetypes)
 
 Solo layer: **`solo.h`** — and the jam ribbon's *voice + behavior change per archetype* (the
