@@ -107,6 +107,18 @@ How the bits fit together (for whoever touches it next):
 This serves all three showreel layers in [transitions.md](transitions.md): an in-cart
 transition clip (A), a stitched reel (B), and the live cross-cart player (C) all now have sound.
 
+## Reels — stitching clips into one video (SHIPPED 2026-06-22)
+
+`tools/compose-clips.js` is the Layer-B stitcher: it glues already-baked clips into ONE reel
+with transitions between cuts (ffmpeg `xfade` for video, `acrossfade` for audio — picture and
+sound dissolve together). Like a clip, a reel is a **committed, reproducible recipe**: a
+`.reel` manifest under `tools/reels/<name>.reel` → `editor/public/reels/<name>.webm` (a sibling
+of `clips/`). The manifest lists one clip per line (`<cart>/<label>` or a path) with an optional
+`| <transition> <secs>` per cut and `# fps/crf/size/xfade` defaults; transitions are ffmpeg
+xfade names (fade · dissolve · wipeleft/… · circleopen…). Clips of mixed sizes are letterboxed
+nearest-neighbour (pixels stay crisp). Bake clips first (`make-gif.js`), then compose. The
+first proof reel is `tools/reels/demo.reel` → `editor/public/reels/demo.webm`.
+
 ## Why this is now the priority (the venue is decided)
 
 The clip system stalled not on the tool — which is done — but on the absence of a venue to

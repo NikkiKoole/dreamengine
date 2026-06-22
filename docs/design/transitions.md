@@ -210,14 +210,14 @@ of magnitude at each step:
   captures a normal run. **Prerequisite for [attract mode](attract-mode.md).** *This is the
   goal; it's the lowest-risk path and the rest of this doc is about it.*
 
-- **B — clip stitching, build-time + passive (a small optional tool, NOT a player).**
-  Take *already-baked* `.webm`s and glue them with ffmpeg crossfades into one **video file**
-  ("5s of `sloop`, dissolve, 10s of `coaster`"). Nothing live, no interactivity — it's video
-  *editing*. Output is a passive reel for the gallery front page. A `tools/compose-clips.js`
-  over ffmpeg; cheap, dumb, waits until there are clips worth stitching. Serves the
+- **B — clip stitching, build-time + passive (a small tool, NOT a player). BUILT 2026-06-22:
+  `tools/compose-clips.js`.** Take *already-baked* `.webm`s and glue them with ffmpeg
+  crossfades into one **video file** ("5s of `sloop`, wipe, 10s of `moog`"). Nothing live, no
+  interactivity — it's video *editing*. Output is a passive reel for the gallery front page.
+  A committed `.reel` manifest lists the clips + per-cut transition (xfade names: fade /
+  dissolve / wipe* / circleopen…); video uses `xfade`, audio `acrossfade`, so picture and
+  sound dissolve together. Clips now carry sound (Layer-A "Sound" is shipped). Serves the
   curated-showcase reel ([decision 0020](../decisions/0020-in-house-tool-curated-showcase.md)).
-  **Needs sound** — a reel of silent instrument carts shows nothing; the input clips must
-  carry audio first (today they're silent — see [cart-clips.md](cart-clips.md) "Sound").
 
 - **C — a LIVE multi-cart player (a separate, much bigger idea — stubbed, not specced here).**
   A meta-program that *runs* cart 1 live (or its demo loop), transitions, loads cart 2, and

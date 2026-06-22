@@ -1,0 +1,7 @@
+# demo — first stitched reel proving compose-clips (sloop → moog → easel)
+# fps 30
+# crf 28
+# xfade fade 0.5
+sloop/01-autodrive
+moog/01-fat       | wipeleft 0.6
+easel/01-selfplay | circleopen 0.5

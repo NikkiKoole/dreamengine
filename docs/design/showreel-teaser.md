@@ -81,8 +81,9 @@ it requires finishing the **clip/showreel pipeline** we already scoped:
 2. Bake them — `make-gif.js --all` (today only 1 of ~10 committed tracks is baked).
 3. ~~**Audio in clips**~~ — **SHIPPED (2026-06-22):** webm/mp4 clips now carry sound (rendered
    in the same `play.js` pass, muxed as Opus/AAC). See [`cart-clips.md`](cart-clips.md) "Sound".
-4. **Stitch** — `tools/compose-clips.js` (Layer B in [`transitions.md`](transitions.md)): glue
-   the shots with [transitions](transitions.md) (the LUMA/iris/wipe work) into one video.
+4. ~~**Stitch**~~ — **SHIPPED (2026-06-22):** `tools/compose-clips.js` glues baked clips with
+   ffmpeg `xfade`/`acrossfade` from a committed `.reel` manifest → one reel (picture + sound
+   dissolve together). Layer B in [`transitions.md`](transitions.md). Proof: `editor/public/reels/demo.webm`.
 
 v0 is honest if it's a *vision* teaser ("here's the world we're building") and dishonest if it
 implies the shots are one continuous game — a call for the maker (below).

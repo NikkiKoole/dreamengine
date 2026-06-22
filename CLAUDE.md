@@ -160,6 +160,13 @@ eventually2/
 │   │                   #   --recipe <label> → editor/public/clips/<cart>/NN-label.webm (the
 │   │                   #   history-page convention, a SIBLING of carts/); --all rebuilds every
 │   │                   #   committed clip. --from/--clip for ad-hoc. See guides/debug-harness.md
+│   │                   #   webm/mp4 carry AUDIO by default (cart's sound rendered in the same
+│   │                   #   deterministic pass, muxed Opus/AAC; gif/webp/apng silent; --mute off).
+│   ├── compose-clips.js #  stitch baked clips into ONE reel with transitions (the showreel
+│   │                   #   stitcher, "Layer B"): ffmpeg xfade (video) + acrossfade (audio) from
+│   │                   #   a committed tools/reels/<name>.reel manifest → editor/public/reels/
+│   │                   #   <name>.webm. Bake clips first (make-gif), then compose. See
+│   │                   #   docs/design/transitions.md + cart-clips.md "Reels"
 │   ├── ui-audit.js     #   UI bug finder: text that runs off the screen edge, overlapping
 │   │                   #   labels, widgets that draw but never respond to clicks (a missing
 │   │                   #   ui_end() — from ui.h's DE_TRACE tripwire), and panels that only
