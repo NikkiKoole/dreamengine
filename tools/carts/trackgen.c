@@ -73,7 +73,9 @@
 #define GRASS_DRAG 0.965f
 #define GRASS_MAX  1.8f
 
-#define CAR_R      5.0f        // car body radius for car-to-car collision (world px)
+#define CAR_HALF_L 6.0f        // car collision half-extent along heading (long)
+#define CAR_HALF_W 3.6f        // car collision half-extent across heading (narrow) — so side-by-side
+                               // cars in adjacent lanes (centres ~16px apart) never falsely touch
 #define BUMP_REST  0.35f       // restitution: 0 = dead thud, 1 = fully elastic bounce
 #define BUMP_BLEED 0.90f       // speed retained by both cars after a hard contact
 
@@ -81,8 +83,8 @@
 #define LANE_MIN   12.0f       // min lane band width (px) — keeps side-by-side cars off each other
 #define LANES_MAX  3
 #define TRAF_LA    12          // traffic steering look-ahead (samples)
-#define TG_GAP0    14.0f       // car-following: standstill gap to the leader (px)
-#define TG_HEAD    20.0f       // time headway (frames) — gap target grows with speed (bigger = brake earlier)
+#define TG_GAP0    20.0f       // car-following: standstill gap to the leader (px) — well clear of the 10px collision diameter
+#define TG_HEAD    28.0f       // time headway (frames) — gap grows with speed; big enough to stop before touching
 #define TG_BRAKE   0.05f       // comfortable decel used to size the safe gap
 
 #define CAM_LEAD   16.0f
@@ -542,7 +544,7 @@ static void gen_track(unsigned int seed) {
     S->nlanes = (int)(2.0f * S->half / LANE_MIN);
     if (S->nlanes < 1) S->nlanes = 1;
     if (S->nlanes > LANES_MAX) S->nlanes = LANES_MAX;
-    S->lane_w = 2.0f * S->half / S->nlanes;            // band ≥ LANE_MIN ≥ 2·CAR_R
+    S->lane_w = 2.0f * S->half / S->nlanes;            // band ≥ LANE_MIN > car width (no side-by-side touch)
     float per = 0;
     for (int s = 0; s < NSAMP; s++) {
         float dx = S->cl[(s+1)%NSAMP].x - S->cl[s].x, dy = S->cl[(s+1)%NSAMP].y - S->cl[s].y;
@@ -782,17 +784,19 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     if (s < TG_GAP0 && v < 0.8f) thr = -1.0f;            // snug behind the obstacle & slow → settle
                                                           // to a dead stop (no reaction-lag creep)
 
-    // REACTION LAG: act on the command from REACT_N frames ago. This delay is what
-    // makes dense following UNSTABLE — tiny gaps amplify backward into phantom jams.
+    // REACTION LAG — but ASYMMETRIC. Braking is PROMPT (you hit the brakes the instant
+    // you see danger); only ACCELERATION is sluggish (slow to get going again). Delaying
+    // the brake is what rear-ended the car ahead; lagging only the throttle still gives
+    // stop-and-go — a jam discharges slowly because cars dawdle speeding up, not braking.
     c->thist[c->thead % REACT_N] = thr;
     c->thead++;
-    float out = c->thist[c->thead % REACT_N];            // oldest entry = REACT_N frames old
+    float delayed = c->thist[c->thead % REACT_N];        // command REACT_N frames ago
+    float out = thr < delayed ? thr : delayed;           // the more cautious of now vs lagged
 
-    // NEVER REVERSE. The clamp must use the speed RIGHT NOW (not when the command was
-    // decided), or a stale brake from before the car stopped would back it up — the
-    // light/queue oscillation. Allow braking only down to a dead stop this frame.
+    // NEVER REVERSE. Clamp against the speed RIGHT NOW (a stale brake from before the car
+    // stopped would otherwise back it up). Brake only down to a dead stop this frame.
     if (out < 0.0f) {
-        float min_thr = -c->spd / BRAKE;                 // brake that lands exactly at spd 0
+        float min_thr = -c->spd / BRAKE;
         if (out < min_thr) out = min_thr;
     }
 
@@ -815,32 +819,38 @@ static void update_standings(void) {
     }
 }
 
-// car-to-car collision: after everyone has moved, push overlapping cars apart and
-// trade momentum along the contact normal. Equal masses, so each takes half. A
-// hard hit bleeds a little speed (and shakes/clacks if the player is in it) — you
-// can shove a rival wide into a corner, and they can do it to you.
+// car-to-car collision: cars are ORIENTED boxes (long along heading, narrow across),
+// not circles — so two cars side-by-side in adjacent lanes don't falsely "touch" the
+// way fat circles did. Overlap is tested in A's local frame; we separate along the
+// axis of least penetration (a separating-axis resolve) and trade momentum there.
+// Mass-weighted: HUNTER barely budges, SUNDAY gets flung. A hard hit clacks/shakes.
 static void resolve_collisions(void) {
-    const float MIN = 2.0f * CAR_R;
+    const float RL = 2.0f * CAR_HALF_L, RW = 2.0f * CAR_HALF_W;   // sum of half-extents
     for (int a = 0; a < S->ncars; a++)
         for (int b = a + 1; b < S->ncars; b++) {
             Car *A = &S->car[a], *B = &S->car[b];
-            float dx = B->px - A->px, dy = B->py - A->py;
-            float d2 = dx*dx + dy*dy;
-            if (d2 >= MIN*MIN) continue;                     // not touching
-            float d = fsqrt(d2), nx, ny;
-            if (d < 1e-3f) { nx = 1.0f; ny = 0.0f; d = 0.0f; }  // exactly stacked → pick an axis
-            else           { nx = dx/d; ny = dy/d; }
-            float pen = MIN - d;
+            float rx = B->px - A->px, ry = B->py - A->py;
+            if (rx*rx + ry*ry >= RL*RL) continue;            // far apart (cheap reject)
 
-            // distribute by MASS: each car yields in proportion to the OTHER's weight,
-            // so HUNTER (heavy) barely budges and SUNDAY (light) gets flung.
+            float fx = dx(1, A->ang),      fy = dy(1, A->ang);       // A's forward
+            float sx = dx(1, A->ang + 90), sy = dy(1, A->ang + 90);  // A's side
+            float fwd = rx*fx + ry*fy, lat = rx*sx + ry*sy;
+            float pf = RL - (fwd < 0 ? -fwd : fwd);          // overlap along / across
+            float pl = RW - (lat < 0 ? -lat : lat);
+            if (pf <= 0 || pl <= 0) continue;                // boxes don't overlap
+
+            float nx, ny, pen;                               // separate along least overlap
+            if (pl < pf) { float g = lat < 0 ? -1.0f : 1.0f; nx = sx*g; ny = sy*g; pen = pl; }
+            else         { float g = fwd < 0 ? -1.0f : 1.0f; nx = fx*g; ny = fy*g; pen = pf; }
+
+            // distribute by MASS: each car yields in proportion to the OTHER's weight.
             float imA = 1.0f / A->mass, imB = 1.0f / B->mass, inv = imA + imB;
             A->px -= nx*pen*(imA/inv); A->py -= ny*pen*(imA/inv);
             B->px += nx*pen*(imB/inv); B->py += ny*pen*(imB/inv);
 
             float vn = (B->vx - A->vx)*nx + (B->vy - A->vy)*ny;
             if (vn < 0) {                                    // closing → trade momentum
-                float j = -(1.0f + BUMP_REST) * vn / inv;    // impulse magnitude
+                float j = -(1.0f + BUMP_REST) * vn / inv;
                 A->vx -= j*imA*nx; A->vy -= j*imA*ny;        // lighter car gets the bigger kick
                 B->vx += j*imB*nx; B->vy += j*imB*ny;
                 if (-vn > 0.8f) {                            // a real bump, not a graze
@@ -940,6 +950,14 @@ void update(void) {
         }
         watch("queue", "%d red=%d", q, S->light_red);
     }
+    { float ms2 = 1e18f; int bi = 0, bj = 0;             // closest any two cars get (collision < 10px)
+      for (int i = 0; i < S->ncars; i++)
+        for (int j = i + 1; j < S->ncars; j++) {
+            float ax = S->car[i].px - S->car[j].px, ay = S->car[i].py - S->car[j].py;
+            float d2 = ax*ax + ay*ay; if (d2 < ms2) { ms2 = d2; bi = i; bj = j; }
+        }
+      watch("minsep", "%.1f lanes=%d/%d samelane=%d", fsqrt(ms2),
+            S->car[bi].lane, S->car[bj].lane, S->car[bi].lane == S->car[bj].lane); }
 #endif
 }
 
@@ -1208,8 +1226,9 @@ void spec(void) {
         S->car[i].vx = S->car[i].vy = 0;
     }
     Car *hv = &S->car[2], *lt = &S->car[4];          // HUNTER (heavy) vs SUNDAY (light)
+    hv->ang = lt->ang = 0.0f;                         // both face +x, so a +x gap is longitudinal
     hv->px = 100.0f; hv->py = 100.0f;
-    lt->px = 105.0f; lt->py = 100.0f;                // overlapping along +x
+    lt->px = 105.0f; lt->py = 100.0f;                // overlapping nose-to-tail along +x
     float hx0 = hv->px, lx0 = lt->px;
     resolve_collisions();
     expect(hv->mass > lt->mass, "HUNTER outweighs SUNDAY");
@@ -1221,15 +1240,19 @@ void spec(void) {
     S->mode = 1;
     step(1500);                      // let the flow settle
 
-    // car-following prevents pile-ups: no two cars overlap after settling
-    float minsep2 = 1e18f;
+    // car-following prevents pile-ups: no two car BOXES overlap after settling
+    // (oriented test, the same one resolve_collisions uses — center distance alone is
+    // misleading now that cars are long-and-narrow, not fat circles)
+    int overlaps = 0;
     for (int i = 0; i < S->ncars; i++)
         for (int j = i + 1; j < S->ncars; j++) {
-            float ddx = S->car[i].px - S->car[j].px, ddy = S->car[i].py - S->car[j].py;
-            float d2 = ddx*ddx + ddy*ddy;
-            if (d2 < minsep2) minsep2 = d2;
+            float rx = S->car[j].px - S->car[i].px, ry = S->car[j].py - S->car[i].py;
+            float fwd = rx*dx(1,S->car[i].ang)      + ry*dy(1,S->car[i].ang);
+            float lat = rx*dx(1,S->car[i].ang + 90) + ry*dy(1,S->car[i].ang + 90);
+            if ((fwd < 0 ? -fwd : fwd) < 2.0f*CAR_HALF_L - 0.5f &&
+                (lat < 0 ? -lat : lat) < 2.0f*CAR_HALF_W - 0.5f) overlaps++;
         }
-    expect(minsep2 > 64.0f, "traffic keeps a gap — no pile-ups (min sep > 8px)");
+    expect_eq(overlaps, 0, "no pile-ups — no two car boxes overlap after settling");
 
     // the road is flowing, not gridlocked: at least one car is moving with purpose
     float vmax = 0;
