@@ -1,12 +1,15 @@
 # traffic-ai — NPC driving behaviours, prototyped as a TRAFFIC mode in trackgen
 
-STATUS: BUILDING (2026-06-23). **Shipped:** the RACE/TRAFFIC toggle + the foundation —
-lane-keeping, car-following (IDM-style time-gap), and OVERTAKING (a blocked car pulls into a
-clear adjacent lane to pass; a following car brakes to a stop and never reverses). Lanes are
-emergent from lateral position, so the player participates (stop in a lane → traffic passes you).
-Spec covers it (closing→brake, clear→accelerate, blocked→change lane, flow, no pile-ups). **Rough
-edge:** on the tightest procedural corners a fast car can still clip the apex (concentrated at one
-corner per track; it recovers). **Next:** phantom jams, figure-8 right-of-way, speed zones, hazard/merge.
+STATUS: BUILDING (2026-06-23). **Shipped:** the RACE/TRAFFIC toggle + lane-keeping, car-following
+(IDM-style time-gap), OVERTAKING (blocked car pulls into a clear lane; a follower brakes to a stop,
+never reverses), a crowd of TRAFFIC_CARS at density, speed-tinted cars (red=stopped→green=flowing),
+a cycling TRAFFIC LIGHT (red = a stop-line all lanes queue behind), and a reaction lag (REACT_N)
+that makes dense following unstable → PHANTOM JAMS emerge with no cause (the ring-road experiment).
+Lanes are emergent from lateral position, so the player participates (stop in a lane → traffic
+passes you). Spec (21 assertions) covers closing→brake, clear→accelerate, blocked→change-lane, flow,
+no pile-ups, red-builds-a-queue, and stop-and-go spread. **Rough edge:** on the tightest procedural
+corner a fast car can still clip the apex (localized, recovers). **Next:** figure-8 right-of-way,
+speed zones, hazard/merge.
 
 The racing rivals in `trackgen.c` proved the core:
 one shared physics step (`step_car`) + a parameter-driven follow-controller (`drive_ai`) +
@@ -44,7 +47,8 @@ a clean split with zero duplication. Flag it when we cross that line; do not pre
 | # | System | What it tests | Ports to | Spec angle |
 |---|---|---|---|---|
 | 1 | **Lane-keeping + car-following (IDM)** ✅ | hold a lane; adjust *throttle* to keep a safe time-gap to the leader **in your lane** (not just braking for corners) | every road in sloop | platoons form; gap never drops below a min |
-| 2 | **Phantom traffic jam** | a stop-and-go wave emerges from density + reaction lag, no obstacle | highway flow realism | speed-variance wave travels *backward* round the ring |
+| 2 | **Phantom traffic jam** ✅ | a stop-and-go wave emerges from density + reaction lag, no obstacle | highway flow realism | speed-variance wave travels *backward* round the ring |
+| — | **Traffic light** ✅ (bonus) | a cycling red/green signal; a red is a stop-line all lanes queue behind — a controllable bottleneck | streetlab signal-state gap | a red builds a queue of stopped cars |
 | 3 | **Overtaking (gap acceptance)** ✅ | change lanes to pass a slower leader *only* when the adjacent lane's gap is clear ahead+behind | multi-lane roads | no lane-change into an occupied gap |
 | 4 | **Intersection right-of-way** | at the figure-8 crossing, yield/priority so cars don't T-bone | streetlab junctions | zero collisions at the crossing point |
 | 5 | **Speed zones** | obey a per-section speed cap (corner / school zone) | road speed limits | cars under cap inside the zone |

@@ -41,14 +41,18 @@
 // (light, get knocked away) — so collisions express character too.
 //
 // TWO MODES (toggle in the setup panel): RACE (above) and TRAFFIC — same track,
-// not a race. In TRAFFIC the AI runs drive_ai_traffic: hold a lane, follow the car
-// ahead at a safe time-gap (IDM-style car-following), lift for corners, and OVERTAKE
-// — pull into a clear adjacent lane to pass a slower car (so a car blocked behind
-// you, even a stopped you, goes around rather than stacking up). Lanes are emergent
-// from lateral position, so the player participates: sit in a lane and traffic
-// follows/passes you. Design + the remaining systems (jams, intersections, speed
-// zones, hazards): docs/design/traffic-ai.md. (Known rough edge: on the tightest
-// procedural corners a fast car can still clip the apex into the grass and recover.)
+// not a race. In TRAFFIC a crowd (TRAFFIC_CARS) of AI runs drive_ai_traffic: hold a
+// lane, follow the car ahead at a safe time-gap (IDM-style car-following), lift for
+// corners, and OVERTAKE — pull into a clear adjacent lane to pass a slower car (so a
+// car blocked behind you, even a stopped you, goes around rather than stacking up).
+// Lanes are emergent from lateral position, so the player participates: sit in a lane
+// and traffic follows/passes you. Cars are tinted by SPEED (red=stopped → green=flowing)
+// so jams are visible. A TRAFFIC LIGHT cycles on the loop — a red is a stop-line all
+// lanes queue behind (the bottleneck that breeds stop-and-go). And a small REACTION
+// LAG (REACT_N) on following makes dense traffic UNSTABLE — phantom jams emerge with no
+// cause, exactly the ring-road experiment. Design + remaining systems (figure-8
+// right-of-way, speed zones, hazards): docs/design/traffic-ai.md. (Known rough edge:
+// on the tightest procedural corner a fast car can still clip the apex and recover.)
 //   LEFT/RIGHT steer · UP gas · DOWN brake · X drift · Z new track · R restart
 //   M: back to the setup panel.  RACE: standings on the right + results on finish.
 
@@ -120,9 +124,12 @@ typedef struct { int x, y; int life; } Skid;
 // difference between player and AI is who supplies turn_in/throttle each frame.
 // That is the whole point: the brain built here ports to sloop unchanged; only the
 // *line to follow* changes (cl[] here, road_at() in the open world later).
-#define NCARS     7            // 1 player + 6 AI, one per personality
+#define RACE_CARS    7         // RACE: 1 player + 6 AI, one per personality
+#define TRAFFIC_CARS 18        // TRAFFIC: a crowd — enough density for queues & jams
+#define CARS_MAX     28        // array bound (>= both of the above)
 #define RACE_LAPS 3
 #define COLL_R    16.0f        // car-to-car avoidance radius (world px)
+#define REACT_N   5            // car-following reaction lag (frames) — seeds phantom jams
 
 typedef struct {
     float px, py, vx, vy, spd, ang;
@@ -134,6 +141,8 @@ typedef struct {
     int   place;               // live race position (1 = leading), recomputed each frame
     int   lane;                // current lane (computed from lateral offset each frame)
     int   want_lane;           // intended lane (traffic) — overtaking sets this; steering aims at it
+    float thist[REACT_N];      // recent throttle commands — applied delayed (reaction lag)
+    int   thead;               // ring head into thist[]
 } Car;
 
 // A personality is JUST a bag of numbers fed to the same follow-controller. No
@@ -177,7 +186,11 @@ STATE {
     float seg_len;             // avg world distance between adjacent cl[] samples (px)
     V2    cl[NSAMP];           // centre line (world)
     V2    nl[NSAMP];           // unit normals
-    Car   car[NCARS];          // car[0] = player, car[1..] = AI rivals
+    Car   car[CARS_MAX];       // car[0] = player, car[1..] = AI
+    int   ncars;               // active cars this mode (RACE_CARS or TRAFFIC_CARS)
+    int   light;               // TRAFFIC: traffic-light sample on the loop (-1 = none)
+    int   light_t;             // light phase timer (frames)
+    bool  light_red;           // is the light currently red?
     float camx, camy;
     float shake;               // screen-shake impulse (decays), set on a hard player hit
     float best, last;          // player lap times
@@ -438,7 +451,7 @@ static void put_car_at_start(Car *c, int slot) {
 // traffic placement: spread cars evenly all the way around the loop, one per lane
 // in rotation, already cruising — so the road looks alive the instant you arrive.
 static void put_car_in_traffic(Car *c, int slot) {
-    int s = (slot * NSAMP) / NCARS;
+    int s = (slot * NSAMP) / S->ncars;
     int lane = slot % S->nlanes;
     float loff = lane_offset(lane);
     c->px = S->cl[s].x + S->nl[s].x * loff;
@@ -454,11 +467,19 @@ static void put_car_in_traffic(Car *c, int slot) {
 }
 
 static void put_all_at_start(void) {
-    for (int i = 0; i < NCARS; i++) {
-        if (i > 0) S->car[i].pers = (i - 1) % AI_COUNT;  // one rival per personality
+    S->ncars = S->traffic ? TRAFFIC_CARS : RACE_CARS;
+    if (S->ncars > CARS_MAX) S->ncars = CARS_MAX;
+    for (int i = 0; i < S->ncars; i++) {
+        if (i > 0) S->car[i].pers = (i - 1) % AI_COUNT;  // cycle personalities for the crowd
         if (S->traffic) put_car_in_traffic(&S->car[i], i);
         else            put_car_at_start(&S->car[i], i);
+        for (int k = 0; k < REACT_N; k++) S->car[i].thist[k] = 0.0f;
+        S->car[i].thead = 0;
     }
+    // TRAFFIC: a single traffic light half a lap from the start (a clean bottleneck),
+    // starting green. RACE: no light.
+    S->light = S->traffic ? (NSAMP / 2) : -1;
+    S->light_t = 0; S->light_red = false;
     S->camx = P.px; S->camy = P.py;
     S->finished = false; S->result_place = 0;
     for (int i = 0; i < MAXSKID; i++) S->skid[i].life = 0;
@@ -648,7 +669,7 @@ static void drive_ai(Car *c, int idx, float *out_turn, float *out_thr, bool *out
     float thr = (c->spd < cap) ? 1.0f : -0.55f;
 
     // 3. car-to-car avoidance — veer off a car just ahead so they overtake, not stack
-    for (int j = 0; j < NCARS; j++) {
+    for (int j = 0; j < S->ncars; j++) {
         if (j == idx) continue;
         Car *o = &S->car[j];
         float rx = o->px - c->px, ry = o->py - c->py;
@@ -667,7 +688,7 @@ static void drive_ai(Car *c, int idx, float *out_turn, float *out_thr, bool *out
 // leader's speed. 1e9 if the lane is clear ahead.
 static float lead_gap(Car *c, int idx, float *vlead) {
     int best = NSAMP; *vlead = MAX_SPD;
-    for (int j = 0; j < NCARS; j++) {
+    for (int j = 0; j < S->ncars; j++) {
         if (j == idx) continue;
         Car *o = &S->car[j];
         if (o->lane != c->lane) continue;
@@ -681,7 +702,7 @@ static float lead_gap(Car *c, int idx, float *vlead) {
 // is `lane` open around this car's position — clear enough ahead AND behind to merge?
 // (looks at where cars are AND where they're heading, so two cars don't pick the same gap)
 static bool lane_clear(Car *c, int idx, int lane) {
-    for (int j = 0; j < NCARS; j++) {
+    for (int j = 0; j < S->ncars; j++) {
         if (j == idx) continue;
         Car *o = &S->car[j];
         if (o->lane != lane && o->want_lane != lane) continue;
@@ -711,17 +732,28 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
 
     // car-following: how close is the leader in my current lane, and how fast?
     float vlead, s = lead_gap(c, idx, &vlead);
-    float ssafe = TG_GAP0 + v * TG_HEAD;
-    float dv = v - vlead;                                // closing speed (+ = approaching)
-    if (dv > 0) ssafe += dv * dv / (2.0f * TG_BRAKE);
 
-    // OVERTAKE: blocked by a slower car and not mid-bend? try to pull into a clear lane.
-    if (S->nlanes > 1 && bendn < 0.4f && s < ssafe * 1.4f && vlead < v0 * 0.85f) {
+    // OVERTAKE: blocked by a slower CAR (not a light) and not mid-bend? pull into a
+    // clear lane. Decided on the real leader — you can't lane-change around a red.
+    float ssafe0 = TG_GAP0 + v * TG_HEAD;
+    if (S->nlanes > 1 && bendn < 0.4f && s < ssafe0 * 1.4f && vlead < v0 * 0.85f) {
         for (int dl = -1; dl <= 1; dl += 2) {
             int nl = c->want_lane + dl;
             if (nl >= 0 && nl < S->nlanes && lane_clear(c, idx, nl)) { c->want_lane = nl; break; }
         }
     }
+
+    // a RED light ahead is a stopped "leader" parked at the stop line (it spans all
+    // lanes), so cars queue behind it — the bottleneck that breeds stop-and-go waves.
+    if (S->light >= 0 && S->light_red) {
+        int ld = (S->light - c->prog + NSAMP) % NSAMP;
+        float lgap = ld * S->seg_len;
+        if (lgap < s) { s = lgap; vlead = 0.0f; }
+    }
+
+    float ssafe = TG_GAP0 + v * TG_HEAD;
+    float dv = v - vlead;                                // closing speed (+ = approaching)
+    if (dv > 0) ssafe += dv * dv / (2.0f * TG_BRAKE);
 
     // steer toward the intended lane's centre line (look-ahead). If we've slid off,
     // aim at the nearest bare centre point — a direct pull back onto the road.
@@ -732,7 +764,7 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     float desired = atan2_deg(ty - c->py, tx - c->px);
     float turn = clamp(awrap(desired - c->ang) / 7.0f, -1.0f, 1.0f);
 
-    // throttle: cruise toward v0, but keep the safe gap to the leader
+    // throttle: cruise toward v0, but keep the safe gap to the leader/light
     float thr = (v < v0) ? 1.0f : -0.15f;
     if (s < ssafe) {                                     // too close → brake, deeper = harder
         float over = (ssafe - s) / (ssafe + 1.0f);
@@ -740,17 +772,23 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     } else if (s < ssafe * 1.8f && v >= v0) {
         thr = -0.1f;
     }
-    if (c->spd <= 0.05f && thr < 0.0f) thr = 0.0f;       // brake to a STOP, never reverse to keep a gap
+    if (c->spd <= 0.05f && thr < 0.0f) thr = 0.0f;       // brake to a STOP, never reverse
 
-    *out_turn = turn; *out_thr = thr; *out_drift = false;
+    // REACTION LAG: act on the command from REACT_N frames ago. This delay is what
+    // makes dense following UNSTABLE — tiny gaps amplify backward into phantom jams.
+    c->thist[c->thead % REACT_N] = thr;
+    c->thead++;
+    *out_thr   = c->thist[c->thead % REACT_N];           // oldest entry = REACT_N frames old
+    *out_turn  = turn;
+    *out_drift = false;
 }
 
 // live race order: place 1 = furthest along (laps then progress)
 static void update_standings(void) {
-    for (int i = 0; i < NCARS; i++) {
+    for (int i = 0; i < S->ncars; i++) {
         long pi = (long)S->car[i].lap * NSAMP + S->car[i].prog;
         int place = 1;
-        for (int j = 0; j < NCARS; j++) {
+        for (int j = 0; j < S->ncars; j++) {
             if (j == i) continue;
             long pj = (long)S->car[j].lap * NSAMP + S->car[j].prog;
             if (pj > pi) place++;
@@ -765,8 +803,8 @@ static void update_standings(void) {
 // can shove a rival wide into a corner, and they can do it to you.
 static void resolve_collisions(void) {
     const float MIN = 2.0f * CAR_R;
-    for (int a = 0; a < NCARS; a++)
-        for (int b = a + 1; b < NCARS; b++) {
+    for (int a = 0; a < S->ncars; a++)
+        for (int b = a + 1; b < S->ncars; b++) {
             Car *A = &S->car[a], *B = &S->car[b];
             float dx = B->px - A->px, dy = B->py - A->py;
             float d2 = dx*dx + dy*dy;
@@ -820,11 +858,15 @@ void update(void) {
     if (keyp('R'))                   { put_all_at_start(); return; }
     if (btnp(0, BTN_B)) P.drift = !P.drift;
 
+    if (S->traffic && S->light >= 0) {                   // cycle the light (green longer than red)
+        if (++S->light_t >= (S->light_red ? 200 : 360)) { S->light_t = 0; S->light_red = !S->light_red; }
+    }
+
     float p_turn = (btn(0, BTN_RIGHT) ? 1.0f : 0.0f) - (btn(0, BTN_LEFT) ? 1.0f : 0.0f);
     float p_thr  = (btn(0, BTN_UP)    ? 1.0f : 0.0f) - (btn(0, BTN_DOWN) ? 1.0f : 0.0f);
     step_car(&P, p_turn, p_thr, P.drift);
 
-    for (int i = 1; i < NCARS; i++) {                    // the AI — race rivals or traffic
+    for (int i = 1; i < S->ncars; i++) {                    // the AI — race rivals or traffic
         float turn, thr; bool dr;
         if (S->traffic) drive_ai_traffic(&S->car[i], i, &turn, &thr, &dr);
         else            drive_ai(&S->car[i], i, &turn, &thr, &dr);
@@ -884,10 +926,16 @@ static void draw_grass(int ox, int oy) {
         }
 }
 
-// one car, in world space. Player gets its red body + blue cockpit + a tag dot;
-// rivals get their personality colour + a dark cockpit.
+// one car, in world space. Player gets its red body + blue cockpit + a tag dot.
+// RACE: rivals show their personality colour. TRAFFIC: cars are tinted by SPEED
+// (red = stopped → green = flowing) so stop-and-go waves are visible at a glance.
 static void draw_car(Car *c, bool is_player) {
-    int body = is_player ? (c->offtrack ? CLR_DARK_RED : CLR_RED) : PERS[c->pers].color;
+    int body;
+    if (is_player)       body = c->offtrack ? CLR_DARK_RED : CLR_RED;
+    else if (S->traffic) {
+        float v = c->spd < 0 ? -c->spd : c->spd;
+        body = v < 0.3f ? CLR_RED : v < 0.9f ? CLR_ORANGE : v < 1.7f ? CLR_YELLOW : CLR_LIME_GREEN;
+    } else               body = PERS[c->pers].color;
     float fx = dx(6, c->ang),         fy = dy(6, c->ang);
     float sx = dx(3.5f, c->ang + 90), sy = dy(3.5f, c->ang + 90);
     quadfill((int)(c->px+fx+sx),(int)(c->py+fy+sy), (int)(c->px+fx-sx),(int)(c->py+fy-sy),
@@ -934,7 +982,23 @@ static void draw_track_world(void) {
             pset(S->skid[i].x, S->skid[i].y,
                  S->skid[i].life > 60 ? CLR_BROWNISH_BLACK : CLR_DARKER_GREY);
 
-    for (int i = 1; i < NCARS; i++) draw_car(&S->car[i], false);   // rivals first
+    if (S->light >= 0) {                                 // traffic light: bold stop-line + signal heads
+        int col = S->light_red ? CLR_RED : CLR_LIME_GREEN;
+        for (int d = -1; d <= 1; d++) {                  // 3 samples thick = a visible stripe
+            int g = (S->light + d + NSAMP) % NSAMP;
+            float nx = S->nl[g].x, ny = S->nl[g].y;
+            for (int w = -hw; w <= hw; w++)
+                pset((int)(S->cl[g].x + nx*w), (int)(S->cl[g].y + ny*w), col);
+        }
+        int g = S->light; float nx = S->nl[g].x, ny = S->nl[g].y;   // a signal head each side
+        for (int sgn = -1; sgn <= 1; sgn += 2) {
+            int hx = (int)(S->cl[g].x + nx*sgn*(hw+5)), hy = (int)(S->cl[g].y + ny*sgn*(hw+5));
+            circfill(hx, hy, 4, CLR_BLACK);
+            circfill(hx, hy, 3, col);
+        }
+    }
+
+    for (int i = 1; i < S->ncars; i++) draw_car(&S->car[i], false);   // rivals first
     draw_car(&P, true);                                            // player on top
 }
 
@@ -1006,13 +1070,13 @@ void draw(void) {
     rectfill(0, 0, SCREEN_W, 10, CLR_DARKER_BLUE);
     if (S->traffic) {
         print("TRAFFIC", 4, 2, CLR_LIGHT_PEACH);
-        print(str("%d cars", NCARS), 66, 2, CLR_WHITE);
-        print(str("lane %d/%d", P.lane + 1, S->nlanes), 130, 2, CLR_YELLOW);
-        print(str("%.1f", P.spd < 0 ? -P.spd : P.spd), 200, 2, CLR_LIGHT_YELLOW);
-        print(str("#%u", S->seed % 100000u), 240, 2,
+        print(str("%d cars", S->ncars), 64, 2, CLR_WHITE);
+        print(str("lane %d/%d", P.lane + 1, S->nlanes), 122, 2, CLR_YELLOW);
+        print(S->light_red ? "RED" : "GRN", 184, 2, S->light_red ? CLR_RED : CLR_LIME_GREEN);
+        print(str("#%u", S->seed % 100000u), 220, 2,
               P.drift ? CLR_ORANGE : CLR_MEDIUM_GREY);
     } else {
-        print(str("P%d/%d", P.place, NCARS), 4, 2,
+        print(str("P%d/%d", P.place, S->ncars), 4, 2,
               P.place == 1 ? CLR_LIGHT_YELLOW : CLR_WHITE);
         print(str("lap %d/%d", P.lap < RACE_LAPS ? P.lap + 1 : RACE_LAPS, RACE_LAPS),
               44, 2, CLR_YELLOW);
@@ -1023,8 +1087,8 @@ void draw(void) {
 
         // standings sidebar (live order, one row per car) — race only
         font(FONT_SMALL);
-        for (int slot = 1; slot <= NCARS; slot++)
-            for (int i = 0; i < NCARS; i++)
+        for (int slot = 1; slot <= S->ncars; slot++)
+            for (int i = 0; i < S->ncars; i++)
                 if (S->car[i].place == slot) {
                     bool me = (i == 0);
                     int y = 12 + (slot - 1) * 7;
@@ -1047,11 +1111,11 @@ void draw(void) {
         const char *head = pl == 1 ? "YOU WIN!" : pl <= 3 ? "PODIUM!" : "FINISHED";
         print_outline(head, SCREEN_W/2 - 28, 28, pl == 1 ? CLR_LIGHT_YELLOW : CLR_WHITE, CLR_BLACK);
         print_centered(str("%d%s of %d", pl,
-                       pl==1?"st":pl==2?"nd":pl==3?"rd":"th", NCARS),
+                       pl==1?"st":pl==2?"nd":pl==3?"rd":"th", S->ncars),
                        SCREEN_W/2, 44, CLR_LIGHT_PEACH);
         int y = 64;
-        for (int slot = 1; slot <= NCARS; slot++)
-            for (int i = 0; i < NCARS; i++)
+        for (int slot = 1; slot <= S->ncars; slot++)
+            for (int i = 0; i < S->ncars; i++)
                 if (S->car[i].place == slot) {
                     bool me = (i == 0);
                     print_centered(str("%d.  %s", slot, me ? "YOU" : PERS[S->car[i].pers].name),
@@ -1084,7 +1148,7 @@ void spec(void) {
 
     // every rival makes real forward progress — even cautious SUNDAY is moving,
     // not stuck (half a lap's distance is a generous floor for the slowest car)
-    for (int i = 1; i < NCARS; i++) {
+    for (int i = 1; i < S->ncars; i++) {
         long adv = (long)S->car[i].lap * NSAMP + S->car[i].prog;
         expect(adv > NSAMP / 2, "rival advances at least half a lap of distance");
     }
@@ -1094,10 +1158,10 @@ void spec(void) {
     long sun_d = (long)sunday->lap * NSAMP + sunday->prog;
     expect(pro_d > sun_d, "PRO out-distances SUNDAY (speed cap differentiates)");
 
-    // standings are a permutation 1..NCARS (no duplicate or missing places)
+    // standings are a permutation 1..S->ncars (no duplicate or missing places)
     int seen = 0;
-    for (int i = 0; i < NCARS; i++) seen |= 1 << (S->car[i].place - 1);
-    expect_eq(seen, (1 << NCARS) - 1, "places form a clean 1..N ranking");
+    for (int i = 0; i < S->ncars; i++) seen |= 1 << (S->car[i].place - 1);
+    expect_eq(seen, (1 << S->ncars) - 1, "places form a clean 1..N ranking");
 
     // collision: stack two cars on the same spot, step, and they must separate
     put_all_at_start();
@@ -1112,7 +1176,7 @@ void spec(void) {
     // than light SUNDAY. Isolate the pair (park everyone else far apart) and call
     // the resolver directly — no AI, fully deterministic.
     put_all_at_start();
-    for (int i = 0; i < NCARS; i++) {
+    for (int i = 0; i < S->ncars; i++) {
         S->car[i].px = -9000.0f - i * 100.0f; S->car[i].py = -9000.0f;
         S->car[i].vx = S->car[i].vy = 0;
     }
@@ -1132,8 +1196,8 @@ void spec(void) {
 
     // car-following prevents pile-ups: no two cars overlap after settling
     float minsep2 = 1e18f;
-    for (int i = 0; i < NCARS; i++)
-        for (int j = i + 1; j < NCARS; j++) {
+    for (int i = 0; i < S->ncars; i++)
+        for (int j = i + 1; j < S->ncars; j++) {
             float ddx = S->car[i].px - S->car[j].px, ddy = S->car[i].py - S->car[j].py;
             float d2 = ddx*ddx + ddy*ddy;
             if (d2 < minsep2) minsep2 = d2;
@@ -1142,39 +1206,57 @@ void spec(void) {
 
     // the road is flowing, not gridlocked: at least one car is moving with purpose
     float vmax = 0;
-    for (int i = 1; i < NCARS; i++) {
+    for (int i = 1; i < S->ncars; i++) {
         float v = S->car[i].spd < 0 ? -S->car[i].spd : S->car[i].spd;
         if (v > vmax) vmax = v;
     }
     expect(vmax > 0.5f, "traffic flows (a car is moving, not jammed to a stop)");
 
-    // the foundation, tested directly on the controller (no track-geometry noise):
-    // a fast car closing on a near leader in its lane BRAKES; with a clear road it
-    // accelerates. lead_gap measures along-track gap by prog distance × seg_len.
+    // ── traffic light: a RED forms a queue of stopped cars just behind the line ──
     put_all_at_start();
+    S->mode = 1;
+    S->light_red = true; S->light_t = 0;     // force red (red phase = 200f; we step < that)
+    step(180);
+    int queued = 0;
+    for (int i = 0; i < S->ncars; i++) {
+        int d = (S->light - S->car[i].prog + NSAMP) % NSAMP;   // samples until the light
+        float v = S->car[i].spd < 0 ? -S->car[i].spd : S->car[i].spd;
+        if (d < 16 && v < 0.4f) queued++;     // stopped, just short of the line
+    }
+    expect(queued >= 1, "traffic light: a red builds a queue of stopped cars");
+
+    // ── phantom jam: density + reaction lag → stop-and-go (speeds spread out), not
+    //    a uniform convoy. Measure the speed spread across the fleet after settling. ──
+    float vmin = 1e9f, vmx = 0;
+    for (int i = 0; i < S->ncars; i++) {
+        float v = S->car[i].spd < 0 ? -S->car[i].spd : S->car[i].spd;
+        if (v < vmin) vmin = v; if (v > vmx) vmx = v;
+    }
+    expect(vmx - vmin > 0.8f, "stop-and-go: a real speed spread exists (jam + free flow coexist)");
+
+    // ── the controller, tested directly (no track noise). Reaction lag delays the
+    //    output, so prime the pipeline (REACT_N+1 calls) before reading the command. ──
+    S->traffic = true; put_all_at_start();
+    S->light = -1;                           // isolate from the light
     Car *F = &S->car[1], *L = &S->car[2];
-    F->lane = L->lane = 0;
     float turn, thr; bool dr;
 
-    F->prog = 100; L->prog = 108;            // leader ~8 samples (small gap) ahead
-    F->spd = MAX_SPD; L->spd = 0.4f;         // follower fast, leader crawling
-    F->offtrack = false;
-    drive_ai_traffic(F, 1, &turn, &thr, &dr);
+    F->prog = 100; L->prog = 108; L->lane = 0;     // leader ~8 samples (small gap) ahead
+    F->lane = F->want_lane = 0; F->spd = MAX_SPD; L->spd = 0.4f; F->offtrack = false;
+    for (int k = 0; k <= REACT_N; k++) drive_ai_traffic(F, 1, &turn, &thr, &dr);
     expect(thr < 0.0f, "car-following: closing on a near leader → brake");
 
-    L->prog = 300;                           // leader far away → road is clear
-    F->spd = 0.4f;
-    drive_ai_traffic(F, 1, &turn, &thr, &dr);
+    L->prog = 300; F->spd = 0.4f;                  // leader far away → clear road
+    for (int k = 0; k <= REACT_N; k++) drive_ai_traffic(F, 1, &turn, &thr, &dr);
     expect(thr > 0.0f, "car-following: clear road → accelerate to desired speed");
 
     // overtaking: blocked by a slow leader with a clear neighbour lane → change lanes.
-    // (Park everyone else off in lane 9 so the adjacent lane reads as clear.)
-    put_all_at_start();
+    put_all_at_start(); S->light = -1;
     if (S->nlanes > 1) {
-        for (int i = 0; i < NCARS; i++) { S->car[i].prog = 9000; S->car[i].lane = S->car[i].want_lane = 9; }
+        for (int i = 0; i < S->ncars; i++) { S->car[i].prog = 9000; S->car[i].lane = S->car[i].want_lane = 9; }
         F = &S->car[1]; L = &S->car[2];
         F->prog = 200; F->lane = F->want_lane = 0; F->spd = MAX_SPD; F->offtrack = false;
-        L->prog = 210; L->lane = L->want_lane = 0; L->spd = 0.3f;       // slow blocker just ahead, same lane
+        L->prog = 210; L->lane = L->want_lane = 0; L->spd = 0.3f;       // slow blocker just ahead
         drive_ai_traffic(F, 1, &turn, &thr, &dr);
         expect(F->want_lane != 0, "overtaking: blocked by a slow leader → pull into a clear lane");
     }
