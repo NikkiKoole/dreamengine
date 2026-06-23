@@ -26,10 +26,15 @@
 // Paint a zone and it fills in on its own; choke it with pollution or crime
 // and it empties out. The city you open is pre-grown from these rules.
 //
+// Service buildings (police/school/hospital) spread a coverage radius; police cuts
+// crime, schools+hospitals raise land value and drive the EQ / LE city stats. Parks
+// and nearby commerce push land value up too — so a well-served, park-adjacent
+// downtown can finally reach the high end (centre-proximity alone capped it before).
+//
 //   LEFT-drag   paint the current brush      RIGHT-drag  erase to land
 //   R C I       zone Residential/Commercial/Industrial
-//   O           road        W  water        P  police station   E  erase
-//   1..6        overlay: City / Land value / Crime / Police / Density / Pollution
+//   O road  W water  P police  G park  S school  H hospital  E erase
+//   1..7        overlay: City / Land value / Crime / Police / Density / Pollution / Services
 //   SPACE       reseed the sample city
 
 #define GW 64
@@ -41,16 +46,19 @@
 #define HUDX 202        // right panel
 
 // cell kinds
-enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE };
+enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL };
 
 // overlays
-enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_COUNT };
+enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_COUNT };
 
 // ── state ──
 static int  kind[MAXC];
 static int  level[MAXC];      // development level of a zoned cell: 0 = empty lot … LMAX = full
 static int  landvalue[MAXC], crime[MAXC], police[MAXC], popden[MAXC], pollution[MAXC];
+static int  school[MAXC], health[MAXC];   // education / health coverage (spread from schools/hospitals)
 static int  terrainv[MAXC];   // static water-proximity value (recomputed on edit)
+static int  parkv[MAXC];      // static park-amenity value (recomputed on edit)
+static int  commv[MAXC];      // commercial-vitality premium (downtown raises nearby land value)
 static int  roadacc[MAXC];    // static road-access field — a service radius, not strict adjacency
 static int  tmp[MAXC];
 static int  view = V_CITY;
@@ -58,6 +66,7 @@ static int  brush = K_R;
 static long ticks = 0;        // sim ticks since reseed
 static int  fcount = 0;
 static int  demR, demC, demI; // global RCI demand meter (drives growth/decline)
+static int  eduQ, lifeE;      // city aggregates: Education Quotient (0..100), Life Expectancy (years)
 static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it for formula tests)
 
 #define TICK_EVERY 8          // frames between sim ticks (slow enough to watch converge)
@@ -78,6 +87,10 @@ static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it 
 static inline int idx(int x, int y){ return y*GW + x; }
 static inline int is_zone(int k){ return k==K_R||k==K_C||k==K_I; }
 static inline int developed(int i){ return is_zone(kind[i]) && level[i]>0; }
+
+// positive land-value drivers (this phase): parks + service coverage + downtown premium
+#define PARK_SRC   220        // a park's land-value boost at the tile (falls off ~8 cells)
+#define COMM_PREM   40        // per-level commercial vitality emitted to neighbours
 
 // SERVICE-COVERAGE spread: each cell takes the strongest neighbour minus a
 // per-step decay — a cheap distance falloff (strong at the source, fading with
@@ -123,6 +136,9 @@ static void recompute_static(void){
     smooth(terrainv, 3);
     for(int i=0;i<MAXC;i++) roadacc[i]  = (kind[i]==K_ROAD)  ? 250 : 0;
     smooth(roadacc, 3);
+    // parks: a strong, fairly LOCAL land-value boost (decaying spread, ~8-cell reach)
+    for(int i=0;i<MAXC;i++) parkv[i] = (kind[i]==K_PARK) ? PARK_SRC : 0;
+    spread(parkv, 8, 28);
 }
 
 // ── one simulation tick: the dependency DAG ──
@@ -142,10 +158,18 @@ static void sim_step(void){
     }
     smooth(popden, 2);
 
-    // 2. police coverage — stations are the source; a decaying spread gives a
-    //    strong radius (~250/18 ≈ 14 cells) that actually suppresses crime
-    for(int i=0;i<MAXC;i++) police[i] = (kind[i]==K_POLICE) ? 250 : 0;
+    // 2. service coverage — each civic building is a source spread into a radius (the
+    //    same falloff police uses). Police suppresses crime; school/health raise land
+    //    value and drive the EQ/LE city stats.
+    for(int i=0;i<MAXC;i++) police[i] = (kind[i]==K_POLICE)   ? 250 : 0;
+    for(int i=0;i<MAXC;i++) school[i] = (kind[i]==K_SCHOOL)   ? 250 : 0;
+    for(int i=0;i<MAXC;i++) health[i] = (kind[i]==K_HOSPITAL) ? 250 : 0;
     spread(police, 14, 18);
+    spread(school, 16, 16);
+    spread(health, 16, 16);
+    // commercial vitality — built downtown raises nearby land value (the shops-nearby premium)
+    for(int i=0;i<MAXC;i++) commv[i] = (kind[i]==K_C) ? COMM_PREM*level[i] : 0;
+    smooth(commv, 3);
 
     // 3. pollution — industry is the heavy emitter, commerce a little (both scaled by
     //    level); it then diffuses onto neighbours (wind-agnostic v1.5) and drags land value down
@@ -154,14 +178,18 @@ static void sim_step(void){
     smooth(pollution, 3);
 
     // 4. land value — reads LAST tick's crime (so this tick's crime feeds the NEXT
-    //    land value = the slum spiral). ↑centre-proximity ↑near-water ↓pollution ↓crime
+    //    land value = the slum spiral). Positive drivers (this phase) let it climb high:
+    //    ↑centre-proximity ↑near-water ↑parks ↑service coverage ↑near-commerce
+    //    ↓pollution ↓crime
     for(int y=0;y<GH;y++) for(int x=0;x<GW;x++){
         int i=idx(x,y);
         if(kind[i]==K_WATER){ landvalue[i]=0; continue; }
         int dx=x-cx, dy=y-cy;
         int dist=(dx<0?-dx:dx)+(dy<0?-dy:dy);          // manhattan, cheap
         int prox=CP_MAX - dist*CP_FALL; if(prox<0) prox=0;
-        int lv = prox + terrainv[i]/2 - pollution[i]/3 - crime[i]/2;
+        int amenity = (police[i]+school[i]+health[i])/8;   // services make an area desirable
+        int lv = prox + terrainv[i]/2 + parkv[i] + amenity + commv[i]
+                 - pollution[i]/3 - crime[i]/2;
         if(lv<0) lv=0; if(lv>250) lv=250;
         landvalue[i]=lv;
     }
@@ -189,6 +217,12 @@ static void sim_step(void){
     demR = R_BASE + (int)(jobs - pop)/6;       // homes wanted to fill the jobs
     demC = C_BASE + (int)(pop - 2*totC)/6;     // shops wanted per resident
     demI = I_BASE + (int)(pop - 2*totI)/6;     // factories: external base + workforce
+
+    // city stats — Education Quotient + Life Expectancy, averaged over where people live
+    long edu=0, hea=0, ncov=0;
+    for(int i=0;i<MAXC;i++) if(popden[i]>0){ edu+=school[i]; hea+=health[i]; ncov++; }
+    eduQ  = ncov ? (int)(edu/ncov)*100/250 : 0;        // 0..100
+    lifeE = 60 + (ncov ? (int)(hea/ncov)*30/250 : 0);  // ~60..90 years
 
     // 7. the develop/abandon valve — every GROW_EVERY ticks each zoned lot nudges its
     //    level up (good local desirability AND its type clearly in demand) or down
@@ -242,6 +276,13 @@ static void seed_city(void){
         else                                       kind[i]=K_R;  // residential
     }
 
+    // civic buildings — parks lift value, schools/hospitals add coverage + EQ/LE,
+    // a couple of police cover downtown (the outskirts stay a little rougher)
+    kind[idx(33,21)]=K_PARK;   kind[idx(15,33)]=K_PARK;
+    kind[idx(45,33)]=K_SCHOOL; kind[idx(21,15)]=K_SCHOOL;
+    kind[idx(21,33)]=K_HOSPITAL; kind[idx(45,15)]=K_HOSPITAL;
+    kind[idx(27,21)]=K_POLICE; kind[idx(39,27)]=K_POLICE;
+
     recompute_static();
     // pre-warm: let the zones grow from empty to a settled city before the player
     // ever sees it (so we open on a living town, not a grid of empty lots)
@@ -267,10 +308,12 @@ void update(void){
     // brush select
     if(keyp('R')) brush=K_R;   if(keyp('C')) brush=K_C;   if(keyp('I')) brush=K_I;
     if(keyp('O')) brush=K_ROAD;if(keyp('W')) brush=K_WATER;if(keyp('P')) brush=K_POLICE;
+    if(keyp('G')) brush=K_PARK;if(keyp('S')) brush=K_SCHOOL;if(keyp('H')) brush=K_HOSPITAL;
     if(keyp('E')) brush=K_LAND;
     // overlay select
     if(keyp('1')) view=V_CITY;    if(keyp('2')) view=V_LANDVAL; if(keyp('3')) view=V_CRIME;
     if(keyp('4')) view=V_POLICE;  if(keyp('5')) view=V_DENSITY; if(keyp('6')) view=V_POLLUTION;
+    if(keyp('7')) view=V_SERVICES;
     if(keyp(KEY_SPACE)) seed_city();
 
     if(mouse_down(0)) paint_at(mouse_x(),mouse_y(),brush);
@@ -285,6 +328,7 @@ static const int RAMP_CR[6] = {CLR_DARK_BLUE, CLR_DARK_PURPLE, CLR_DARK_RED, CLR
 static const int RAMP_PO[6] = {CLR_BLACK, CLR_DARKER_BLUE, CLR_BLUE_GREEN, CLR_TRUE_BLUE, CLR_BLUE, CLR_WHITE};
 static const int RAMP_PD[6] = {CLR_DARK_GREEN, CLR_MEDIUM_GREEN, CLR_GREEN, CLR_LIME_GREEN, CLR_YELLOW, CLR_WHITE};
 static const int RAMP_PL[6] = {CLR_BLACK, CLR_DARKER_PURPLE, CLR_DARK_PURPLE, CLR_MAUVE, CLR_DARK_ORANGE, CLR_ORANGE};
+static const int RAMP_SV[6] = {CLR_BLACK, CLR_DARKER_GREY, CLR_BLUE_GREEN, CLR_MEDIUM_GREEN, CLR_LIME_GREEN, CLR_WHITE};
 
 static int ramp(const int *r,int v){ int s=v*6/251; if(s<0)s=0; if(s>5)s=5; return r[s]; }
 
@@ -292,11 +336,14 @@ static int city_color(int k){
     switch(k){
         case K_WATER:  return CLR_DARK_BLUE;
         case K_ROAD:   return CLR_DARK_GREY;
-        case K_R:      return CLR_GREEN;
-        case K_C:      return CLR_BLUE;
-        case K_I:      return CLR_YELLOW;
-        case K_POLICE: return CLR_WHITE;
-        default:       return CLR_DARK_GREEN;   // land
+        case K_R:        return CLR_GREEN;
+        case K_C:        return CLR_BLUE;
+        case K_I:        return CLR_YELLOW;
+        case K_POLICE:   return CLR_WHITE;
+        case K_PARK:     return CLR_MEDIUM_GREEN;
+        case K_SCHOOL:   return CLR_LIGHT_PEACH;
+        case K_HOSPITAL: return CLR_PINK;
+        default:         return CLR_DARK_GREEN;   // land
     }
 }
 
@@ -318,6 +365,8 @@ void draw(void){
             case V_POLICE:  col=ramp(RAMP_PO,police[i]); break;
             case V_DENSITY: col=(popden[i]<=0)?CLR_BROWNISH_BLACK:ramp(RAMP_PD,popden[i]); break;
             case V_POLLUTION: col=(pollution[i]<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_PL,pollution[i]); break;
+            case V_SERVICES: { int sv=police[i]+school[i]+health[i]+parkv[i]; if(sv>250)sv=250;
+                               col=(sv<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_SV,sv); } break;
             default: col=CLR_BLACK;
         }
         // in data overlays, keep roads readable as a faint grid
@@ -326,8 +375,8 @@ void draw(void){
     }
 
     // ── HUD ──
-    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION"};
-    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE"};
+    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES"};
+    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital"};
     int hy=22;
     print("OVERLAY", HUDX, hy, CLR_DARK_GREY); hy+=8;
     for(int v=0;v<V_COUNT;v++){ print(VNAME[v], HUDX, hy, v==view?CLR_WHITE:CLR_DARK_GREY); hy+=8; }
@@ -337,7 +386,7 @@ void draw(void){
     // legend ramp for the active data overlay
     if(view!=V_CITY){
         const int *r = view==V_LANDVAL?RAMP_LV : view==V_CRIME?RAMP_CR : view==V_POLICE?RAMP_PO
-                     : view==V_POLLUTION?RAMP_PL : RAMP_PD;
+                     : view==V_POLLUTION?RAMP_PL : view==V_SERVICES?RAMP_SV : RAMP_PD;
         print("low", HUDX, hy, CLR_DARK_GREY);
         print("high", HUDX+86, hy, CLR_DARK_GREY); hy+=8;
         for(int s=0;s<6;s++) rectfill(HUDX+s*18, hy, 17, 8, r[s]);
@@ -359,10 +408,11 @@ void draw(void){
       }
       hy+=3*8+3;
     }
+    print(str("EQ %d   LE %d", eduQ, lifeE), HUDX, hy, CLR_LIGHT_GREY); hy+=8;
     print(str("ticks %ld", ticks), HUDX, hy, CLR_LIGHT_GREY);
 
     // bottom help
-    print("RCI/O road/W water/P police/E erase  1-6 view  SPACE reseed",
+    print("RCI/O/W/P/G park/S school/H hosp/E erase   1-7 view   SPACE reseed",
           OX, OY+GH*TS+4, CLR_DARK_GREY);
 }
 
@@ -470,5 +520,24 @@ void spec(void){
     expect(builtR > 0, "served zones in demand grow from empty into a built district");
     expect(demR != 0 || demC != 0 || demI != 0, "the RCI demand meter is live");
     expect_eq(starved, 0, "a road-starved zone never develops");
+
+    // ── positive drivers: parks + service coverage raise land value; schools/hospitals
+    //    drive EQ/LE. Frozen valve, a built road-served R district for population. ──
+    memset(kind,0,sizeof kind); memset(level,0,sizeof level); memset(crime,0,sizeof crime);
+    growth_on=0;
+    for(int y=10;y<26;y++) for(int x=10;x<26;x++){ kind[idx(x,y)]=K_R; level[idx(x,y)]=3; }
+    for(int x=9;x<27;x+=4) for(int y=9;y<27;y++) kind[idx(x,y)]=K_ROAD;
+    for(int y=9;y<27;y+=4) for(int x=9;x<27;x++) kind[idx(x,y)]=K_ROAD;
+    recompute_static();
+    step(8*TICK_EVERY);
+    int lv0=landvalue[idx(15,15)], eq0=eduQ, le0=lifeE;
+    kind[idx(16,16)]=K_PARK; kind[idx(14,16)]=K_SCHOOL; kind[idx(16,14)]=K_HOSPITAL;
+    recompute_static();
+    step(8*TICK_EVERY);
+    expect(1, str("DBG drivers: landval %d->%d  EQ %d->%d  LE %d->%d",
+                  lv0, landvalue[idx(15,15)], eq0, eduQ, le0, lifeE));
+    expect(landvalue[idx(15,15)] > lv0, "parks + service coverage raise land value");
+    expect(eduQ  > eq0, "a school raises the Education Quotient");
+    expect(lifeE > le0, "a hospital raises Life Expectancy");
 }
 #endif

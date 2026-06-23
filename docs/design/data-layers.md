@@ -167,15 +167,24 @@ Tuning found: `CP_MAX 100`, `CRIME_BASE 30`, police `spread(14, 18)`. Constants 
   Two tuning lessons: the street grid must be **dense** (every 6 cells) or most zones aren't
   road-served and never grow; and the centre-proximity falloff had to soften (`CP_FALL 1`)
   so the whole map is buildable and crime/pollution — not distance — make the variation.
-- ⬜ **Positive land-value drivers** (answers "nothing pushes values *really* high yet"):
-  parks/amenity bonus, a direct lift from police/fire coverage, commercial-core premium —
-  so land value isn't capped by centre-proximity (100) + a local water bonus.
+- ✅ **Positive land-value drivers + schools/hospitals** (2026-06-23): land value now has
+  *upward* terms so it can reach the ceiling, not just centre-proximity + water:
+  - **Parks** (`G`) — a strong, local land-value boost (`spread`, ~8-cell reach).
+  - **Service amenity** — police + school + hospital coverage all lift land value
+    (`(police+school+health)/8`), so police now both cuts crime *and* raises value.
+  - **Commercial premium** — built downtown raises nearby land value (`commv`, smoothed).
+  - **Schools (`S`) + hospitals (`H`)** — new service buildings using the same `spread()`
+    coverage primitive as police; they feed two SC2000 city aggregates shown in the HUD:
+    **EQ** (Education Quotient 0–100) and **LE** (Life Expectancy ~60–90), averaged over
+    populated cells. New **Services** overlay (7) shows combined coverage.
+  `spec()` (17 assertions): a cell next to a park+school+hospital goes land value 16→250,
+  EQ 0→39, LE 60→71. Magnitudes are loose — three adjacent civics saturate a cell; spread
+  out in a real city it grades nicely (verified: land-value overlay now ranges green↔red).
 
 ### v2 — full
-Densities (light/dense), power grid flood, water pipes, traffic (trip generation along
-roads — the one non-blur layer), service coverage for fire/education/health, and the EQ/LE
-aggregate meters. This is where land value's full factor set (water/hills proximity, parks,
-the lot) comes in.
+Remaining after the services phase pulled education/health/EQ/LE forward: densities
+(light/dense zoning), power grid flood, water pipes, traffic (trip generation along roads —
+the one non-blur layer), and **fire** coverage (+ fire spread the coverage suppresses).
 
 ### Open questions to resolve while building
 - Field resolution: full-res vs Micropolis-style half/quarter — decide by profiling, not upfront.
