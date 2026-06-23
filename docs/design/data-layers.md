@@ -213,7 +213,20 @@ Tuning found: `CP_MAX 100`, `CRIME_BASE 30`, police `spread(14, 18)`. Constants 
   as it burns — burn long enough and the lot is razed. Flames render live in the city view
   (red/orange). Overlay 0 = fire coverage + flames. `spec()` (29): an uncovered blaze razed
   256 cells, fire-station coverage held the same ignition to 111.
-- ⬜ **Water pipes** — last utility; same flood-fill shape as power.
+- ✅ **Water** (2026-06-23): a water pump (`U`) floods water through the built fabric like
+  power — but a pump only draws if it sits **beside a water tile** (the lake earns its keep),
+  and water is a **soft** gate: an unwatered lot still builds but can't rise past
+  `WATER_DRY_CAP` (1). So power = hard on/off, water = height cap — two distinct gates from the
+  same flood. Overlay reached via `[`/`]` cycle (the 11th, past the number keys). `spec()` (32):
+  a powered, served, in-demand dense block tops out at 1 dry, rises to 4 once a lake-side pump
+  is wired in.
+
+**All planned layers are in** (v1 → v2 complete). gridcity now models, on one 64×48 grid:
+land value · crime · police · population density · pollution · service coverage
+(police/school/hospital/fire) · EQ/LE stats · the RCI growth valve · light/dense zoning ·
+power · traffic (trip generation) · fire (dynamic) · water. 32 spec assertions. Future
+depth if wanted: per-cell water/power *consumption* budgets, disasters beyond fire, a budget/
+tax economy, or feeding a real procplaces-seeded map in as the starting zone layout.
 
 ### Open questions to resolve while building
 - Field resolution: full-res vs Micropolis-style half/quarter — decide by profiling, not upfront.

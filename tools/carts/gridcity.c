@@ -35,11 +35,12 @@
 //   R C I       zone Residential/Commercial/Industrial (D toggles light↔dense zoning:
 //               light caps low = suburbs, dense rises tall = downtown)
 //   O road  W water  P police  G park  S school  H hospital  L power plant
-//   F fire station   B ignite a building (watch it spread)   E erase
+//   F fire station   B ignite a building   U water pump (place by the lake)   E erase
 //   Power floods from plants through roads/zones; an unpowered (or road-less) lot
 //   can't develop — cut a district off and it goes dark and stops growing. Fire spreads
 //   building→building unless fire-station coverage contains it.
-//   1..9,0  overlay: City/Land value/Crime/Police/Density/Pollution/Services/Power/Traffic/Fire
+//   1..9,0 overlay (City…Fire); [ ] cycle (reaches Water). Water from lake-side pumps is a
+//   SOFT gate — an unwatered lot still builds but can't rise tall.
 //   Traffic = commute trips routed home↔job along the roads; busy roads add pollution.
 //   SPACE       reseed the sample city
 
@@ -52,11 +53,11 @@
 #define HUDX 202        // right panel
 
 // cell kinds
-enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT, K_FIRESTN };
+enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT, K_FIRESTN, K_PUMP };
 #define B_IGNITE 50    // a pseudo-brush: clicking sets a building alight (doesn't change kind)
 
 // overlays
-enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_TRAFFIC, V_FIRE, V_COUNT };
+enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_TRAFFIC, V_FIRE, V_WATER, V_COUNT };
 
 // ── state ──
 static int  kind[MAXC];
@@ -73,6 +74,7 @@ static int  parkv[MAXC];      // static park-amenity value (recomputed on edit)
 static int  commv[MAXC];      // commercial-vitality premium (downtown raises nearby land value)
 static int  roadacc[MAXC];    // static road-access field — a service radius, not strict adjacency
 static int  powered[MAXC];    // static: 1 if the tile is reached by the power grid (flood from plants)
+static int  watered[MAXC];    // static: 1 if reached by the water network (flood from pumps by the lake)
 static int  tmp[MAXC];
 static int  view = V_CITY;
 static int  brush = K_R;
@@ -100,6 +102,7 @@ static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it 
 #define FIRE_MAX     8        // fuel of a freshly-lit fire
 #define FIRE_SPREAD  5        // a fire this fierce jumps to flammable neighbours
 #define FIRE_BLOCK 120        // fire coverage this strong stops a fire taking hold
+#define WATER_DRY_CAP 1       // without water a lot can't develop past this (a soft gate)
 #define R_BASE     30         // baseline residential pull (people want in)
 #define C_BASE     20         // baseline commercial pull
 #define I_BASE     20         // baseline industrial pull (external market)
@@ -171,6 +174,23 @@ static void recompute_static(void){
         int nb[4], nn=0;
         if(x>0)nb[nn++]=i-1; if(x<GW-1)nb[nn++]=i+1; if(y>0)nb[nn++]=i-GW; if(y<GH-1)nb[nn++]=i+GW;
         for(int j=0;j<nn;j++){ int n=nb[j]; if(!powered[n] && conducts(kind[n])){ powered[n]=1; q[tail++]=n; } }
+    }
+    // water grid: flood from ACTIVE pumps (a pump touching a water tile) through the fabric.
+    // Same shape as power, but a pump must sit beside the lake to draw — and water is a SOFT
+    // gate (see the growth valve): unwatered lots build, but can't rise past WATER_DRY_CAP.
+    head=tail=0;
+    for(int i=0;i<MAXC;i++) watered[i]=0;
+    for(int i=0;i<MAXC;i++){
+        if(kind[i]!=K_PUMP) continue;
+        int x=i%GW, y=i/GW, near=0;
+        if(x>0&&kind[i-1]==K_WATER)near=1; if(x<GW-1&&kind[i+1]==K_WATER)near=1;
+        if(y>0&&kind[i-GW]==K_WATER)near=1; if(y<GH-1&&kind[i+GW]==K_WATER)near=1;
+        if(near){ watered[i]=1; q[tail++]=i; }
+    }
+    while(head<tail){
+        int i=q[head++], x=i%GW, y=i/GW, nb[4], nn=0;
+        if(x>0)nb[nn++]=i-1; if(x<GW-1)nb[nn++]=i+1; if(y>0)nb[nn++]=i-GW; if(y<GH-1)nb[nn++]=i+GW;
+        for(int j=0;j<nn;j++){ int n=nb[j]; if(!watered[n] && conducts(kind[n])){ watered[n]=1; q[tail++]=n; } }
     }
 }
 
@@ -326,8 +346,9 @@ static void sim_step(void){
             if(((x*3 + y*5) & 3) != phase) continue;       // this pass touches one quarter
             int dem = kind[i]==K_R?demR : kind[i]==K_C?demC : demI;
             int des = landvalue[i] - crime[i]/2 - pollution[i]/4;
-            int served = roadacc[i]>40 && powered[i];   // needs BOTH a road and power
+            int served = roadacc[i]>40 && powered[i];   // hard gate: needs BOTH a road and power
             int cap = zdense[i] ? LMAX : LIGHT_CAP;       // light zoning tops out low
+            if(!watered[i] && cap>WATER_DRY_CAP) cap=WATER_DRY_CAP;  // soft gate: no water → can't rise tall
             if(served && dem>DEM_DEAD && des>GROW_THRESH){ if(level[i]<cap) level[i]++; }
             else if(!served || dem<-DEM_DEAD || des<DECL_THRESH){ if(level[i]>0) level[i]--; }
         }
@@ -400,6 +421,7 @@ static void seed_city(void){
     kind[idx(27,21)]=K_POLICE; kind[idx(39,27)]=K_POLICE;
     kind[idx(57,39)]=K_PLANT;  // a power plant on the grid's edge feeds the whole connected city
     kind[idx(33,33)]=K_FIRESTN; kind[idx(15,27)]=K_FIRESTN;  // two fire stations cover the core
+    kind[idx(9,13)]=K_PUMP;    // a water pump drawing from the lake supplies the connected city
 
     recompute_static();
     // pre-warm: let the zones grow from empty to a settled city before the player
@@ -433,6 +455,7 @@ void update(void){
     if(keyp('L')) brush=K_PLANT;               // L = power pLant
     if(keyp('F')) brush=K_FIRESTN;             // F = Fire station
     if(keyp('B')) brush=B_IGNITE;              // B = Burn (ignite a building)
+    if(keyp('U')) brush=K_PUMP;                // U = water pUmp (place by the lake)
     if(keyp('E')) brush=K_LAND;
     if(keyp('D')) brush_dense=!brush_dense;   // toggle light/dense zoning for the zone brushes
     // overlay select
@@ -440,6 +463,8 @@ void update(void){
     if(keyp('4')) view=V_POLICE;  if(keyp('5')) view=V_DENSITY; if(keyp('6')) view=V_POLLUTION;
     if(keyp('7')) view=V_SERVICES; if(keyp('8')) view=V_POWER; if(keyp('9')) view=V_TRAFFIC;
     if(keyp('0')) view=V_FIRE;
+    if(keyp('[')) view=(view+V_COUNT-1)%V_COUNT;   // cycle overlays (reaches WATER, the 11th)
+    if(keyp(']')) view=(view+1)%V_COUNT;
     if(keyp(KEY_SPACE)) seed_city();
 
     if(mouse_down(0)) paint_at(mouse_x(),mouse_y(),brush);
@@ -485,6 +510,7 @@ static int city_color(int k){
         case K_HOSPITAL: return CLR_PINK;
         case K_PLANT:    return CLR_RED;
         case K_FIRESTN:  return CLR_DARK_ORANGE;
+        case K_PUMP:     return CLR_TRUE_BLUE;
         default:         return CLR_DARK_GREEN;   // land
     }
 }
@@ -512,18 +538,19 @@ void draw(void){
                                                   : CLR_BROWNISH_BLACK; break;   // lit vs blackout
             case V_TRAFFIC: col = (kind[i]==K_ROAD) ? ramp(RAMP_TR, traffic[i]) : CLR_BROWNISH_BLACK; break;
             case V_FIRE: col=(firecov[i]<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_PO,firecov[i]); break; // coverage; flames drawn on top below
+            case V_WATER: col = conducts(kind[i]) ? (watered[i]?CLR_BLUE:CLR_DARKER_GREY) : CLR_BROWNISH_BLACK; break;
             default: col=CLR_BLACK;
         }
         // in data overlays, keep roads readable as a faint grid (but power + traffic colour the roads themselves)
-        if(view!=V_CITY && view!=V_POWER && view!=V_TRAFFIC && view!=V_FIRE && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
+        if(view!=V_CITY && view!=V_POWER && view!=V_TRAFFIC && view!=V_FIRE && view!=V_WATER && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
         // live flames burn bright in the city view and the fire view
         if((view==V_CITY||view==V_FIRE) && burning[i]>0) col = (burning[i]*2>=FIRE_MAX)?CLR_RED:CLR_ORANGE;
         rectfill(OX+x*TS, OY+y*TS, TS, TS, col);
     }
 
     // ── HUD ──
-    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER","9 TRAFFIC","0 FIRE"};
-    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant","fire stn"};
+    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER","9 TRAFFIC","0 FIRE","[ ] WATER"};
+    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant","fire stn","water pump"};
     int hy=22;
     print("OVERLAY", HUDX, hy, CLR_DARK_GREY); hy+=8;
     for(int v=0;v<V_COUNT;v++){ print(VNAME[v], HUDX, hy, v==view?CLR_WHITE:CLR_DARK_GREY); hy+=8; }
@@ -533,9 +560,10 @@ void draw(void){
               (is_zone(brush)&&brush_dense)?" (dense)":""),
           HUDX, hy, CLR_YELLOW); hy+=10;
     // legend for the active data overlay — a ramp for scalar fields, two swatches for power
-    if(view==V_POWER){
-        rectfill(HUDX, hy, 12, 8, CLR_DARK_RED); print("dark", HUDX+15, hy, CLR_DARK_GREY);
-        rectfill(HUDX+54, hy, 12, 8, CLR_YELLOW); print("lit", HUDX+69, hy, CLR_DARK_GREY);
+    if(view==V_POWER || view==V_WATER){
+        int off = view==V_POWER?CLR_DARK_RED:CLR_DARKER_GREY, on = view==V_POWER?CLR_YELLOW:CLR_BLUE;
+        rectfill(HUDX, hy, 12, 8, off); print(view==V_POWER?"dark":"dry", HUDX+15, hy, CLR_DARK_GREY);
+        rectfill(HUDX+54, hy, 12, 8, on); print(view==V_POWER?"lit":"wet", HUDX+69, hy, CLR_DARK_GREY);
         hy+=14;
     } else if(view!=V_CITY){
         const int *r = view==V_LANDVAL?RAMP_LV : view==V_CRIME?RAMP_CR : view==V_POLICE?RAMP_PO
@@ -566,7 +594,7 @@ void draw(void){
     print(str("ticks %ld", ticks), HUDX, hy, CLR_LIGHT_GREY);
 
     // bottom help
-    print("brush RCIOWPGSHL/F fire/B burn/E  D dense  1-9,0 view  SPACE reseed",
+    print("brush RCIOWPGSHLFBU/E  D dense  1-9,0/[ ] view  SPACE reseed",
           OX, OY+GH*TS+4, CLR_DARK_GREY);
 }
 
@@ -705,7 +733,8 @@ void spec(void){
     for(int y=20;y<26;y++) for(int x=48;x<54;x++){ kind[idx(x,y)]=K_R; zdense[idx(x,y)]=1; } // DENSE
     for(int x=9;x<55;x++){ kind[idx(x,19)]=K_ROAD; kind[idx(x,23)]=K_ROAD; kind[idx(x,27)]=K_ROAD; }
     for(int y=19;y<28;y++) for(int x=9;x<55;x+=4) kind[idx(x,y)]=K_ROAD;
-    kind[idx(9,19)]=K_PLANT;      // power the grid so both blocks can develop
+    kind[idx(9,19)]=K_PLANT;                          // power the grid so both blocks can develop
+    kind[idx(7,23)]=K_WATER; kind[idx(8,23)]=K_PUMP;  // …and water it so dense can rise past the dry cap
     recompute_static();
     step(80*TICK_EVERY);
     int maxL=0,maxD=0;
@@ -779,5 +808,27 @@ void spec(void){
     int razed_cov=0; for(int y=10;y<26;y++) for(int x=10;x<26;x++) if(level[idx(x,y)]==0) razed_cov++;
     expect(1, str("DBG fire: razed open=%d  covered=%d", razed_open, razed_cov));
     expect(razed_cov < razed_open, "fire-station coverage contains the blaze");
+
+    // ── water: a powered, served, in-demand dense block still can't rise past WATER_DRY_CAP
+    //    with no water; add a lake + a pump beside it and it grows tall ──
+    memset(kind,0,sizeof kind); memset(level,0,sizeof level);
+    memset(zdense,0,sizeof zdense); memset(crime,0,sizeof crime);
+    growth_on=1;
+    for(int y=20;y<26;y++) for(int x=20;x<30;x++){ kind[idx(x,y)]=K_R; zdense[idx(x,y)]=1; } // dense homes
+    for(int y=20;y<26;y++) for(int x=32;x<40;x++) kind[idx(x,y)]=K_I;                         // jobs
+    for(int x=18;x<42;x++){ kind[idx(x,19)]=K_ROAD; kind[idx(x,23)]=K_ROAD; kind[idx(x,26)]=K_ROAD; }
+    for(int y=19;y<27;y++) for(int x=18;x<42;x+=4) kind[idx(x,y)]=K_ROAD;
+    kind[idx(40,23)]=K_PLANT;                          // power present, but NO water
+    recompute_static();
+    step(80*TICK_EVERY);
+    int dry_max=0; for(int y=20;y<26;y++) for(int x=20;x<30;x++){ int v=level[idx(x,y)]; if(v>dry_max)dry_max=v; }
+    expect(dry_max <= WATER_DRY_CAP, "without water, development can't rise past the dry cap");
+    // add a lake tile + a pump beside it, wired to the grid
+    kind[idx(16,23)]=K_WATER; kind[idx(17,23)]=K_PUMP;
+    recompute_static();
+    step(80*TICK_EVERY);
+    int wet_max=0; for(int y=20;y<26;y++) for(int x=20;x<30;x++){ int v=level[idx(x,y)]; if(v>wet_max)wet_max=v; }
+    expect(1, str("DBG water: dry max=%d  watered max=%d  (cap=%d)", dry_max, wet_max, WATER_DRY_CAP));
+    expect(wet_max > WATER_DRY_CAP, "a lake-side pump lets development rise tall");
 }
 #endif
