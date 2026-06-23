@@ -68,6 +68,7 @@ docs/
 │   ├── roadnet2-plan.md  the vector-native rebuild plan (one graph, one road_at query); Part B = hierarchy + INTERCHANGES (the junction matrix), which spun off the road-geometry thread below
 │   ├── roadnet2-handoff.md  roadnet2 cart state / orientation
 │   ├── road-program-state.md  ★ WHOLE-PROGRAM STATE on one screen: every road tier (interchange/at-grade/network) + cart + build status, what shipped this cycle (streetlab M1–M4, the spec() harness), and the open frontier (the two-tier generator + a seed-driven world). Start here for "how far are we"; the docs below are tier detail
+│   ├── streetlab-corner-symmetry-plan.md  PLAN (not built): fix streetlab's ≤1px arc-flip corner floor on SYMMETRIC junctions by rendering one quadrant and mirror-blitting the other three (pget/pset, guarded by !skew && !isT). Diagnosis confirmed; verifier is tools/mirror-diff.js; the arcsym cart is the petri-dish demo
 │   ├── road-geometry-handoff.md  ★ START HERE for interchange/junction GEOMETRY — master map of the effort: carts interchange → rampkit → roadlab, what we're solving, the research, what failed, how to continue
 │   ├── interchange-handoff.md  the interchange.c cart state (trumpet loop work, the junction matrix, isolation-bake workflow)
 │   ├── interchange-dsl.md  the junction DSL: topology layer (legs × movements × ramp-primitive) + geometry as relations/solver (the "language that isn't math")
