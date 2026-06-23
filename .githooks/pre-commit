@@ -25,6 +25,28 @@ if echo "$staged" | grep -qE '^(editor/public/carts/index\.json|tools/carts/)'; 
   fi
 fi
 
+# Cart source-embed drift: a .cart.png embeds its de:source (the C the EDITOR loads).
+# A thumbnail-only `--run` bake, or staging the .c without re-embedding, leaves that
+# chunk STALE — the editor then loads old code ("the cart ignores my changes"), and the
+# stale embed can get committed. Block it: for each cart this commit touches, cart-info.js
+# --quiet exits 1 when the embedded source != tools/carts/<name>.c (0 = in sync, 2 = no png).
+# Scoped to the staged carts, so another agent's unrelated stale cart never blocks you.
+cart_names=$(printf '%s\n' "$staged" | sed -n \
+  -e 's#^tools/carts/\([^/]*\)\.c$#\1#p' \
+  -e 's#^editor/public/carts/\([^/]*\)\.cart\.png$#\1#p' | sort -u)
+drifted=""
+for name in $cart_names; do
+  node tools/cart-info.js "$name" --quiet
+  [ $? -eq 1 ] && drifted="$drifted $name"
+done
+if [ -n "$drifted" ]; then
+  echo "[pre-commit] ✗ stale embedded source in:$drifted"
+  echo "             The .cart.png de:source != tools/carts/<name>.c — the editor would load OLD code."
+  echo "             Fix: node tools/make-cart.js tools/carts/<name>.c editor/public/carts/<name>.cart.png"
+  echo "             then re-stage the .cart.png.  (--run bakes only the thumbnail, not the source.)"
+  exit 1
+fi
+
 echo "$staged" | grep -qE 'runtime/(sound|studio)\.h' || exit 0
 
 echo "[pre-commit] runtime/sound.h or studio.h staged — compile-checking the runtime…"
