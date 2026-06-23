@@ -1,0 +1,10 @@
+# boom — RAM CAR: kamikaze cars scream in from the edges and crash the walls
+# frames 230
+# fps 30
+# scale 3
+# crf 30
+down 4 6
+up 7 6
+click 14 250 44
+click 80 45 40
+click 150 185 95
