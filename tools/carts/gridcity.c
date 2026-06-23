@@ -70,6 +70,7 @@ static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it 
 #define GROW_EVERY  4         // sim ticks between growth/decline passes
 #define GROW_THRESH 30        // desirability a lot needs (above) to build up
 #define DECL_THRESH 10        // …and (below) to start emptying out
+#define DEM_DEAD    10        // demand dead band: near balance the city HOLDS (anti-oscillation)
 #define R_BASE     30         // baseline residential pull (people want in)
 #define C_BASE     20         // baseline commercial pull
 #define I_BASE     20         // baseline industrial pull (external market)
@@ -190,16 +191,23 @@ static void sim_step(void){
     demI = I_BASE + (int)(pop - 2*totI)/6;     // factories: external base + workforce
 
     // 7. the develop/abandon valve — every GROW_EVERY ticks each zoned lot nudges its
-    //    level up (good local desirability AND its type is in demand) or down (starved
-    //    of road access, choked by crime/pollution, or its type is oversupplied)
+    //    level up (good local desirability AND its type clearly in demand) or down
+    //    (starved of road access, choked by crime/pollution, or clearly oversupplied).
+    //    Two anti-oscillation guards so the city SETTLES instead of pulsing the whole
+    //    grid between two states: (a) a demand DEAD BAND — within ±DEM_DEAD the city
+    //    holds; (b) STAGGER — only ~a quarter of lots update each pass (rotating phase),
+    //    so supply changes in small steps and demand can't whiplash past the dead band.
     if(growth_on && ticks % GROW_EVERY == 0){
-        for(int i=0;i<MAXC;i++){
+        int phase = (int)(ticks / GROW_EVERY) & 3;
+        for(int y=0;y<GH;y++) for(int x=0;x<GW;x++){
+            int i=idx(x,y);
             if(!is_zone(kind[i])) continue;
+            if(((x*3 + y*5) & 3) != phase) continue;       // this pass touches one quarter
             int dem = kind[i]==K_R?demR : kind[i]==K_C?demC : demI;
             int des = landvalue[i] - crime[i]/2 - pollution[i]/4;
             int served = roadacc[i]>40;
-            if(served && dem>0 && des>GROW_THRESH){ if(level[i]<LMAX) level[i]++; }
-            else if(!served || dem<0 || des<DECL_THRESH){ if(level[i]>0) level[i]--; }
+            if(served && dem>DEM_DEAD && des>GROW_THRESH){ if(level[i]<LMAX) level[i]++; }
+            else if(!served || dem<-DEM_DEAD || des<DECL_THRESH){ if(level[i]>0) level[i]--; }
         }
     }
     ticks++;
