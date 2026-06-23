@@ -1105,14 +1105,23 @@ void draw(void) {
         }
     }
 
-    // smoke (behind), then debris, then flames/embers/sparks (in front)
+    // smoke (behind), then debris, then flames/embers/sparks (in front).
+    // DITHERED: the 1-bits are transparent (hole_color -1), so smoke reads as a
+    // soft, semi-transparent volume — dense + dark when young, dissolving to wispy
+    // sparse dots (and lighter grey) as it ages and thins. The pattern is pinned to
+    // world (0,0), so overlapping puffs share one lattice and composite as one cloud.
     for (int i = 0; i < MAXP; i++) {
         P *p = &ps[i];
         if (p->kind != PK_SMOKE) continue;
         float t = p->life / p->maxlife;          // 1 young → 0 old
         int col = t > 0.6f ? CLR_DARKER_GREY : t > 0.3f ? CLR_DARK_GREY : CLR_MEDIUM_GREY;
+        int pat = t > 0.6f ? FILL_DOTS           // young: dense (a few holes)
+                : t > 0.3f ? FILL_CHECKER        // mid: 50%
+                : (~FILL_DOTS & 0xFFFF);         // old: wispy (mostly holes)
+        fillp(pat, -1);
         circfill((int)p->x, (int)p->y, (int)p->size, col);
     }
+    fillp_reset();                               // back to solid for everything below
     for (int i = 0; i < MAXP; i++) {
         P *p = &ps[i];
         if (p->kind != PK_DEBRIS) continue;
