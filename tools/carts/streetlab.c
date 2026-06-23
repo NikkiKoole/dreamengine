@@ -68,6 +68,7 @@
 #define BIKEW    5     // M7: bike-lane width (a tinted lane outside the driving lanes)
 #define PARKW    7     // M7: parking-lane width (at the kerb, marked with bay ticks)
 #define MEDHW    4     // M7: continuous centre-median half-width (the median IS a cross-section lane type)
+#define TWLTLHW  5     // Stage-1 #3: two-way left-turn lane half-width (a painted centre lane, ~10px ⇒ one lane)
 #define SLIPW    6     // Stage-1 #2: free-right slip-lane width (the gap between the kerb and the floating island)
 #define FR_NOSE  2.f   // Stage-1 #2: nose offset — the island is set back this far from the box corner (traveled way)
 #define PCLEAR   16    // Pass 2: parking CLEAR ZONE — markings end this far back from the junction (no parking near it)
@@ -181,6 +182,7 @@ static int   freeRight = 0;   // Stage-1 #2: CHANNELIZED RIGHT-TURN slip + pork-
 static float islandR  = 8.f;  // M6: central-island radius (the headline roundabout knob; reuses [ ] in this mode)
 static float frR      = 14.f; // Stage-1 #2: free-right TURN radius (the slip centreline; reuses [ ] in free-right mode)
 static int   medOn    = 0;    // M7: continuous raised centre median (a cross-section lane type, not the turn splitter)
+static int   twltlOn  = 0;    // Stage-1 #3: two-way left-turn lane (painted centre lane) — excl. with the median (both centre)
 static int   bikeOn   = 0;    // M7/Pass3: 0 off · 1 lanes (+corner-wrap, the default) · 2 +straight-through crossing
 static int   parkOn   = 0;    // M7: a parking lane at the kerb
 enum { PAT_GRID, PAT_ORGANIC, PAT_RADIAL, PAT_CULDESAC, NPAT };   // M4: street-web patterns
@@ -225,14 +227,18 @@ static void edge_corner(float cx,float cy,float HW,float bA,float bB,float bm,fl
 //    [bike] · [parking] · (sidewalk = the M5 peds layer). The carriageway half-width is the SUM of the lanes
 //    present — and because every junction primitive (curb returns, the mouth datum, the roundabout, sidewalks)
 //    keys off HW, widening the section re-solves the whole junction for free. cross_hw() is the pure datum. ──
+// the CENTRE treatment's half-width: a raised median OR a (painted) two-way left-turn lane — mutually exclusive,
+// both occupy the centreline. This is the single offset the rest of the section (and every junction primitive
+// that reads drive_inner) keys off, so adding TWLTL as a centre lane type re-solves the junction for free.
+static float centre_hw(void){ return medOn?MEDHW : twltlOn?TWLTLHW : 0; }
 static float cross_hw(void){
-    return (medOn?MEDHW:0) + lanesPer*LANEW + (bikeOn?BIKEW:0) + (parkOn?PARKW:0);
+    return centre_hw() + lanesPer*LANEW + (bikeOn?BIKEW:0) + (parkOn?PARKW:0);
 }
 // ── the lane-section as the SINGLE SOURCE OF TRUTH. Offsets from the centreline (one side), centre→out:
 //    [median 0..MEDHW] · driving lanes · [bike] · [parking]. Turn lanes, the stop bar, and the roundabout
 //    approaches ALL read these instead of hardcoding centre-relative offsets — so the section drives every
 //    junction primitive. The HALF-section is the unit (mirrored at the draw site) ⇒ one-way is later a flag. ──
-static float drive_inner(void){ return medOn?MEDHW:0; }                  // where the driving lanes begin
+static float drive_inner(void){ return centre_hw(); }                    // where the driving lanes begin (past the centre treatment)
 static float drive_outer(void){ return drive_inner()+lanesPer*LANEW; }   // where they end (parking begins)
 // Pass 2: the bike lane is OUTERMOST (at the kerb), parking INBOARD of it (the Dutch protected arrangement) —
 // so the bike lane can follow the curb-return arc around the corner, and parking ends in the clear zone.
@@ -264,8 +270,23 @@ static void cross_markings(float cx,float cy,float b,float kstdP,float kstdM,flo
         lane_band(cx,cy,b, 0, MEDHW, -1, cstd,reach, CLR_LIGHT_GREY);
         edge_line(cx,cy,b, MEDHW,+1, cstd,reach, CLR_BROWNISH_BLACK);
         edge_line(cx,cy,b, MEDHW,-1, cstd,reach, CLR_BROWNISH_BLACK);
+    } else if (twltlOn){                                     // Stage-1 #3: TWO-WAY LEFT-TURN LANE (painted centre lane)
+        // each side: a SOLID yellow (outer, no through-cross) + a DASHED yellow just inside (left-turners enter);
+        // surface stays asphalt. Alternating left-turn arrows down the centreline = the bidirectional tell.
+        for (int s=-1;s<=1;s+=2){
+            edge_line(cx,cy,b, TWLTLHW, s, cstd,reach, CLR_YELLOW);            // outer solid yellow
+            float o=TWLTLHW-1.5f;                                             // inner dashed yellow (may enter)
+            dashed(cx0+nx*s*o,cy0+ny*s*o, x1+nx*s*o,y1+ny*s*o, CLR_YELLOW);
+        }
+        float L=sqrtf((x1-cx0)*(x1-cx0)+(y1-cy0)*(y1-cy0));                   // alternate the arrow side each step
+        for (float t=10, k=0; t<L && t<150; t+=22, k++){
+            int s=(((int)k)&1)?1:-1; float px=cx0+dx*t, py=cy0+dy*t, ax=px+nx*s*2.5f, ay=py+ny*s*2.5f;
+            line((int)(px-dx*3),(int)(py-dy*3),(int)ax,(int)ay,CLR_YELLOW);   // turning stroke → tip on side s
+            line((int)ax,(int)ay,(int)(ax-nx*s*2-dx*1.5f),(int)(ay-ny*s*2-dy*1.5f),CLR_YELLOW);   // barb
+            line((int)ax,(int)ay,(int)(ax-nx*s*2+dx*1.5f),(int)(ay-ny*s*2+dy*1.5f),CLR_YELLOW);   // barb
+        }
     } else {
-        dashed(cx0,cy0,x1,y1,CLR_YELLOW);                   // the centreline (no median)
+        dashed(cx0,cy0,x1,y1,CLR_YELLOW);                   // the centreline (no centre treatment)
     }
     for (int k=1;k<lanesPer;k++){                           // dashed driving-lane dividers
         float o=inner+k*LANEW;
@@ -494,6 +515,9 @@ static void draw_freeright(float cx,float cy,float bA,float bB,float bm){
 // exclusive (each is a whole-corner channelization scheme that re-draws the corners differently).
 static void set_treatment(int t){ turnLanes=(t==1); freeRight=(t==2); roundabout=(t==3); }
 static int  cur_treatment(void){ return roundabout?3 : freeRight?2 : turnLanes?1 : 0; }
+// the CENTRE cross-section treatment cycles none → raised median → TWLTL → none (they're mutually exclusive —
+// both live on the centreline). One control for both ⇒ the exclusion is structural, not a guard.
+static void cycle_centre(void){ if (medOn){ medOn=0; twltlOn=1; } else if (twltlOn){ twltlOn=0; } else medOn=1; }
 
 void update(void){
     if (keyp('v')||keyp('V')) netview = !netview;            // M4: junction-detail ↔ street-web view
@@ -515,7 +539,7 @@ void update(void){
     if (keyp('f')||keyp('F')) set_treatment(cur_treatment()==2 ? 0 : 2);   // Stage-1 #2: free-right slip (excl.)
     if (keyp('r')||keyp('R')) set_treatment(cur_treatment()==3 ? 0 : 3);   // M6: mini-roundabout (excl.)
     if (keyp('k')||keyp('K')) peds = !peds;                  // M5: sidewalks + crosswalks
-    if (keyp('m')||keyp('M')) medOn  = !medOn;               // M7: cross-section — centre median
+    if (keyp('m')||keyp('M')) cycle_centre();                // M7/#3: centre cross-section — none → median → TWLTL
     if (keyp('b')||keyp('B')) bikeOn = (bikeOn+1)%3;         // M7/Pass3: off → lanes → +straight-through crossing
     if (keyp(';'))            parkOn = !parkOn;              // M7: parking lane
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
@@ -813,7 +837,7 @@ void draw(void){
         if (turnLanes){
             // #2: the channelizing splitter draws ONLY when there's no continuous median; with a median, the
             // left-turn bay is just the GAP the median leaves at the junction (it begins at startd, past the mouth).
-            if (!medOn) draw_median(cx,cy,b,mouth);
+            if (!medOn && !twltlOn) draw_median(cx,cy,b,mouth);   // splitter only when the centre is bare (no median/TWLTL)
             // #1: delineate the inner DRIVING lane (next to the median/centre) as the left-turn lane — a SOLID
             // white line at its outer edge, where the dashed dividers leave off. Median-aware via drive_inner().
             if (lanesPer>=2){
@@ -856,7 +880,7 @@ void draw(void){
     // ── toolbar (three rows) ── row1 = cross-section lane types (incl. pavement) · row2 = curb/lanes/view · row3 = skew/topology/treatment
     rectfill(0, SCREEN_H-TOOLBAR, SCREEN_W, TOOLBAR, CLR_BLACK);
     int d;
-    if (ui_button(4,   SCREEN_H-58, 72, 13, medOn ?"median: on" :"median: off"))   medOn =!medOn;
+    if (ui_button(4,   SCREEN_H-58, 72, 13, medOn?"centre: median":twltlOn?"centre: twltl":"centre: none")) cycle_centre();
     if (ui_button(80,  SCREEN_H-58, 56, 13, bikeOn==2?"bike:+xing":bikeOn?"bike: on":"bike: off")) bikeOn=(bikeOn+1)%3;
     if (ui_button(140, SCREEN_H-58, 76, 13, parkOn?"parking: on":"parking: off"))   parkOn=!parkOn;
     if (ui_button(220, SCREEN_H-58, 92, 13, peds  ?"pavement: on":"pavement: off")) peds  =!peds;  // #6: pavement = its own lane-type toggle
@@ -995,6 +1019,16 @@ void spec(void){
     medOn=1; expect(spec_near(drive_inner(), MEDHW), "median: driving lanes start outside it (drive_inner == MEDHW)");
     expect(spec_near(drive_outer(), MEDHW+lanesPer*LANEW), "drive_outer = drive_inner + the driving lanes");
     medOn=0; bikeOn=0; parkOn=0;
+    // ── Stage-1 #3: TWLTL is a CENTRE lane type — it routes through centre_hw()/drive_inner() exactly like the
+    //    median, so every junction primitive absorbs it (no hardcoded offsets ⇒ no M7-style regression). ──
+    twltlOn=1; expect(spec_near(cross_hw(), TWLTLHW+2*LANEW), "TWLTL adds its half-width to the carriageway (like a median)");
+    expect(spec_near(drive_inner(), TWLTLHW),                 "TWLTL: driving lanes start outside it (drive_inner == TWLTLHW)");
+    twltlOn=0;
+    // the 'm' control CYCLES the centre treatment none → median → TWLTL → none; median and TWLTL are never both set
+    medOn=0; twltlOn=0;
+    cycle_centre(); expect(medOn==1 && twltlOn==0, "centre cycle: none → raised median");
+    cycle_centre(); expect(medOn==0 && twltlOn==1, "centre cycle: median → TWLTL (median cleared — mutually exclusive)");
+    cycle_centre(); expect(medOn==0 && twltlOn==0, "centre cycle: TWLTL → none (full cycle)");
     // Pass 2: the bike lane is OUTERMOST (kerb-side) so it can wrap the corner; parking sits inboard of it
     parkOn=1; bikeOn=1; lanesPer=2;
     expect(spec_near(park_inner(), drive_outer()),               "parking sits just outside the driving lanes");
@@ -1026,7 +1060,8 @@ void spec(void){
     { float ft[3]={0,90,180};                                              // a T (north dropped): arm 0's back is a 180 gap
       expect(spec_near(kerb_start(ft,3,0,16.f,8.f,-1), 0), "T back (straight 180 gap): the lane runs through to the hub (start 0)");
       expect(kerb_start(ft,3,0,16.f,8.f,+1) > 0,           "the cornered side of the same arm still starts at its tangent"); }
-    int m0=medOn;  spec_tap('m'); expect(medOn!=m0,  "the 'm' key toggles the centre median");
+    medOn=0; twltlOn=0; spec_tap('m'); expect(medOn==1, "the 'm' key drives the centre cycle (none → median)");
+    spec_tap('m'); spec_tap('m');                  expect(medOn==0 && twltlOn==0, "'m' x3 returns the centre to none");
     int pk0=parkOn; spec_tap(';'); expect(parkOn!=pk0,"the ';' key toggles the parking lane");
     // Pass 3: 'b' cycles the bike lane through 3 states — off → lanes(+corner-wrap) → +straight-through crossing
     bikeOn=0; spec_tap('b'); expect_eq(bikeOn,1, "'b' #1: bike lanes on (corner-wrap default)");

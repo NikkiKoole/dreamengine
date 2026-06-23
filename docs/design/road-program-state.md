@@ -91,7 +91,9 @@ Cheap + high-value at the top. (✓ = shipped since.)
 - ✓ **Curb extensions / bulb-outs** (§2) — `draw_bulb()` fills the parking clear-zone at each mouth, shortening
       the crossing (auto with pavement+parking). Pedestrian refuge islands are already covered (the turn median +
       the roundabout splitter both serve as refuges).
-- [ ] **TWLTL** (two-way centre left-turn lane) + **right-turn pockets** + **driveways as low-volume junctions** (§2).
+- ◑ **Minor markings pass** (§2): ✓ **TWLTL** (two-way centre left-turn lane — a painted CENTRE lane type, `m`
+      cycles none→median→TWLTL; routes through `centre_hw()`/`drive_inner()` so it composes with every primitive)
+      · [ ] **right-turn pockets** · [ ] **driveways as low-volume junctions**.
 
 **Network topology (Facet B — §8), in the network view:**
 - [ ] **Fused-grid / superblock** pattern (§8.3) — perimeter arterial loop + calmed/discontinuous interior;
@@ -128,7 +130,8 @@ early; exhaust what can be built in isolation first.
    deferred in M3. `f` cycles it in. Constant-width slip (concentric arcs about one fillet); the pork-chop island
    is carved to the corner zone OUTSIDE the through kerb lines (fill-then-reopen-gap-side) ⇒ a near-nothing sliver
    at 90°, a clean triangle at skew, never over a lane (owner-approved). Spec'd (81). fr_fits window kept at 40–145°.
-3. **Minor markings pass** *(low, batched)* — TWLTL (two-way centre left-turn) + right-turn pockets + driveways.
+3. ◑ **Minor markings pass** *(low, batched)* — ✓ TWLTL (centre lane type, `m` cycle, owner-approved; routes
+   through `centre_hw()`/`drive_inner()` ⇒ composes, no M7 regression) · [ ] right-turn pockets · [ ] driveways.
 4. *Parked:* staggered junctions + signalised-vs-priority CONTROL (the latter is a signals/phasing layer, not
    at-grade geometry — its own thing). Revisit only on request.
    → Facet A complete + spec-locked; the junction cart is done.
@@ -187,8 +190,9 @@ build-all + ui-audit clean; baked. (Site publish is stale — a separate `publis
 (12 ft constrained); island offset from the traveled way; exit defaults to YIELD/give-way; ped crosswalk across
 the slip centre + island as refuge; small radii preferred; free-rights discouraged in ped-heavy contexts (NACTO).
 
-**Next: step 3 — minor markings pass** (TWLTL + right-turn pockets + driveways), then Stage 2 (superblock).
-Don't jump to the world.
+**Next: step 3 cont'd** — ✓ TWLTL done (centre lane type, `m` cycle). Remaining: right-turn pockets (mirror the
+M3 left-turn bay to the kerb side, off `drive_outer()`), then driveways (a kerb-cut apron = a low-volume junction).
+Then Stage 2 (superblock). Don't jump to the world.
 
 ## Cross-section composition — known issues + the next-pass plan (2026-06-22)
 
