@@ -104,6 +104,9 @@ Cheap + high-value at the top. (✓ = shipped since.)
 - [ ] **Dendricity + circuity** metrics (§8.2) — the rest of the four-measure SNDi. Circuity needs shortest-path
       (heavier); defer until there's a reason.
 - ✓ M4a–c: grid/organic/radial/cul-de-sac patterns + the curvature knob (winding, live sinuosity).
+- [ ] **Modal (active-travel) network layer** (Facet C, §9) — independent bike/foot paths as their OWN edges (not
+      a road cross-section): parallel-at-offset / divergent / own crossings. The superblock's permeable-but-
+      vehicle-discontinuous co-feature. See Stage 2.5.
 
 **Phase 2 — the world (§8.4), beyond a single screen:**
 - [ ] **The two-tier major→minor generator** — major arterials first, then fill local streets per region
@@ -147,6 +150,18 @@ early; exhaust what can be built in isolation first.
 6. *Deferred:* dendricity + circuity metrics (circuity needs shortest-path) — add only if needed to separate
    the superblock from the other patterns numerically.
    → Network sandbox complete; the superblock teaches the region model.
+
+**Stage 2.5 — the MODAL (active-travel) network layer (Facet C, §9 of the research).** *(new, scoped 2026-06-23)*
+6b. **Independent bike/foot paths as their own network edges** — NOT a road cross-section (that's built), but a
+    separate parallel graph overlaid on the vehicle network: a thin path edge (own polyline + width, drawn as its
+    own ribbon with grass verges) that parallels a road at an offset, diverges to its own alignment (park, canal,
+    block cut-through), and crosses roads at its own crossings (reusing the M5/Pass-3 zebra + elephant's-teeth
+    markings). It has its own hierarchy (local → cycle route → fast route) and its own junctions. **Why here:** the
+    superblock (step 5) is by definition *"pedestrian-permeable, vehicle-discontinuous"* — the active-travel graph
+    has MORE edges than the vehicle one — so this is the superblock's natural co-feature, not a separate effort.
+    Borderline sub-case: a verge-separated parallel footway *could* instead be a cross-section variant (`verge`
+    lane type + setback sidewalk). Build the independent edge in the network view; revisit the verge variant then.
+   → Pairs with / extends Stage 2; the two-tier world (Stage 3) then carries TWO overlaid networks, not one.
 
 **Stage 3 — Phase 2: compose the WORLD (the frontier; needs all sandboxes done).**
 7. **Directed network → one-way streets** — directionality is a network property; the junction inherits

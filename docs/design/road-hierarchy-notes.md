@@ -171,6 +171,33 @@ A single generator can morph **grid ↔ radial ↔ organic ↔ cul-de-sac** by t
 sinuosity) **+ the degree-1/3/4 share** — these empirically separate every canonical pattern (e.g. grid 100%
 four-way vs organic 10% vs cul-de-sac 9%, disambiguated by dendricity/circuity).
 
+## 9. Facet C — the modal (active-travel) network as a PARALLEL layer ⚠️ (concept, 2026-06-23)
+Bike paths and footways come in **two fundamentally different forms**, and we've only modelled one:
+
+- **Road-bound (a cross-section attribute)** — a bike lane / sidewalk measured *outward from a road's centreline*
+  (`bike_inner()`, the peds sidewalk ring in `streetlab`). It exists *because the road is there*. **Built.**
+- **Independent (its own network edge)** — a path with **its own alignment**, that may run parallel to a road at
+  an offset (separated by a grass verge), or **wander away from roads entirely** (through a park, along a canal,
+  a block cut-through). It has no parent road centreline, so it is **NOT a wider cross-section** — it's a second
+  *edge type in its own graph*. **Unmodelled.**
+
+**Key insight: this is a SEPARATE network overlaid on the vehicle network — a different modal layer, NOT a lower
+tier of the road hierarchy.** It has its own hierarchy (local path → cycle route → fast cycle route / NL
+*snelfietsroute*) and its own junctions (path×road and path×path crossings — for which the M5/Pass-3 zebra +
+elephant's-teeth marking primitives already exist).
+
+**The hook is already in the research:** the fused-grid/superblock (§8.3) is defined as *"pedestrian-permeable,
+vehicle-discontinuous"* — i.e. **the active-travel graph has MORE edges than the vehicle graph** (cut-throughs,
+park links, paths where cars hit a dead-end). A solitary-path layer is the natural co-feature of the superblock,
+not a separate effort. (Dutch reality: the parallel *fietsnetwerk* / *solitair fietspad* is arguably more
+developed than the road network — this is a first-class layer, not a fringe.)
+
+**Where it belongs:** Facet B / the network layer (`streetlab`'s `v` view), NOT the junction cross-section.
+A thin "path edge" (own polyline + width, drawn as its own ribbon with grass verges) that (1) parallels a road
+edge at an offset, (2) diverges to its own alignment, (3) crosses roads at its own crossings. The verge-separated
+*parallel footway* is the borderline case — it could be a cross-section variant (`verge` lane type + setback)
+OR an edge; the *goes-its-own-way* path must be an edge.
+
 ## Open questions (carry into a follow-up)
 *Facet A (at-grade junctions):*
 - Precise mapping of at-grade lane composition + junction primitives onto OpenDRIVE lane types / `roadMark`
