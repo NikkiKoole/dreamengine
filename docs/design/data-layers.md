@@ -192,9 +192,14 @@ Tuning found: `CP_MAX 100`, `CRIME_BASE 30`, police `spread(14, 18)`. Constants 
   network to the nearest *compatible* zone within a step budget and deposits traffic on the
   path; aggregate = a road-traffic field that adds to pollution, lowers land value, and
   (when congested) caps growth. The one layer needing road *connectivity*, not a blur.
-- ⬜ **Power grid** — boolean flood-fill from plants along conductive tiles; unpowered zones
-  can't develop (gates growth like roads do). Clean next piece.
+- ✅ **Power grid** (2026-06-23): a power plant (`L`) floods power by boolean BFS through the
+  connected built fabric (roads/zones/civic conduct; bare land + water don't). A lot needs
+  **both** road access AND power to develop, so cutting a district off the grid browns it out
+  and stops its growth. New **Power** overlay (8): lit (yellow) vs blackout (red). `spec()`
+  (23): a road-served, in-demand zone stays at 0 with no plant, then develops once a plant is
+  wired into its grid. (Flood lives in `recompute_static` — topology only changes on edit.)
 - ⬜ **Water pipes**, and **fire** coverage (+ fire spread the coverage suppresses).
+- ⬜ **Traffic** (carried over) — deterministic trip generation along the road network.
 
 ### Open questions to resolve while building
 - Field resolution: full-res vs Micropolis-style half/quarter — decide by profiling, not upfront.

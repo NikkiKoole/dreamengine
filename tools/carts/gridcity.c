@@ -34,8 +34,10 @@
 //   LEFT-drag   paint the current brush      RIGHT-drag  erase to land
 //   R C I       zone Residential/Commercial/Industrial (D toggles light↔dense zoning:
 //               light caps low = suburbs, dense rises tall = downtown)
-//   O road  W water  P police  G park  S school  H hospital  E erase
-//   1..7        overlay: City / Land value / Crime / Police / Density / Pollution / Services
+//   O road  W water  P police  G park  S school  H hospital  L power plant  E erase
+//   Power floods from plants through roads/zones; an unpowered (or road-less) lot
+//   can't develop — cut a district off and it goes dark and stops growing.
+//   1..8        overlay: City / Land value / Crime / Police / Density / Pollution / Services / Power
 //   SPACE       reseed the sample city
 
 #define GW 64
@@ -47,10 +49,10 @@
 #define HUDX 202        // right panel
 
 // cell kinds
-enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL };
+enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT };
 
 // overlays
-enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_COUNT };
+enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_COUNT };
 
 // ── state ──
 static int  kind[MAXC];
@@ -62,6 +64,7 @@ static int  terrainv[MAXC];   // static water-proximity value (recomputed on edi
 static int  parkv[MAXC];      // static park-amenity value (recomputed on edit)
 static int  commv[MAXC];      // commercial-vitality premium (downtown raises nearby land value)
 static int  roadacc[MAXC];    // static road-access field — a service radius, not strict adjacency
+static int  powered[MAXC];    // static: 1 if the tile is reached by the power grid (flood from plants)
 static int  tmp[MAXC];
 static int  view = V_CITY;
 static int  brush = K_R;
@@ -91,6 +94,8 @@ static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it 
 static inline int idx(int x, int y){ return y*GW + x; }
 static inline int is_zone(int k){ return k==K_R||k==K_C||k==K_I; }
 static inline int developed(int i){ return is_zone(kind[i]) && level[i]>0; }
+// power conducts through the built fabric (roads/zones/civic/plants), not bare land or water
+static inline int conducts(int k){ return k!=K_LAND && k!=K_WATER; }
 
 // positive land-value drivers (this phase): parks + service coverage + downtown premium
 #define PARK_SRC   220        // a park's land-value boost at the tile (falls off ~8 cells)
@@ -143,6 +148,17 @@ static void recompute_static(void){
     // parks: a strong, fairly LOCAL land-value boost (decaying spread, ~8-cell reach)
     for(int i=0;i<MAXC;i++) parkv[i] = (kind[i]==K_PARK) ? PARK_SRC : 0;
     spread(parkv, 8, 28);
+    // power grid: flood from every plant through connected conductive tiles. A district
+    // cut off from a plant (e.g. its road link bulldozed) goes dark and stops developing.
+    static int q[MAXC]; int head=0, tail=0;
+    for(int i=0;i<MAXC;i++) powered[i]=0;
+    for(int i=0;i<MAXC;i++) if(kind[i]==K_PLANT){ powered[i]=1; q[tail++]=i; }
+    while(head<tail){
+        int i=q[head++], x=i%GW, y=i/GW;
+        int nb[4], nn=0;
+        if(x>0)nb[nn++]=i-1; if(x<GW-1)nb[nn++]=i+1; if(y>0)nb[nn++]=i-GW; if(y<GH-1)nb[nn++]=i+GW;
+        for(int j=0;j<nn;j++){ int n=nb[j]; if(!powered[n] && conducts(kind[n])){ powered[n]=1; q[tail++]=n; } }
+    }
 }
 
 // ── one simulation tick: the dependency DAG ──
@@ -243,8 +259,8 @@ static void sim_step(void){
             if(((x*3 + y*5) & 3) != phase) continue;       // this pass touches one quarter
             int dem = kind[i]==K_R?demR : kind[i]==K_C?demC : demI;
             int des = landvalue[i] - crime[i]/2 - pollution[i]/4;
-            int served = roadacc[i]>40;
-            int cap = zdense[i] ? LMAX : LIGHT_CAP;   // light zoning tops out low
+            int served = roadacc[i]>40 && powered[i];   // needs BOTH a road and power
+            int cap = zdense[i] ? LMAX : LIGHT_CAP;       // light zoning tops out low
             if(served && dem>DEM_DEAD && des>GROW_THRESH){ if(level[i]<cap) level[i]++; }
             else if(!served || dem<-DEM_DEAD || des<DECL_THRESH){ if(level[i]>0) level[i]--; }
         }
@@ -291,6 +307,7 @@ static void seed_city(void){
     kind[idx(45,33)]=K_SCHOOL; kind[idx(21,15)]=K_SCHOOL;
     kind[idx(21,33)]=K_HOSPITAL; kind[idx(45,15)]=K_HOSPITAL;
     kind[idx(27,21)]=K_POLICE; kind[idx(39,27)]=K_POLICE;
+    kind[idx(57,39)]=K_PLANT;  // a power plant on the grid's edge feeds the whole connected city
 
     recompute_static();
     // pre-warm: let the zones grow from empty to a settled city before the player
@@ -320,12 +337,13 @@ void update(void){
     if(keyp('R')) brush=K_R;   if(keyp('C')) brush=K_C;   if(keyp('I')) brush=K_I;
     if(keyp('O')) brush=K_ROAD;if(keyp('W')) brush=K_WATER;if(keyp('P')) brush=K_POLICE;
     if(keyp('G')) brush=K_PARK;if(keyp('S')) brush=K_SCHOOL;if(keyp('H')) brush=K_HOSPITAL;
+    if(keyp('L')) brush=K_PLANT;               // L = power pLant
     if(keyp('E')) brush=K_LAND;
     if(keyp('D')) brush_dense=!brush_dense;   // toggle light/dense zoning for the zone brushes
     // overlay select
     if(keyp('1')) view=V_CITY;    if(keyp('2')) view=V_LANDVAL; if(keyp('3')) view=V_CRIME;
     if(keyp('4')) view=V_POLICE;  if(keyp('5')) view=V_DENSITY; if(keyp('6')) view=V_POLLUTION;
-    if(keyp('7')) view=V_SERVICES;
+    if(keyp('7')) view=V_SERVICES; if(keyp('8')) view=V_POWER;
     if(keyp(KEY_SPACE)) seed_city();
 
     if(mouse_down(0)) paint_at(mouse_x(),mouse_y(),brush);
@@ -368,6 +386,7 @@ static int city_color(int k){
         case K_PARK:     return CLR_MEDIUM_GREEN;
         case K_SCHOOL:   return CLR_LIGHT_PEACH;
         case K_HOSPITAL: return CLR_PINK;
+        case K_PLANT:    return CLR_RED;
         default:         return CLR_DARK_GREEN;   // land
     }
 }
@@ -391,16 +410,18 @@ void draw(void){
             case V_POLLUTION: col=(pollution[i]<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_PL,pollution[i]); break;
             case V_SERVICES: { int sv=police[i]+school[i]+health[i]+parkv[i]; if(sv>250)sv=250;
                                col=(sv<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_SV,sv); } break;
+            case V_POWER: col = conducts(kind[i]) ? (powered[i]?CLR_YELLOW:CLR_DARK_RED)
+                                                  : CLR_BROWNISH_BLACK; break;   // lit vs blackout
             default: col=CLR_BLACK;
         }
-        // in data overlays, keep roads readable as a faint grid
-        if(view!=V_CITY && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
+        // in data overlays, keep roads readable as a faint grid (but not in power — roads carry power there)
+        if(view!=V_CITY && view!=V_POWER && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
         rectfill(OX+x*TS, OY+y*TS, TS, TS, col);
     }
 
     // ── HUD ──
-    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES"};
-    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital"};
+    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER"};
+    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant"};
     int hy=22;
     print("OVERLAY", HUDX, hy, CLR_DARK_GREY); hy+=8;
     for(int v=0;v<V_COUNT;v++){ print(VNAME[v], HUDX, hy, v==view?CLR_WHITE:CLR_DARK_GREY); hy+=8; }
@@ -408,8 +429,12 @@ void draw(void){
     print("BRUSH", HUDX, hy, CLR_DARK_GREY); hy+=8;
     print(str("> %s%s", BNAME[brush], (is_zone(brush)&&brush_dense)?" (dense)":""),
           HUDX, hy, CLR_YELLOW); hy+=10;
-    // legend ramp for the active data overlay
-    if(view!=V_CITY){
+    // legend for the active data overlay — a ramp for scalar fields, two swatches for power
+    if(view==V_POWER){
+        rectfill(HUDX, hy, 12, 8, CLR_DARK_RED); print("dark", HUDX+15, hy, CLR_DARK_GREY);
+        rectfill(HUDX+54, hy, 12, 8, CLR_YELLOW); print("lit", HUDX+69, hy, CLR_DARK_GREY);
+        hy+=14;
+    } else if(view!=V_CITY){
         const int *r = view==V_LANDVAL?RAMP_LV : view==V_CRIME?RAMP_CR : view==V_POLICE?RAMP_PO
                      : view==V_POLLUTION?RAMP_PL : view==V_SERVICES?RAMP_SV : RAMP_PD;
         print("low", HUDX, hy, CLR_DARK_GREY);
@@ -437,7 +462,7 @@ void draw(void){
     print(str("ticks %ld", ticks), HUDX, hy, CLR_LIGHT_GREY);
 
     // bottom help
-    print("RCI/O/W/P/G/S/H/E brush  D light<>dense  1-7 view  SPACE reseed",
+    print("brush RCI/O/W/P/G/S/H/L/E  D dense  1-8 view  SPACE reseed",
           OX, OY+GH*TS+4, CLR_DARK_GREY);
 }
 
@@ -536,6 +561,7 @@ void spec(void){
     for(int y=19;y<31;y++){ kind[idx(26,y)]=K_ROAD; kind[idx(33,y)]=K_ROAD; kind[idx(40,y)]=K_ROAD; }
     // an UNREACHABLE R block — zoned, but no road anywhere near it
     for(int y=40;y<46;y++) for(int x=4;x<10;x++) kind[idx(x,y)]=K_R;
+    kind[idx(24,19)]=K_PLANT;     // power the connected grid (the isolated block stays dark + dead)
     recompute_static();
     long built0=0; for(int i=0;i<MAXC;i++) if(kind[i]==K_R) built0+=level[i];
     step(80*TICK_EVERY);                 // ~80 ticks → ~20 growth passes
@@ -575,6 +601,7 @@ void spec(void){
     for(int y=20;y<26;y++) for(int x=48;x<54;x++){ kind[idx(x,y)]=K_R; zdense[idx(x,y)]=1; } // DENSE
     for(int x=9;x<55;x++){ kind[idx(x,19)]=K_ROAD; kind[idx(x,23)]=K_ROAD; kind[idx(x,27)]=K_ROAD; }
     for(int y=19;y<28;y++) for(int x=9;x<55;x+=4) kind[idx(x,y)]=K_ROAD;
+    kind[idx(9,19)]=K_PLANT;      // power the grid so both blocks can develop
     recompute_static();
     step(80*TICK_EVERY);
     int maxL=0,maxD=0;
@@ -583,5 +610,25 @@ void spec(void){
     expect(1, str("DBG zoning: light max=%d  dense max=%d  (LIGHT_CAP=%d)", maxL, maxD, LIGHT_CAP));
     expect(maxL <= LIGHT_CAP, "light zoning caps development low");
     expect(maxD >  LIGHT_CAP, "dense zoning lets development rise taller");
+
+    // ── power: a road-served, in-demand zone still can't develop with no power; wire a
+    //    plant into the connected grid and it does ──
+    memset(kind,0,sizeof kind); memset(level,0,sizeof level);
+    memset(zdense,0,sizeof zdense); memset(crime,0,sizeof crime);
+    growth_on=1;
+    for(int y=20;y<26;y++) for(int x=20;x<30;x++){ kind[idx(x,y)]=K_R; zdense[idx(x,y)]=1; }
+    for(int y=20;y<26;y++) for(int x=32;x<40;x++) kind[idx(x,y)]=K_I;          // jobs
+    for(int x=18;x<42;x++){ kind[idx(x,19)]=K_ROAD; kind[idx(x,23)]=K_ROAD; kind[idx(x,26)]=K_ROAD; }
+    for(int y=19;y<27;y++) for(int x=18;x<42;x+=4) kind[idx(x,y)]=K_ROAD;
+    recompute_static();
+    step(50*TICK_EVERY);
+    long unpowered=0; for(int y=20;y<26;y++) for(int x=20;x<30;x++) unpowered+=level[idx(x,y)];
+    expect_eq(unpowered, 0, "an unpowered zone cannot develop (no plant on the grid)");
+    kind[idx(40,23)]=K_PLANT;     // wire a plant onto the connected road network
+    recompute_static();
+    step(50*TICK_EVERY);
+    long powered_built=0; for(int y=20;y<26;y++) for(int x=20;x<30;x++) powered_built+=level[idx(x,y)];
+    expect(1, str("DBG power: built unpowered=%ld -> powered=%ld", unpowered, powered_built));
+    expect(powered_built > 0, "a connected power plant lets the zone develop");
 }
 #endif
