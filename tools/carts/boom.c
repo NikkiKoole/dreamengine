@@ -1109,19 +1109,23 @@ void draw(void) {
     // Thick (young) smoke is SOLID + dark; only as it thins does it break into
     // dither (1-bits transparent via hole_color -1) — 50% checker, then wispy
     // sparse dots and lighter grey — so it dissolves into the background at the end
-    // of its life. Pattern pinned to world (0,0) so overlapping puffs share one
-    // lattice. fillp_reset() only matters once we've left the dithered tail.
+    // of its life. Each puff ANCHORS the lattice to its own centre (fillp_anchor),
+    // so the pattern travels WITH the cloud — its own offset, no crawl as it drifts.
     for (int i = 0; i < MAXP; i++) {
         P *p = &ps[i];
         if (p->kind != PK_SMOKE) continue;
         float t = p->life / p->maxlife;          // 1 young → 0 old
         int col = t > 0.55f ? CLR_DARKER_GREY : t > 0.3f ? CLR_DARK_GREY : CLR_MEDIUM_GREY;
         if (t > 0.55f) fillp_reset();            // thick smoke: solid, no dither
-        else fillp(t > 0.3f ? FILL_CHECKER       // thinning: 50%
+        else {
+            fillp_anchor((int)p->x, (int)p->y);  // this cloud's own dither offset
+            fillp(t > 0.3f ? FILL_CHECKER        // thinning: 50%
                            : (~FILL_DOTS & 0xFFFF), -1);   // wispy tail: mostly holes
+        }
         circfill((int)p->x, (int)p->y, (int)p->size, col);
     }
     fillp_reset();                               // back to solid for everything below
+    fillp_anchor(0, 0);                          // restore the default lattice origin
     for (int i = 0; i < MAXP; i++) {
         P *p = &ps[i];
         if (p->kind != PK_DEBRIS) continue;
