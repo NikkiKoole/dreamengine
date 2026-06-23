@@ -29,8 +29,11 @@
 //   seam-safe, byte-identical for a seed.
 // • rows    — BOUNDED fill-mode: a coarse parcel grid of fields, each planted with
 //   rows of a crop + a hedgerow. rows_fill() fills ONE region; the driver tiles it.
-// • footprint — buildings: a block grid carves streets, perimeter lots front them
-//   by construction, and one footprint_fill() makes house/shop/tower from a ZONE.
+// • footprint — buildings: a block grid carves streets; block_lots() SUBDIVIDES each
+//   block into a street-fronting RING of VARIED lots (unequal widths, count + size
+//   from an urban-DENSITY field), and one footprint_fill() makes house/shop/tower
+//   from a ZONE × MASSING class. Dense residential lots go TERRACED (shared walls);
+//   detached houses get a yard. (Same block_lots feeds ruins + the world city.)
 // • ruins   — the first MODIFIER PIPELINE (phase 5): footprint → collapse → overgrow.
 //   A DECAY field drives two modifiers that READ the maker's output and transform it
 //   (collapse invents absence; overgrow creeps growth, scaled by a fertility field).
@@ -476,19 +479,113 @@ static int zone_at(float x, float y) {
     return i < 0.46f ? ZN_RES : i < 0.72f ? ZN_COM : ZN_TOWN;
 }
 
+// ── urban density: drives lot FINENESS + building MASSING (organic clusters) ──
+// A read-only field (same trick as decay/fertility): high → packed narrow lots +
+// taller massing + terraced rows; low → a few wide detached lots + cottages. It's
+// what stops "every house the same size, all separate" — the variety is a field, not
+// a special case. (Local stub for the parked `massing`/`density` upstream input.)
+#define UDEN_FREQ 0.0060f
+static float urban_density_at(float x, float y) {
+    float z = (float)lf_seed;
+    float a = noise3(x * UDEN_FREQ,        y * UDEN_FREQ,        z + 500.0f);
+    float b = noise3(x * UDEN_FREQ * 2.5f, y * UDEN_FREQ * 2.5f, z + 517.0f);
+    return clamp(a * 0.62f + b * 0.38f, 0.0f, 1.0f);
+}
+// massing class 0..3 (cottage→house→midrise→tower) from zone + local density + hash.
+static int massing_at(float x, float y, int zone, unsigned h) {
+    float v = urban_density_at(x, y) + (frac01(h >> 9) - 0.5f) * 0.25f;
+    int base = (zone == ZN_TOWN) ? 2 : (zone == ZN_COM) ? 1 : 0;
+    int bump = v > 0.78f ? 2 : v > 0.50f ? 1 : 0;
+    int m = base + bump;
+    return m > 3 ? 3 : m;
+}
+
+// a small yard for a DETACHED house: a bush/tree + a flower in the front-yard strip,
+// jittered by the lot hash — fills the dead space a detached lot leaves toward its
+// street. (The doc's `house = footprint + scatter(yard) + driveway`.)
+static void draw_yard(Rect lot, int outward, unsigned h) {
+    int jx = lot.x + 2 + (int)(frac01(h)      * (lot.w > 4 ? lot.w - 4 : 1));
+    int jy = lot.y + 2 + (int)(frac01(h >> 8) * (lot.h > 4 ? lot.h - 4 : 1));
+    int yx, yy;
+    switch (outward) {                              // sit it in the front-yard gap
+        case 0:  yx = jx; yy = lot.y + 3;           break;
+        case 2:  yx = jx; yy = lot.y + lot.h - 1;   break;
+        case 1:  yx = lot.x + lot.w - 1; yy = jy;   break;
+        default: yx = lot.x + 2;         yy = jy;   break;
+    }
+    if (h & 1) { draw_bush(yx, yy, h); if (h & 4) draw_flower(yx + 2, yy, (h & 8) ? CLR_RED : CLR_YELLOW); }
+    else        draw_tree(yx, yy, h, 0);
+}
+
+// ── SUBDIVIDE: a block interior → a street-fronting RING of VARIED lots ────────
+// Replaces the old fixed 3×3 of identical squares. Each of the 4 sides is a run
+// split into k UNEQUAL lots (k + widths from density: dense → many narrow row-house
+// lots, sparse → a few wide ones); the centre is courtyard. Every perimeter lot
+// fronts a street BY CONSTRUCTION (reachability theorem preserved). Pure fn of
+// (block, seed) — the SAME lots feed footprint, ruins AND the world-city driver, so
+// they can never diverge. THIS is the `subdivide` primitive the design doc wants.
+typedef struct { Rect lot; unsigned hash; unsigned char outward, attached, massing; } LotSlot;
+
+static int run_split(int L, int target_w, unsigned h, int *bnd) {   // → k; fills bnd[0..k]
+    int k = target_w > 0 ? L / target_w : 1;
+    if (k < 1) k = 1; if (k > 8) k = 8;
+    float w[8], sum = 0;
+    for (int i = 0; i < k; i++) { w[i] = 0.55f + 1.6f * frac01(h >> (i * 3)); sum += w[i]; }
+    float acc = 0; bnd[0] = 0;
+    for (int i = 0; i < k; i++) { acc += w[i] / sum * (float)L; bnd[i + 1] = (int)(acc + 0.5f); }
+    bnd[k] = L;
+    return k;
+}
+
+static int block_lots(int bx, int by, int zone, LotSlot *out, int cap) {
+    int ox = bx * BLK_P, oy = by * BLK_P, inx = ox + ST_W, iny = oy + ST_W, IN = BLK_P - ST_W;
+    unsigned bh = hash2(bx * 131 + lf_seed * 7, by * 89 + 5);
+    float ud = urban_density_at(inx + IN / 2.0f, iny + IN / 2.0f);
+    int D  = 13 + (int)(frac01(bh >> 3) * 8) + (zone == ZN_TOWN ? 2 : 0);    // ring depth 13..23
+    if (D > IN / 2 - 3) D = IN / 2 - 3;
+    int tw = (int)(22.0f - 13.0f * ud) + (zone == ZN_TOWN ? 4 : 0);          // target lot width
+    int attach_res = (zone == ZN_RES && ud > 0.45f);                         // dense res → terraces
+    int n = 0, bnd[9];
+    for (int s = 0; s < 4 && n < cap; s++) {                                 // 4 sides of the ring
+        int horiz = (s < 2);
+        int runL  = horiz ? IN : (IN - 2 * D);
+        if (runL < 6) continue;
+        unsigned sh = hash2((int)bh + s * 1009, (int)(bh >> 7) + s * 17);
+        int k = run_split(runL, tw, sh, bnd);
+        for (int i = 0; i < k && n < cap; i++) {
+            int a0 = bnd[i], lw = bnd[i + 1] - a0;
+            if (lw < 5) continue;
+            Rect r; int outward;
+            if      (s == 0) { r = (Rect){ inx + a0,    iny,            lw, D }; outward = 0; }  // top
+            else if (s == 1) { r = (Rect){ inx + a0,    iny + IN - D,   lw, D }; outward = 2; }  // bottom
+            else if (s == 2) { r = (Rect){ inx,         iny + D + a0,   D, lw }; outward = 3; }  // left
+            else             { r = (Rect){ inx + IN - D, iny + D + a0,  D, lw }; outward = 1; }  // right
+            unsigned lh = hash2((int)sh + i * 2399, (int)(sh >> 5) - i * 41);
+            out[n].lot = r; out[n].hash = lh; out[n].outward = (unsigned char)outward;
+            out[n].attached = (unsigned char)(attach_res && lw <= 12);
+            out[n].massing  = (unsigned char)massing_at(r.x + r.w / 2.0f, r.y + r.h / 2.0f, zone, lh);
+            n++;
+        }
+    }
+    return n;
+}
+
 // The INTACT building rect inside a lot — the massing footprint_fill draws. Factored
 // out so the ruin MODIFIERS (collapse/overgrow) operate on the SAME rect: phase 5
 // RE-DERIVES phase 4's pure output (no retained buffer needed — it's all pure-fn-of-
 // (lot,outward,zone)). Returns 0 if the setback leaves nothing buildable.
-static int footprint_body(Rect lot, int outward, int zone, Rect *out) {
-    int m  = (zone == ZN_TOWN) ? 1 : 2;                                  // side/back margin
-    int fs = (zone == ZN_RES)  ? 5 : (zone == ZN_COM) ? 3 : 1;           // front setback (yard)
-    int ix = lot.x + m, iy = lot.y + m, iw = lot.w - 2 * m, ih = lot.h - 2 * m;
-    switch (outward) {                                                   // push front edge in by setback
-        case 0: iy += fs; ih -= fs; break;
-        case 2: ih -= fs;           break;
-        case 1: iw -= fs;           break;
-        case 3: ix += fs; iw -= fs; break;
+// `attached` (terraced row) drops the SIDE margins to 0 so neighbours share a party
+// wall into a continuous row; detached lots keep a side gap + a deeper front yard.
+static int footprint_body(Rect lot, int outward, int zone, int attached, Rect *out) {
+    int side = attached ? 0 : (zone == ZN_TOWN) ? 1 : 2;                 // side margin (along the run)
+    int back = (zone == ZN_TOWN) ? 1 : 2;                                // back margin (toward courtyard)
+    int fs   = (zone == ZN_RES)  ? (attached ? 2 : 5) : (zone == ZN_COM) ? 3 : 1;  // front setback
+    int ix = lot.x, iy = lot.y, iw = lot.w, ih = lot.h;
+    switch (outward) {                                                   // front = the `outward` edge
+        case 0: iy += fs;   ih -= fs + back; ix += side; iw -= 2 * side; break;  // fronts up
+        case 2: iy += back; ih -= fs + back; ix += side; iw -= 2 * side; break;  // fronts down
+        case 1: ix += back; iw -= fs + back; iy += side; ih -= 2 * side; break;  // fronts right
+        case 3: ix += fs;   iw -= fs + back; iy += side; ih -= 2 * side; break;  // fronts left
     }
     if (iw < 2 || ih < 2) return 0;
     *out = (Rect){ ix, iy, iw, ih };
@@ -496,20 +593,23 @@ static int footprint_body(Rect lot, int outward, int zone, Rect *out) {
 }
 
 // fill ONE building lot. outward ∈ {0 up,1 right,2 down,3 left} = the street side.
-static void footprint_fill(Rect lot, int outward, int zone, unsigned h, const bool show[3]) {
+// `massing` 0..3 raises the building from cottage → tower (fake height + windows).
+static void footprint_fill(Rect lot, int outward, int zone, int attached, int massing, unsigned h, const bool show[3]) {
     static const int ROOF_RES [5] = { CLR_RED, CLR_DARK_RED, CLR_BROWN, CLR_PEACH, CLR_DARK_PURPLE };
     static const int ROOF_COM [4] = { CLR_DARK_GREY, CLR_TRUE_BLUE, CLR_BLUE_GREEN, CLR_INDIGO };
     static const int ROOF_TOWN[3] = { CLR_DARKER_BLUE, CLR_DARKER_GREY, CLR_INDIGO };
 
-    Rect b; if (!footprint_body(lot, outward, zone, &b)) return;
+    Rect b; if (!footprint_body(lot, outward, zone, attached, &b)) return;
     int ix = b.x, iy = b.y, iw = b.w, ih = b.h;
 
     if (show[FL_BUILD]) {
         int col = zone == ZN_RES ? ROOF_RES[h % 5] : zone == ZN_COM ? ROOF_COM[h % 4] : ROOF_TOWN[h % 3];
         rectfill(ix, iy, iw, ih, col);
-        if (zone == ZN_TOWN) {                                          // fake height: lit top, offset up-left
-            rectfill(ix - 1, iy - 1, iw, 1, CLR_LIGHT_GREY);
-            for (int yy = iy; yy < iy + ih; yy += 2) pset(ix, yy, CLR_DARKER_GREY);  // window columns
+        if (massing >= 1) {                                             // 2+ stories: lit top edge + window grid
+            rectfill(ix, iy, iw, 1, CLR_LIGHT_GREY);
+            int vstep = massing >= 3 ? 2 : 3;
+            for (int yy = iy + 2; yy < iy + ih - 1; yy += vstep)
+                for (int xx = ix + 1; xx < ix + iw; xx += 2) pset(xx, yy, CLR_DARKER_GREY);
         }
     }
     if (show[FL_DETAIL]) {                                               // driveway/path to the street + door
@@ -520,6 +620,7 @@ static void footprint_fill(Rect lot, int outward, int zone, unsigned h, const bo
             case 1: line(ix + iw - 1, dy, lot.x + lot.w - 1, dy, dc); pset(ix + iw - 1, dy, CLR_BROWNISH_BLACK); break;
             case 3: line(lot.x, dy, ix, dy, dc);             pset(ix, dy, CLR_BROWNISH_BLACK); break;
         }
+        if (zone == ZN_RES && !attached) draw_yard(lot, outward, h);    // detached house → yard tree/bush
     }
 }
 
@@ -535,28 +636,22 @@ static void footprint_draw(float cam_x, float cam_y, float zoom) {
                      layer_on[FL_DETAIL] && zoom >= 0.9f };   // driveways only when close
     int b0x = ifloordiv(Lpx, BLK_P), b1x = ifloordiv(Rpx, BLK_P);
     int b0y = ifloordiv(Tpx, BLK_P), b1y = ifloordiv(Bpx, BLK_P);
-    int IN = BLK_P - ST_W, nlot = 3, ls = IN / nlot, nb = 0;
+    int IN = BLK_P - ST_W, nb = 0;
+    LotSlot slots[40];
     for (int by = b0y; by <= b1y; by++)
         for (int bx = b0x; bx <= b1x; bx++) {
             int ox = bx * BLK_P, oy = by * BLK_P, inx = ox + ST_W, iny = oy + ST_W;
             int zone = zone_at(inx + IN / 2.0f, iny + IN / 2.0f);
             if (show[FL_GROUND]) {
                 rectfill(ox, oy, BLK_P, BLK_P, CLR_DARK_GREY);                       // street band (top+left L)
-                rectfill(inx, iny, IN, IN, zone == ZN_RES ? CLR_DARK_GREEN : CLR_MEDIUM_GREY);
+                rectfill(inx, iny, IN, IN, zone == ZN_RES ? CLR_DARK_GREEN : CLR_MEDIUM_GREY);  // interior/courtyard
             }
-            for (int lj = 0; lj < nlot; lj++)
-                for (int li = 0; li < nlot; li++) {
-                    if (li == 1 && lj == 1) {                                        // centre courtyard
-                        if (show[FL_GROUND] && zone != ZN_RES)
-                            rectfill(inx + li * ls, iny + lj * ls, ls, ls, CLR_DARKER_GREY);
-                        continue;
-                    }
-                    Rect lot = { inx + li * ls, iny + lj * ls, ls, ls };
-                    int outward = (lj == 0) ? 0 : (lj == 2) ? 2 : (li == 0) ? 3 : 1; // block-outward = street side
-                    unsigned hh = hash2(bx * 97 + li + lf_seed * 7, by * 89 + lj);
-                    footprint_fill(lot, outward, zone, hh, show);
-                    nb++;
-                }
+            int nl = block_lots(bx, by, zone, slots, 40);
+            for (int i = 0; i < nl; i++) {
+                footprint_fill(slots[i].lot, slots[i].outward, zone, slots[i].attached,
+                               slots[i].massing, slots[i].hash, show);
+                nb++;
+            }
         }
 
     if (dbg) {                                                                       // block partition + active block
@@ -573,7 +668,8 @@ static const char *footprint_probe(float x, float y) {
     int bx = ifloordiv((int)x, BLK_P), by = ifloordiv((int)y, BLK_P), IN = BLK_P - ST_W;
     int zone = zone_at(bx * BLK_P + ST_W + IN / 2.0f, by * BLK_P + ST_W + IN / 2.0f);
     bool street = posmod((int)x, BLK_P) < ST_W || posmod((int)y, BLK_P) < ST_W;
-    snprintf(buf, sizeof buf, "%s  %s", ZN_NAME[zone], street ? "street" : "lot");
+    snprintf(buf, sizeof buf, "%s  %s  dens %.2f", ZN_NAME[zone], street ? "street" : "lot",
+             (double)urban_density_at(x, y));
     return buf;
 }
 
@@ -661,31 +757,26 @@ static void ruins_draw(float cam_x, float cam_y, float zoom) {
     bool show[3] = { false, build, false };                    // footprint_fill: build layer only
     int b0x = ifloordiv(Lpx, BLK_P), b1x = ifloordiv(Rpx, BLK_P);
     int b0y = ifloordiv(Tpx, BLK_P), b1y = ifloordiv(Bpx, BLK_P);
-    int IN = BLK_P - ST_W, nlot = 3, ls = IN / nlot, n_ruin = 0, n_gone = 0;
+    int IN = BLK_P - ST_W, n_ruin = 0, n_gone = 0;
+    LotSlot slots[40];
     for (int by = b0y; by <= b1y; by++)
         for (int bx = b0x; bx <= b1x; bx++) {
             int ox = bx * BLK_P, oy = by * BLK_P, inx = ox + ST_W, iny = oy + ST_W;
             int zone = zone_at(inx + IN / 2.0f, iny + IN / 2.0f);
             rectfill(ox, oy, BLK_P, BLK_P, CLR_DARK_GREY);                       // street band
             rectfill(inx, iny, IN, IN, zone == ZN_RES ? CLR_DARK_GREEN : CLR_MEDIUM_GREY);
-            for (int lj = 0; lj < nlot; lj++)
-                for (int li = 0; li < nlot; li++) {
-                    if (li == 1 && lj == 1) {                                    // centre courtyard
-                        if (zone != ZN_RES) rectfill(inx + li * ls, iny + lj * ls, ls, ls, CLR_DARKER_GREY);
-                        continue;
-                    }
-                    Rect lot = { inx + li * ls, iny + lj * ls, ls, ls };
-                    int outward = (lj == 0) ? 0 : (lj == 2) ? 2 : (li == 0) ? 3 : 1;
-                    unsigned hh = hash2(bx * 97 + li + lf_seed * 7, by * 89 + lj);
-                    Rect body; if (!footprint_body(lot, outward, zone, &body)) continue;
-                    float fx = body.x + body.w / 2.0f, fy = body.y + body.h / 2.0f;
-                    float dec = decay_at(fx, fy), fert = fertility_at(fx, fy);
-                    footprint_fill(lot, outward, zone, hh, show);               // stage 1: maker
-                    if (coll) collapse_fill(body, hh, dec);                     // stage 2: modifier
-                    if (over) overgrow_fill(body, hh, dec, fert);              // stage 3: modifier
-                    if (dec >= 0.30f) n_ruin++;
-                    if (dec >= 0.85f) n_gone++;
-                }
+            int nl = block_lots(bx, by, zone, slots, 40);
+            for (int i = 0; i < nl; i++) {
+                Rect lot = slots[i].lot; int outward = slots[i].outward; unsigned hh = slots[i].hash;
+                Rect body; if (!footprint_body(lot, outward, zone, slots[i].attached, &body)) continue;
+                float fx = body.x + body.w / 2.0f, fy = body.y + body.h / 2.0f;
+                float dec = decay_at(fx, fy), fert = fertility_at(fx, fy);
+                footprint_fill(lot, outward, zone, slots[i].attached, slots[i].massing, hh, show);  // stage 1: maker
+                if (coll) collapse_fill(body, hh, dec);                     // stage 2: modifier
+                if (over) overgrow_fill(body, hh, dec, fert);              // stage 3: modifier
+                if (dec >= 0.30f) n_ruin++;
+                if (dec >= 0.85f) n_gone++;
+            }
         }
 
     if (dbg) {                                                                  // the DECAY field heatmap
@@ -765,10 +856,11 @@ static void world_draw(float cam_x, float cam_y, float zoom) {
             }
     }
 
-    // CITY — buildings on town blocks (reuses footprint_fill)
+    // CITY — buildings on town blocks (reuses block_lots + footprint_fill)
     if (layer_on[2]) {
         bool show[3] = { true, zoom >= 0.45f, zoom >= 0.9f };
-        int IN = BLK_P - ST_W, nlot = 3, ls = IN / nlot;
+        int IN = BLK_P - ST_W;
+        LotSlot slots[40];
         for (int by = ifloordiv(Tpx, BLK_P); by <= ifloordiv(Bpx, BLK_P); by++)
             for (int bx = ifloordiv(Lpx, BLK_P); bx <= ifloordiv(Rpx, BLK_P); bx++) {
                 int ox = bx * BLK_P, oy = by * BLK_P, inx = ox + ST_W, iny = oy + ST_W;
@@ -776,13 +868,10 @@ static void world_draw(float cam_x, float cam_y, float zoom) {
                 int zone = zone_at(inx + IN / 2.0f, iny + IN / 2.0f);
                 rectfill(ox, oy, BLK_P, BLK_P, CLR_DARK_GREY);
                 rectfill(inx, iny, IN, IN, zone == ZN_RES ? CLR_DARK_GREEN : CLR_MEDIUM_GREY);
-                for (int lj = 0; lj < nlot; lj++)
-                    for (int li = 0; li < nlot; li++) {
-                        if (li == 1 && lj == 1) { if (zone != ZN_RES) rectfill(inx + li * ls, iny + lj * ls, ls, ls, CLR_DARKER_GREY); continue; }
-                        Rect lot = { inx + li * ls, iny + lj * ls, ls, ls };
-                        int outward = (lj == 0) ? 0 : (lj == 2) ? 2 : (li == 0) ? 3 : 1;
-                        footprint_fill(lot, outward, zone, hash2(bx * 97 + li + lf_seed * 7, by * 89 + lj), show);
-                    }
+                int nl = block_lots(bx, by, zone, slots, 40);
+                for (int i = 0; i < nl; i++)
+                    footprint_fill(slots[i].lot, slots[i].outward, zone, slots[i].attached,
+                                   slots[i].massing, slots[i].hash, show);
                 n_city++;
             }
     }

@@ -267,8 +267,21 @@ The subset that needs **no** roadnet/worldgen — it runs on the local stubs lot
   the *surface* modifiers `age` (weather/stain) and `dress` (finishing scatter), which transform without
   inventing absence — lighter than the ruin pair and a natural next pass on the same phase-5 footing.
 - **`relief` as readable slope** — promote `elev_raw` to a slope the makers read (footprints avoid steep, water pools low, rows terrace).
-- **`massing`** — `footprint` reads a local `density` stub → cottage/midrise/tower height. A flavor, not a maker.
+- ~~**`massing`** — `footprint` reads a local `density` stub → cottage/midrise/tower height. A flavor, not a maker.~~
+  ✅ **done 2026-06-23** as `urban_density_at` → `massing_at` (class 0..3); higher class adds fake-height
+  (lit top + window grid). Drove three coupled wins at once, all from the same density field:
+  - **`subdivide` (real, varied)** — `block_lots()` replaces the old fixed 3×3 of identical squares with a
+    street-fronting RING of UNEQUAL lots (count + widths from density; reachability theorem preserved). The
+    `subdivide` primitive the L3 table wanted, and the single source the footprint / ruins / world-city
+    drivers all share (they used to duplicate the lot loop — fixed).
+  - **terraced rows** — dense RES lots set `attached` → 0 side margin → adjacent houses share a party wall
+    into a continuous row (kills "every house detached"). `footprint_body` now takes per-edge margins.
+  - **yards** — detached RES lots scatter a yard tree/bush + flower in the front-yard strip (`draw_yard`).
+
+  Together these were the fix for the "same-size, all-separate, large-and-empty" lots. Still open below.
 - **`square` / `quay`** — composite recipes (carve+pave+ring; water-edge using `cover_at`'s water). Content.
+- **footprint shapes (L/U outline)** — `footprint_fill` still draws a plain rect; the L3 spec wants rect/L/U.
+  Lowest-priority polish now that size/density variety lands via subdivision + massing.
 - **`era`** — a modifier *plus* a "distance-from-a-stub-nucleus" ring field that swaps the morphology recipe per ring.
 - **`cluster`** — a bounded composite (hamlet = footprints + green + scatter; fronts the road stub, doesn't make one).
 - **`blob` / `carve`** partition generators, **`line`/`cliff`/river-`meander`** flow verbs — all terrain/region work, no network needed.
