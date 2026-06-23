@@ -11,6 +11,11 @@ right home and linking from the index — NOT by expanding this file.** CLAUDE.m
 one-line pointers only*; it loads into every conversation, so prose here is the most expensive place
 to put anything.
 
+**Project knowledge lives in the repo, NOT in Claude's per-machine memory.** This repo is worked
+from several machines, and Claude's memory is per-machine — a fact saved there is invisible
+everywhere else. Persist anything durable (how a system works, a gotcha, a decision, a preference)
+to the repo via the homes below; treat memory as a scratchpad for the live session only.
+
 - **Tool** (`tools/x.js`) → full contract in the file's header comment + ONE line in the tools list
   below (the header is the source of truth; tools aren't documented in `docs/`).
 - **Design / idea** → `docs/design/<topic>.md`, linked from `docs/README.md`'s layout tree.
@@ -45,6 +50,22 @@ Two parallel-agent commit hazards (both have bitten):
    working-tree version, foreign edits and all, which may reference uncommitted cart files (broken
    refs). If the file is dirty with foreign edits: stash your copy, `git checkout HEAD -- <file>`,
    splice in ONLY your entry, commit by pathspec, then restore.
+
+**Destructive-restore guard — a restore you don't notice wipes work you can't see.** `git checkout
+-- <file>` / `git restore <file>` silently throw away *all* uncommitted changes to that path — with
+no undo. The trap that bit: running it to "clean up" a throwaway edit (a test probe appended to a
+file whose real changes were never committed) — and the rewrite went with it. Before any
+restore/stash/`reset`, ask: **is my work on this path committed?** If not, commit it first (by
+pathspec) or operate on a copy.
+
+The shared working tree makes this WORSE, not better (same reason as the commit hazards above): the
+tree is shared across agents, so a restore's blast radius is *every* agent's uncommitted work on the
+touched paths, not just yours — and the sibling agent gets no warning, no conflict, nothing. So:
+**never run a tree-wide destructive form** — `git checkout .`, `git restore .`, `git reset --hard`,
+or a bare `git stash` (stashes the whole tree, foreign WIP and all). Scope every restore to YOUR one
+exact named path, never a directory/glob/`.`. (Cart backstop if you do lose one: the `.cart.png`
+still holds your last *baked* source in `de:source` — `node tools/cart-info.js <name> --source >
+tools/carts/<name>.c`. Don't rely on it; commit.)
 
 ### Hot shared source files: `runtime/sound.h`, `runtime/studio.h`
 
@@ -119,6 +140,7 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              gen-rom-font.js bake the "extra" bitmap fonts (ROM dumps + EPX) into the shared atlas
              lint-carts.js   validate index.json (tags + registration); owns the tag vocabulary
              spec.js         run each cart's spec() — the gameplay-logic gate (twin of tune-check)
+             cart-info.js    orient on ONE cart: screen/GW×GH, embedded de:source DRIFT vs the .c, registration
              cart-status.js  what's out of date (rebake / publish / stale / compendium)
              cart-analyze.js complexity + global-state report; ranks spec-worthiness
              cart-index.js   computed technique index ("what cart teaches X") + coverage
