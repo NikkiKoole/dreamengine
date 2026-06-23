@@ -10,7 +10,9 @@ passes you). Collision is an ORIENTED box (long-along-heading, narrow-across), s
 never falsely touch. Spec (24 assertions) covers closing→brake, clear→accelerate, blocked→change-lane,
 flow, no box-overlap, red-builds-a-queue / no-bolt / no-reverse, and stop-and-go spread. **Rough
 edge:** on the tightest procedural corner a fast car can still clip the apex (localized, recovers).
-**Next:** the cross-road intersection (#4), then speed zones / hazards / the more-ideas list below.
+**Next:** the cross-road intersection (#4) — a big L→R road cutting the loop (~twice) with its own
+traffic, built in phases A–D (geometry → cross-traffic → right-of-way → tune); see the sketch below.
+Then speed zones / hazards / the more-ideas list.
 
 The racing rivals in `trackgen.c` proved the core:
 one shared physics step (`step_car`) + a parameter-driven follow-controller (`drive_ai`) +
@@ -68,27 +70,45 @@ and realistic platooning. It is also the most portable piece to sloop and matche
 
 ## Sketch: the cross-road intersection (#4, the next build)
 
-The vision (2026-06-23): instead of relying on the figure-8 self-crossing, lay **one large road
-straight through the world** that crosses the loop, with **its own traffic** — and make cars on
-both roads negotiate the crossing so they don't collide. The figure-8 self-crossing is the cheap
-warm-up of the same problem (same path, two passes); a dedicated cross-road is two *independent*
-streams meeting.
+The vision (2026-06-23, resolved): lay **one big straight road across the world, left → right**,
+cutting through the loop. Because the loop is a closed circuit, a straight chord across it
+**crosses it at (at least) two points**. The cross-road has **its own traffic**, and cars on both
+roads must negotiate each crossing so they don't T-bone. The figure-8 self-crossing was the cheap
+warm-up (one path, two passes); this is two *independent* streams meeting — the first time **two
+roads, not one loop, share the sim** (the direct prototype of streetlab junctions + the world
+composer's road graph).
 
-Likely shape in trackgen's model:
-- A second path `cl2[]` (a straight or gentle spline across the map) intersecting the loop at one
-  (or two) **crossing point(s)** — found by segment-intersection of the two centre lines.
-- A pool of cars assigned to the cross-road, run by the **same `drive_ai_traffic`** (the brain
-  doesn't care which line it follows — the whole portability thesis).
-- **Conflict negotiation** at each crossing: a car approaching computes its time-to-crossing; if a
-  car on the other road will be inside the intersection box within that window, it **yields**
-  (treat the crossing as a temporary stop-line leader, reusing the red-light gap trick). Rule
-  variants to try: a **priority road** (loop has right-of-way), **give-way**, **4-way stop**
-  (first-come), or **a light** governing the cross-road.
-- Spec: run long, assert **zero box-overlaps at the crossing** (the right-of-way held) while both
-  roads keep flowing (not gridlocked).
+**Shape in trackgen's model:** a second centre line `cl2[]` (a straight L→R line spanning the map,
+with its own normals). Cross cars are just more `Car`s with a `road` field (0 = loop, 1 = cross),
+run by the **same `drive_ai_traffic`** following `cl2[]` instead of `cl[]` — the brain doesn't care
+which line it follows (the whole portability thesis; the only generalization is "which line am I
+on"). Crossing points = segment-intersections of `cl[]` against `cl2[]` (expect ~2). Cars wrap /
+respawn at the cross-road's ends (it's not a loop) or it bends back — decide in Phase A.
 
-This is the direct prototype of streetlab's junction priority and the world composer's road graph —
-the first time two roads, not one loop, share the sim.
+### Phases (build in order, spec each)
+
+- **Phase A — geometry.** Generate `cl2[]` as a straight road L→R across the world bounds + its
+  normals; render it (same ribbon/curb code). Compute the crossing point(s) by segment-intersection
+  vs `cl[]`; store them (`xpt[]`, with the prog index on each road). Draw a marker at each crossing.
+  *No cross-traffic yet.* Spec: ≥1 crossing found; markers sit on both ribbons.
+- **Phase B — cross-traffic, naive.** Spawn a pool of cars on `cl2[]` driven by `drive_ai_traffic`
+  (generalized to follow either line). They drive across and respawn/loop at the ends. They will
+  *collide* with loop cars at the crossings — that's expected; it sets up Phase C. Spec: cross cars
+  make forward progress along `cl2[]`.
+- **Phase C — right-of-way (the heart).** At each crossing, a car computes its time-to-cross; if a
+  conflicting car (other road) will be inside the **intersection box** within that window, it
+  **yields** — reuse the red-light trick: treat the crossing as a temporary stop-line leader
+  (gap = distance to the crossing, vlead = 0) until the box is clear. Start with **priority road**
+  (the loop has right-of-way; the cross-road gives way); later try give-way / 4-way-stop
+  (first-come) / a light on the cross-road. Spec: **zero box-overlaps at any crossing** over a long
+  run, while both roads keep flowing (not gridlocked).
+- **Phase D — feel + tune.** Visualize yields (a car waiting at a crossing), balance densities so it
+  doesn't deadlock, and add a setup toggle (cross-road on/off, or which rule). Spec: no deadlock
+  (both roads still moving after N frames).
+
+**Watch out for:** deadlock (two priority rules that both yield → everyone stops); pick an asymmetric
+rule first. And the existing TRAFFIC light is on the loop — decide whether it stays, moves to the
+cross-road, or governs the intersection.
 
 ## How TRAFFIC mode differs from RACE mode
 
