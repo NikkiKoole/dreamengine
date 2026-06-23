@@ -81,8 +81,8 @@
 #define LANE_MIN   12.0f       // min lane band width (px) — keeps side-by-side cars off each other
 #define LANES_MAX  3
 #define TRAF_LA    12          // traffic steering look-ahead (samples)
-#define TG_GAP0    12.0f       // car-following: standstill gap to the leader (px)
-#define TG_HEAD    14.0f       // time headway (frames) — gap target grows with speed
+#define TG_GAP0    14.0f       // car-following: standstill gap to the leader (px)
+#define TG_HEAD    20.0f       // time headway (frames) — gap target grows with speed (bigger = brake earlier)
 #define TG_BRAKE   0.05f       // comfortable decel used to size the safe gap
 
 #define CAM_LEAD   16.0f
@@ -129,7 +129,7 @@ typedef struct { int x, y; int life; } Skid;
 #define CARS_MAX     40        // array bound (>= both of the above)
 #define RACE_LAPS 3
 #define COLL_R    16.0f        // car-to-car avoidance radius (world px)
-#define REACT_N   5            // car-following reaction lag (frames) — seeds phantom jams
+#define REACT_N   3            // car-following reaction lag (frames) — seeds phantom jams
 #define LIGHT_RED 480          // red phase (frames) — long, so a real line of cars builds
 #define LIGHT_GRN 300          // green phase (frames)
 
@@ -748,9 +748,14 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     // a RED light ahead is a stopped "leader" parked at the stop line (it spans all
     // lanes), so cars queue behind it — the bottleneck that breeds stop-and-go waves.
     if (S->light >= 0 && S->light_red) {
-        int ld = (S->light - c->prog + NSAMP) % NSAMP;
-        float lgap = ld * S->seg_len;
-        if (lgap < s) { s = lgap; vlead = 0.0f; }
+        int ld = (S->light - c->prog + NSAMP) % NSAMP;   // forward samples to the light
+        if (ld > NSAMP - 6) ld = 0;                       // a tiny overshoot pins to the line —
+                                                          // WITHOUT this the wrap reads ~a full lap
+                                                          // away and the front car bolts the red
+        if (ld <= NSAMP / 2) {                            // only brake when the light is ahead
+            float lgap = ld * S->seg_len;
+            if (lgap < s) { s = lgap; vlead = 0.0f; }
+        }
     }
 
     float ssafe = TG_GAP0 + v * TG_HEAD;
@@ -774,6 +779,8 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     } else if (s < ssafe * 1.8f && v >= v0) {
         thr = -0.1f;
     }
+    if (s < TG_GAP0 && v < 0.8f) thr = -1.0f;            // snug behind the obstacle & slow → settle
+                                                          // to a dead stop (no reaction-lag creep)
 
     // REACTION LAG: act on the command from REACT_N frames ago. This delay is what
     // makes dense following UNSTABLE — tiny gaps amplify backward into phantom jams.
@@ -1246,6 +1253,32 @@ void spec(void) {
     }
     expect(queued >= 3, "traffic light: a red builds a LINE of stopped cars");
     expect(worst > -0.05f, "no reversing: cars stop at the light, never roll backward");
+
+    // doesn't run the red: a lone car approaching a held red stops AT the line and
+    // does NOT roll across (regression — the prog-wrap once let the front car bolt).
+    put_all_at_start();
+    S->mode = 1; S->light_red = true; S->light_t = 0;
+    S->light = 20;                           // put the line on the start straight (geometry-stable)
+    for (int i = 0; i < S->ncars; i++) {     // clear the road
+        S->car[i].px = -9000.0f - i * 50.0f; S->car[i].py = -9000.0f;
+        S->car[i].vx = S->car[i].vy = S->car[i].spd = 0;
+    }
+    {
+        Car *A = &S->car[1];
+        int s0 = (S->light - 40 + NSAMP) % NSAMP;        // 40 samples before the line
+        float lo = lane_offset(0);
+        A->lane = A->want_lane = 0;
+        A->px = S->cl[s0].x + S->nl[s0].x * lo; A->py = S->cl[s0].y + S->nl[s0].y * lo;
+        A->ang = atan2_deg(S->cl[(s0+1)%NSAMP].y - S->cl[s0].y, S->cl[(s0+1)%NSAMP].x - S->cl[s0].x);
+        A->prog = s0; A->spd = MAX_SPD * 0.6f; A->offtrack = false;
+        for (int k = 0; k < REACT_N; k++) A->thist[k] = 0; A->thead = 0;
+        step(400);                                        // reaches the line, still red (< LIGHT_RED)
+        int dd = (S->light - A->prog + NSAMP) % NSAMP;
+        if (dd > NSAMP / 2) dd -= NSAMP;                  // signed: negative = past the line
+        float av = A->spd < 0 ? -A->spd : A->spd;
+        expect(dd > -8, "red light: car did NOT bolt through (stopped at/near the line)");
+        expect(av < 0.4f, "red light: approaching car came to a stop");
+    }
 
     // ── phantom jam: density + reaction lag → stop-and-go (speeds spread out), not
     //    a uniform convoy. Measure the speed spread across the fleet after settling. ──
