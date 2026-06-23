@@ -88,6 +88,10 @@ Cheap + high-value at the top. (✓ = shipped since.)
       beyond the through roads' kerb lines — fill-then-reopen the gap-side carriageway, so it's a near-nothing
       sliver at 90° (a perpendicular free-right shouldn't block the through movement) and a clean triangle at skew,
       never crossing a travel lane. Spec'd (81): fr_fits window, constant-width band, exclusive toggle, knob clamp.
+      ✓ **Composes with a bike lane** (owner-flagged, fixed 2026-06-23): the slip is anchored on the DRIVING-
+      carriageway edge (`drive_outer()`), not the kerb, so a cycle track sits OUTBOARD and WRAPS the corner as its
+      own continuous path (`corner_bike` at the free-right corner), the slip nesting inboard. Bike-outside-slip-
+      inside ⇒ they're separated, not overlaid (the Dutch protected-corner principle) — no corner crossing conflict.
 - ✓ **Curb extensions / bulb-outs** (§2) — `draw_bulb()` fills the parking clear-zone at each mouth, shortening
       the crossing (auto with pavement+parking). Pedestrian refuge islands are already covered (the turn median +
       the roundabout splitter both serve as refuges).
@@ -97,6 +101,12 @@ Cheap + high-value at the top. (✓ = shipped since.)
       `drive_outer()-LANEW` + a right arrow, mirror of the left bay) · ✓ **driveways** (`d` cycles a per-side
       bitmask off→+→−→both; a flared kerb-cut apron crosses the kerb + sidewalk into the grass = a low-volume
       access point, FHWA access management). **→ Facet A's marking vocabulary is complete.**
+- [ ] **Crossings & priority markings pass** *(deferred — a focused session on just markings, owner request
+      2026-06-23)*. The LANE markings are done; this pass is about CONFLICT/PRIORITY markings where modes meet:
+      bike-vs-car give-way (elephant's-teeth where a slip rejoins the arm / "car yields to bike"); emphasising
+      path×road crossings (raised tables, give-way triangles/sharks-teeth, priority arrows); making the existing
+      straight-through bike crossing (Pass-3 #5b) compose cleanly with the free-right. Pairs naturally with the
+      modal-network layer (Facet C, §9) — best done once paths-as-edges exist so there's a real thing to mark.
 
 **Network topology (Facet B — §8), in the network view:**
 - [ ] **Fused-grid / superblock** pattern (§8.3) — perimeter arterial loop + calmed/discontinuous interior;
@@ -211,6 +221,9 @@ the slip centre + island as refuge; small radii preferred; free-rights discourag
 
 **Stage 1 (Facet A) COMPLETE** — ✓ free-right slip, ✓ TWLTL, ✓ right-turn pockets, ✓ driveways; the at-grade
 junction's geometry + marking vocabulary is built and spec-locked (94 assertions). The junction cart is done.
+Also fixed: the **free-right × bike-lane** overlay (slip anchored on `drive_outer()` so the cycle track wraps the
+corner outside it — separated, the protected-corner arrangement). **Deferred (owner): a focused crossings/priority
+markings pass** (bike-vs-car give-way, path×road crossings) — best paired with the modal layer (Facet C).
 **Next: Stage 2 — the NETWORK superblock** (the fused-grid: a perimeter arterial loop + a calmed/discontinuous
 interior; the one original bit with no algorithm in the 2001/2008 pillars, and a single-region prototype of the
 two-tier world, so it de-risks Stage 3). Don't jump to the world.

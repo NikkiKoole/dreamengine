@@ -507,7 +507,10 @@ static int fr_fits(float gap){ return gap > 40.f && gap < 145.f; }
 //    fix for the island overlapping the straight-ahead lanes). Slip = the centreline ±SLIPW/2 (concentric ⇒
 //    constant width). Drive-on-right ⇒ the right turn exits onto the bA arm (the yield is there). ──
 static void draw_freeright(float cx,float cy,float bA,float bB,float bm){
-    float HW=cross_hw(), lc=HW-SLIPW*0.5f;            // lc = kerb-side lane centre (half a slip-width in from the kerb)
+    // anchor on the DRIVING-carriageway edge (drive_outer), NOT the kerb (HW): the slip is the kerb-side DRIVING
+    // lane bent into a curve, so any bike lane / parking sits OUTBOARD of it (the cycle track wraps the corner as
+    // its own thing — drawn at the corner site). Without bike/parking, drive_outer()==HW ⇒ identical to before.
+    float cw=drive_outer(), lc=cw-SLIPW*0.5f;         // lc = kerb-side DRIVING lane centre (half a slip-width in)
     float kcx,kcy; edge_corner(cx,cy, lc, bA,bB,bm, &kcx,&kcy);
     CurbReturn cc=curb_return(kcx,kcy, bA,bB, frR);   // the slip CENTRELINE fillet (turn radius frR), about cc.o
     float ri=frR-SLIPW*0.5f, ro=frR+SLIPW*0.5f;       // slip lane = centreline ± half-width (concentric ⇒ constant)
@@ -517,14 +520,14 @@ static void draw_freeright(float cx,float cy,float bA,float bB,float bm){
     // (centre→kerb) as asphalt, carving the island back to just the wedge beyond the kerb lines. At 90° that wedge
     // is almost nothing (correct — a perpendicular free-right barely needs an island, and a fat one only blocks the
     // through movement); as the corner skews acute it opens into a real triangle that's clear of every lane.
-    float kkx,kky; edge_corner(cx,cy, HW, bA,bB,bm, &kkx,&kky);   // the kerb corner (where the two outer kerb lines meet)
+    float kkx,kky; edge_corner(cx,cy, cw, bA,bB,bm, &kkx,&kky);   // the carriageway corner (the two driving-edge lines meet)
     fill_corner(kkx,kky, cc, ro, CLR_LIGHT_GREY);
     float REACH=SCREEN_W+SCREEN_H;
-    for (int s=0;s<2;s++){                            // reopen ONLY the gap-facing half of each arm (centre→kerb),
+    for (int s=0;s<2;s++){                            // reopen ONLY the gap-facing half of each arm (centre→carriageway edge),
         float b=s?bB:bA, dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);   // so a neighbouring corner's slip is untouched
         float sg=(nx*ux(bm)+ny*uy(bm))>0?1.f:-1.f, ox=cx+dx*REACH, oy=cy+dy*REACH;
-        int q[8]={(int)cx,(int)cy,(int)(cx+nx*sg*HW),(int)(cy+ny*sg*HW),
-                  (int)(ox+nx*sg*HW),(int)(oy+ny*sg*HW),(int)ox,(int)oy};
+        int q[8]={(int)cx,(int)cy,(int)(cx+nx*sg*cw),(int)(cy+ny*sg*cw),
+                  (int)(ox+nx*sg*cw),(int)(oy+ny*sg*cw),(int)ox,(int)oy};
         polyfill(q,4,CLR_DARK_GREY);
     }
     fill_ring(cc, ri, ro, CLR_DARK_GREY);             // the SLIP lane, re-laid over the reopened kerb lane
@@ -840,7 +843,21 @@ void draw(void){
         float bm=bA+gap*0.5f, kx,ky;
         // Stage-1 #2: slip + pork-chop island — only where it FITS (deep enough corner: acute / generous radius).
         // Shallow obtuse corners have no room and fall through to a plain curb return.
-        if (freeRight && fr_fits(gap)){ draw_freeright(cx,cy, bA,bB, bm); continue; }
+        if (freeRight && fr_fits(gap)){
+            if (bikeOn){
+                // the CYCLE TRACK wraps the kerb corner as its own continuous path, OUTSIDE the slip: pave the
+                // corner, lay the slip inboard, then wrap the bike band round it (the slip nests within).
+                edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
+                CurbReturn cw=curb_return(kx,ky, bA,bB, cornerR);
+                fill_corner(kx,ky, cw, cornerR, CLR_DARK_GREY);
+                draw_freeright(cx,cy, bA,bB, bm);
+                corner_bike(cw, cornerR);
+                stroke_corner(cw, cornerR, CLR_BROWNISH_BLACK);
+            } else {
+                draw_freeright(cx,cy, bA,bB, bm);
+            }
+            continue;
+        }
         edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
         CurbReturn c=curb_return(kx,ky, bA, bB, cornerR);
         fill_corner(kx,ky, c, cornerR, CLR_DARK_GREY);
