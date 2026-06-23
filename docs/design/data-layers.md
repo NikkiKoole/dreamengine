@@ -198,8 +198,15 @@ Tuning found: `CP_MAX 100`, `CRIME_BASE 30`, police `spread(14, 18)`. Constants 
   and stops its growth. New **Power** overlay (8): lit (yellow) vs blackout (red). `spec()`
   (23): a road-served, in-demand zone stays at 0 with no plant, then develops once a plant is
   wired into its grid. (Flood lives in `recompute_static` — topology only changes on edit.)
+- ✅ **Traffic** (2026-06-23): deterministic trip generation. Two multi-source BFS *routing
+  fields* over the road network (`distJob` from job-adjacent roads, `distHome` from
+  home-adjacent roads); each developed zone then walks the gradient to its nearest
+  compatible destination, depositing its `level` as traffic on every road tile en route
+  (capped at `TRIP_MAX` steps). Roads on many home↔job paths congest. Traffic feeds
+  pollution (road fumes) → which lowers land value, so a car-dependent layout is visibly
+  dirtier. Overlay 9. `spec()` (26): homes+jobs+roads generate 3197 traffic; turn the jobs
+  into homes and it drops to 0 (proving trips are directed home↔job, not random motion).
 - ⬜ **Water pipes**, and **fire** coverage (+ fire spread the coverage suppresses).
-- ⬜ **Traffic** (carried over) — deterministic trip generation along the road network.
 
 ### Open questions to resolve while building
 - Field resolution: full-res vs Micropolis-style half/quarter — decide by profiling, not upfront.

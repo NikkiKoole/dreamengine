@@ -37,7 +37,8 @@
 //   O road  W water  P police  G park  S school  H hospital  L power plant  E erase
 //   Power floods from plants through roads/zones; an unpowered (or road-less) lot
 //   can't develop — cut a district off and it goes dark and stops growing.
-//   1..8        overlay: City / Land value / Crime / Police / Density / Pollution / Services / Power
+//   1..9  overlay: City/Land value/Crime/Police/Density/Pollution/Services/Power/Traffic
+//   Traffic = commute trips routed home↔job along the roads; busy roads add pollution.
 //   SPACE       reseed the sample city
 
 #define GW 64
@@ -52,7 +53,7 @@
 enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT };
 
 // overlays
-enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_COUNT };
+enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_TRAFFIC, V_COUNT };
 
 // ── state ──
 static int  kind[MAXC];
@@ -60,6 +61,8 @@ static int  level[MAXC];      // development level of a zoned cell: 0 = empty lo
 static int  zdense[MAXC];     // zoning density: 0 = light (caps low, suburbs), 1 = dense (allows tall)
 static int  landvalue[MAXC], crime[MAXC], police[MAXC], popden[MAXC], pollution[MAXC];
 static int  school[MAXC], health[MAXC];   // education / health coverage (spread from schools/hospitals)
+static int  traffic[MAXC];                // road-traffic density (deterministic trip generation)
+static int  distJob[MAXC], distHome[MAXC];// BFS routing fields along roads (dist to nearest job / home)
 static int  terrainv[MAXC];   // static water-proximity value (recomputed on edit)
 static int  parkv[MAXC];      // static park-amenity value (recomputed on edit)
 static int  commv[MAXC];      // commercial-vitality premium (downtown raises nearby land value)
@@ -87,6 +90,8 @@ static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it 
 #define GROW_THRESH 30        // desirability a lot needs (above) to build up
 #define DECL_THRESH 10        // …and (below) to start emptying out
 #define DEM_DEAD    10        // demand dead band: near balance the city HOLDS (anti-oscillation)
+#define INF (1<<29)           // "unreachable" for the BFS routing fields
+#define TRIP_MAX    60        // a commute trip walks at most this many road tiles
 #define R_BASE     30         // baseline residential pull (people want in)
 #define C_BASE     20         // baseline commercial pull
 #define I_BASE     20         // baseline industrial pull (external market)
@@ -161,6 +166,49 @@ static void recompute_static(void){
     }
 }
 
+// ── traffic: deterministic trip generation ──
+// route_field: multi-source BFS over ROAD tiles outward from every road tile that touches a
+// developed target zone (kind ka or kb). dist[r] = road steps to the nearest such zone.
+static void route_field(int *dist, int ka, int kb){
+    static int q[MAXC]; int head=0, tail=0;
+    for(int i=0;i<MAXC;i++) dist[i]=INF;
+    for(int y=0;y<GH;y++) for(int x=0;x<GW;x++){
+        int i=idx(x,y); if(kind[i]!=K_ROAD) continue;
+        int t=0;
+        if(x>0    && developed(i-1)  && (kind[i-1]==ka ||kind[i-1]==kb))  t=1;
+        if(x<GW-1 && developed(i+1)  && (kind[i+1]==ka ||kind[i+1]==kb))  t=1;
+        if(y>0    && developed(i-GW) && (kind[i-GW]==ka||kind[i-GW]==kb)) t=1;
+        if(y<GH-1 && developed(i+GW) && (kind[i+GW]==ka||kind[i+GW]==kb)) t=1;
+        if(t){ dist[i]=0; q[tail++]=i; }
+    }
+    while(head<tail){
+        int i=q[head++], x=i%GW, y=i/GW;
+        int nb[4],nn=0;
+        if(x>0)nb[nn++]=i-1; if(x<GW-1)nb[nn++]=i+1; if(y>0)nb[nn++]=i-GW; if(y<GH-1)nb[nn++]=i+GW;
+        for(int j=0;j<nn;j++){ int n=nb[j]; if(kind[n]==K_ROAD && dist[n]==INF){ dist[n]=dist[i]+1; q[tail++]=n; } }
+    }
+}
+// deposit_trips: each developed `src` cell sends a trip down the gradient of `dist` to the
+// nearest destination, depositing its population (level) as traffic on every road tile en route.
+static void deposit_trips(const int *dist, int src){
+    for(int y=0;y<GH;y++) for(int x=0;x<GW;x++){
+        int i=idx(x,y); if(kind[i]!=src || !developed(i)) continue;
+        int best=INF, br=-1, nb[4], nn=0;
+        if(x>0)nb[nn++]=i-1; if(x<GW-1)nb[nn++]=i+1; if(y>0)nb[nn++]=i-GW; if(y<GH-1)nb[nn++]=i+GW;
+        for(int j=0;j<nn;j++){ int r=nb[j]; if(kind[r]==K_ROAD && dist[r]<best){ best=dist[r]; br=r; } }
+        if(br<0 || best>=INF) continue;            // no road access / no reachable destination
+        int cur=br, steps=0, load=level[i];
+        while(steps<TRIP_MAX){
+            traffic[cur]+=load;
+            if(dist[cur]==0) break;                // arrived at the destination's doorstep
+            int cx=cur%GW, cy=cur/GW, nx=-1, mb[4], mn=0;
+            if(cx>0)mb[mn++]=cur-1; if(cx<GW-1)mb[mn++]=cur+1; if(cy>0)mb[mn++]=cur-GW; if(cy<GH-1)mb[mn++]=cur+GW;
+            for(int j=0;j<mn;j++){ int r=mb[j]; if(kind[r]==K_ROAD && dist[r]==dist[cur]-1){ nx=r; break; } }
+            if(nx<0) break; cur=nx; steps++;
+        }
+    }
+}
+
 // ── one simulation tick: the dependency DAG ──
 static void sim_step(void){
     // city centre = centroid of zoned cells (fallback: grid centre)
@@ -178,6 +226,14 @@ static void sim_step(void){
     }
     smooth(popden, 2);
 
+    // 1b. traffic — residents commute to the nearest job; jobs draw workers from the nearest
+    //     homes. Each trip walks the road network (BFS routing field) depositing its level as
+    //     traffic, so roads on many home↔job paths congest. Feeds pollution below.
+    for(int i=0;i<MAXC;i++) traffic[i]=0;
+    route_field(distJob,  K_C, K_I); deposit_trips(distJob,  K_R);
+    route_field(distHome, K_R, K_R); deposit_trips(distHome, K_C);
+                                     deposit_trips(distHome, K_I);
+
     // 2. service coverage — each civic building is a source spread into a radius (the
     //    same falloff police uses). Police suppresses crime; school/health raise land
     //    value and drive the EQ/LE city stats.
@@ -191,10 +247,11 @@ static void sim_step(void){
     for(int i=0;i<MAXC;i++) commv[i] = (kind[i]==K_C) ? COMM_PREM*level[i] : 0;
     smooth(commv, 3);
 
-    // 3. pollution — industry is the heavy emitter, commerce a little (both scaled by
-    //    level); it then diffuses onto neighbours (wind-agnostic v1.5) and drags land value down
+    // 3. pollution — industry is the heavy emitter, commerce a little (both scaled by level),
+    //    plus busy ROADS (traffic fumes); it diffuses onto neighbours and drags land value down
     for(int i=0;i<MAXC;i++)
-        pollution[i] = kind[i]==K_I ? 55*level[i] : kind[i]==K_C ? 10*level[i] : 0;
+        pollution[i] = kind[i]==K_I ? 55*level[i] : kind[i]==K_C ? 10*level[i]
+                     : kind[i]==K_ROAD ? traffic[i]/3 : 0;
     smooth(pollution, 3);
 
     // 4. land value — reads LAST tick's crime (so this tick's crime feeds the NEXT
@@ -343,7 +400,7 @@ void update(void){
     // overlay select
     if(keyp('1')) view=V_CITY;    if(keyp('2')) view=V_LANDVAL; if(keyp('3')) view=V_CRIME;
     if(keyp('4')) view=V_POLICE;  if(keyp('5')) view=V_DENSITY; if(keyp('6')) view=V_POLLUTION;
-    if(keyp('7')) view=V_SERVICES; if(keyp('8')) view=V_POWER;
+    if(keyp('7')) view=V_SERVICES; if(keyp('8')) view=V_POWER; if(keyp('9')) view=V_TRAFFIC;
     if(keyp(KEY_SPACE)) seed_city();
 
     if(mouse_down(0)) paint_at(mouse_x(),mouse_y(),brush);
@@ -359,6 +416,7 @@ static const int RAMP_PO[6] = {CLR_BLACK, CLR_DARKER_BLUE, CLR_BLUE_GREEN, CLR_T
 static const int RAMP_PD[6] = {CLR_DARK_GREEN, CLR_MEDIUM_GREEN, CLR_GREEN, CLR_LIME_GREEN, CLR_YELLOW, CLR_WHITE};
 static const int RAMP_PL[6] = {CLR_BLACK, CLR_DARKER_PURPLE, CLR_DARK_PURPLE, CLR_MAUVE, CLR_DARK_ORANGE, CLR_ORANGE};
 static const int RAMP_SV[6] = {CLR_BLACK, CLR_DARKER_GREY, CLR_BLUE_GREEN, CLR_MEDIUM_GREEN, CLR_LIME_GREEN, CLR_WHITE};
+static const int RAMP_TR[6] = {CLR_DARKER_GREY, CLR_DARK_GREEN, CLR_LIME_GREEN, CLR_YELLOW, CLR_ORANGE, CLR_RED};
 
 static int ramp(const int *r,int v){ int s=v*6/251; if(s<0)s=0; if(s>5)s=5; return r[s]; }
 
@@ -412,15 +470,16 @@ void draw(void){
                                col=(sv<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_SV,sv); } break;
             case V_POWER: col = conducts(kind[i]) ? (powered[i]?CLR_YELLOW:CLR_DARK_RED)
                                                   : CLR_BROWNISH_BLACK; break;   // lit vs blackout
+            case V_TRAFFIC: col = (kind[i]==K_ROAD) ? ramp(RAMP_TR, traffic[i]) : CLR_BROWNISH_BLACK; break;
             default: col=CLR_BLACK;
         }
-        // in data overlays, keep roads readable as a faint grid (but not in power — roads carry power there)
-        if(view!=V_CITY && view!=V_POWER && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
+        // in data overlays, keep roads readable as a faint grid (but power + traffic colour the roads themselves)
+        if(view!=V_CITY && view!=V_POWER && view!=V_TRAFFIC && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
         rectfill(OX+x*TS, OY+y*TS, TS, TS, col);
     }
 
     // ── HUD ──
-    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER"};
+    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER","9 TRAFFIC"};
     static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant"};
     int hy=22;
     print("OVERLAY", HUDX, hy, CLR_DARK_GREY); hy+=8;
@@ -436,7 +495,8 @@ void draw(void){
         hy+=14;
     } else if(view!=V_CITY){
         const int *r = view==V_LANDVAL?RAMP_LV : view==V_CRIME?RAMP_CR : view==V_POLICE?RAMP_PO
-                     : view==V_POLLUTION?RAMP_PL : view==V_SERVICES?RAMP_SV : RAMP_PD;
+                     : view==V_POLLUTION?RAMP_PL : view==V_SERVICES?RAMP_SV
+                     : view==V_TRAFFIC?RAMP_TR : RAMP_PD;
         print("low", HUDX, hy, CLR_DARK_GREY);
         print("high", HUDX+86, hy, CLR_DARK_GREY); hy+=8;
         for(int s=0;s<6;s++) rectfill(HUDX+s*18, hy, 17, 8, r[s]);
@@ -462,7 +522,7 @@ void draw(void){
     print(str("ticks %ld", ticks), HUDX, hy, CLR_LIGHT_GREY);
 
     // bottom help
-    print("brush RCI/O/W/P/G/S/H/L/E  D dense  1-8 view  SPACE reseed",
+    print("brush RCI/O/W/P/G/S/H/L/E  D dense  1-9 view  SPACE reseed",
           OX, OY+GH*TS+4, CLR_DARK_GREY);
 }
 
@@ -630,5 +690,27 @@ void spec(void){
     long powered_built=0; for(int y=20;y<26;y++) for(int x=20;x<30;x++) powered_built+=level[idx(x,y)];
     expect(1, str("DBG power: built unpowered=%ld -> powered=%ld", unpowered, powered_built));
     expect(powered_built > 0, "a connected power plant lets the zone develop");
+
+    // ── traffic: homes + jobs joined by roads generate commute traffic; remove the jobs
+    //    and there's nowhere to commute, so the roads quieten ──
+    memset(kind,0,sizeof kind); memset(level,0,sizeof level);
+    memset(zdense,0,sizeof zdense); memset(crime,0,sizeof crime);
+    growth_on=1;
+    for(int y=20;y<26;y++) for(int x=12;x<20;x++){ kind[idx(x,y)]=K_R; zdense[idx(x,y)]=1; }  // homes
+    for(int y=20;y<26;y++) for(int x=44;x<52;x++){ kind[idx(x,y)]=K_I; zdense[idx(x,y)]=1; }  // jobs, far off
+    for(int x=11;x<53;x++){ kind[idx(x,19)]=K_ROAD; kind[idx(x,23)]=K_ROAD; kind[idx(x,26)]=K_ROAD; }
+    for(int y=19;y<27;y++) for(int x=11;x<53;x+=4) kind[idx(x,y)]=K_ROAD;
+    kind[idx(32,23)]=K_PLANT;
+    recompute_static();
+    step(80*TICK_EVERY);
+    long tr_jobs=0; for(int i=0;i<MAXC;i++) if(kind[i]==K_ROAD) tr_jobs+=traffic[i];
+    expect(tr_jobs > 0, "commuting between homes and jobs generates road traffic");
+    // turn the jobs into more homes — now nobody has anywhere to commute TO
+    for(int y=20;y<26;y++) for(int x=44;x<52;x++) kind[idx(x,y)]=K_R;
+    recompute_static();
+    step(20*TICK_EVERY);
+    long tr_none=0; for(int i=0;i<MAXC;i++) if(kind[i]==K_ROAD) tr_none+=traffic[i];
+    expect(1, str("DBG traffic: with jobs=%ld  all-homes=%ld", tr_jobs, tr_none));
+    expect(tr_none < tr_jobs, "with no jobs to reach, commute traffic drops");
 }
 #endif
