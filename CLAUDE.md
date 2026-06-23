@@ -106,6 +106,7 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              make-gif.js     capture an animated clip of a cart (webm/webp/gif/mp4/apng + audio)
              compose-clips.js stitch baked clips into one reel (ffmpeg xfade) from a .reel manifest
              ui-audit.js     UI bug finder (off-screen text, overlaps, dead widgets, hidden panels)
+             mirror-diff.js  golden-pixel-diff harness: assert a render's symmetry invariant headless
              build-site.js / publish-cart.sh   build wasm carts + gallery → site/; publish + push
              mobile-lint.js  static report card: can a phone play this cart?
              wav-analyze.js / tune-check.js / level-check.js / fx-check.js / soak-check.js /
