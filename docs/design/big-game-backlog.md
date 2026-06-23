@@ -51,7 +51,7 @@ but #1 (the avatar/seam) can prototype *now* against any single cart.
 
 ### sloop (drive) — [`sloop.md`](sloop.md)
 Rungs 1–2.7 (drive/drift/build/drivetrain/gears) + §9 collidable world done.
-- ✓ **NPC-driven traffic** — "sloop has no NPC-driven traffic; rung 4 = wire `road_at()`." *(needs the world)*
+- ✓ **NPC-driven traffic** — "sloop has no NPC-driven traffic; rung 4 = wire `road_at()`." *(needs the world)* — the *behaviour* (lane-keep, car-following, right-of-way) is being prototyped now as a TRAFFIC mode in trackgen: [`traffic-ai.md`](traffic-ai.md). Only the line it follows changes (cl[] there → road_at() here).
 - ✓ **Breakage — §9d "alles kan kapot"**: tile-detach demolition + loose debris + persistence (phase 3, parked).
 - ✓ Fuel & range (§6) · overheat derate (§4) · muscle engines (§2.8) · trailers/articulation (§7) · per-wheel contact model (§8) · noise/stealth (§6, "only matters once things hear you").
 - ＋ **Visible damage model** — deformation / smoke / performance-loss, so breakage *reads* as GTA, not just disappearing tiles.
