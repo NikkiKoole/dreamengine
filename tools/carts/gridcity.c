@@ -34,10 +34,12 @@
 //   LEFT-drag   paint the current brush      RIGHT-drag  erase to land
 //   R C I       zone Residential/Commercial/Industrial (D toggles light↔dense zoning:
 //               light caps low = suburbs, dense rises tall = downtown)
-//   O road  W water  P police  G park  S school  H hospital  L power plant  E erase
+//   O road  W water  P police  G park  S school  H hospital  L power plant
+//   F fire station   B ignite a building (watch it spread)   E erase
 //   Power floods from plants through roads/zones; an unpowered (or road-less) lot
-//   can't develop — cut a district off and it goes dark and stops growing.
-//   1..9  overlay: City/Land value/Crime/Police/Density/Pollution/Services/Power/Traffic
+//   can't develop — cut a district off and it goes dark and stops growing. Fire spreads
+//   building→building unless fire-station coverage contains it.
+//   1..9,0  overlay: City/Land value/Crime/Police/Density/Pollution/Services/Power/Traffic/Fire
 //   Traffic = commute trips routed home↔job along the roads; busy roads add pollution.
 //   SPACE       reseed the sample city
 
@@ -50,10 +52,11 @@
 #define HUDX 202        // right panel
 
 // cell kinds
-enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT };
+enum { K_LAND, K_WATER, K_ROAD, K_R, K_C, K_I, K_POLICE, K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT, K_FIRESTN };
+#define B_IGNITE 50    // a pseudo-brush: clicking sets a building alight (doesn't change kind)
 
 // overlays
-enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_TRAFFIC, V_COUNT };
+enum { V_CITY, V_LANDVAL, V_CRIME, V_POLICE, V_DENSITY, V_POLLUTION, V_SERVICES, V_POWER, V_TRAFFIC, V_FIRE, V_COUNT };
 
 // ── state ──
 static int  kind[MAXC];
@@ -63,6 +66,8 @@ static int  landvalue[MAXC], crime[MAXC], police[MAXC], popden[MAXC], pollution[
 static int  school[MAXC], health[MAXC];   // education / health coverage (spread from schools/hospitals)
 static int  traffic[MAXC];                // road-traffic density (deterministic trip generation)
 static int  distJob[MAXC], distHome[MAXC];// BFS routing fields along roads (dist to nearest job / home)
+static int  firecov[MAXC];                // fire-station coverage (spread)
+static int  burning[MAXC];                // fire intensity / fuel remaining (0 = not on fire)
 static int  terrainv[MAXC];   // static water-proximity value (recomputed on edit)
 static int  parkv[MAXC];      // static park-amenity value (recomputed on edit)
 static int  commv[MAXC];      // commercial-vitality premium (downtown raises nearby land value)
@@ -92,6 +97,9 @@ static int  growth_on = 1;    // gate the develop/abandon pass (spec freezes it 
 #define DEM_DEAD    10        // demand dead band: near balance the city HOLDS (anti-oscillation)
 #define INF (1<<29)           // "unreachable" for the BFS routing fields
 #define TRIP_MAX    60        // a commute trip walks at most this many road tiles
+#define FIRE_MAX     8        // fuel of a freshly-lit fire
+#define FIRE_SPREAD  5        // a fire this fierce jumps to flammable neighbours
+#define FIRE_BLOCK 120        // fire coverage this strong stops a fire taking hold
 #define R_BASE     30         // baseline residential pull (people want in)
 #define C_BASE     20         // baseline commercial pull
 #define I_BASE     20         // baseline industrial pull (external market)
@@ -238,11 +246,13 @@ static void sim_step(void){
     //    same falloff police uses). Police suppresses crime; school/health raise land
     //    value and drive the EQ/LE city stats.
     for(int i=0;i<MAXC;i++) police[i] = (kind[i]==K_POLICE)   ? 250 : 0;
-    for(int i=0;i<MAXC;i++) school[i] = (kind[i]==K_SCHOOL)   ? 250 : 0;
-    for(int i=0;i<MAXC;i++) health[i] = (kind[i]==K_HOSPITAL) ? 250 : 0;
+    for(int i=0;i<MAXC;i++) school[i]  = (kind[i]==K_SCHOOL)   ? 250 : 0;
+    for(int i=0;i<MAXC;i++) health[i]  = (kind[i]==K_HOSPITAL) ? 250 : 0;
+    for(int i=0;i<MAXC;i++) firecov[i] = (kind[i]==K_FIRESTN)  ? 250 : 0;
     spread(police, 14, 18);
     spread(school, 16, 16);
     spread(health, 16, 16);
+    spread(firecov, 14, 18);
     // commercial vitality — built downtown raises nearby land value (the shops-nearby premium)
     for(int i=0;i<MAXC;i++) commv[i] = (kind[i]==K_C) ? COMM_PREM*level[i] : 0;
     smooth(commv, 3);
@@ -322,6 +332,30 @@ static void sim_step(void){
             else if(!served || dem<-DEM_DEAD || des<DECL_THRESH){ if(level[i]>0) level[i]--; }
         }
     }
+
+    // 8. fire — a dynamic hazard (runs regardless of the growth gate). A burning building
+    //    spreads to flammable, poorly-covered neighbours while fierce, loses fuel each tick
+    //    (fire coverage puts it out faster), and is knocked down as it burns; burn long
+    //    enough and it's razed to an empty lot. Player lights fires with the ignite brush.
+    {
+        static int ignite[MAXC];
+        for(int i=0;i<MAXC;i++) ignite[i]=0;
+        for(int i=0;i<MAXC;i++){
+            if(burning[i]<FIRE_SPREAD) continue;             // only a fierce fire jumps
+            int x=i%GW, y=i/GW, nb[4], nn=0;
+            if(x>0)nb[nn++]=i-1; if(x<GW-1)nb[nn++]=i+1; if(y>0)nb[nn++]=i-GW; if(y<GH-1)nb[nn++]=i+GW;
+            for(int j=0;j<nn;j++){ int n=nb[j];
+                if(is_zone(kind[n]) && level[n]>0 && burning[n]==0 && firecov[n]<FIRE_BLOCK) ignite[n]=1; }
+        }
+        for(int i=0;i<MAXC;i++){
+            if(ignite[i]) burning[i]=FIRE_MAX;
+            if(burning[i]>0){
+                if(ticks&1 && level[i]>0) level[i]--;        // damage every other tick it burns
+                burning[i] -= 1 + firecov[i]/80;             // coverage extinguishes faster
+                if(burning[i]<0) burning[i]=0;
+            }
+        }
+    }
     ticks++;
 }
 
@@ -365,6 +399,7 @@ static void seed_city(void){
     kind[idx(21,33)]=K_HOSPITAL; kind[idx(45,15)]=K_HOSPITAL;
     kind[idx(27,21)]=K_POLICE; kind[idx(39,27)]=K_POLICE;
     kind[idx(57,39)]=K_PLANT;  // a power plant on the grid's edge feeds the whole connected city
+    kind[idx(33,33)]=K_FIRESTN; kind[idx(15,27)]=K_FIRESTN;  // two fire stations cover the core
 
     recompute_static();
     // pre-warm: let the zones grow from empty to a settled city before the player
@@ -381,6 +416,7 @@ static void paint_at(int mx,int my,int k){
     int x=(mx-OX)/TS, y=(my-OY)/TS;
     if(x<0||x>=GW||y<0||y>=GH) return;
     int i=idx(x,y);
+    if(k==B_IGNITE){ if(is_zone(kind[i]) && level[i]>0) burning[i]=FIRE_MAX; return; }  // light it up
     int redense = is_zone(k) && kind[i]==k && zdense[i]!=brush_dense;  // re-zone same tile light↔dense
     if(kind[i]==k && !redense) return;
     kind[i]=k;
@@ -395,12 +431,15 @@ void update(void){
     if(keyp('O')) brush=K_ROAD;if(keyp('W')) brush=K_WATER;if(keyp('P')) brush=K_POLICE;
     if(keyp('G')) brush=K_PARK;if(keyp('S')) brush=K_SCHOOL;if(keyp('H')) brush=K_HOSPITAL;
     if(keyp('L')) brush=K_PLANT;               // L = power pLant
+    if(keyp('F')) brush=K_FIRESTN;             // F = Fire station
+    if(keyp('B')) brush=B_IGNITE;              // B = Burn (ignite a building)
     if(keyp('E')) brush=K_LAND;
     if(keyp('D')) brush_dense=!brush_dense;   // toggle light/dense zoning for the zone brushes
     // overlay select
     if(keyp('1')) view=V_CITY;    if(keyp('2')) view=V_LANDVAL; if(keyp('3')) view=V_CRIME;
     if(keyp('4')) view=V_POLICE;  if(keyp('5')) view=V_DENSITY; if(keyp('6')) view=V_POLLUTION;
     if(keyp('7')) view=V_SERVICES; if(keyp('8')) view=V_POWER; if(keyp('9')) view=V_TRAFFIC;
+    if(keyp('0')) view=V_FIRE;
     if(keyp(KEY_SPACE)) seed_city();
 
     if(mouse_down(0)) paint_at(mouse_x(),mouse_y(),brush);
@@ -445,6 +484,7 @@ static int city_color(int k){
         case K_SCHOOL:   return CLR_LIGHT_PEACH;
         case K_HOSPITAL: return CLR_PINK;
         case K_PLANT:    return CLR_RED;
+        case K_FIRESTN:  return CLR_DARK_ORANGE;
         default:         return CLR_DARK_GREEN;   // land
     }
 }
@@ -471,22 +511,26 @@ void draw(void){
             case V_POWER: col = conducts(kind[i]) ? (powered[i]?CLR_YELLOW:CLR_DARK_RED)
                                                   : CLR_BROWNISH_BLACK; break;   // lit vs blackout
             case V_TRAFFIC: col = (kind[i]==K_ROAD) ? ramp(RAMP_TR, traffic[i]) : CLR_BROWNISH_BLACK; break;
+            case V_FIRE: col=(firecov[i]<=4)?CLR_BROWNISH_BLACK:ramp(RAMP_PO,firecov[i]); break; // coverage; flames drawn on top below
             default: col=CLR_BLACK;
         }
         // in data overlays, keep roads readable as a faint grid (but power + traffic colour the roads themselves)
-        if(view!=V_CITY && view!=V_POWER && view!=V_TRAFFIC && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
+        if(view!=V_CITY && view!=V_POWER && view!=V_TRAFFIC && view!=V_FIRE && kind[i]==K_ROAD) col=CLR_DARKER_GREY;
+        // live flames burn bright in the city view and the fire view
+        if((view==V_CITY||view==V_FIRE) && burning[i]>0) col = (burning[i]*2>=FIRE_MAX)?CLR_RED:CLR_ORANGE;
         rectfill(OX+x*TS, OY+y*TS, TS, TS, col);
     }
 
     // ── HUD ──
-    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER","9 TRAFFIC"};
-    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant"};
+    static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER","9 TRAFFIC","0 FIRE"};
+    static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant","fire stn"};
     int hy=22;
     print("OVERLAY", HUDX, hy, CLR_DARK_GREY); hy+=8;
     for(int v=0;v<V_COUNT;v++){ print(VNAME[v], HUDX, hy, v==view?CLR_WHITE:CLR_DARK_GREY); hy+=8; }
     hy+=4;
     print("BRUSH", HUDX, hy, CLR_DARK_GREY); hy+=8;
-    print(str("> %s%s", BNAME[brush], (is_zone(brush)&&brush_dense)?" (dense)":""),
+    print(str("> %s%s", brush==B_IGNITE?"ignite fire":BNAME[brush],
+              (is_zone(brush)&&brush_dense)?" (dense)":""),
           HUDX, hy, CLR_YELLOW); hy+=10;
     // legend for the active data overlay — a ramp for scalar fields, two swatches for power
     if(view==V_POWER){
@@ -522,7 +566,7 @@ void draw(void){
     print(str("ticks %ld", ticks), HUDX, hy, CLR_LIGHT_GREY);
 
     // bottom help
-    print("brush RCI/O/W/P/G/S/H/L/E  D dense  1-9 view  SPACE reseed",
+    print("brush RCIOWPGSHL/F fire/B burn/E  D dense  1-9,0 view  SPACE reseed",
           OX, OY+GH*TS+4, CLR_DARK_GREY);
 }
 
@@ -712,5 +756,28 @@ void spec(void){
     long tr_none=0; for(int i=0;i<MAXC;i++) if(kind[i]==K_ROAD) tr_none+=traffic[i];
     expect(1, str("DBG traffic: with jobs=%ld  all-homes=%ld", tr_jobs, tr_none));
     expect(tr_none < tr_jobs, "with no jobs to reach, commute traffic drops");
+
+    // ── fire: an ignited building spreads and razes a block; fire-station coverage contains it.
+    //    Frozen valve + a built block, so the only thing changing levels is the blaze. ──
+    growth_on=0;
+    memset(kind,0,sizeof kind); memset(zdense,0,sizeof zdense); memset(burning,0,sizeof burning);
+    for(int i=0;i<MAXC;i++) level[i]=0;
+    for(int y=10;y<26;y++) for(int x=10;x<26;x++){ kind[idx(x,y)]=K_R; level[idx(x,y)]=3; }
+    recompute_static();
+    burning[idx(17,17)]=FIRE_MAX;                 // light the middle of the block (no fire cover)
+    step(24*TICK_EVERY);
+    int razed_open=0; for(int y=10;y<26;y++) for(int x=10;x<26;x++) if(level[idx(x,y)]==0) razed_open++;
+    expect(razed_open > 1, "an uncovered fire spreads and razes buildings");
+
+    // same block, now with a fire station covering it
+    memset(burning,0,sizeof burning);
+    for(int y=10;y<26;y++) for(int x=10;x<26;x++) level[idx(x,y)]=3;
+    kind[idx(18,18)]=K_FIRESTN;
+    recompute_static();
+    burning[idx(14,14)]=FIRE_MAX;
+    step(24*TICK_EVERY);
+    int razed_cov=0; for(int y=10;y<26;y++) for(int x=10;x<26;x++) if(level[idx(x,y)]==0) razed_cov++;
+    expect(1, str("DBG fire: razed open=%d  covered=%d", razed_open, razed_cov));
+    expect(razed_cov < razed_open, "fire-station coverage contains the blaze");
 }
 #endif

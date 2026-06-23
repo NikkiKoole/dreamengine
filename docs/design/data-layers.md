@@ -206,7 +206,14 @@ Tuning found: `CP_MAX 100`, `CRIME_BASE 30`, police `spread(14, 18)`. Constants 
   pollution (road fumes) → which lowers land value, so a car-dependent layout is visibly
   dirtier. Overlay 9. `spec()` (26): homes+jobs+roads generate 3197 traffic; turn the jobs
   into homes and it drops to 0 (proving trips are directed home↔job, not random motion).
-- ⬜ **Water pipes**, and **fire** coverage (+ fire spread the coverage suppresses).
+- ✅ **Fire** (2026-06-23): the first *dynamic* hazard (everything else is a settling field).
+  Fire stations (`F`) give a coverage field (same `spread()` primitive); the player ignites a
+  building with the `B` brush. A fierce fire jumps to flammable, poorly-covered neighbours each
+  tick; it loses fuel over time (coverage extinguishes it faster) and knocks development down
+  as it burns — burn long enough and the lot is razed. Flames render live in the city view
+  (red/orange). Overlay 0 = fire coverage + flames. `spec()` (29): an uncovered blaze razed
+  256 cells, fire-station coverage held the same ignition to 111.
+- ⬜ **Water pipes** — last utility; same flood-fill shape as power.
 
 ### Open questions to resolve while building
 - Field resolution: full-res vs Micropolis-style half/quarter — decide by profiling, not upfront.
