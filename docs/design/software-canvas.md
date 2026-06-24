@@ -530,6 +530,12 @@ that both use the *same* FP flags. FMA contraction is safe (verified). Add
 `sw_canvas_active`: clear `cbuf`, run `draw()`, then `UpdateTexture(canvas.texture, cbuf)` → the
 existing `DrawTexturePro` scale-up (untouched — crisp scaling stays GPU). Wire `cls` only.
 *Gate:* a `cls`-only cart is byte-identical on/off.
+> **Ready-to-run plan: [`software-canvas-phase0-plan.md`](software-canvas-phase0-plan.md)** — the
+> executable version of Phase 0→0c with the exact `studio.c` integration points (`:1354–1365`), the
+> V0 primitive table, the `cityplan` world-line catch (route `line`→`sline`→`cbuf`, split the
+> byte-identity gate onto a line-free cart + the perf gate onto `cityplan`), and the shared-file
+> coordination steps. This is the GO/NO-GO experiment; everything before it is de-risked by the
+> `tools/det-probes/` suite.
 
 **Phase 1 — v0: the headline win on the narrow set (~2–3 days) ⟵ GO/NO-GO.** This is the detailed
 [Minimal slice (v0)](#minimal-slice-v0--the-smallest-thing-that-shows-a-real-validatable-result)
