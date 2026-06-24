@@ -5,6 +5,11 @@
 // .cart.js) WITH -DDE_TRACE so its watch() instrumentation feeds the trace, then
 // runs the native runtime in one of the harness modes (see runtime/studio.c):
 //
+// BINARY PATH (matters for profiling/sampling): play.js builds + runs
+//   build/<name>-dbg  — NOT build/cart. build/cart is the EDITOR's ▶ binary and is
+//   usually stale relative to play.js. To `sample`/inspect a play.js cart, target
+//   build/<name>-dbg. (Profiling how-to: docs/guides/profiler.md → "Manual sample".)
+//
 //   node tools/play.js <name> run                 windowed live play
 //   node tools/play.js <name> record <out.rec>    play live, log inputs for replay
 //   node tools/play.js <name> replay <in.rec>     replay a recording deterministically

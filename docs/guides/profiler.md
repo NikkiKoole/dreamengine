@@ -172,6 +172,34 @@ build mode → **release**. Compiles with `-O2 -DDE_RELEASE`, which redefines
 
 ---
 
+## Manual sample (headless / no editor — e.g. an agent)
+
+You don't need the ⏱ button. `sample` is a CLI tool; run a cart headless and attach to it:
+
+```bash
+node tools/play.js <cart> run --headless --frames 60     # builds the binary
+cd build
+./<cart>-dbg run --headless --frames 8000 &              # ⚠ build/<cart>-dbg, NOT build/cart
+P=$!; sleep 0.4; sample $P 3 -file /tmp/x.sample; kill $P
+awk '/Sort by top of stack/{f=1} f' /tmp/x.sample | grep "in cart"   # self-time hotspots
+```
+
+Three traps that will waste your time (all bit during the rotation work):
+
+- **The binary is `build/<cart>-dbg`, not `build/cart`.** `build/cart` is the editor's ▶ output and
+  is usually *stale* — sampling it profiles old code (you'll chase ghosts). play.js builds `<cart>-dbg`.
+- **`sample` is wall-clock**, so a vsync-blocked `EndDrawing` and the **audio thread** (`reverb_process`/
+  `apply_insert`, which run every callback *even on a silent cart*) dominate the leaves. Make the cart
+  genuinely CPU-bound (crank the load so a frame exceeds 16 ms), and run with **`DE_AUDIO=off`** to drop
+  the audio thread entirely. To profile a *software-canvas* path, also set `DE_SOFTWARE_CANVAS=on`.
+- **play.js builds `-O2`, which inlines the `static` helpers** (e.g. `de_cpu_img_rot` folds into its
+  caller; only the non-inlined raylib `GetImageColor` shows by name). For per-primitive attribution use
+  the editor's `-O1 -fno-inline` profile build, or compile your own with `-fno-inline`.
+
+`tools/carts/rotstress.c` is a ready-made CPU-bound target (crankable via `RS_COUNT`/UP-DOWN).
+
+---
+
 ## Caveats
 
 - **macOS-only.** It uses the `sample` CLI. (The in-engine counts/timing in
