@@ -924,30 +924,33 @@ static void draw_overlay(float cam_x, float cam_y, float zoom) {
 // ── shared probe — l1 = container (house/farm/wild), l2 = room/detail, l3 = furniture (or "") ──
 static void hover_at(float fx, float fy, char *l1, char *l2, char *l3, int cap) {
     l3[0] = 0;
-    int wk = world_kind_at(fx, fy);
-    if (wk == WK_WILD) { snprintf(l1, cap, "wilderness"); snprintf(l2, cap, "%s", CV_NAME[cover_at(fx, fy).kind]); return; }
-    if (wk == WK_FARM) { int fxi = ifloordiv((int)fx, FIELD_P), fyi = ifloordiv((int)fy, FIELD_P);
-        snprintf(l1, cap, "farmland"); snprintf(l2, cap, "%s", CR_NAME[hash2(fxi + lf_seed * 257, fyi * 7 + 13) % CR_N]); return; }
     int bx = ifloordiv((int)fx, BLK_P), by = ifloordiv((int)fy, BLK_P), IN = BLK_P - ST_W;
-    int zone = zone_at(bx * BLK_P + ST_W + IN / 2.0f, by * BLK_P + ST_W + IN / 2.0f);
-    if (posmod((int)fx, BLK_P) < ST_W || posmod((int)fy, BLK_P) < ST_W) { snprintf(l1, cap, "%s", ZN_NAME[zone]); snprintf(l2, cap, "street"); return; }
-    LotSlot slots[40]; int nl = block_lots(bx, by, zone, slots, 40); int x = (int)fx, y = (int)fy;
-    for (int i = 0; i < nl; i++) {
-        Rect b; if (!footprint_body(slots[i].lot, slots[i].outward, zone, slots[i].attached, &b)) continue;
-        if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
-        Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3), value_at(b.x + b.w / 2.0f, b.y + b.h / 2.0f));
-        int ri = room_at(&p, x, y);
-        snprintf(l1, cap, "%s", (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone]);   // RES → archetype
-        snprintf(l2, cap, "%s", ri >= 0 ? RM_NAME[p.room[ri].label] : "wall");
-        if (ri >= 0) {                                          // name the furniture piece under the cursor (topmost wins)
-            Furn it[28]; int ni = furnish_items(&p.room[ri], p.value, ri == p.sig_room ? p.sig_kind : SIG_NONE, it, 28);
-            const char *fn = 0;
-            for (int k = 0; k < ni; k++) if (furn_hit(&it[k], x, y)) fn = it[k].name;
-            if (fn) snprintf(l3, cap, "%s", fn);
+    float bcx = bx * BLK_P + ST_W + IN / 2.0f, bcy = by * BLK_P + ST_W + IN / 2.0f;
+    if (world_kind_at(bcx, bcy) == WK_CITY) {                   // classify like the renderer: per-BLOCK, not per-point
+        int zone = zone_at(bcx, bcy);
+        if (posmod((int)fx, BLK_P) < ST_W || posmod((int)fy, BLK_P) < ST_W) { snprintf(l1, cap, "%s", ZN_NAME[zone]); snprintf(l2, cap, "street"); return; }
+        LotSlot slots[40]; int nl = block_lots(bx, by, zone, slots, 40); int x = (int)fx, y = (int)fy;
+        for (int i = 0; i < nl; i++) {
+            Rect b; if (!footprint_body(slots[i].lot, slots[i].outward, zone, slots[i].attached, &b)) continue;
+            if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
+            Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3), value_at(b.x + b.w / 2.0f, b.y + b.h / 2.0f));
+            int ri = room_at(&p, x, y);
+            snprintf(l1, cap, "%s", (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone]);   // RES → archetype
+            snprintf(l2, cap, "%s", ri >= 0 ? RM_NAME[p.room[ri].label] : "wall");
+            if (ri >= 0) {                                      // name the furniture piece under the cursor (topmost wins)
+                Furn it[28]; int ni = furnish_items(&p.room[ri], p.value, ri == p.sig_room ? p.sig_kind : SIG_NONE, it, 28);
+                const char *fn = 0;
+                for (int k = 0; k < ni; k++) if (furn_hit(&it[k], x, y)) fn = it[k].name;
+                if (fn) snprintf(l3, cap, "%s", fn);
+            }
+            return;
         }
-        return;
+        snprintf(l1, cap, "%s", ZN_NAME[zone]); snprintf(l2, cap, "yard"); return;
     }
-    snprintf(l1, cap, "%s", ZN_NAME[zone]); snprintf(l2, cap, "yard");
+    int fxi = ifloordiv((int)fx, FIELD_P), fyi = ifloordiv((int)fy, FIELD_P);   // farm is per-FIELD-tile, also like the renderer
+    if (world_kind_at(fxi * FIELD_P + FIELD_P / 2.0f, fyi * FIELD_P + FIELD_P / 2.0f) == WK_FARM) {
+        snprintf(l1, cap, "farmland"); snprintf(l2, cap, "%s", CR_NAME[hash2(fxi + lf_seed * 257, fyi * 7 + 13) % CR_N]); return; }
+    snprintf(l1, cap, "wilderness"); snprintf(l2, cap, "%s", CV_NAME[cover_at(fx, fy).kind]);
 }
 static const char *probe(float fx, float fy) {
     static char buf[80], a[28], b[28], c[28];
