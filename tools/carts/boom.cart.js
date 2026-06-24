@@ -14,7 +14,7 @@
 // 8 red · 9 orange · 10 yellow · 11 green · 12 blue · 16 brownish-black (outline)
 // · 19 blue-green · 20 dk-brown · 24 dk-red · 30 dk-peach · 31 peach.
 
-const { blank, pixel, rectfill, line, circlefill, ovalfill, rrectfill, outlined, flat } =
+const { blank, pixel, rectfill, line, circlefill, ovalfill, rrectfill, trifill, outlined, flat } =
   require('../sprite-draw.js')
 
 // ── BOOM blasts (slots 0..5) ──────────────────────────────────────────────────
@@ -73,6 +73,25 @@ function ic_ramcar() {
   pixel(g, 6, 5, 5); pixel(g, 12, 5, 5); pixel(g, 6, 12, 5); pixel(g, 12, 12, 5)  // wheels
   line(g, 0, 6, 3, 6, 6); line(g, 0, 8, 2, 8, 6); line(g, 0, 10, 3, 10, 6)  // motion lines
   return flat(g)
+}
+
+// ── action buttons (slots 6 = clear fire/smoke, 7 = reset scene) ──────────────
+function ic_clear() {
+  const g = blank()
+  line(g, 12, 2, 7, 9, 4); line(g, 13, 2, 8, 9, 20)      // broom handle (two-tone)
+  rectfill(g, 4, 9, 9, 10, 5)                            // ferrule band
+  rectfill(g, 3, 10, 10, 12, 10)                         // bristle head
+  line(g, 3, 12, 2, 14, 10); line(g, 5, 12, 5, 14, 10)   // bristle tips
+  line(g, 7, 12, 8, 14, 10); line(g, 9, 12, 10, 14, 10)
+  return flat(outlined(g))
+}
+function ic_reset() {
+  const g = blank()
+  circlefill(g, 8, 8, 6, 11)                             // green disc
+  circlefill(g, 8, 8, 3, 0)                              // hollow it → a ring
+  rectfill(g, 8, 0, 13, 6, 0)                            // erase a gap (upper-right)
+  trifill(g, 5, 0, 5, 6, 10, 3, 11)                      // arrowhead → a circular (refresh) arrow
+  return flat(outlined(g))
 }
 
 // ── BUILD materials (slot = 16 + material value) ──────────────────────────────
@@ -176,6 +195,7 @@ module.exports = {
   sprites: {
     0: ic_blast(), 1: ic_grenade(), 2: ic_molotov(),
     3: ic_carbomb(), 4: ic_gasmain(), 5: ic_ramcar(),
+    6: ic_clear(), 7: ic_reset(),
     16: ic_ground(), 17: ic_road(), 18: ic_grass(), 19: ic_wood(),
     20: ic_oil(), 21: ic_water(), 23: ic_barrel(), 24: ic_car(),
     25: ic_glass(), 26: ic_concrete(), 28: ic_gas(), 29: ic_tnt(),

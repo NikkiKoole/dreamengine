@@ -32,7 +32,8 @@
 //                GASOLINE   pour a fuse (catches instantly, races along its trail)
 //                EXPLOSIVE  a charge that detonates when the fuse-fire reaches it
 //
-//   ALWAYS    C clear all fire & smoke      R reset the scene
+//   ALWAYS    top-right buttons: a BROOM clears all fire & smoke (keeps the world),
+//             a circular ARROW resets the whole scene. (C / R keys still work too.)
 //
 //   DESTRUCTIBLE WALLS: a blast knocks concrete/glass/wood cells loose as real
 //   physics blocks that fly, tumble, slide to rest, and settle back into rubble
@@ -91,6 +92,11 @@
 #define TB_GAP 2
 #define TB_PITCH (TB_SZ + TB_GAP)
 #define TB_NBOOM  (BL_KINDS + 1)   // blast buttons (incl. ram car)
+#define TB_BOT    (TB_Y1 + TB_SZ)  // bottom edge of the toolbar header strip
+// clear + reset action buttons live top-right, on the blast row
+#define ACT_Y       TB_Y0
+#define ACT_RESET_X (SCREEN_W - 2 - TB_SZ)
+#define ACT_CLEAR_X (ACT_RESET_X - TB_PITCH)
 
 // ── materials ────────────────────────────────────────────────────────────────
 // fuel  = how long a cell burns once lit.   resist = % shaved off a neighbour's
@@ -755,6 +761,18 @@ static const char *tool_name(int row, int i) {
     return b == TORCH ? "torch" : b == CRATE_BRUSH ? "crate" : MAT_NAME[b];
 }
 
+void reset_world(void);   // defined below
+
+// wipe all transient fire/smoke/debris but KEEP the built world (the clear action)
+static void clear_fx(void) {
+    for (int i = 0; i < NCELL; i++)  W[i].fire = 0;
+    for (int i = 0; i < MAXP; i++)   ps[i].kind = PK_FREE;
+    for (int i = 0; i < 12; i++)     rings[i].on = 0;
+    for (int i = 0; i < 8; i++)      pend[i].on = 0;
+    for (int i = 0; i < MAXBLK; i++) blk[i].on = 0;
+    for (int i = 0; i < MAXCAR; i++) rcar[i].on = 0;
+}
+
 // ── per-frame update ───────────────────────────────────────────────────────
 void update(void) {
     // wind drifts toward a new random target every few seconds (gusts)
@@ -770,36 +788,37 @@ void update(void) {
 
     // input ------------------------------------------------------------------
     if (keyp(KEY_TAB)) mode ^= 1;
-    if (keyp('R')) { extern void reset_world(void); reset_world(); }
-    if (keyp('C')) {
-        for (int i = 0; i < NCELL; i++) W[i].fire = 0;
-        for (int i = 0; i < MAXP; i++) ps[i].kind = PK_FREE;
-        for (int i = 0; i < 12; i++) rings[i].on = 0;
-        for (int i = 0; i < 8; i++) pend[i].on = 0;
-        for (int i = 0; i < MAXBLK; i++) blk[i].on = 0;
-        for (int i = 0; i < MAXCAR; i++) rcar[i].on = 0;
-    }
+    if (keyp('R')) reset_world();
+    if (keyp('C')) clear_fx();
     float w = mouse_wheel();
     if (w != 0) { charge += (w > 0 ? 1 : -1); if (charge < 1) charge = 1; if (charge > 5) charge = 5; }
 
     int mx = mouse_x(), my = mouse_y();
 
-    // ── toolbar: BOTH rows always on screen (blasts above, brushes below).
-    // Clicking any button picks that tool AND sets the matching mode — so every
-    // tool is one click away, no TAB needed. (TAB still flips mode as a shortcut.)
-    int over_tb = 0, hit_row = -1, hit_i = -1;
+    // ── toolbar header eats clicks: two tool rows (blasts above, brushes below)
+    // + clear/reset actions. Clicking a tool picks it AND sets its mode — every
+    // tool is one click away, no keyboard needed. Any click in the strip is UI,
+    // never a detonation/paint into the world hidden behind it.
+    int over_tb = (my < TB_BOT);
+    int hit_row = -1, hit_i = -1;
     {
         int ry[2] = { TB_Y0, TB_Y1 }, rn[2] = { TB_NBOOM, NBUILD };
         for (int r = 0; r < 2; r++)
             if (my >= ry[r] && my < ry[r] + TB_SZ && mx >= TB_X) {
                 int i = (mx - TB_X) / TB_PITCH;
-                if (i >= 0 && i < rn[r]) { over_tb = 1; hit_row = r; hit_i = i; }
+                if (i >= 0 && i < rn[r]) { hit_row = r; hit_i = i; }
             }
     }
-    if (over_tb && mouse_pressed(0)) {
-        if (hit_row == 0) { mode = 0; blast = hit_i; }     // 0..5, 5 = RAMCAR
-        else              { mode = 1; brush = BUILD_BRUSHES[hit_i]; }
-        hit(74, INSTR_SQUARE, 1, 26);                      // soft UI click
+    int act = -1;   // 0 = clear, 1 = reset
+    if (my >= ACT_Y && my < ACT_Y + TB_SZ) {
+        if      (mx >= ACT_CLEAR_X && mx < ACT_CLEAR_X + TB_SZ) act = 0;
+        else if (mx >= ACT_RESET_X && mx < ACT_RESET_X + TB_SZ) act = 1;
+    }
+    if (mouse_pressed(0)) {
+        if      (act == 0)     { clear_fx();   hit(60, INSTR_NOISE, 5, 110); }
+        else if (act == 1)     { reset_world(); hit(52, INSTR_SQUARE, 3, 70); }
+        else if (hit_row == 0) { mode = 0; blast = hit_i;                  hit(74, INSTR_SQUARE, 1, 26); }
+        else if (hit_row == 1) { mode = 1; brush = BUILD_BRUSHES[hit_i];   hit(74, INSTR_SQUARE, 1, 26); }
     }
 
     if (mode == 0) {                                  // BOOM
@@ -1307,13 +1326,7 @@ void draw(void) {
     // in a little label that flips side/below so it never runs off-screen
     {
         int gx = mx / CELL, gy = my / CELL;
-        int in_tb = 0;
-        {
-            int ry[2] = { TB_Y0, TB_Y1 }, rn[2] = { TB_NBOOM, NBUILD };
-            for (int r = 0; r < 2; r++)
-                if (my >= ry[r] && my < ry[r] + TB_SZ && mx >= TB_X &&
-                    (mx - TB_X) / TB_PITCH < rn[r]) in_tb = 1;
-        }
+        int in_tb = (my < TB_BOT);          // probe only makes sense over the world
         if (!in_tb && gx >= 0 && gy >= 0 && gx < GW && gy < GH) {
             Cell *c = &W[IDX(gx, gy)];
             char lbl[48];
@@ -1330,27 +1343,28 @@ void draw(void) {
             int lx = mx + 6, ly = my - 8;
             if (lx + tw + 1 > SCREEN_W) lx = mx - 6 - tw;          // flip to the left edge
             if (lx < 1) lx = 1;
-            if (ly < 10) ly = my + 8;                              // drop below if it'd hit the HUD
+            if (ly < TB_BOT + 1) ly = my + 8;                      // drop below if it'd hide under the panel
             rectfill(lx - 1, ly - 1, tw + 2, 7, CLR_BLACK);
             print(lbl, lx, ly, CLR_WHITE);
             font(FONT_NORMAL);
         }
     }
 
-    // HUD ---------------------------------------------------------------------
-    rectfill(0, 0, SCREEN_W, 9, CLR_BLACK);
+    // HUD: one clean toolbar header panel behind the title + both icon rows -----
+    rectfill(0, 0, SCREEN_W, TB_BOT, CLR_BROWNISH_BLACK);
+    line(0, TB_BOT, SCREEN_W, TB_BOT, CLR_DARK_GREY);          // base separator
     char buf[64];
     if (mode == 0) {
         const char *bn = (blast == RAMCAR) ? "ram car" : BSPEC[blast].name;
         snprintf(buf, sizeof buf, "BOOM  %s  charge %d", bn, charge);
     } else {
         const char *bn = brush == TORCH ? "torch" : brush == CRATE_BRUSH ? "crate" : MAT_NAME[brush];
-        snprintf(buf, sizeof buf, "BUILD  brush: %s", bn);
+        snprintf(buf, sizeof buf, "BUILD  %s", bn);
     }
     print(buf, 3, 1, CLR_WHITE);
 
-    // toolbar: BOTH rows of cute clickable icons, always on screen. The active
-    // tool gets a white frame + yellow halo; the hovered one a light frame.
+    // both tool rows of cute clickable icons. Active tool = white frame + yellow
+    // halo; hovered = light frame.
     int ry[2] = { TB_Y0, TB_Y1 }, rn[2] = { TB_NBOOM, NBUILD };
     int hov_row = -1, hov_i = -1;
     for (int r = 0; r < 2; r++)
@@ -1370,23 +1384,36 @@ void draw(void) {
                  sel ? CLR_WHITE : (r == hov_row && i == hov_i ? CLR_LIGHT_GREY : CLR_DARKER_GREY));
             if (sel) rect(bx - 2, by - 2, TB_SZ + 4, TB_SZ + 4, CLR_YELLOW);
         }
-    // hover tooltip — name the button under the pointer
-    if (hov_row >= 0) {
-        const char *nm = tool_name(hov_row, hov_i);
+
+    // clear (slot 6) + reset (slot 7) action buttons, top-right of the blast row
+    int act_x[2] = { ACT_CLEAR_X, ACT_RESET_X };
+    int hov_act = -1;
+    for (int a = 0; a < 2; a++) {
+        int bx = act_x[a], by = ACT_Y;
+        int hov = (my >= by && my < by + TB_SZ && mx >= bx && mx < bx + TB_SZ);
+        if (hov) hov_act = a;
+        rectfill(bx - 1, by - 1, TB_SZ + 2, TB_SZ + 2, CLR_BLACK);
+        spr(6 + a, bx, by);
+        rect(bx - 1, by - 1, TB_SZ + 2, TB_SZ + 2, hov ? CLR_LIGHT_GREY : CLR_DARKER_GREY);
+    }
+
+    // one hover tooltip just below the panel — names the tool OR action hovered
+    const char *tip = NULL; int tip_x = 0;
+    if (hov_act >= 0)      { tip = hov_act == 0 ? "clear fire" : "reset scene"; tip_x = act_x[hov_act]; }
+    else if (hov_row >= 0) { tip = tool_name(hov_row, hov_i);                   tip_x = TB_X + hov_i * TB_PITCH; }
+    if (tip) {
         font(FONT_SMALL);
-        int tw = (int)strlen(nm) * 4;
-        int lx = TB_X + hov_i * TB_PITCH;
+        int tw = (int)strlen(tip) * 4, lx = tip_x;
         if (lx + tw + 1 > SCREEN_W) lx = SCREEN_W - tw - 1;
-        int ly = TB_Y1 + TB_SZ + 2;
+        if (lx < 1) lx = 1;
+        int ly = TB_BOT + 3;
         rectfill(lx - 1, ly - 1, tw + 2, 7, CLR_BLACK);
-        print(nm, lx, ly, CLR_YELLOW);
+        print(tip, lx, ly, CLR_YELLOW);
         font(FONT_NORMAL);
     }
 
-    print("click a tool  wheel charge  C clear  R reset", 3, SCREEN_H - 8, CLR_LIGHT_GREY);
-
-    // wind tell-tale (top-right arrow)
-    int wx = SCREEN_W - 14, wy = 5;
-    line(wx, wy, wx + (int)(windx * 9), wy + (int)(windy * 9), CLR_BLUE);
-    pset(wx + (int)(windx * 9), wy + (int)(windy * 9), CLR_WHITE);
+    // wind tell-tale (small arrow in the title strip, left of the action buttons)
+    int wx = ACT_CLEAR_X - 12, wy = 4;
+    line(wx, wy, wx + (int)(windx * 8), wy + (int)(windy * 8), CLR_BLUE);
+    pset(wx + (int)(windx * 8), wy + (int)(windy * 8), CLR_WHITE);
 }
