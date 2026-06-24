@@ -395,14 +395,17 @@ static int footprint_body(Rect lot, int outward, int zone, int attached, Rect *o
 //  INTERIOR — interiors' BSP floor-plan (one footprint → its rooms)
 // ════════════════════════════════════════════════════════════════════════════
 enum { RM_HALL, RM_LIVING, RM_BED, RM_KITCHEN, RM_BATH,
-       RM_SHOP, RM_BACK, RM_OFFICE, RM_BAY, RM_STORE, RM_N };
+       RM_SHOP, RM_BACK, RM_OFFICE, RM_BAY, RM_STORE,
+       RM_DINING, RM_KIDS, RM_STUDY, RM_GARAGE, RM_UTILITY, RM_N };
 static const char *RM_NAME[RM_N] = { "hall", "living", "bedroom", "kitchen", "bath",
-                                     "shop floor", "back-of-house", "office", "bay", "storage" };
+                                     "shop floor", "back-of-house", "office", "bay", "storage",
+                                     "dining", "kids room", "study", "garage", "utility" };
 static const int RM_FLOOR[RM_N] = {
     [RM_HALL]    = CLR_DARK_BROWN,  [RM_LIVING] = CLR_BROWN,      [RM_BED]   = CLR_DARK_PURPLE,
     [RM_KITCHEN] = CLR_DARK_GREY,   [RM_BATH]   = CLR_BLUE_GREEN, [RM_SHOP]  = CLR_LIGHT_GREY,
     [RM_BACK]    = CLR_DARKER_GREY, [RM_OFFICE] = CLR_MEDIUM_GREY,[RM_BAY]   = CLR_DARKER_GREY,
-    [RM_STORE]   = CLR_DARK_BROWN,
+    [RM_STORE]   = CLR_DARK_BROWN,  [RM_DINING] = CLR_BROWN,      [RM_KIDS]  = CLR_DARK_PURPLE,
+    [RM_STUDY]   = CLR_DARK_BROWN,  [RM_GARAGE] = CLR_DARKER_GREY,[RM_UTILITY] = CLR_DARK_GREY,
 };
 enum { T_N = 1, T_E = 2, T_S = 4, T_W = 8 };
 typedef struct { Rect r; int label; int touch; } Room;
@@ -452,7 +455,23 @@ static void bsp(Plan *p, Rect r, unsigned h, int depth, const SplitP *sp) {
     }
 }
 static int front_bit(int outward) { return outward == 0 ? T_N : outward == 1 ? T_E : outward == 2 ? T_S : T_W; }
-static void assign_labels(Plan *p) {
+// ── residential archetypes — a home's "personality", emergent from value + size ──
+enum { ARCH_TENEMENT, ARCH_COTTAGE, ARCH_FAMILY, ARCH_MANSION, ARCH_N };
+static const char *ARCH_NAME[ARCH_N] = { "tenement", "cottage", "family home", "mansion" };
+static int arch_of(float value, int nroom) {
+    if (value > 0.70f && nroom >= 5) return ARCH_MANSION;
+    if (value < 0.35f)               return ARCH_TENEMENT;   // cramped, whatever the size
+    if (value > 0.45f && nroom >= 4) return ARCH_FAMILY;
+    return ARCH_COTTAGE;
+}
+// what the spare rooms become, biggest-first — this is where each archetype's character lives
+static const int ARCH_FILL[ARCH_N][6] = {
+    [ARCH_TENEMENT] = { RM_BED,    RM_BED,   RM_BED,  RM_BED,  RM_BED, RM_BED },   // subdivided rental: all beds
+    [ARCH_COTTAGE]  = { RM_BED,    RM_DINING,RM_BED,  RM_BED,  RM_BED, RM_BED },
+    [ARCH_FAMILY]   = { RM_DINING, RM_KIDS,  RM_BED,  RM_STUDY,RM_BED, RM_BED },
+    [ARCH_MANSION]  = { RM_DINING, RM_STUDY, RM_BATH, RM_KIDS, RM_BED, RM_BED },
+};
+static void assign_labels(Plan *p, unsigned h) {
     int n = p->nroom; if (n == 0) return;
     int fb = front_bit(p->outward); long tot = 0;
     for (int i = 0; i < n; i++) { p->room[i].label = RM_BED; tot += (long)p->room[i].r.w * p->room[i].r.h; }
@@ -474,11 +493,19 @@ static void assign_labels(Plan *p) {
         if (ki >= 0) p->room[ki].label = RM_KITCHEN;
         int e = p->entry_room;
         if (e >= 0 && e != liv && p->room[e].label == RM_BED && (long)p->room[e].r.w * p->room[e].r.h < avg) p->room[e].label = RM_HALL;
-        if (p->value > 0.70f && n >= 5) {                    // prime homes get an ensuite (second bath)
-            int eb = -1;
-            for (int i = 0; i < n; i++) { if (p->room[i].label != RM_BED) continue;
-                if (eb < 0 || (long)p->room[i].r.w * p->room[i].r.h < (long)p->room[eb].r.w * p->room[eb].r.h) eb = i; }
-            if (eb >= 0) p->room[eb].label = RM_BATH;
+        // archetype fills the spare bedrooms with character rooms (dining, kids, study, …)
+        int arch = arch_of(p->value, n);
+        int lo[MAX_ROOMS], m = 0;
+        for (int i = 0; i < n; i++) if (p->room[i].label == RM_BED) lo[m++] = i;
+        for (int a = 0; a < m; a++) for (int b = a + 1; b < m; b++)               // sort biggest-first
+            if ((long)p->room[lo[b]].r.w * p->room[lo[b]].r.h > (long)p->room[lo[a]].r.w * p->room[lo[a]].r.h) { int t = lo[a]; lo[a] = lo[b]; lo[b] = t; }
+        int gi = (arch >= ARCH_FAMILY && m >= 3 && frac01(hmix(h, 71)) < 0.40f) ? 0     : -1;  // biggest spare → garage
+        int ui = (m >= 2 && frac01(hmix(h, 83)) < 0.45f)                        ? m - 1 : -1;  // smallest spare → laundry
+        int fi = 0;
+        for (int k = 0; k < m; k++) {
+            if      (k == gi) p->room[lo[k]].label = RM_GARAGE;
+            else if (k == ui) p->room[lo[k]].label = RM_UTILITY;
+            else              p->room[lo[k]].label = ARCH_FILL[arch][fi < 6 ? fi++ : 5];
         }
     } else if (p->type == ZN_COM) {
         for (int i = 0; i < n; i++) p->room[i].label = RM_BACK;
@@ -510,7 +537,7 @@ static void plan_build(Plan *p, Rect shell, int type, int outward, unsigned h, f
     }
     for (int i = 0; i < p->nroom; i++) { Rect r = p->room[i].r;
         if (ix >= r.x && ix < r.x + r.w && iy >= r.y && iy < r.y + r.h) { p->entry_room = i; break; } }
-    assign_labels(p);
+    assign_labels(p, h);
 }
 static int room_at(const Plan *p, int x, int y) {
     for (int i = 0; i < p->nroom; i++) { Rect r = p->room[i].r;
@@ -565,6 +592,32 @@ static void furnish(const Room *rm, float value) {
         case RM_BAY:    for (int yy = iy + 2; yy < iy + ih - 3; yy += 7) for (int xx = ix + 2; xx < ix + iw - 3; xx += 8) { if (hash2(xx, yy + lf_seed) & 1) continue; rectfill(xx, yy, 4, 4, CLR_BROWN); rect(xx, yy, 4, 4, CLR_DARK_BROWN); } break;
         case RM_STORE: case RM_BACK: for (int yy = iy + 1; yy < iy + ih - 1; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); break;
         case RM_HALL:   rectfill(cx - 1, iy, 3, ih, CLR_DARK_RED); break;
+        case RM_DINING: {
+            int tw = iw / 2 < 4 ? 4 : iw / 2, th = ih / 3 < 3 ? 3 : ih / 3;              // table
+            rectfill(cx - tw / 2, cy - th / 2, tw, th, CLR_DARK_BROWN);
+            pset(cx - tw / 2 - 1, cy, CLR_DARKER_GREY); pset(cx + tw / 2, cy, CLR_DARKER_GREY);  // chairs
+            pset(cx, cy - th / 2 - 1, CLR_DARKER_GREY); pset(cx, cy + th / 2, CLR_DARKER_GREY);
+            break;
+        }
+        case RM_KIDS:
+            rectfill(ix, iy, iw / 2, ih / 3 + 1, CLR_BLUE);                              // small bed
+            rectfill(ix + 1, iy + 1, iw / 2 - 2, 1, CLR_LIGHT_PEACH);
+            if (iw >= 7) rectfill(ix + iw - 3, iy + ih - 3, 2, 2, CLR_RED);              // toy chest
+            break;
+        case RM_STUDY:
+            rectfill(ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN);                             // desk
+            if (ih >= 7) rectfill(ix + iw - 2, iy, 2, ih - 1, CLR_DARK_BROWN);           // bookshelf
+            pset(ix + 2, iy + 4, CLR_DARKER_GREY);                                       // chair
+            break;
+        case RM_GARAGE:
+            if (iw >= 6 && ih >= 6) { rectfill(ix + 1, iy + 1, iw - 4, ih - 3, CLR_TRUE_BLUE);   // car body
+                                      rectfill(ix + 2, iy + 2, iw - 6, 2, CLR_BLUE); }            // windscreen
+            rectfill(ix, iy + ih - 1, iw, 1, CLR_DARK_GREY);                            // workbench along the back
+            break;
+        case RM_UTILITY:
+            rectfill(ix, iy, 3, 3, CLR_LIGHT_GREY);                                      // washer
+            if (iw >= 8) rectfill(ix + 4, iy, 3, 3, CLR_LIGHT_GREY);                     // dryer
+            break;
     }
 }
 static void plan_draw(const Plan *p, Show s) {
@@ -835,7 +888,8 @@ static const char *probe(float fx, float fy) {
         if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
         Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3), value_at(b.x + b.w / 2.0f, b.y + b.h / 2.0f));
         int ri = room_at(&p, x, y);
-        snprintf(buf, sizeof buf, "%s / %s", ZN_NAME[zone], ri >= 0 ? RM_NAME[p.room[ri].label] : "wall"); return buf;
+        const char *kind = (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone];   // RES shows its archetype
+        snprintf(buf, sizeof buf, "%s / %s", kind, ri >= 0 ? RM_NAME[p.room[ri].label] : "wall"); return buf;
     }
     snprintf(buf, sizeof buf, "%s  yard", ZN_NAME[zone]); return buf;
 }
