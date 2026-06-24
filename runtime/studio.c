@@ -511,6 +511,32 @@ static void sw_blit(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int 
         }
     }
 }
+// software textured triangle (the stritex probe): edge-function rasterizer + top-left rule, affine
+// barycentric u,v sampled from spritesheet_img → sw_pset. Adjacent tris tile gap-free (top-left).
+static float sw_edge(float ax,float ay,float bx,float by,float px,float py){ return (bx-ax)*(py-ay)-(by-ay)*(px-ax); }
+static int   sw_topleft(float ax,float ay,float bx,float by){ float dx=bx-ax,dy=by-ay; return (dy<0.f)||(dy==0.f&&dx<0.f); }
+static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,float u1,float v1, float x2,float y2,float u2,float v2){
+    if (!spritesheet_img.data) return;
+    float area = sw_edge(x0,y0,x1,y1,x2,y2);
+    if (area == 0.f) return;
+    if (area < 0.f) { float t; t=x1;x1=x2;x2=t; t=y1;y1=y2;y2=t; t=u1;u1=u2;u2=t; t=v1;v1=v2;v2=t; area=-area; }
+    int minx=(int)floorf(fminf(x0,fminf(x1,x2))), maxx=(int)ceilf(fmaxf(x0,fmaxf(x1,x2)));
+    int miny=(int)floorf(fminf(y0,fminf(y1,y2))), maxy=(int)ceilf(fmaxf(y0,fmaxf(y1,y2)));
+    int tl0=sw_topleft(x1,y1,x2,y2), tl1=sw_topleft(x2,y2,x0,y0), tl2=sw_topleft(x0,y0,x1,y1);
+    for (int py=miny; py<=maxy; py++) for (int px=minx; px<=maxx; px++) {
+        float fx=px+0.5f, fy=py+0.5f;
+        float w0=sw_edge(x1,y1,x2,y2,fx,fy), w1=sw_edge(x2,y2,x0,y0,fx,fy), w2=sw_edge(x0,y0,x1,y1,fx,fy);
+        int in0=(w0>0.f)||(w0==0.f&&tl0), in1=(w1>0.f)||(w1==0.f&&tl1), in2=(w2>0.f)||(w2==0.f&&tl2);
+        if (in0 && in1 && in2) {
+            float l0=w0/area, l1=w1/area, l2=w2/area;
+            int iu=(int)(l0*u0+l1*u1+l2*u2), iv=(int)(l0*v0+l1*v1+l2*v2);
+            if ((unsigned)iu<(unsigned)spritesheet_img.width && (unsigned)iv<(unsigned)spritesheet_img.height) {
+                Color cc = GetImageColor(spritesheet_img, iu, iv);
+                if (cc.a >= 128) sw_pset(px, py, cc);
+            }
+        }
+    }
+}
 
 // ── --uiaudit: per-frame draw bounding-box log ───────────────────────────
 // When --uiaudit <file> is set, every primitive records its bounds + the
@@ -2752,6 +2778,7 @@ void tritex(int x1, int y1, float u1, float v1,
             int x3, int y3, float u3, float v3) {
     PROF("tritex");
     if (spritesheet.width == 0) return;
+    if (sw_canvas_active) { sw_tritex(x1,y1,u1,v1, x2,y2,u2,v2, x3,y3,u3,v3); return; }
     float tw = (float)spritesheet.width, th = (float)spritesheet.height;
     typedef struct { float x, y, u, v; } TV;
     TV a = { x1, y1, u1, v1 };
