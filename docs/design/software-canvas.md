@@ -71,8 +71,9 @@ be coalesced.
 > (`sw_fillrect` = cbuf row-memset). A first cut that routed `rectfill` per-pixel through `plot_pat`
 > was **2.4× *slower* than GPU**; the memset flipped it to 2.3× faster. **Deployment:** per-cart /
 > opt-in (default on for pset-bound carts; leave rectfill-bound on GPU) — which is why it's
-> flag-gated, not a blanket default. (Phase 2 has since ported `spr`/`print`/`tritex` + `camera_ex`
-> zoom; rotation falls back to GPU.) Full write-up:
+> flag-gated, not a blanket default. (Phase 2 ported `spr`/`print`/`tritex` + `camera_ex` zoom; the
+> 2026-06-25 rotation port added `rectfill_rot`/`spr_rot`/`sspr_ex` in SW — only `print_rot` and
+> rotating `camera_ex(angle)` still fall back to GPU. See the rotation note below.) Full write-up:
 > [`software-canvas-phase0-plan.md`](software-canvas-phase0-plan.md).
 
 > **Map-cart fleet A/B (2026-06-24, after the `map()` port).** The Phase-0 table above had no
@@ -125,9 +126,10 @@ be coalesced.
 >   CPU-shader bars disappeared. Now a `sw_fillrect` row-memset (memset path → byte-exact).
 > - **`print_outline()`** — only the inner `print()` was sw-aware; the 8 outline passes went to GPU,
 >   so the outline/shadow was missing. Outline passes now use `sw_print` (the outlines now appear).
-> - **`print_rot()` / `print_rot_scaled()`** — rotated text silently dropped (no branch, and unlike
->   `spr_rot` it didn't even set `sw_force_gpu`). Now `deg==0` (+ `scale==1`) blits via `sw_print`;
->   any rotation/scale falls the whole cart back to GPU, matching `sspr_ex`.
+> - **`print_rot()` / `print_rot_scaled()`** — rotated text silently dropped (no branch). Now `deg==0`
+>   (+ `scale==1`) blits via `sw_print`; any rotation/scale still falls the whole cart back to GPU. As
+>   of the 2026-06-25 rotation port this is the **last rotated primitive still on `sw_force_gpu`**
+>   (`rectfill_rot`/`spr_rot`/`sspr_ex` now render in SW — see the rotation note below).
 >
 > *Gate:* `build-all` = 433/433 compile.
 >
@@ -169,6 +171,24 @@ be coalesced.
 > `line()` decision is still open, see §"DDA vs coverage for the line" below). `canvas-diff` sets it on
 > the reference automatically (`--raw` opts out to measure the divergence). It grows as more rotated
 > primitives port to SW. SEAMs in `studio.c` at `de_cpu_line` / `de_cpu_rectfill_rot`.
+
+> **Rotation Tier-1 ported (2026-06-25) — rotated primitives now render in software.** Following the
+> scoped plan (conventions already settled by the det-probes), the rotated *primitives* came off
+> `sw_force_gpu`:
+> - **`rectfill_rot`** → `de_cpu_rectfill_rot` (inverse-map fill, `rotfill.c` convention).
+> - **`spr_rot` / `sspr_ex(deg)`** → `de_cpu_sspr_rot` (inverse-map **nearest** sprite, `rotspr.c`
+>   convention — nearest == GPU point-filter quality, device-deterministic; RotSprite is the future
+>   ≥16px opt-in, not built). Reuses `sw_blit`'s colorkey + `pal()` recolor; plots via `pset_rgb`.
+> - **`tritex`** was already SW; it now also honours `DE_CPU_RASTER` (plots via `pset_rgb`).
+>
+> All quantize the rotation matrix to 1/4096 (cross-device determinism) and match raylib's `[[c,-s],
+> [s,c]]` so rotation direction agrees with GPU. **Milestone:** `cityview` (rectfill_rot + tritex +
+> line) and `masseffect` (spr_rot + sspr_ex) now render **fully on the software canvas with zero GPU
+> fallback** — the first rotated-primitive carts to do so — and A/B byte-exact under `DE_CPU_RASTER`.
+> `build-all` 433/433. **Remaining on `sw_force_gpu`:** `print_rot`/`print_rot_scaled` (rotated text —
+> next Tier-1 item, reuses the glyph-blit path) and rotating `camera_ex(angle)` (Tier 2, the
+> demand-gated whole-view case — stays a correct GPU fallback). Quality knobs (RotSprite ≥16px,
+> Xiaolin-Wu smooth strokes) remain opt-in futures, not needed for correctness.
 >
 > **`sw_force_gpu` makes naive A/Bs lie.** A cart that calls `spr_rot`/`sspr_ex(deg)`/`rectfill_rot`/
 > `camera_ex(angle)` trips the sticky GPU fallback **on the frame it first hits the call** — so frame

@@ -2409,26 +2409,66 @@ void sspr(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh) {
     UIAUDIT('s', dx, dy, dw, dh, NULL);
 }
 
+// CPU rotated sprite blit: INVERSE-map nearest — for each dest screen pixel, rotate it back about the
+// pivot to unrotated dest-local coords, map to source (dw→sw, dh→sh scale), nearest-sample the sheet.
+// Convention proven in tools/det-probes/rotspr.c: nearest == today's GPU point-filter quality + it's
+// device-deterministic (quantized matrix). (RotSprite is the opt-in ≥16px upgrade — not built yet.)
+// Reuses the sheet sampling + colorkey + pal() recolor from sw_blit; plots via pset_rgb so ONE impl
+// serves canvas (→ sw_pset → cbuf) and the off-canvas DE_CPU_RASTER reference (→ DrawPixel). Pivot is
+// world (dx+ox, dy+oy); rotation matrix [[c,-s],[s,c]] matches raylib DrawTexturePro's direction.
+static void de_cpu_sspr_rot(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh,
+                            float deg, int ox, int oy, bool use_pal) {
+    if (!spritesheet_img.data || dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+    float a = deg * DEG2RAD;
+    float c = roundf(cosf(a) * 4096.f) / 4096.f, s = roundf(sinf(a) * 4096.f) / 4096.f;
+    float px0 = dx + ox, py0 = dy + oy;                       // pivot (world)
+    bool recolor = use_pal && pal_active;
+    // screen bbox = the 4 dest corners rotated forward about the pivot
+    float cxx[4] = { dx - px0, dx + dw - px0, dx + dw - px0, dx - px0 };
+    float cyy[4] = { dy - py0, dy - py0, dy + dh - py0, dy + dh - py0 };
+    float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
+    for (int k = 0; k < 4; k++) {
+        float rx = c * cxx[k] - s * cyy[k] + px0, ry = s * cxx[k] + c * cyy[k] + py0;
+        if (rx < minx) minx = rx; if (rx > maxx) maxx = rx;
+        if (ry < miny) miny = ry; if (ry > maxy) maxy = ry;
+    }
+    int x0 = (int)floorf(minx), x1 = (int)ceilf(maxx), y0 = (int)floorf(miny), y1 = (int)ceilf(maxy);
+    for (int py = y0; py <= y1; py++) for (int px = x0; px <= x1; px++) {
+        float ddx = px + 0.5f - px0, ddy = py + 0.5f - py0;
+        float lx = c * ddx + s * ddy, ly = -s * ddx + c * ddy;     // rotate dest by -a
+        float fxu = lx + ox, fyu = ly + oy;                        // dest-local (0..dw, 0..dh)
+        if (fxu < 0 || fxu >= dw || fyu < 0 || fyu >= dh) continue;
+        int ssx = sx + (int)(fxu * sw / dw), ssy = sy + (int)(fyu * sh / dh);   // nearest source texel
+        Color cc = GetImageColor(spritesheet_img, ssx, ssy);
+        if (cc.a < 128 || sw_keyed(cc)) continue;
+        if (recolor) cc = sw_recolor(cc);
+        pset_rgb(px, py, (cc.r << 16) | (cc.g << 8) | cc.b);
+    }
+}
+
 void spr_rot(int index, int x, int y, float deg) {
     PROF("spr_rot");
     if (spritesheet.width == 0) return;
-    if (sw_canvas_active) { sw_force_gpu = true; return; }   // rotated sprite → GPU fallback (Fork-2/C)
     int cols = spritesheet.width / SPRITE_SIZE;
-    Rectangle src = { (index % cols) * SPRITE_SIZE, (index / cols) * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE };
-    float h = SPRITE_SIZE / 2.0f;
+    int srcx = (index % cols) * SPRITE_SIZE, srcy = (index / cols) * SPRITE_SIZE;
+    int h = SPRITE_SIZE / 2;
+    if (sw_canvas_active || cpu_raster_enabled) {   // SW: inverse-map (no GPU fallback); also the A/B reference
+        de_cpu_sspr_rot(srcx, srcy, SPRITE_SIZE, SPRITE_SIZE, x, y, SPRITE_SIZE, SPRITE_SIZE, deg, h, h, true); return;
+    }
+    Rectangle src = { srcx, srcy, SPRITE_SIZE, SPRITE_SIZE };
     Rectangle dst = { x + h, y + h, SPRITE_SIZE, SPRITE_SIZE };  // origin maps here, so top-left stays (x,y)
     pal_begin();
-    DrawTexturePro(spritesheet, src, dst, (Vector2){ h, h }, deg, WHITE);
+    DrawTexturePro(spritesheet, src, dst, (Vector2){ (float)h, (float)h }, deg, WHITE);
     pal_end();
 }
 
 void sspr_ex(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh, float deg, int ox, int oy) {
     PROF("sspr_ex");
     if (spritesheet.width == 0) return;
-    if (sw_canvas_active) {
-        if (deg != 0.0f) { sw_force_gpu = true; return; }     // rotated → GPU fallback (Fork-2/C)
-        sw_blit(sx, sy, sw, sh, dx, dy, dw, dh, false, false, true); return;
+    if (deg != 0.0f && (sw_canvas_active || cpu_raster_enabled)) {   // SW rotated: inverse-map + A/B reference
+        de_cpu_sspr_rot(sx, sy, sw, sh, dx, dy, dw, dh, deg, ox, oy, true); return;
     }
+    if (sw_canvas_active) { sw_blit(sx, sy, sw, sh, dx, dy, dw, dh, false, false, true); return; }   // deg==0 on canvas
     Rectangle src = { sx, sy, sw, sh };
     Rectangle dst = { dx + ox, dy + oy, dw, dh };               // pivot (ox,oy) is in dest space, relative to (dx,dy)
     pal_begin();

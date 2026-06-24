@@ -53,14 +53,16 @@ if (!fs.existsSync(src)) { console.error(`canvas-diff: no such cart ${src}`); pr
 const source = fs.readFileSync(src, 'utf8');
 // strip // line comments + /* */ blocks so a comment mentioning spr_rot doesn't false-positive
 const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-const ROT = ['spr_rot', 'sspr_ex', 'rectfill_rot', 'print_rot', 'print_rot_scaled', 'camera_ex'];
+// rectfill_rot/spr_rot/sspr_ex now render in SOFTWARE (inverse-map), so they no longer force GPU.
+// Only these still trip the sticky sw_force_gpu fallback (not yet ported to SW):
+const ROT = ['print_rot', 'print_rot_scaled', 'camera_ex'];
 const hits = ROT.filter(p => new RegExp(`\\b${p}\\s*\\(`).test(code));
 if (hits.length) {
   console.error('\x1b[33m⚠ WARNING: this cart calls ' + hits.join(', ') + '\x1b[0m');
-  console.error('  These can trip sw_force_gpu (rotation) → the =on build falls back to GPU mid-frame,');
-  console.error('  so frames after the first are GPU-vs-GPU and prove NOTHING about the canvas.');
-  console.error('  spr_rot/rectfill_rot ALWAYS trip it; sspr_ex/print_rot/camera_ex only when deg/angle≠0.');
-  console.error('  Pick a rotation-free cart for a meaningful A/B, or trust only the result if these are unreached.\n');
+  console.error('  These can trip sw_force_gpu → the =on build falls back to GPU mid-frame, so frames');
+  console.error('  after the first are GPU-vs-GPU and prove NOTHING about the canvas.');
+  console.error('  print_rot/print_rot_scaled trip it when deg≠0 (or scale≠1); camera_ex when angle≠0.');
+  console.error('  Pick a cart without these for a meaningful A/B, or trust the result only if they are unreached.\n');
 }
 
 // ── magick presence (only needed for AE / heatmap; bytecheck is pure node) ─────────────────────
