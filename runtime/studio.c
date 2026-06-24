@@ -203,6 +203,15 @@ static bool            clamp_cache_on = true;        // false → recompute the 
 #define DE_BATCH_PSET_DEFAULT 0                        // web has no env vars → compile-time toggle (-DDE_BATCH_PSET_DEFAULT=1)
 #endif
 static bool            pset_batch     = DE_BATCH_PSET_DEFAULT; // true → batched pset (skip DrawPixel's per-pixel rlSetTexture toggle) (A/B; env DE_BATCH_PSET=on, or -DDE_BATCH_PSET_DEFAULT=1 for web)
+// --- software canvas (Phase 0 probe): write pixels into a CPU RGBA buffer, upload once/frame with
+// one UpdateTexture → no per-pixel rlVertex3f. A/B with env DE_SOFTWARE_CANVAS=on (mirrors
+// DE_BATCH_PSET); -DSW_CANVAS_DEFAULT=1 for web. Plan: docs/design/software-canvas-phase0-plan.md.
+#ifndef SW_CANVAS_DEFAULT
+#define SW_CANVAS_DEFAULT 0
+#endif
+static bool            sw_canvas_active = SW_CANVAS_DEFAULT;
+static uint32_t        sw_cbuf[SCREEN_W * SCREEN_H];          // CPU framebuffer (Fork 1: RGBA on desktop)
+static inline uint32_t sw_pack(Color c) { return (uint32_t)c.r | ((uint32_t)c.g<<8) | ((uint32_t)c.b<<16) | 0xFF000000u; }
 // internal patterned-fill helpers — the public fills call these when fillp() is on
 static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0);
 static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
@@ -445,6 +454,18 @@ static Camera2D cam = {
 static bool  cam_active = false;   // true while inside BeginMode2D during draw()
 static bool  clip_active = false;
 static int   clip_cx = 0, clip_cy = 0, clip_cw = 0, clip_ch = 0;  // active scissor rect (valid while clip_active)
+
+// software-canvas pixel write: apply camera() translation (zoom==1/rotation==0 in Phase 0) + clip,
+// then store one RGBA texel. The hot path of the whole probe.
+static inline void sw_pset(int x, int y, Color c) {
+    x -= (int)(cam.target.x - cam.offset.x);
+    y -= (int)(cam.target.y - cam.offset.y);
+    if (clip_active && (x < clip_cx || x >= clip_cx + clip_cw || y < clip_cy || y >= clip_cy + clip_ch)) return;
+    // store bottom-up to match the GPU RenderTexture's FBO layout, so the existing present (-SCREEN_H)
+    // and the screenshot path treat the software canvas identically to the GPU one.
+    if ((unsigned)x < (unsigned)SCREEN_W && (unsigned)y < (unsigned)SCREEN_H)
+        sw_cbuf[(SCREEN_H - 1 - y) * SCREEN_W + x] = sw_pack(c);
+}
 
 // ── --uiaudit: per-frame draw bounding-box log ───────────────────────────
 // When --uiaudit <file> is set, every primitive records its bounds + the
@@ -1351,6 +1372,19 @@ static void loop_step(void) {
     // rotation on the GPU). camera()/camera_ex() called inside draw() re-apply via
     // cam_reapply() while cam_active is true.
     if (!skip_render) {        // render-cadence off-tick: keep the canvas (retains last frame)
+    if (sw_canvas_active) {
+        // software canvas: primitives write sw_cbuf (no GPU draw, no BeginMode2D — camera()
+        // translation is applied as a write offset in sw_pset). One UpdateTexture replaces the
+        // whole canvas → zero rlVertex3f. Present (below) un-flips with a +SCREEN_H source rect.
+        cam_active = true;     // so camera()/camera_ex() inside draw() still update `cam`
+#ifdef DE_TCC
+        if (cart_draw) cart_draw();
+#else
+        draw();
+#endif
+        cam_active = false;
+        UpdateTexture(canvas.texture, sw_cbuf);
+    } else {
     BeginTextureMode(canvas);
         BeginMode2D(cam);
         cam_active = true;
@@ -1363,6 +1397,7 @@ static void loop_step(void) {
         cam_active = false;
         EndMode2D();
     EndTextureMode();
+    }
     }   // end if (!skip_render) — canvas redraw
 #if !defined(PLATFORM_WEB) && !defined(DE_RELEASE)
     {
@@ -1572,6 +1607,8 @@ int main(int argc, char **argv) {
       if (cc && strcmp(cc, "off") == 0) clamp_cache_on = false; }      // DE_CLAMP_CACHE=off → recompute every call
     { const char *bp = getenv("DE_BATCH_PSET");         // A/B the batched-pset path:
       if (bp && strcmp(bp, "on") == 0) pset_batch = true; }            // DE_BATCH_PSET=on → coalesce psets into one draw call
+    { const char *sc = getenv("DE_SOFTWARE_CANVAS");    // A/B the software canvas (Phase 0 probe):
+      if (sc && strcmp(sc, "on") == 0) sw_canvas_active = true; }       // DE_SOFTWARE_CANVAS=on → CPU framebuffer + one UpdateTexture/frame
     const char *window_title           = "dreamengine";
 #ifndef PLATFORM_WEB
     int         screenshot_mode        = 0;
@@ -1988,6 +2025,11 @@ static int last_cls_color = 0;   // remembered so smooth_zoom's offscreen clears
 void cls(int color) {
     PROF("cls");
     last_cls_color = color % PALETTE_SIZE;
+    if (sw_canvas_active) {
+        uint32_t p = sw_pack(palette[last_cls_color]);
+        for (int i = 0; i < SCREEN_W * SCREEN_H; i++) sw_cbuf[i] = p;
+        return;
+    }
     ClearBackground(palette[last_cls_color]);
 }
 
@@ -2677,6 +2719,7 @@ static inline void px_emit(int x, int y, Color c) {
 void pset(int x, int y, int color) {
     PROF("pset");
     Color c = palette[color % PALETTE_SIZE];
+    if (sw_canvas_active) { sw_pset(x, y, c); return; }
     if (pset_batch) px_emit(x, y, c);
     else            DrawPixel(x, y, c);
 }
@@ -2686,6 +2729,7 @@ void pset(int x, int y, int color) {
 void pset_rgb(int x, int y, int hex) {
     PROF("pset");
     Color c = { (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 };
+    if (sw_canvas_active) { sw_pset(x, y, c); return; }
     if (pset_batch) px_emit(x, y, c);
     else            DrawPixel(x, y, c);
 }
