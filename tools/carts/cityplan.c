@@ -566,16 +566,92 @@ static void edge(int x0, int y0, int len, int vert, int gap0, int gaplen, int co
         if (gaplen > 0 && gx >= gap0 && gx < gap0 + gaplen) continue;
         if (vert) pset(x0, y0 + i, col); else pset(x0 + i, y0, col); }
 }
-static void furnish(const Room *rm, float value) {
+// ── furniture as data: each piece is a named rect+style so the SAME list both draws the
+//    room and answers "what's under the cursor" — no parallel geometry to drift ──
+enum { FX_FILL, FX_RECT, FX_CIRC };
+typedef struct { int x, y, w, h, col, style; const char *name; } Furn;
+static void draw_furn(const Furn *f) {
+    if (f->style == FX_FILL)      rectfill(f->x, f->y, f->w, f->h, f->col);
+    else if (f->style == FX_RECT) rect(f->x, f->y, f->w, f->h, f->col);
+    else                          circfill(f->x, f->y, f->w, f->col);          // CIRC: (x,y)=centre, w=radius
+}
+static bool furn_hit(const Furn *f, int x, int y) {
+    if (f->style == FX_CIRC) { int dx = x - f->x, dy = y - f->y, rr = f->w + 1; return dx * dx + dy * dy <= rr * rr; }
+    return x >= f->x && x < f->x + f->w && y >= f->y && y < f->y + f->h;
+}
+static int furnish_items(const Room *rm, float value, int sig, Furn *out, int cap) {
+    int n = 0; Rect r = rm->r; int ix = r.x + 2, iy = r.y + 2, iw = r.w - 4, ih = r.h - 4;
+    if (iw < 4 || ih < 4) return 0;
+    int cx = r.x + r.w / 2, cy = r.y + r.h / 2; bool rich = value > 0.50f, lux = value > 0.78f;
+    #define PUT(nm, sx, sy, sw, sh, c, st) do { if (n < cap) out[n++] = (Furn){ sx, sy, sw, sh, c, st, nm }; } while (0)
+    switch (rm->label) {
+        case RM_BED: { int bw = iw * 3 / 5;
+            PUT("bed", ix, iy, bw, ih / 2, CLR_INDIGO, FX_FILL); PUT("bed", ix + 1, iy + 1, bw - 2, 2, CLR_LIGHT_PEACH, FX_FILL);
+            if (iw >= 9)                     PUT("nightstand", ix + bw + 1, iy, 2, 2, CLR_DARK_BROWN, FX_FILL);
+            if (rich && iw >= 9 && ih >= 10) PUT("rug", ix + 1, iy + ih - 4, iw - 2, 3, CLR_DARK_RED, FX_RECT);
+            if (lux && iw >= 11)             PUT("wardrobe", ix + iw - 3, iy + ih - 5, 3, 5, CLR_DARK_BROWN, FX_FILL);
+            break; }
+        case RM_LIVING:
+            PUT("sofa", ix, iy + ih - 4, iw * 2 / 3, 3, CLR_DARK_RED, FX_FILL);
+            PUT("coffee table", cx - 3, cy, 6, 3, CLR_DARK_BROWN, FX_FILL);
+            if (iw >= 9 && ih >= 9) PUT("rug", ix + 1, iy + 1, iw - 2, ih - 6, CLR_BROWN, FX_RECT);
+            if (rich && iw >= 8)    PUT("TV console", ix, iy, iw / 2, 2, CLR_DARKER_GREY, FX_FILL);
+            if (lux && iw >= 11)    PUT("armchair", ix + iw - 4, iy + ih - 4, 4, 3, CLR_DARK_RED, FX_FILL);
+            break;
+        case RM_KITCHEN:
+            PUT("counter", ix, iy, iw, 2, CLR_LIGHT_GREY, FX_FILL); PUT("counter", ix, iy, 2, ih, CLR_LIGHT_GREY, FX_FILL);
+            PUT("fridge", ix + iw - 3, iy + 1, 2, 2, CLR_DARK_GREY, FX_FILL);
+            if (rich && iw >= 9 && ih >= 9) PUT("island", cx - 2, cy, 4, 3, CLR_DARK_BROWN, FX_FILL);
+            break;
+        case RM_BATH:
+            PUT("bathtub", ix, iy, iw / 2 + 1, 3, CLR_BLUE, FX_FILL);
+            PUT("sink", ix + iw - 2, iy + ih - 2, 1, 0, CLR_WHITE, FX_CIRC);
+            if (iw >= 7) PUT("toilet", ix + iw - 3, iy, 2, 2, CLR_WHITE, FX_FILL);
+            break;
+        case RM_OFFICE:
+            PUT("desk", ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN, FX_FILL); PUT("chair", ix + 1, iy + 4, 3, 3, CLR_DARK_GREY, FX_FILL);
+            if (rich && ih >= 8) PUT("bookshelf", ix + iw - 2, iy, 2, ih - 1, CLR_DARK_BROWN, FX_FILL);
+            break;
+        case RM_HALL: PUT("runner", cx - 1, iy, 3, ih, CLR_DARK_RED, FX_FILL); break;
+        case RM_DINING: { int tw = iw / 2 < 4 ? 4 : iw / 2, th = ih / 3 < 3 ? 3 : ih / 3;
+            PUT("dining table", cx - tw / 2, cy - th / 2, tw, th, CLR_DARK_BROWN, FX_FILL);
+            PUT("chair", cx - tw / 2 - 1, cy, 1, 1, CLR_DARKER_GREY, FX_FILL); PUT("chair", cx + tw / 2, cy, 1, 1, CLR_DARKER_GREY, FX_FILL);
+            PUT("chair", cx, cy - th / 2 - 1, 1, 1, CLR_DARKER_GREY, FX_FILL); PUT("chair", cx, cy + th / 2, 1, 1, CLR_DARKER_GREY, FX_FILL);
+            break; }
+        case RM_KIDS:
+            PUT("bed", ix, iy, iw / 2, ih / 3 + 1, CLR_BLUE, FX_FILL); PUT("bed", ix + 1, iy + 1, iw / 2 - 2, 1, CLR_LIGHT_PEACH, FX_FILL);
+            if (iw >= 7) PUT("toy chest", ix + iw - 3, iy + ih - 3, 2, 2, CLR_RED, FX_FILL);
+            break;
+        case RM_STUDY:
+            PUT("desk", ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN, FX_FILL);
+            if (ih >= 7) PUT("bookshelf", ix + iw - 2, iy, 2, ih - 1, CLR_DARK_BROWN, FX_FILL);
+            PUT("chair", ix + 2, iy + 4, 1, 1, CLR_DARKER_GREY, FX_FILL);
+            break;
+        case RM_GARAGE:
+            if (iw >= 6 && ih >= 6) { PUT("car", ix + 1, iy + 1, iw - 4, ih - 3, CLR_TRUE_BLUE, FX_FILL); PUT("car", ix + 2, iy + 2, iw - 6, 2, CLR_BLUE, FX_FILL); }
+            PUT("workbench", ix, iy + ih - 1, iw, 1, CLR_DARK_GREY, FX_FILL);
+            break;
+        case RM_UTILITY:
+            PUT("washer", ix, iy, 3, 3, CLR_LIGHT_GREY, FX_FILL);
+            if (iw >= 8) PUT("dryer", ix + 4, iy, 3, 3, CLR_LIGHT_GREY, FX_FILL);
+            break;
+    }
+    if (iw >= 5 && ih >= 5) switch (sig) {                          // signature feature, drawn on top
+        case SIG_FIREPLACE: PUT("fireplace", cx - 3, r.y + 1, 6, 2, CLR_DARKER_GREY, FX_FILL); PUT("fireplace", cx - 1, r.y + 1, 2, 1, CLR_ORANGE, FX_FILL); break;
+        case SIG_PIANO:     PUT("grand piano", ix + iw - 6, iy, 5, 4, CLR_BLACK, FX_FILL); PUT("grand piano", ix + iw - 6, iy, 5, 1, CLR_WHITE, FX_FILL); break;
+        case SIG_POOL:      PUT("pool table", cx - 4, r.y + r.h / 2 - 2, 8, 4, CLR_DARK_GREEN, FX_FILL); PUT("pool table", cx - 4, r.y + r.h / 2 - 2, 8, 4, CLR_DARK_BROWN, FX_RECT); break;
+        case SIG_LIBRARY:   PUT("library", r.x + 1, r.y + 1, r.w - 2, 1, CLR_DARK_BROWN, FX_FILL); PUT("library", r.x + 1, r.y + r.h - 2, r.w - 2, 1, CLR_DARK_BROWN, FX_FILL);
+                            PUT("library", r.x + 1, r.y + 1, 1, r.h - 2, CLR_DARK_BROWN, FX_FILL); PUT("library", r.x + r.w - 2, r.y + 1, 1, r.h - 2, CLR_DARK_BROWN, FX_FILL); break;
+    }
+    #undef PUT
+    return n;
+}
+static void furnish(const Room *rm, float value, int sig) {
     Rect r = rm->r; int ix = r.x + 2, iy = r.y + 2, iw = r.w - 4, ih = r.h - 4;
     if (iw < 4 || ih < 4) return;
-    int cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-    bool rich = value > 0.50f, lux = value > 0.78f;        // extra furniture as the home gets nicer
-    // background clutter — small accent props (plants, stools, toys) drawn UNDER the core
-    // furniture; count scales with room area so big rooms fill with MORE pieces, not bigger ones
     int lb = rm->label;
-    if (lb == RM_LIVING || lb == RM_DINING || lb == RM_STUDY || lb == RM_BED || lb == RM_KIDS) {
-        int dens = rich ? 3 : 5;                            // keep ~1/dens of the grid cells
+    if (lb == RM_LIVING || lb == RM_DINING || lb == RM_STUDY || lb == RM_BED || lb == RM_KIDS) {   // background clutter (under everything)
+        int dens = value > 0.50f ? 3 : 5;                   // keep ~1/dens of the grid cells
         for (int yy = iy + 1; yy < iy + ih - 2; yy += 6)
             for (int xx = ix + 1; xx < ix + iw - 2; xx += 6) {
                 unsigned g = hash2(xx * 5 + (int)(value * 97), yy * 9 + lf_seed);
@@ -587,93 +663,17 @@ static void furnish(const Room *rm, float value) {
                 rectfill(xx, yy, 2, 2, col);
             }
     }
-    switch (rm->label) {
-        case RM_BED: {
-            int bw = iw * 3 / 5; rectfill(ix, iy, bw, ih / 2, CLR_INDIGO); rectfill(ix + 1, iy + 1, bw - 2, 2, CLR_LIGHT_PEACH);  // bed + pillow
-            if (iw >= 9)               rectfill(ix + bw + 1, iy, 2, 2, CLR_DARK_BROWN);              // nightstand
-            if (rich && iw >= 9 && ih >= 10) rect(ix + 1, iy + ih - 4, iw - 2, 3, CLR_DARK_RED);     // rug
-            if (lux  && iw >= 11)      rectfill(ix + iw - 3, iy + ih - 5, 3, 5, CLR_DARK_BROWN);      // wardrobe
-            break;
-        }
-        case RM_LIVING:
-            rectfill(ix, iy + ih - 4, iw * 2 / 3, 3, CLR_DARK_RED);                                   // sofa
-            rectfill(cx - 3, cy, 6, 3, CLR_DARK_BROWN);                                               // coffee table
-            if (iw >= 9 && ih >= 9)    rect(ix + 1, iy + 1, iw - 2, ih - 6, CLR_BROWN);               // rug
-            if (rich && iw >= 8)       rectfill(ix, iy, iw / 2, 2, CLR_DARKER_GREY);                  // TV console
-            if (lux  && iw >= 11)      rectfill(ix + iw - 4, iy + ih - 4, 4, 3, CLR_DARK_RED);        // armchair
-            break;
-        case RM_KITCHEN:
-            rectfill(ix, iy, iw, 2, CLR_LIGHT_GREY); rectfill(ix, iy, 2, ih, CLR_LIGHT_GREY);         // counters
-            rectfill(ix + iw - 3, iy + 1, 2, 2, CLR_DARK_GREY);                                       // appliance
-            if (rich && iw >= 9 && ih >= 9) rectfill(cx - 2, cy, 4, 3, CLR_DARK_BROWN);               // island/table
-            break;
-        case RM_BATH:
-            rectfill(ix, iy, iw / 2 + 1, 3, CLR_BLUE);                                                // tub
-            circfill(ix + iw - 2, iy + ih - 2, 1, CLR_WHITE);                                         // sink
-            if (iw >= 7) rectfill(ix + iw - 3, iy, 2, 2, CLR_WHITE);                                  // toilet
-            break;
-        case RM_SHOP:   for (int yy = iy + 1; yy < iy + ih - 3; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); rectfill(ix, iy + ih - 2, iw, 2, CLR_BROWN); break;
-        case RM_OFFICE: rectfill(ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN); rectfill(ix + 1, iy + 4, 3, 3, CLR_DARK_GREY);
-            if (rich && ih >= 8) rectfill(ix + iw - 2, iy, 2, ih - 1, CLR_DARK_BROWN);                // bookshelf
-            break;
-        case RM_BAY:    for (int yy = iy + 2; yy < iy + ih - 3; yy += 7) for (int xx = ix + 2; xx < ix + iw - 3; xx += 8) { if (hash2(xx, yy + lf_seed) & 1) continue; rectfill(xx, yy, 4, 4, CLR_BROWN); rect(xx, yy, 4, 4, CLR_DARK_BROWN); } break;
-        case RM_STORE: case RM_BACK: for (int yy = iy + 1; yy < iy + ih - 1; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); break;
-        case RM_HALL:   rectfill(cx - 1, iy, 3, ih, CLR_DARK_RED); break;
-        case RM_DINING: {
-            int tw = iw / 2 < 4 ? 4 : iw / 2, th = ih / 3 < 3 ? 3 : ih / 3;              // table
-            rectfill(cx - tw / 2, cy - th / 2, tw, th, CLR_DARK_BROWN);
-            pset(cx - tw / 2 - 1, cy, CLR_DARKER_GREY); pset(cx + tw / 2, cy, CLR_DARKER_GREY);  // chairs
-            pset(cx, cy - th / 2 - 1, CLR_DARKER_GREY); pset(cx, cy + th / 2, CLR_DARKER_GREY);
-            break;
-        }
-        case RM_KIDS:
-            rectfill(ix, iy, iw / 2, ih / 3 + 1, CLR_BLUE);                              // small bed
-            rectfill(ix + 1, iy + 1, iw / 2 - 2, 1, CLR_LIGHT_PEACH);
-            if (iw >= 7) rectfill(ix + iw - 3, iy + ih - 3, 2, 2, CLR_RED);              // toy chest
-            break;
-        case RM_STUDY:
-            rectfill(ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN);                             // desk
-            if (ih >= 7) rectfill(ix + iw - 2, iy, 2, ih - 1, CLR_DARK_BROWN);           // bookshelf
-            pset(ix + 2, iy + 4, CLR_DARKER_GREY);                                       // chair
-            break;
-        case RM_GARAGE:
-            if (iw >= 6 && ih >= 6) { rectfill(ix + 1, iy + 1, iw - 4, ih - 3, CLR_TRUE_BLUE);   // car body
-                                      rectfill(ix + 2, iy + 2, iw - 6, 2, CLR_BLUE); }            // windscreen
-            rectfill(ix, iy + ih - 1, iw, 1, CLR_DARK_GREY);                            // workbench along the back
-            break;
-        case RM_UTILITY:
-            rectfill(ix, iy, 3, 3, CLR_LIGHT_GREY);                                      // washer
-            if (iw >= 8) rectfill(ix + 4, iy, 3, 3, CLR_LIGHT_GREY);                     // dryer
-            break;
-    }
-}
-// ── signature object — ONE memorable feature per home, drawn over the furniture ──
-static void draw_signature(Rect r, int kind) {
-    int ix = r.x + 2, iy = r.y + 2, iw = r.w - 4, ih = r.h - 4;
-    if (iw < 5 || ih < 5) return;
-    int cx = r.x + r.w / 2;
-    switch (kind) {
-        case SIG_FIREPLACE:                                              // hearth set into the top wall, ember glow
-            rectfill(cx - 3, r.y + 1, 6, 2, CLR_DARKER_GREY); rectfill(cx - 1, r.y + 1, 2, 1, CLR_ORANGE);
-            break;
-        case SIG_PIANO:                                                  // grand piano: black body + key strip
-            rectfill(ix + iw - 6, iy, 5, 4, CLR_BLACK); rectfill(ix + iw - 6, iy, 5, 1, CLR_WHITE);
-            break;
-        case SIG_POOL:                                                   // pool table: felt + dark rail
-            rectfill(cx - 4, r.y + r.h / 2 - 2, 8, 4, CLR_DARK_GREEN); rect(cx - 4, r.y + r.h / 2 - 2, 8, 4, CLR_DARK_BROWN);
-            break;
-        case SIG_LIBRARY:                                                // bookshelves lining every wall
-            rectfill(r.x + 1, r.y + 1, r.w - 2, 1, CLR_DARK_BROWN); rectfill(r.x + 1, r.y + r.h - 2, r.w - 2, 1, CLR_DARK_BROWN);
-            rectfill(r.x + 1, r.y + 1, 1, r.h - 2, CLR_DARK_BROWN); rectfill(r.x + r.w - 2, r.y + 1, 1, r.h - 2, CLR_DARK_BROWN);
-            break;
-    }
+    if (lb == RM_SHOP)  { for (int yy = iy + 1; yy < iy + ih - 3; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); rectfill(ix, iy + ih - 2, iw, 2, CLR_BROWN); return; }
+    if (lb == RM_BAY)   { for (int yy = iy + 2; yy < iy + ih - 3; yy += 7) for (int xx = ix + 2; xx < ix + iw - 3; xx += 8) { if (hash2(xx, yy + lf_seed) & 1) continue; rectfill(xx, yy, 4, 4, CLR_BROWN); rect(xx, yy, 4, 4, CLR_DARK_BROWN); } return; }
+    if (lb == RM_STORE || lb == RM_BACK) { for (int yy = iy + 1; yy < iy + ih - 1; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); return; }
+    Furn items[28]; int ni = furnish_items(rm, value, sig, items, 28);   // discrete named pieces + signature
+    for (int i = 0; i < ni; i++) draw_furn(&items[i]);
 }
 static void plan_draw(const Plan *p, Show s) {
     Rect sh = p->shell;
     rectfill(sh.x + 1, sh.y + 1, sh.w - 2, sh.h - 2, SLAB_COL);
     if (s.floors) for (int i = 0; i < p->nroom; i++) { Rect r = p->room[i].r; rectfill(r.x, r.y, r.w, r.h, RM_FLOOR[p->room[i].label]); }
-    if (s.props) { for (int i = 0; i < p->nroom; i++) furnish(&p->room[i], p->value);
-        if (p->sig_kind != SIG_NONE && p->sig_room >= 0) draw_signature(p->room[p->sig_room].r, p->sig_kind); }
+    if (s.props) for (int i = 0; i < p->nroom; i++) furnish(&p->room[i], p->value, i == p->sig_room ? p->sig_kind : SIG_NONE);
     if (s.walls) for (int i = 0; i < p->nwall; i++) { Wall w = p->wall[i];
         if (w.vert) { for (int y = w.y; y < w.y + w.len; y++) if (!(y >= w.dpos && y < w.dpos + w.dlen)) pset(w.x, y, WALL_INT); }
         else        { for (int x = w.x; x < w.x + w.len; x++) if (!(x >= w.dpos && x < w.dpos + w.dlen)) pset(x, w.y, WALL_INT); } }
@@ -921,30 +921,40 @@ static void draw_overlay(float cam_x, float cam_y, float zoom) {
     }
 }
 
-// ── shared probe — fills `top` (the container: house/farm/wild) and `bot` (the detail) ──
-static void hover_at(float fx, float fy, char *top, char *bot, int cap) {
+// ── shared probe — l1 = container (house/farm/wild), l2 = room/detail, l3 = furniture (or "") ──
+static void hover_at(float fx, float fy, char *l1, char *l2, char *l3, int cap) {
+    l3[0] = 0;
     int wk = world_kind_at(fx, fy);
-    if (wk == WK_WILD) { snprintf(top, cap, "wilderness"); snprintf(bot, cap, "%s", CV_NAME[cover_at(fx, fy).kind]); return; }
+    if (wk == WK_WILD) { snprintf(l1, cap, "wilderness"); snprintf(l2, cap, "%s", CV_NAME[cover_at(fx, fy).kind]); return; }
     if (wk == WK_FARM) { int fxi = ifloordiv((int)fx, FIELD_P), fyi = ifloordiv((int)fy, FIELD_P);
-        snprintf(top, cap, "farmland"); snprintf(bot, cap, "%s", CR_NAME[hash2(fxi + lf_seed * 257, fyi * 7 + 13) % CR_N]); return; }
+        snprintf(l1, cap, "farmland"); snprintf(l2, cap, "%s", CR_NAME[hash2(fxi + lf_seed * 257, fyi * 7 + 13) % CR_N]); return; }
     int bx = ifloordiv((int)fx, BLK_P), by = ifloordiv((int)fy, BLK_P), IN = BLK_P - ST_W;
     int zone = zone_at(bx * BLK_P + ST_W + IN / 2.0f, by * BLK_P + ST_W + IN / 2.0f);
-    if (posmod((int)fx, BLK_P) < ST_W || posmod((int)fy, BLK_P) < ST_W) { snprintf(top, cap, "%s", ZN_NAME[zone]); snprintf(bot, cap, "street"); return; }
+    if (posmod((int)fx, BLK_P) < ST_W || posmod((int)fy, BLK_P) < ST_W) { snprintf(l1, cap, "%s", ZN_NAME[zone]); snprintf(l2, cap, "street"); return; }
     LotSlot slots[40]; int nl = block_lots(bx, by, zone, slots, 40); int x = (int)fx, y = (int)fy;
     for (int i = 0; i < nl; i++) {
         Rect b; if (!footprint_body(slots[i].lot, slots[i].outward, zone, slots[i].attached, &b)) continue;
         if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
         Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3), value_at(b.x + b.w / 2.0f, b.y + b.h / 2.0f));
         int ri = room_at(&p, x, y);
-        snprintf(top, cap, "%s", (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone]);   // RES → archetype
-        snprintf(bot, cap, "%s", ri >= 0 ? RM_NAME[p.room[ri].label] : "wall");
+        snprintf(l1, cap, "%s", (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone]);   // RES → archetype
+        snprintf(l2, cap, "%s", ri >= 0 ? RM_NAME[p.room[ri].label] : "wall");
+        if (ri >= 0) {                                          // name the furniture piece under the cursor (topmost wins)
+            Furn it[28]; int ni = furnish_items(&p.room[ri], p.value, ri == p.sig_room ? p.sig_kind : SIG_NONE, it, 28);
+            const char *fn = 0;
+            for (int k = 0; k < ni; k++) if (furn_hit(&it[k], x, y)) fn = it[k].name;
+            if (fn) snprintf(l3, cap, "%s", fn);
+        }
         return;
     }
-    snprintf(top, cap, "%s", ZN_NAME[zone]); snprintf(bot, cap, "yard");
+    snprintf(l1, cap, "%s", ZN_NAME[zone]); snprintf(l2, cap, "yard");
 }
 static const char *probe(float fx, float fy) {
-    static char buf[56], t[28], b[28];
-    hover_at(fx, fy, t, b, sizeof t); snprintf(buf, sizeof buf, "%s / %s", t, b); return buf;
+    static char buf[80], a[28], b[28], c[28];
+    hover_at(fx, fy, a, b, c, sizeof a);
+    if (c[0]) snprintf(buf, sizeof buf, "%s / %s / %s", a, b, c);
+    else      snprintf(buf, sizeof buf, "%s / %s", a, b);
+    return buf;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -987,16 +997,19 @@ static void draw_cursor_and_hover(void) {
     if (!drag_on) {                                       // inspector panel (hidden while panning)
         float wx = (mx - SCREEN_W / 2.0f) / zoom + cam_x + SCREEN_W / 2.0f;
         float wy = (my - SCREEN_H / 2.0f) / zoom + cam_y + SCREEN_H / 2.0f;
-        char top[28], bot[28]; hover_at(wx, wy, top, bot, sizeof top);
+        char l1[28], l2[28], l3[28]; hover_at(wx, wy, l1, l2, l3, sizeof l1);
         font(FONT_SMALL);
-        int tw = 0; while (top[tw]) tw++; int bw = 0; while (bot[bw]) bw++;
-        int w = (tw > bw ? tw : bw) * 5 + 7, h = 17, px = mx + 9, py = my + 6;
+        int n1 = 0; while (l1[n1]) n1++; int n2 = 0; while (l2[n2]) n2++; int n3 = 0; while (l3[n3]) n3++;
+        int mw = n1; if (n2 > mw) mw = n2; if (n3 > mw) mw = n3;
+        int lines = l3[0] ? 3 : 2;
+        int w = mw * 5 + 7, h = 3 + lines * 7, px = mx + 9, py = my + 6;
         if (px + w > SCREEN_W) px = mx - w - 3;
         if (py + h > SCREEN_H) py = my - h - 3;
         if (px < 0) px = 0; if (py < 0) py = 0;
         rectfill(px, py, w, h, CLR_BLACK); rect(px, py, w, h, CLR_LIGHT_GREY);
-        print(top, px + 3, py + 2, CLR_WHITE);
-        print(bot, px + 3, py + 9, CLR_LIGHT_GREY);
+        print(l1, px + 3, py + 2, CLR_WHITE);
+        print(l2, px + 3, py + 9, CLR_LIGHT_GREY);
+        if (l3[0]) print(l3, px + 3, py + 16, CLR_YELLOW);
         font(FONT_NORMAL);
     }
     for (int r = 0; r <= 7; r++) line(mx, my + r, mx + r, my + r, CLR_WHITE);   // arrow, tip at (mx,my)
