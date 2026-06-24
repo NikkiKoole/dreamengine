@@ -263,6 +263,16 @@ rotation-in-software until there's measured demand. (The "translation-camera-onl
 >   stable while rotating. So "kill Fork 2, do *all* rotation in software" overclaims; inverse
 >   mapping shrinks the hard part to stroked outlines, it doesn't erase it. Fork-2/C stays the
 >   recommendation; inverse mapping is the tool *inside* C if the rotating-fill demand ever shows up.
+>   > **Measured (2026-06-24) — `tools/det-probes/rotline.c` softens the "need Xiaolin-Wu" worry.**
+>   > A crisp rotated 1px line via `sline` is, at *every* angle: **exactly 1px-uniform** (excess 0,
+>   > no fat spots), **connected** (1 component, no gaps), and **bit-identical across arm64/x86/wasm**.
+>   > So rotated strokes are *correctness*-solved with the crisp drawer we already have — no sub-pixel
+>   > drawer is needed for them to be right. The *only* residual is **shimmer**: a 1° rotation can flip
+>   > ~a whole line-length of pixels (churn up to 268px on a ~160px line), because crisp rotation has
+>   > no sub-pixel easing. That's an **aesthetic** matter, and it's consistent with the console's
+>   > existing no-AA house style — so a Xiaolin-Wu drawer becomes an **optional "smooth rotation" mode**
+>   > (like RotSprite for sprites), not a prerequisite. Net: rotated *strokes* are no longer the open
+>   > hard part — crisp is correct and good enough; AA is a future nicety.
 
 > **Note — RotSprite is the quality knob for rotated *sprites* (a future opt-in, captured so it's
 > not lost).** Inverse-mapped nearest-neighbour rotation (above) is correct and gap-free, but on
