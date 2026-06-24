@@ -6,8 +6,18 @@
 > **Perf gate (0b):** `cityplan`, same harness, **GPU `workMsAvg` 11.4ms → software 5.0ms = 2.3×
 > faster.** The decisive lesson: **fills must stay span-based** — routing `rectfill` per-pixel
 > through `plot_pat` was *2.4× slower* than GPU; a `sw_fillrect` row-memset is what wins. Commits:
-> Phase 0a `133b9d0e`, Phase 0b `ec1b855c`. Next is Phase 2 (port `spr`/`print`/`tritex` as CPU
-> blits, then flip the default) — see `software-canvas.md` runbook.
+> Phase 0a `133b9d0e`, Phase 0b `ec1b855c`.
+>
+> **Phase 2 done (2026-06-24): `spr`/`print`/`tritex` + span fills ported** — the renderer is now
+> feature-complete for the common cart. `2a` spr/sspr CPU blit (`e19a479b`), `2b` print all 5 fonts
+> via glyph blit (`bda3d59d`), `2c` tritex via the `stritex` rasterizer (`dd4fd9ab`), `2d` circ/oval/
+> poly fills kept span-based on the canvas (`90611408`). Validated: `gridcity` renders fully in
+> software (sprites+map+text, 1.6×), `interiors` correctly (2.9×), `textured3d` cube correct (but
+> 1.5× *slower* — tritex-bound carts, like the rectfill-bound CPU-shaders, keep the GPU). **Fleet
+> shape holds: pset/fill/sprite-bound carts win 1.4–3.5×; tritex- and rectfill-bound carts stay on
+> GPU** → per-cart opt-in. **Remaining tail (before flipping the default):** `camera_ex` zoom/rotation
+> (translation-only today), rotated `spr_rot`/`sspr_ex`/`print_rot` blits, and `pal()`/runtime
+> `colorkey()` for the sprite blit. Then Phase 3/4 (default for non-`camera_ex` frames + free wins).
 >
 > Caveats in this probe (fine for the GO/NO-GO, to clean up in Phase 1/2): `print` is skipped (HUD
 > text absent), `camera_ex` zoom is approximate (sw applies translation only), and `cityplan` is not
