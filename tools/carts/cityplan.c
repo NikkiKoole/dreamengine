@@ -544,21 +544,41 @@ static void label_dwelling(Plan *p, int s, int e) {         // label rooms [s,e)
     p->room[big].label = RM_LIVING;
     if (e - s >= 3 && small != big) p->room[small].label = RM_BATH;
 }
+static void unit_flat(Plan *p, Rect f, unsigned h, int wx, int wy, int wlen, int wvert) {
+    int s = p->nroom; SplitP us = { 9, 9, 2, 0.40f, 0.60f };
+    bsp(p, f, h, 0, &us); label_dwelling(p, s, p->nroom);
+    if (p->nwall < MAX_WALLS) { int dl = 4, dpos = (wvert ? wy : wx) + wlen / 2 - dl / 2;
+        p->wall[p->nwall++] = (Wall){ wx, wy, wlen, wvert, dpos, dl, 0 }; }   // the flat's front door onto the shared corridor
+}
 static void build_units(Plan *p, Rect in, int units, unsigned h) {
-    Rect cell[8]; int nc = 1; cell[0] = in; if (units > 8) units = 8;
-    SplitP us = { 9, 9, 2, 0.40f, 0.60f };                  // small flats: shallow split, tight rooms
-    while (nc < units) {
-        int bi = 0; for (int i = 1; i < nc; i++) if ((long)cell[i].w * cell[i].h > (long)cell[bi].w * cell[bi].h) bi = i;
-        Rect c = cell[bi]; if (c.w < 18 && c.h < 18) break; // don't split below a liveable flat
-        if (c.w >= c.h) { int sx = c.x + c.w / 2;
-            if (p->nwall < MAX_WALLS) p->wall[p->nwall++] = (Wall){ sx, c.y, c.h, 1, 0, 0, 1 };   // party wall (solid)
-            cell[bi] = (Rect){ c.x, c.y, sx - c.x, c.h }; cell[nc++] = (Rect){ sx, c.y, c.x + c.w - sx, c.h };
-        } else { int sy = c.y + c.h / 2;
-            if (p->nwall < MAX_WALLS) p->wall[p->nwall++] = (Wall){ c.x, sy, c.w, 0, 0, 0, 1 };
-            cell[bi] = (Rect){ c.x, c.y, c.w, sy - c.y }; cell[nc++] = (Rect){ c.x, sy, c.w, c.y + c.h - sy };
+    int cw = 5, per = (units + 1) / 2; if (per < 1) per = 1;
+    if (p->outward == 0 || p->outward == 2) {               // corridor runs in vertically from a top/bottom entry
+        int cx0 = p->egx - cw / 2;
+        if (cx0 < in.x + 11) cx0 = in.x + 11;
+        if (cx0 + cw > in.x + in.w - 11) cx0 = in.x + in.w - cw - 11;
+        if (cx0 < in.x + 4 || cx0 + cw > in.x + in.w - 4) { int s = p->nroom; bsp(p, in, h, 0, &SPLIT[ZN_RES]); label_dwelling(p, s, p->nroom); return; }
+        if (p->nroom < MAX_ROOMS) p->room[p->nroom++] = (Room){ (Rect){ cx0, in.y, cw, in.h }, RM_HALL, 0 };
+        for (int sd = 0; sd < 2; sd++) {
+            int rx = sd ? cx0 + cw : in.x, rw = sd ? (in.x + in.w) - (cx0 + cw) : cx0 - in.x, wx = sd ? cx0 + cw : cx0, y = in.y;
+            for (int r = 0; r < per; r++) { int rh = (in.y + in.h - y) / (per - r);
+                unit_flat(p, (Rect){ rx, y, rw, rh }, hmix(h, sd * 9 + r + 1), wx, y, rh, 1);
+                if (r > 0 && p->nwall < MAX_WALLS) p->wall[p->nwall++] = (Wall){ rx, y, rw, 0, 0, 0, 1 };   // party wall between stacked flats
+                y += rh; }
+        }
+    } else {                                                // corridor runs in horizontally from a left/right entry
+        int cy0 = p->egy - cw / 2;
+        if (cy0 < in.y + 11) cy0 = in.y + 11;
+        if (cy0 + cw > in.y + in.h - 11) cy0 = in.y + in.h - cw - 11;
+        if (cy0 < in.y + 4 || cy0 + cw > in.y + in.h - 4) { int s = p->nroom; bsp(p, in, h, 0, &SPLIT[ZN_RES]); label_dwelling(p, s, p->nroom); return; }
+        if (p->nroom < MAX_ROOMS) p->room[p->nroom++] = (Room){ (Rect){ in.x, cy0, in.w, cw }, RM_HALL, 0 };
+        for (int sd = 0; sd < 2; sd++) {
+            int ry = sd ? cy0 + cw : in.y, rh = sd ? (in.y + in.h) - (cy0 + cw) : cy0 - in.y, wy = sd ? cy0 + cw : cy0, x = in.x;
+            for (int c = 0; c < per; c++) { int rw = (in.x + in.w - x) / (per - c);
+                unit_flat(p, (Rect){ x, ry, rw, rh }, hmix(h, sd * 9 + c + 5), x, wy, rw, 0);
+                if (c > 0 && p->nwall < MAX_WALLS) p->wall[p->nwall++] = (Wall){ x, ry, rh, 1, 0, 0, 1 };   // party wall between flats
+                x += rw; }
         }
     }
-    for (int i = 0; i < nc; i++) { int s = p->nroom; bsp(p, cell[i], hmix(h, i + 1), 0, &us); label_dwelling(p, s, p->nroom); }
 }
 static void plan_build(Plan *p, Rect shell, int type, int outward, unsigned h, float value) {
     p->shell = shell; p->type = type; p->outward = outward; p->value = value; p->nroom = p->nwall = 0; p->entry_room = -1;
