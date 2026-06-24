@@ -45,8 +45,10 @@ fill (`fill_corner → polyfill`) reflects exactly. Why: `polyfill` decides its 
 (float edge-crossings → integer span via `poly_fill_cov`), then GL only *fills* the chosen integer
 span. `line()`, by contrast, is raylib **GPU `DrawLine`** — GL *chooses* the staircase, and that
 choice is direction-dependent, so it isn't reflection-symmetric. (Engine audit: `line()` — and
-`bezier`/2-pt `poly` that call it — is the **only** cart-facing primitive that lets GL pick pixels;
-`rectfill_rot` does too but that's a deliberate rotated-quad and symmetry isn't its contract. Every
+`bezier`/2-pt `poly` that call it — is the only **axis-aligned** cart-facing primitive that lets GL
+pick pixels; the rest of that surface is the rotation/texture family (`rectfill_rot`, `spr_rot`/
+`sspr_ex`, `tritex`, + rotating `camera_ex`) — see `software-canvas.md`'s audit — but those are
+rotation/sampling, not the axis-aligned kerb case. Every
 other fill/circle/oval/ring/arc/thickline is CPU-decided → symmetric-capable.)
 
 **2. A symmetric software line does NOT fix the kerb — it REGRESSES it 7 → 27 (measured).**
