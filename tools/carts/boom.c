@@ -86,8 +86,8 @@
 // Picking a tool is CLICK-ONLY now — no keyboard shortcuts. BOOM mode shows the
 // blast icons (slots 0..5); BUILD mode shows the brush icons (slot = 16 + value).
 #define TB_X   2
-#define TB_Y0  11        // row 0: the BOOM blasts
-#define TB_Y1  29        // row 1: the BUILD brushes
+#define TB_Y0  2         // row 0: the BOOM blasts (title sits next to them, no strip above)
+#define TB_Y1  20        // row 1: the BUILD brushes (TB_Y0 + TB_PITCH)
 #define TB_SZ  16
 #define TB_GAP 2
 #define TB_PITCH (TB_SZ + TB_GAP)
@@ -1350,7 +1350,8 @@ void draw(void) {
         }
     }
 
-    // HUD: one clean toolbar header panel behind the title + both icon rows -----
+    // HUD: one short toolbar header panel — two icon rows, the title tucked in
+    // small next to the blast icons (no separate strip above) ------------------
     rectfill(0, 0, SCREEN_W, TB_BOT, CLR_BROWNISH_BLACK);
     line(0, TB_BOT, SCREEN_W, TB_BOT, CLR_DARK_GREY);          // base separator
     char buf[64];
@@ -1361,7 +1362,6 @@ void draw(void) {
         const char *bn = brush == TORCH ? "torch" : brush == CRATE_BRUSH ? "crate" : MAT_NAME[brush];
         snprintf(buf, sizeof buf, "BUILD  %s", bn);
     }
-    print(buf, 3, 1, CLR_WHITE);
 
     // both tool rows of cute clickable icons. Active tool = white frame + yellow
     // halo; hovered = light frame.
@@ -1397,6 +1397,11 @@ void draw(void) {
         rect(bx - 1, by - 1, TB_SZ + 2, TB_SZ + 2, hov ? CLR_LIGHT_GREY : CLR_DARKER_GREY);
     }
 
+    // title, small, tucked on the blast row to the right of the icons
+    font(FONT_SMALL);
+    print(buf, TB_X + TB_NBOOM * TB_PITCH + 4, TB_Y0 + 5, CLR_WHITE);
+    font(FONT_NORMAL);
+
     // one hover tooltip just below the panel — names the tool OR action hovered
     const char *tip = NULL; int tip_x = 0;
     if (hov_act >= 0)      { tip = hov_act == 0 ? "clear fire" : "reset scene"; tip_x = act_x[hov_act]; }
@@ -1412,8 +1417,8 @@ void draw(void) {
         font(FONT_NORMAL);
     }
 
-    // wind tell-tale (small arrow in the title strip, left of the action buttons)
-    int wx = ACT_CLEAR_X - 12, wy = 4;
-    line(wx, wy, wx + (int)(windx * 8), wy + (int)(windy * 8), CLR_BLUE);
-    pset(wx + (int)(windx * 8), wy + (int)(windy * 8), CLR_WHITE);
+    // wind tell-tale (small arrow on the blast row, left of the action buttons)
+    int wx = ACT_CLEAR_X - 12, wy = TB_Y0 + 8;
+    line(wx, wy, wx + (int)(windx * 7), wy + (int)(windy * 7), CLR_BLUE);
+    pset(wx + (int)(windx * 7), wy + (int)(windy * 7), CLR_WHITE);
 }
