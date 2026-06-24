@@ -13,7 +13,11 @@
 // Overlay views (0 = stack-DDA vs coverage, 4 = perp-DDA vs coverage) colour agreement WHITE,
 // disagreement blue/orange — the gap between two methods at the same thickness.
 //
-// LEFT/RIGHT rotate · A auto-spin · B cycle view · UP/DOWN thickness.
+// Coverage cap style (C): ROUND caps (a capsule — the rounded ends make the line grow LONGER as
+// it thickens) vs BUTT caps (flush ends — the line keeps its length, only widens). DDA always
+// ends flush, so this is the coverage-only knob that makes a thick coverage line stop overshooting.
+//
+// LEFT/RIGHT rotate · A auto-spin · B cycle view · C cap style · UP/DOWN thickness.
 #include "studio.h"
 #include <math.h>
 
@@ -30,6 +34,7 @@ static float angle = 0.6f;
 static int   thick = 1;             // line thickness in cells (1 = 1px); all methods share it
 static int   spin  = 1;
 static int   view  = 0;             // 0 stackDDA|cov  1 stackDDA  2 cov  3 perpDDA  4 perpDDA|cov
+static int   caps  = 0;             // coverage cap style: 0 = round (capsule), 1 = butt (flush)
 
 static void mark(unsigned char *g, int i, int j){ if(i>=0&&i<GW&&j>=0&&j<GH) g[j*GW+i]=1; }
 
@@ -72,18 +77,21 @@ static void dda_perp(int x0,int y0,int x1,int y1){
         dda1(pddag, ax,ay,bx,by);
     }
 }
-// coverage: distance from a cell centre to the segment <= radius.
-static float dist_seg(float px,float py,float ax,float ay,float bx,float by){
+// coverage: is a cell centre within `r` of the segment? butt=1 cuts the ends flush (foot must
+// land on the segment, 0<=t<=1); butt=0 clamps t → round caps that extend past the endpoints.
+static int cov_in(float px,float py,float ax,float ay,float bx,float by,float r,int butt){
     float dx=bx-ax,dy=by-ay,Lq=dx*dx+dy*dy;
     float t = Lq>0.f ? ((px-ax)*dx+(py-ay)*dy)/Lq : 0.f;
-    if(t<0.f)t=0.f; if(t>1.f)t=1.f;
+    if(butt){ if(t<0.f||t>1.f) return 0; }
+    else    { if(t<0.f)t=0.f; if(t>1.f)t=1.f; }
     float qx=ax+t*dx, qy=ay+t*dy;
-    return sqrtf((px-qx)*(px-qx)+(py-qy)*(py-qy));
+    return (px-qx)*(px-qx)+(py-qy)*(py-qy) <= r*r;
 }
 
 void update(void){
     if(btnp(0,BTN_A)) spin=!spin;
     if(btnp(0,BTN_B)) view=(view+1)%5;
+    if(keyp('C'))     caps=!caps;       // coverage cap style: round <-> butt
     if(spin) angle += 0.012f;
     if(btn(0,BTN_LEFT))  { angle -= 0.03f; spin=0; }
     if(btn(0,BTN_RIGHT)) { angle += 0.03f; spin=0; }
@@ -104,7 +112,7 @@ void draw(void){
     dda_perp (ix0,iy0,ix1,iy1);
     float radius = thick*0.5f;
     for(int j=0;j<GH;j++) for(int i=0;i<GW;i++)
-        if(dist_seg(i+0.5f,j+0.5f, ix0,iy0, ix1,iy1) <= radius) covg[j*GW+i]=1;
+        if(cov_in(i+0.5f,j+0.5f, ix0,iy0, ix1,iy1, radius, caps)) covg[j*GW+i]=1;
 
     // pick the grid(s) this view shows. gB==0 => single-method view.
     unsigned char *gA, *gB; const char *label;
@@ -144,6 +152,6 @@ void draw(void){
     print(str("thick %d", thick), OX+62, y+18, CLR_LIGHT_GREY);
     if(gB) print(str("differ %d", differ), OX+128, y+18, differ?CLR_ORANGE:CLR_GREEN);
     else   print(str("lit %d", lit), OX+128, y+18, CLR_LIGHT_GREY);
-    print(str("spin %s", spin?"ON":"off"), OX+210, y+18, spin?CLR_GREEN:CLR_MEDIUM_GREY);
-    print("A spin  B view  </> turn  ^v thick", OX, y+27, CLR_MEDIUM_GREY);
+    print(str("caps %s", caps?"butt":"round"), OX+210, y+18, CLR_LIGHT_GREY);
+    print("A spin B view C caps </>turn ^vthick", OX, y+27, CLR_MEDIUM_GREY);
 }
