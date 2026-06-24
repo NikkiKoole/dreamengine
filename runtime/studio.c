@@ -466,6 +466,34 @@ static inline void sw_pset(int x, int y, Color c) {
     if ((unsigned)x < (unsigned)SCREEN_W && (unsigned)y < (unsigned)SCREEN_H)
         sw_cbuf[(SCREEN_H - 1 - y) * SCREEN_W + x] = sw_pack(c);
 }
+// software line: the validated reflection-symmetric per-axis DDA (sline), writing sw_pset.
+static void sw_plot_minor(int maj, float v, float mid, int horiz, Color c) {
+    float f = floorf(v); int fi = (int)f; float r = v - f; int m;
+    if (r != 0.5f) m = (r < 0.5f) ? fi : fi + 1;
+    else if (v == mid) { if (horiz) { sw_pset(maj,fi,c); sw_pset(maj,fi+1,c); } else { sw_pset(fi,maj,c); sw_pset(fi+1,maj,c); } return; }
+    else m = (mid > v) ? fi + 1 : fi;
+    if (horiz) sw_pset(maj, m, c); else sw_pset(m, maj, c);
+}
+static void sw_sline(int x0, int y0, int x1, int y1, Color c) {
+    int dx = x1-x0, dy = y1-y0, adx = dx<0?-dx:dx, ady = dy<0?-dy:dy;
+    if (adx == 0 && ady == 0) { sw_pset(x0, y0, c); return; }
+    if (adx >= ady) { int lo = x0<x1?x0:x1, hi = x0<x1?x1:x0; float ymid = (y0+y1)*0.5f;
+        for (int x = lo; x <= hi; x++) sw_plot_minor(x, y0 + (float)(x-x0)*dy/(float)dx, ymid, 1, c);
+    } else { int lo = y0<y1?y0:y1, hi = y0<y1?y1:y0; float xmid = (x0+x1)*0.5f;
+        for (int y = lo; y <= hi; y++) sw_plot_minor(y, x0 + (float)(y-y0)*dx/(float)dy, xmid, 0, c); }
+}
+// software filled rect: clip+camera-offset once, then memset cbuf rows (keeps the span speedup —
+// per-pixel plot_pat here would be far slower than the GPU DrawRectangle it replaces).
+static void sw_fillrect(int x, int y, int w, int h, Color c) {
+    x -= (int)(cam.target.x - cam.offset.x);
+    y -= (int)(cam.target.y - cam.offset.y);
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (clip_active) { if (x0<clip_cx) x0=clip_cx; if (y0<clip_cy) y0=clip_cy;
+                       if (x1>clip_cx+clip_cw) x1=clip_cx+clip_cw; if (y1>clip_cy+clip_ch) y1=clip_cy+clip_ch; }
+    if (x0<0) x0=0; if (y0<0) y0=0; if (x1>SCREEN_W) x1=SCREEN_W; if (y1>SCREEN_H) y1=SCREEN_H;
+    uint32_t p = sw_pack(c);
+    for (int yy = y0; yy < y1; yy++) { uint32_t *row = &sw_cbuf[(SCREEN_H-1-yy)*SCREEN_W]; for (int xx = x0; xx < x1; xx++) row[xx] = p; }
+}
 
 // ── --uiaudit: per-frame draw bounding-box log ───────────────────────────
 // When --uiaudit <file> is set, every primitive records its bounds + the
@@ -2300,6 +2328,10 @@ int text_width(const char *t) {
 
 int print(const char *text, int x, int y, int color) {
     PROF("print");
+    // Phase-0 software canvas: text is deferred (HUD layer, Phase 2 ports it as a CPU glyph blit).
+    // For the probe, skip the GPU DrawTextEx (it'd draw outside the texture target). The few HUD
+    // labels vanish under DE_SOFTWARE_CANVAS=on; perf/byte-identity carts don't depend on them.
+    if (sw_canvas_active) return x + text_width(text);
     DrawTextEx(cur_font(), text, (Vector2){ (float)x, (float)y },
                cur_font_size(), 0, palette[color % PALETTE_SIZE]);
     int w = text_width(text);
@@ -2349,6 +2381,11 @@ int print_rot_scaled(const char *text, int x, int y, float deg, int scale, int c
 
 void rect(int x, int y, int w, int h, int color) {
     PROF("rect");
+    if (sw_canvas_active) {   // border via plot_pat → pset → sw_pset
+        for (int xx = x; xx < x + w; xx++) { plot_pat(xx, y, color); plot_pat(xx, y + h - 1, color); }
+        for (int yy = y + 1; yy < y + h - 1; yy++) { plot_pat(x, yy, color); plot_pat(x + w - 1, yy, color); }
+        UIAUDIT('R', x, y, w, h, NULL); return;
+    }
     Color c = palette[color % PALETTE_SIZE];
     int rx = x, ry = y;
     // 1px DrawRectangle slices — no line caps, exact pixel coverage
@@ -2361,6 +2398,11 @@ void rect(int x, int y, int w, int h, int color) {
 
 void rectfill(int x, int y, int w, int h, int color) {
     PROF("rectfill");
+    if (sw_canvas_active) {
+        if (fp_on) { for (int yy = y; yy < y + h; yy++) for (int xx = x; xx < x + w; xx++) plot_pat(xx, yy, color); }  // dither: per-pixel
+        else sw_fillrect(x, y, w, h, palette[color % PALETTE_SIZE]);   // solid: fast cbuf row memset
+        UIAUDIT('f', x, y, w, h, NULL); return;
+    }
     if (fp_on) { rectfill_pat(x, y, w, h, fp_global, fp_hole, color); UIAUDIT('f', x, y, w, h, NULL); return; }   // 1-bits = holes, 0-bits = color
     DrawRectangle(x, y, w, h, palette[color % PALETTE_SIZE]);
     UIAUDIT('f', x, y, w, h, NULL);
@@ -2513,7 +2555,7 @@ void circfill(int cx, int cy, int r, int color) {
     // solid fill; ZOOM is fine (rotation-0 camera is axis-aligned affine → the run of 1×1
     // world quads tiles to exactly the same screen pixels as one w×1 quad; only rotation
     // breaks that). A rotated camera or fillp() dither falls back to per-pixel.
-    if (disc_fill_fast && r >= 1 && cam.rotation == 0.0f && !fp_on) {
+    if (disc_fill_fast && r >= 1 && cam.rotation == 0.0f && !fp_on && !sw_canvas_active) {
         int x0 = cx - r, y0 = cy - r, x1 = cx + r, y1 = cy + r;
         poly_clamp_scan(&x0, &y0, &x1, &y1);            // skip off-screen rows/cols (the poly-path win)
         Color col = palette[color % PALETTE_SIZE];
@@ -2675,6 +2717,7 @@ void tritex(int x1, int y1, float u1, float v1,
 
 void line(int x1, int y1, int x2, int y2, int color) {
     PROF("line");
+    if (sw_canvas_active) { sw_sline(x1, y1, x2, y2, palette[color % PALETTE_SIZE]); return; }
     DrawLine(x1, y1, x2, y2, palette[color % PALETTE_SIZE]);
 }
 
@@ -3184,7 +3227,7 @@ static void poly_fill_cov(const int *xy, int n, int color) {
                 if (poly_inside(x + 0.5f, y + 0.5f, xy, n)) plot_pat(x, y, color);
         return;
     }
-    bool fast = (cam.rotation == 0.0f) && (cam.zoom == 1.0f) && !fp_on;
+    bool fast = (cam.rotation == 0.0f) && (cam.zoom == 1.0f) && !fp_on && !sw_canvas_active;
     Color col = palette[color % PALETTE_SIZE];
     float cross[MAXCROSS];
     for (int y = y0; y <= y1; y++) {
