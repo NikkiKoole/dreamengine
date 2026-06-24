@@ -31,6 +31,8 @@
 // and nearby commerce push land value up too — so a well-served, park-adjacent
 // downtown can finally reach the high end (centre-proximity alone capped it before).
 //
+//   Pick a brush by CLICKING the cute icon row under the grid (or the keys below);
+//   click an overlay name on the right to switch the data view. Keys still work.
 //   LEFT-drag   paint the current brush      RIGHT-drag  erase to land
 //   R C I       zone Residential/Commercial/Industrial (D toggles light↔dense zoning:
 //               light caps low = suburbs, dense rises tall = downtown)
@@ -431,7 +433,32 @@ static void seed_city(void){
     ticks=0;
 }
 
-void init(void){ seed_city(); }
+void init(void){ seed_city(); colorkey(0); }   // index 0 = transparent for the toolbar icons
+
+// ── brush toolbar: cute clickable icons under the grid (sprites in gridcity.cart.js)
+// button i draws spr(i); BR_VAL[i] is its brush (i < NBR), and the last button
+// (i == NBR) is the light↔dense zoning toggle.
+static const int BR_VAL[] = { K_LAND, K_ROAD, K_WATER, K_R, K_C, K_I, K_POLICE,
+                              K_PARK, K_SCHOOL, K_HOSPITAL, K_PLANT, K_FIRESTN, K_PUMP, B_IGNITE };
+static const char *BR_TIP[] = { "erase","road","water","R zone","C zone","I zone","police",
+                                "park","school","hospital","power plant","fire stn","water pump","ignite" };
+#define NBR    14                     // brush buttons
+#define NTOOL  15                     // + the dense toggle (slot 14)
+#define TLBX   4
+#define TLBY   (OY + GH*TS + 1)        // just under the grid
+#define TLBSZ  16
+#define TLBP   18                      // button pitch
+#define TLBCOLS 8
+#define OVLY   30                      // overlay-list first item y (keep == draw())
+
+// which toolbar button is under (mx,my)?  -1 = none
+static int tool_hit(int mx, int my){
+    for(int i=0;i<NTOOL;i++){
+        int bx=TLBX+(i%TLBCOLS)*TLBP, by=TLBY+(i/TLBCOLS)*TLBP;
+        if(mx>=bx && mx<bx+TLBSZ && my>=by && my<by+TLBSZ) return i;
+    }
+    return -1;
+}
 
 // ── painting ──
 static void paint_at(int mx,int my,int k){
@@ -467,8 +494,17 @@ void update(void){
     if(keyp(']')) view=(view+1)%V_COUNT;
     if(keyp(KEY_SPACE)) seed_city();
 
-    if(mouse_down(0)) paint_at(mouse_x(),mouse_y(),brush);
-    if(mouse_down(1)) paint_at(mouse_x(),mouse_y(),K_LAND);
+    int mx=mouse_x(), my=mouse_y();
+    // click a brush button (or the dense toggle); click an overlay name to switch view
+    int th = tool_hit(mx,my);
+    if(mouse_pressed(0)){
+        if(th==NBR)      brush_dense=!brush_dense;
+        else if(th>=0)   brush=BR_VAL[th];
+        else if(mx>=HUDX) for(int v=0;v<V_COUNT;v++){ int oy=OVLY+v*8; if(my>=oy&&my<oy+8){ view=v; break; } }
+    }
+    // paint — paint_at bounds-checks to the grid, so the toolbar + right panel never paint
+    if(mouse_down(0)) paint_at(mx,my,brush);
+    if(mouse_down(1)) paint_at(mx,my,K_LAND);
 
     if(++fcount>=TICK_EVERY){ fcount=0; sim_step(); }
 }
@@ -551,9 +587,13 @@ void draw(void){
     // ── HUD ──
     static const char *VNAME[V_COUNT]={"1 CITY","2 LAND VALUE","3 CRIME","4 POLICE","5 DENSITY","6 POLLUTION","7 SERVICES","8 POWER","9 TRAFFIC","0 FIRE","[ ] WATER"};
     static const char *BNAME[]={"land","water","road","R zone","C zone","I zone","POLICE","park","school","hospital","power plant","fire stn","water pump"};
+    int mx=mouse_x(), my=mouse_y();
     int hy=22;
     print("OVERLAY", HUDX, hy, CLR_DARK_GREY); hy+=8;
-    for(int v=0;v<V_COUNT;v++){ print(VNAME[v], HUDX, hy, v==view?CLR_WHITE:CLR_DARK_GREY); hy+=8; }
+    for(int v=0;v<V_COUNT;v++){
+        int hov = (mx>=HUDX && my>=hy && my<hy+8);
+        print(VNAME[v], HUDX, hy, v==view?CLR_WHITE : (hov?CLR_LIGHT_GREY:CLR_DARK_GREY)); hy+=8;
+    }
     hy+=4;
     print("BRUSH", HUDX, hy, CLR_DARK_GREY); hy+=8;
     print(str("> %s%s", brush==B_IGNITE?"ignite fire":BNAME[brush],
@@ -593,9 +633,25 @@ void draw(void){
     print(str("EQ %d   LE %d", eduQ, lifeE), HUDX, hy, CLR_LIGHT_GREY); hy+=8;
     print(str("ticks %ld", ticks), HUDX, hy, CLR_LIGHT_GREY);
 
-    // bottom help
-    print("brush RCIOWPGSHLFBU/E  D dense  1-9,0/[ ] view  SPACE reseed",
-          OX, OY+GH*TS+4, CLR_DARK_GREY);
+    // ── brush toolbar: cute clickable icons under the grid ──
+    // active brush = white frame + yellow halo; dense toggle lights when on; hover = light frame
+    int hov_tool = tool_hit(mx,my);
+    for(int i=0;i<NTOOL;i++){
+        int bx=TLBX+(i%TLBCOLS)*TLBP, by=TLBY+(i/TLBCOLS)*TLBP;
+        int sel = (i<NBR) ? (brush==BR_VAL[i]) : brush_dense;
+        rectfill(bx-1,by-1,TLBSZ+2,TLBSZ+2,CLR_BLACK);
+        spr(i,bx,by);
+        rect(bx-1,by-1,TLBSZ+2,TLBSZ+2, sel?CLR_WHITE:(i==hov_tool?CLR_LIGHT_GREY:CLR_DARKER_GREY));
+        if(sel) rect(bx-2,by-2,TLBSZ+4,TLBSZ+4,CLR_YELLOW);
+    }
+    // tooltip (hovered tool) + the reseed hint, in the free space right of the toolbar
+    font(FONT_SMALL);
+    int tx = TLBX + TLBCOLS*TLBP + 6;
+    if(hov_tool>=0)
+        print(hov_tool==NBR ? (brush_dense?"dense: on":"dense: off") : BR_TIP[hov_tool],
+              tx, TLBY+3, CLR_YELLOW);
+    print("SPACE reseed", tx, TLBY+TLBP+3, CLR_DARK_GREY);
+    font(FONT_NORMAL);
 }
 
 #ifdef DE_SPEC
