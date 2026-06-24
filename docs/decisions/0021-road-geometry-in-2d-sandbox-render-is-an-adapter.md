@@ -5,7 +5,8 @@ Date: 2026-06-24 · Status: accepted
 ## Context
 The road family — `streetlab` (at-grade junctions + the street network) and `roadlab` (grade-
 separated interchanges) — is built and refined as **2D top-down** carts. Separately, a pseudo-3D
-city look exists in `cityview`/`overpass`: a **parallel oblique projection** (`cityview.c` `project()`)
+city look exists in `cityview` (which folded in the former standalone `overpass` flyover experiment):
+a **parallel oblique projection** (`cityview.c` `project()`)
 where the ground is the plan `(x,y)` map rotated + uniformly scaled, and height pushes pixels straight
 up the screen (no perspective foreshortening). The maker likes that view and asked whether the road
 work transfers to it — and whether it's fine to keep developing the carts here and use the logic there.
@@ -14,8 +15,9 @@ The answer hinged on one fact: **in that projection the ground plane is still a 
 keeps its exact plan shape, only rotated and scaled. So the geometry the carts compute is already in the
 right coordinate space; only the *drawing* assumes axis-aligned screen space. `roadlab` is further along
 than it looks: its M5 already computes a real elevation profile `z(s)` and fakes the oblique look with a
-height-proportional drop-shadow (`z*0.45, z*0.85`) — i.e. it's already half-projecting. `overpass.c` is a
-working proof of the deck/pillar/shadow/depth-sort backend that `roadlab`'s flyovers imply.
+height-proportional drop-shadow (`z*0.45, z*0.85`) — i.e. it's already half-projecting. `cityview`'s
+flyover layouts (the folded-in `overpass` work) are a working proof of the deck/pillar/shadow/depth-sort
+backend that `roadlab`'s flyovers imply — including the projected-primitive helpers below.
 
 ## Decision
 **Road geometry is developed, specced, and gated in the 2D top-down sandbox. The pseudo-3D view is a
@@ -53,12 +55,16 @@ geometry** (per-cart, world-plane → reused verbatim) · **render rules** (thre
   most of them anyway.
 - **When the adapter is built, prefer a shared helper over per-cart copies.** The projected-primitive
   vocabulary (project-then-`polyfill`; a projected disc→ellipse; a projected dashed line) is wanted by
-  `cityview`, `overpass`, and any `streetlab`/`roadlab` 3D front-end — so it belongs in a runtime header
-  (the `ui.h`/`gestures.h` "cart-land capability" pattern, ADR 0006), not duplicated. Not built yet; this
-  decision just fixes *where* it goes. (A projected line is nearly free — `line()` takes any coords; the
+  `cityview` and any `streetlab`/`roadlab` 3D front-end — so it belongs in a runtime header
+  (the `ui.h`/`gestures.h` "cart-land capability" pattern, ADR 0006), not duplicated. **Now built and
+  proven in `cityview`** (`project`/`pdisc`/`pline`/`pdash`/`pproj_poly`); this decision fixes *where*
+  they graduate to — a runtime header once a second 3D front-end wants them. (A projected line is nearly free — `line()` takes any coords; the
   disc→ellipse is the one genuinely new helper worth having early.)
-- **Don't port full road detail into `cityview`/`overpass` before the adapter is proven.** The cheapest
-  high-signal spike is to pipe `roadlab`'s M5 `z(s)` deck through `overpass`'s projector — if a trumpet
-  renders as a real flyover with one coordinate adapter, the thesis holds for the whole family.
+- **Don't port full road detail into `cityview` before the adapter is proven.** The cheapest
+  high-signal spike is to feed `roadlab`'s M5 `z(s)` deck geometry into `cityview`'s projector — the
+  preferred direction is **data → cityview** (pull `roadlab`'s computed boundaries + `z(s)` out and
+  render them as a flyover in `cityview`); equivalently one could add a `project()` toggle inside
+  `roadlab`. Either way, if a trumpet renders as a real flyover with one coordinate adapter, the thesis
+  holds for the whole family. (Spike not done yet — `cityview`'s flyovers currently use synthetic decks.)
 - **Not in scope:** true perspective (this view is parallel-oblique by design); the software canvas, which
   is where per-pixel field fill becomes cheap (its own track, `software-canvas.md`).

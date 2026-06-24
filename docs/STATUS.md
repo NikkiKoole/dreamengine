@@ -49,7 +49,12 @@ Recently landed and worth calling out:
 - **`sget(sx,sy)`** — palette index of a *spritesheet* pixel (companion to `pget`, which reads the canvas). Lets carts treat sprites as data: paint a level in the sprite editor (1 pixel = 1 block, color = type) and read it back at runtime, or build lookup tables. Shipped with two paired platformer tutorial carts — **`platform-rects`** (a pixel-perfect AABB mover: per-axis resolution + sub-pixel position, coyote time, jump buffering, variable jump height, one-way platforms; level as a hard-coded `Box[]`) and **`platform-paint`** (same mover, level read from a painted sprite via `sget`). Same engine, two level sources — the "level as code vs level as data" teaching pair from [`design/tutorial-curriculum.md`](design/tutorial-curriculum.md).
 - Fill patterns: `fillp`/`fillp_reset` + `FILL_*` (PICO-8-style fillp).
 - Shapes/helpers: `oval`/`ovalfill`, `bar`, `blink`, `fsqrt`.
-- Pseudo-3D: `tritex` (affine texture-mapped triangle; used by `mode7`/`raycaster`/`cube3d`).
+- Pseudo-3D: `tritex` (affine texture-mapped triangle; used by `mode7`/`raycaster`/`cube3d`/`cityview`).
+- **`cityview`** — GTA1-meets-Zelda pseudo-3D city bench: parallel-oblique projection (height goes
+  straight up-screen), four building view modes, `tritex` wall textures, and drivable raised-highway
+  flyovers (ramp/curve/spiral/stack) you climb while the camera rises. Folded in the former `overpass`
+  experiment. Proves the projected-primitive helpers ([decision 0021](decisions/0021-road-geometry-in-2d-sandbox-render-is-an-adapter.md),
+  mechanism in [design/pseudo-3d-city.md](design/pseudo-3d-city.md)). Next: pipe `roadlab`'s real `z(s)` deck through its projector.
 - 3D leaf-helpers: `V3` + `rot3`/`project3`/`zsort`/`quadfill` — the rotate→project→sort→fill
   pipeline the solid-3D carts re-derived by hand. `cube3d`/`solid3d`/`textured3d`/`flyover`
   refactored onto them. [decision 0009](decisions/0009-small-3d-leaf-helpers.md).
