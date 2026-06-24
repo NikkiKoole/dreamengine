@@ -220,15 +220,17 @@ static bool            pset_batch     = DE_BATCH_PSET_DEFAULT; // true → batch
 static bool            sw_canvas_enabled = SW_CANVAS_DEFAULT; // env DE_SOFTWARE_CANVAS=on (the master toggle)
 static bool            sw_canvas_active   = SW_CANVAS_DEFAULT; // PER-FRAME: enabled AND this cart hasn't used a zoom/rotation camera_ex. Primitives check this.
 static bool            sw_force_gpu     = false;            // sticky: cart used camera_ex with zoom!=1 or angle!=0 → that cart falls back to the GPU path (Fork-2/C)
-// DE_CPU_LINE (default off): route line()/bezier/2-pt poly through the reflection-symmetric CPU line
-// even off-canvas (de_cpu_line, via pset). Purpose is A/B hygiene: with it set on BOTH the GPU and
-// software-canvas builds, line() draws the SAME pixels on each, so a canvas A/B isn't tripped up by
-// the GPU-DrawLine-vs-sw_sline diff (gta/combo noise). Interim, NOT a direction-1 commitment — the
-// coverage-vs-DDA line() decision is still open: docs/design/{software-canvas,rasterization-consistency}.md.
-#ifndef CPU_LINE_DEFAULT
-#define CPU_LINE_DEFAULT 0
+// DE_CPU_RASTER (default off): route the primitives that GL rasterizes DIFFERENTLY from the software
+// canvas through the SAME CPU rasterizer even off-canvas — `line()`/`bezier`/2-pt poly (→ de_cpu_line)
+// and `rectfill_rot` (→ the inverse-map fill), via pset so they hit the GPU buffer too. Purpose is A/B
+// hygiene: with it set on BOTH the GPU and software-canvas builds, those primitives draw the SAME
+// pixels on each, so a canvas A/B isn't tripped up by GL-vs-CPU rasterization diffs (the line/rotated-
+// edge noise). Grows as more rotated primitives port. NOT a direction-1 commitment (the coverage-vs-DDA
+// line() decision is still open): docs/design/{software-canvas,rasterization-consistency}.md.
+#ifndef CPU_RASTER_DEFAULT
+#define CPU_RASTER_DEFAULT 0
 #endif
-static bool            cpu_line_enabled = CPU_LINE_DEFAULT;   // env DE_CPU_LINE=on
+static bool            cpu_raster_enabled = CPU_RASTER_DEFAULT;   // env DE_CPU_RASTER=on
 static uint32_t        sw_cbuf[SCREEN_W * SCREEN_H];          // CPU framebuffer (Fork 1: RGBA on desktop)
 static inline uint32_t sw_pack(Color c) { return (uint32_t)c.r | ((uint32_t)c.g<<8) | ((uint32_t)c.b<<16) | 0xFF000000u; }
 // internal patterned-fill helpers — the public fills call these when fillp() is on
@@ -586,7 +588,10 @@ static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,flo
             int iu=(int)(l0*u0+l1*u1+l2*u2), iv=(int)(l0*v0+l1*v1+l2*v2);
             if ((unsigned)iu<(unsigned)spritesheet_img.width && (unsigned)iv<(unsigned)spritesheet_img.height) {
                 Color cc = GetImageColor(spritesheet_img, iu, iv);
-                if (cc.a >= 128 && !sw_keyed(cc)) sw_pset(px, py, cc);   // tritex uses the keyed sheet; no pal swap (matches GPU)
+                // plot via pset_rgb (arbitrary sampled RGB, no palette index) → backend-agnostic:
+                // on-canvas → sw_pset → cbuf; off-canvas (DE_CPU_RASTER) → DrawPixel. tritex uses the
+                // keyed sheet; no pal swap (matches GPU).
+                if (cc.a >= 128 && !sw_keyed(cc)) pset_rgb(px, py, (cc.r << 16) | (cc.g << 8) | cc.b);
             }
         }
     }
@@ -1739,8 +1744,8 @@ int main(int argc, char **argv) {
       if (bp && strcmp(bp, "on") == 0) pset_batch = true; }            // DE_BATCH_PSET=on → coalesce psets into one draw call
     { const char *sc = getenv("DE_SOFTWARE_CANVAS");    // A/B the software canvas (Phase 0 probe):
       if (sc && strcmp(sc, "on") == 0) { sw_canvas_enabled = true; sw_canvas_active = true; } }  // DE_SOFTWARE_CANVAS=on
-    { const char *cl = getenv("DE_CPU_LINE");           // CPU line off-canvas too (A/B hygiene, see decl):
-      if (cl && strcmp(cl, "on") == 0) cpu_line_enabled = true; }     // DE_CPU_LINE=on → line()→de_cpu_line everywhere
+    { const char *cl = getenv("DE_CPU_RASTER");         // CPU rasterizers off-canvas too (A/B hygiene, see decl):
+      if (cl && strcmp(cl, "on") == 0) cpu_raster_enabled = true; }   // DE_CPU_RASTER=on → line()/rectfill_rot → CPU everywhere
     const char *window_title           = "dreamengine";
 #ifndef PLATFORM_WEB
     int         screenshot_mode        = 0;
@@ -2587,9 +2592,30 @@ void rectfill_rgb(int x, int y, int w, int h, int hex) {
 // in world space and the rotation staircases them into a dotted lattice of holes; a GPU quad
 // is filled by the rasteriser in screen space after the transform, so it stays solid at any
 // angle. The pivot is the rect's own centre, so (cx,cy) holds still as it spins.
+// CPU rotated fill: INVERSE mapping (visit each dest pixel in the rotated rect's world bbox, rotate
+// it back to rect-local, test inside) → gap-free at every angle by construction, device-deterministic
+// via the 1/4096-quantized matrix. Proven in tools/det-probes/rotfill.c (gap-free all 360°,
+// bit-identical arm64/x86/wasm). Matches raylib DrawRectanglePro's forward matrix [[c,-s],[s,c]], so
+// rotation direction agrees with the GPU path. Plots via the public pset() so ONE impl serves both:
+// on-canvas → sw_pset → cbuf; off-canvas (DE_CPU_RASTER) → DrawPixel — identical pixel set either way,
+// so a canvas A/B of a rotated-fill cart is byte-exact. Camera translate/zoom + clip come for free.
+static void de_cpu_rectfill_rot(int cx, int cy, int w, int h, float deg, int color) {
+    float a = deg * DEG2RAD;
+    float c = roundf(cosf(a) * 4096.f) / 4096.f, s = roundf(sinf(a) * 4096.f) / 4096.f;
+    float hw = w * 0.5f, hh = h * 0.5f;
+    float ex = fabsf(c * hw) + fabsf(s * hh), ey = fabsf(s * hw) + fabsf(c * hh);   // world bbox half-extents
+    int x0 = (int)floorf(cx - ex), x1 = (int)ceilf(cx + ex);
+    int y0 = (int)floorf(cy - ey), y1 = (int)ceilf(cy + ey);
+    for (int py = y0; py <= y1; py++) for (int px = x0; px <= x1; px++) {
+        float dx = px + 0.5f - cx, dy = py + 0.5f - cy;
+        float lx = c * dx + s * dy, ly = -s * dx + c * dy;     // rotate dest by -a → rect-local
+        if (fabsf(lx) <= hw && fabsf(ly) <= hh) pset(px, py, color);
+    }
+}
+
 void rectfill_rot(int cx, int cy, int w, int h, float deg, int color) {
     PROF("rectfill_rot");
-    if (sw_canvas_active) { sw_force_gpu = true; return; }   // rotated primitive → GPU fallback (Fork-2/C)
+    if (sw_canvas_active || cpu_raster_enabled) { de_cpu_rectfill_rot(cx, cy, w, h, deg, color); return; }   // SW: inverse-map (no GPU fallback); also the A/B reference path
     DrawRectanglePro((Rectangle){ (float)cx, (float)cy, (float)w, (float)h },
                      (Vector2){ w * 0.5f, h * 0.5f }, deg, palette[color % PALETTE_SIZE]);
 }
@@ -2860,7 +2886,7 @@ void tritex(int x1, int y1, float u1, float v1,
             int x3, int y3, float u3, float v3) {
     PROF("tritex");
     if (spritesheet.width == 0) return;
-    if (sw_canvas_active) { sw_tritex(x1,y1,u1,v1, x2,y2,u2,v2, x3,y3,u3,v3); return; }
+    if (sw_canvas_active || cpu_raster_enabled) { sw_tritex(x1,y1,u1,v1, x2,y2,u2,v2, x3,y3,u3,v3); return; }   // SW canvas + the A/B reference path
     float tw = (float)spritesheet.width, th = (float)spritesheet.height;
     typedef struct { float x, y, u, v; } TV;
     TV a = { x1, y1, u1, v1 };
@@ -2888,7 +2914,7 @@ void tritex(int x1, int y1, float u1, float v1,
 // public pset() so it works on BOTH backends: off-canvas pset → DrawPixel (GPU), on-canvas pset →
 // sw_pset → cbuf. sw_sline writes the cbuf directly (the canvas hot path, no per-pixel pset branch),
 // so we keep both: line() stays on sw_sline when the canvas is active, and only falls to de_cpu_line
-// for the off-canvas DE_CPU_LINE case. Why this exists: docs/design/software-canvas.md §"DDA vs
+// for the off-canvas DE_CPU_RASTER case. Why this exists: docs/design/software-canvas.md §"DDA vs
 // coverage for the line" + rasterization-consistency.md. Interim A/B hygiene, not a direction-1 commit.
 static void de_cpu_plot_minor(int maj, float v, float mid, int horiz, int c) {
     float f = floorf(v); int fi = (int)f; float r = v - f; int m;
@@ -2909,7 +2935,7 @@ static void de_cpu_line(int x0, int y0, int x1, int y1, int c) {
 void line(int x1, int y1, int x2, int y2, int color) {
     PROF("line");
     if (sw_canvas_active) { sw_sline(x1, y1, x2, y2, palette[color % PALETTE_SIZE]); return; }
-    if (cpu_line_enabled) { de_cpu_line(x1, y1, x2, y2, color); return; }   // DE_CPU_LINE: CPU line off-canvas too
+    if (cpu_raster_enabled) { de_cpu_line(x1, y1, x2, y2, color); return; }   // DE_CPU_RASTER: CPU line off-canvas too
     DrawLine(x1, y1, x2, y2, palette[color % PALETTE_SIZE]);
 }
 

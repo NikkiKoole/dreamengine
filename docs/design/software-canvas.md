@@ -151,19 +151,24 @@ be coalesced.
 >
 > **Tools for verifying a canvas change** (and where they fit in the wider gate map —
 > [`../guides/checks-and-oracles.md`](../guides/checks-and-oracles.md)): **`canvas-diff.js`** (the
-> GPU-vs-canvas oracle — bakes in the `sw_force_gpu` guard, the `DE_CPU_LINE` reference, and a
+> GPU-vs-canvas oracle — bakes in the `sw_force_gpu` guard, the `DE_CPU_RASTER` reference, and a
 > `--bytecheck` shasum mode), the **`swcanvas_test`** probe cart (byte-identical pset/fill check),
 > **`mirror-diff.js`** (symmetry), **`road-check.js`** (the coverage-field road oracle), and
 > **`profile-fleet.js`** for the perf A/B (recipe under the map-cart table above).
 >
-> **`DE_CPU_LINE=on` neutralises the line diff for A/B (2026-06-24).** Setting it routes `line()`
-> (and `bezier`/2-pt `poly`) through `de_cpu_line` — the pset-dispatched twin of `sw_sline`, *same*
-> symmetric DDA — even off-canvas, so the GPU reference build and the software-canvas build draw the
-> **same line pixels**. The clean A/B is therefore `DE_CPU_LINE=on` (reference) vs `DE_SOFTWARE_CANVAS=on`
-> (the canvas already uses `sw_sline`). Measured: `gta` **203 → 0 px**, `combo` **16940 → 348 px** (the
-> 348 is its audio-reactive disc, not lines). Default **off** — the shipping look is unchanged; this is
-> A/B hygiene only, **not** the direction-1 promotion of a CPU line (that decision — DDA vs coverage —
-> is still open, see §"DDA vs coverage for the line" below). SEAM in `studio.c` at `de_cpu_line`.
+> **`DE_CPU_RASTER=on` neutralises the GL-vs-CPU rasterization diff for A/B (2026-06-24, renamed +
+> generalised from `DE_CPU_LINE` 2026-06-25).** Some primitives GL rasterizes *differently* from the
+> software canvas — `line()` (GL `DrawLine` vs `sw_sline`), `rectfill_rot` (GL `DrawRectanglePro` vs the
+> inverse-map fill), and `tritex` (GL quad vs `sw_tritex`). The flag routes all of them through the
+> **same CPU rasterizer even off-canvas** (`de_cpu_line` via `pset`; `de_cpu_rectfill_rot` via `pset`;
+> `sw_tritex` via `pset_rgb`), so the GPU reference build and the canvas build draw the **same pixels**.
+> The clean A/B is `DE_CPU_RASTER=on` (reference) vs `DE_SOFTWARE_CANVAS=on`. Measured: `gta` **203 → 0**,
+> `combo` **16940 → 348** (the 348 is its audio-reactive disc, not lines), and after the `rectfill_rot`/
+> `tritex` routing **`cityview` 48 → 0** (a rotated-rect + tritex cart now byte-exact). Default **off** —
+> shipping look unchanged; A/B hygiene only, **not** a direction-1 commitment (the coverage-vs-DDA
+> `line()` decision is still open, see §"DDA vs coverage for the line" below). `canvas-diff` sets it on
+> the reference automatically (`--raw` opts out to measure the divergence). It grows as more rotated
+> primitives port to SW. SEAMs in `studio.c` at `de_cpu_line` / `de_cpu_rectfill_rot`.
 >
 > **`sw_force_gpu` makes naive A/Bs lie.** A cart that calls `spr_rot`/`sspr_ex(deg)`/`rectfill_rot`/
 > `camera_ex(angle)` trips the sticky GPU fallback **on the frame it first hits the call** — so frame

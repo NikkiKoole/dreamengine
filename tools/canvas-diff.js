@@ -9,9 +9,9 @@
 //   --frames N    frames to render + compare (default 10)
 //   --bytecheck   require BYTE-identical (sha256) instead of a pixel count — for the pset/fill
 //                 primitives that ARE exact (cls/pset/pset_rgb/rectfill/spans; e.g. swcanvas_test).
-//   --raw         compare against the TRUE shipping GPU line (DrawLine). Default sets DE_CPU_LINE=on
-//                 on the reference so line()'s GPU-vs-sw_sline divergence doesn't pollute the diff
-//                 (use --raw to MEASURE that divergence on purpose).
+//   --raw         compare against the TRUE shipping GPU primitives. Default sets DE_CPU_RASTER=on on
+//                 the reference so the GL-vs-CPU rasterization diffs (line, rotated fill) don't pollute
+//                 the diff (use --raw to MEASURE that divergence on purpose).
 //   --max N       per-frame pixel-diff budget; exit nonzero if any frame exceeds it (default 0).
 //   --heatmap     write a difference PNG for the worst frame (needs ImageMagick).
 //   --keep        keep the dumped frames (build/.canvas-diff/<cart>/) for inspection.
@@ -20,7 +20,8 @@
 //   1. sw_force_gpu — a cart calling spr_rot/sspr_ex(deg)/rectfill_rot/print_rot/camera_ex(angle)
 //      trips the sticky GPU fallback, so the =on build silently runs GPU after frame 0 and the A/B
 //      is GPU-vs-GPU (proves nothing). We grep the source and WARN loudly.
-//   2. line() divergence — neutralized by DE_CPU_LINE=on on the reference (unless --raw).
+//   2. GL-vs-CPU rasterization (line, rotated fill) — neutralized by DE_CPU_RASTER=on on the
+//      reference (unless --raw), so a line/rotated-fill cart A/Bs byte-exact instead of with noise.
 //   3. wrong oracle — pixel-diff (magick AE) by default, not shasum; --bytecheck only where exact.
 //
 // Exit: 0 = within budget (or byte-identical), 1 = exceeded / mismatch, 2 = setup error.
@@ -80,8 +81,8 @@ function run(dir, env, label) {
   } catch (e) { console.error(`canvas-diff: ${label} run failed — ${(e.message||'').slice(0,80)}`); process.exit(2); }
 }
 
-const refEnv  = raw ? {} : { DE_CPU_LINE: 'on' };          // gotcha #2
-console.error(`canvas-diff ${cart}: reference = GPU${raw ? ' (raw DrawLine)' : ' + DE_CPU_LINE=on'}, test = DE_SOFTWARE_CANVAS=on, ${frames} frames`);
+const refEnv  = raw ? {} : { DE_CPU_RASTER: 'on' };        // gotcha #2
+console.error(`canvas-diff ${cart}: reference = GPU${raw ? ' (raw GL rasterizers)' : ' + DE_CPU_RASTER=on'}, test = DE_SOFTWARE_CANVAS=on, ${frames} frames`);
 run(refDir,  refEnv, 'reference (GPU)');
 run(testDir, { DE_SOFTWARE_CANVAS: 'on' }, 'test (software canvas)');
 
