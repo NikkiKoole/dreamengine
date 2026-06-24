@@ -102,6 +102,11 @@ static const Weapon WEAP[NWEAP] = {
     { 'k', WK_MELEE,   22, 99, 16,  10,  0.4f,  1.0f, 2.2f,   18, 1.72f,  0,  0, 12, 14, 16, 0, CLR_RED,        3 },  // knife    — jumpy assassin, silent, fast light swings (outruns a fleeing player)
     { 'b', WK_MELEE,   40, 99, 30,  10,  0.3f,  0.8f, 0.4f,   80, 1.10f,  0,  0, 22, 14, 22, 0, CLR_DARK_GREEN, 7 },  // brawl    — steady bruiser, tanky, heavy slow swings
 };
+// carried-weapon line length (px) drawn from the man's chest toward his aim — a thin
+// barrel that varies JUST enough to read the weapon in the world: long rifle for the
+// marksman, stubby barrels for SMG/shotgun, a short blade for the knife, nothing for
+// the bare-fisted brawler. Indexed by the W_* enum (matches WEAP order).
+static const int GUNLEN[NWEAP] = { 6, 7, 11, 3, 0 };   // SMG · shotgun · marksman · knife · brawl
 
 // SEAM — a PERSONALITY layer composes on top of the weapon ("we might want both"): the weapon
 // says HOW it fights, a persona says WHO carries it (skill/nerve), scaling the weapon's numbers
@@ -271,7 +276,7 @@ static void reset(void) {
     if (post == ST_HOT) { known = 1; kx = pl.x; ky = pl.y; kage = 0;    // ambush: converging on your spawn from frame 0
         for (int i=0;i<NE;i++) if (en[i].alive) { en[i].alert = 85; en[i].invx = (int)pl.x; en[i].invy = (int)pl.y; } }
 }
-void init(void) { reverb(0.25f, 0.5f); reset(); phase = PH_PLAYING; }   // boot straight into the fight (normal preset); the menu/panel only appears on the win/lose end screen, or via R
+void init(void) { colorkey(0); reverb(0.25f, 0.5f); reset(); phase = PH_PLAYING; }   // colorkey 0 = sprite glyphs draw transparent over the field; boot straight into the fight
 
 static void setmsg(const char *s) { snprintf(msg,sizeof msg,"%s",s); msg_t=90; }
 
@@ -602,7 +607,7 @@ static const int HOPS[4] = { 0, 1, 2, 1 };
 // a little upright pixel-man (druglord-style), feet planted at (x,y) screen px.
 // shirt = role/state colour, cap + build = weapon marker, hop lifts the body, ghost = dim last-seen.
 // build = body width (the weapon's WEAP.build; 5 for the player); hat = cap colour, -1 = none.
-static void draw_man(int x, int y, float aim, int shirt, int hat, int hop, int ghost, int build) {
+static void draw_man(int x, int y, float aim, int shirt, int hat, int hop, int ghost, int build, int gun) {
     int skin = ghost ? CLR_DARKER_GREY : CLR_PEACH;
     int pant = ghost ? CLR_DARKER_GREY : CLR_DARK_BLUE;
     if (ghost) { shirt = CLR_DARKER_GREY; hat = -1; }
@@ -615,7 +620,7 @@ static void draw_man(int x, int y, float aim, int shirt, int hat, int hop, int g
     rectfill(x-tw/2, t+2, tw, 3, shirt);                        // torso (role/state colour; width = type build)
     rectfill(x-1, t,   3, 2, skin);                             // head
     if (hat >= 0) { int cw = build>=7 ? 5 : 3; rectfill(x-cw/2, t-1, cw, 1, hat); }   // cap (wide build = wide helmet)
-    if (!ghost) line(x, t+3, x + (int)dx(5, aim), (t+3) + (int)dy(5, aim), CLR_LIGHT_GREY);  // gun arm toward aim
+    if (!ghost && gun > 0) line(x, t+3, x + (int)dx(gun, aim), (t+3) + (int)dy(gun, aim), CLR_LIGHT_GREY);  // carried barrel toward aim (length = weapon)
 }
 
 void draw(void) {
@@ -690,31 +695,34 @@ void draw(void) {
             if (en[i].suppressing) circ(x,y-4,5,blink(4)?CLR_RED:CLR_ORANGE);    // muzzle bloom of a suppressor
             if (en[i].state==E_ENGAGE && en[i].react>0 && blink(4))              // drawing a bead — your window to break LOS / duck behind cover
                 line(x, y-4, (int)(en[i].x+dx(11,en[i].aim))+sh, (y-4)+(int)dy(11,en[i].aim), CLR_ORANGE);
-            draw_man(x, y, en[i].aim, ECOL[en[i].state], WEAP[en[i].weapon].hat, hop, 0, WEAP[en[i].weapon].build);  // shirt = state, cap+build = weapon
+            draw_man(x, y, en[i].aim, ECOL[en[i].state], WEAP[en[i].weapon].hat, hop, 0, WEAP[en[i].weapon].build, GUNLEN[en[i].weapon]);  // shirt = state, cap+build+barrel = weapon
             if (en[i].state==E_SUSPECT) print("?", x-1, y-13, CLR_YELLOW);                    // investigating
             else if (en[i].state>=E_HUNT && en[i].state<=E_ENGAGE) print("!", x-1, y-13, CLR_RED);  // alarmed
         } else if (en[i].everseen)                                            // last-seen ghost (your memory)
-            draw_man((int)en[i].lsx+sh, (int)en[i].lsy, en[i].aim, CLR_DARKER_GREY, -1, 0, 1, WEAP[en[i].weapon].build);
+            draw_man((int)en[i].lsx+sh, (int)en[i].lsy, en[i].aim, CLR_DARKER_GREY, -1, 0, 1, WEAP[en[i].weapon].build, 0);
     }
     // your vision ring + you (a blue ring keeps you findable in the chaos)
     if (!reveal && !pl.spectate) circ((int)pl.x+sh, (int)pl.y, VIS_R, CLR_DARK_GREY);
     int px=(int)pl.x+sh, py=(int)pl.y, phop=HOPS[((int)pl.bob)&3];
-    draw_man(px, py, pl.aim, pl.hp>0 ? (pl.sneak?CLR_DARK_BLUE:CLR_BLUE) : CLR_DARK_GREY, CLR_WHITE, phop, 0, 5);   // player = normal build
+    draw_man(px, py, pl.aim, pl.hp>0 ? (pl.sneak?CLR_DARK_BLUE:CLR_BLUE) : CLR_DARK_GREY, CLR_WHITE, phop, 0, 5, 6);   // player = normal build, pistol-length barrel
     line(px, py-2-phop, (int)(pl.x+dx(8,pl.aim))+sh, (py-2-phop)+(int)dy(8,pl.aim), CLR_YELLOW);  // your aim line (longer, so "you" reads)
     if (pl.pinned > 0.3f) { rect(0,0,SCREEN_W,HUD_Y,CLR_RED); print("PINNED", px-11, py-15, blink(6)?CLR_RED:CLR_ORANGE); }
     if (combat && combat_t < 50 && blink(5)) { rect(0,0,SCREEN_W,HUD_Y,CLR_RED); print_centered("! ALARM !", SCREEN_W/2, 5, CLR_RED); }  // the moment the room goes loud
     if (!d_unlimited && pl.mag==0 && pl.reserve==0 && pl.hp>0 && !pl.spectate)   // dry → forced knife play
         print("OUT-KNIFE!", px-18, py-15, blink(8)?CLR_RED:CLR_YELLOW);
 
-    // HUD
+    // HUD — small sprite glyphs (heart/clip/skull) stand in for the HP/ammo/kills labels
     rectfill(0,HUD_Y,SCREEN_W,SCREEN_H-HUD_Y,CLR_DARKER_BLUE);
-    rect(4,HUD_Y+3,42,6,CLR_DARK_GREY); rectfill(5,HUD_Y+4,40*(pl.hp>0?pl.hp:0)/100,4,pl.hp>30?CLR_GREEN:CLR_RED);
+    spr(18, 3, HUD_Y+2);                                               // heart
+    rect(11,HUD_Y+3,40,6,CLR_DARK_GREY); rectfill(12,HUD_Y+4,38*(pl.hp>0?pl.hp:0)/100,4,pl.hp>30?CLR_GREEN:CLR_RED);
     font(FONT_SMALL);                                                   // compact so the row never collides
-    print(str("HP %d", pl.hp>0?pl.hp:0), 50, HUD_Y+3, CLR_WHITE);
-    if (d_unlimited) print(str("ammo %d", pl.mag), 80, HUD_Y+3, pl.mag?CLR_YELLOW:CLR_RED);
-    else             print(str("ammo %d|%d", pl.mag, pl.reserve), 80, HUD_Y+3, (pl.mag||pl.reserve)?CLR_YELLOW:CLR_RED);
-    print(str("down %d/%d", kills, ecount), 132, HUD_Y+3, CLR_ORANGE);
-    if (pl.sneak) print("SNEAK", 178, HUD_Y+3, CLR_INDIGO);
+    print(str("%d", pl.hp>0?pl.hp:0), 53, HUD_Y+3, CLR_WHITE);
+    spr(19, 70, HUD_Y+2);                                              // ammo clip
+    if (d_unlimited) print(str("%d", pl.mag), 79, HUD_Y+3, pl.mag?CLR_YELLOW:CLR_RED);
+    else             print(str("%d|%d", pl.mag, pl.reserve), 79, HUD_Y+3, (pl.mag||pl.reserve)?CLR_YELLOW:CLR_RED);
+    spr(20, 114, HUD_Y+2);                                             // skull (kills)
+    print(str("%d/%d", kills, ecount), 123, HUD_Y+3, CLR_ORANGE);
+    if (pl.sneak) print("SNEAK", 152, HUD_Y+3, CLR_INDIGO);
     print_right(pl.spectate?"SPECTATE":(pl.pinned>0.3f?"PINNED":(!combat?"hidden":(known?"SPOTTED":"ALERT"))), SCREEN_W-4, HUD_Y+3,
                 pl.pinned>0.3f?CLR_RED:(!combat?CLR_GREEN:(known?CLR_RED:CLR_ORANGE)));
     font(FONT_TINY);                                                    // controls line: tiny so it fits in one row
@@ -726,28 +734,30 @@ void draw(void) {
     if (show_panel) {
         fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();   // dim
         int X=46, Y=6, W=228;
-        rrectfill(X-6, 0, W+12, 184, 4, CLR_DARKER_BLUE); rect(X-6, 0, W+12, 184, CLR_LIGHT_GREY);
+        rrectfill(X-6, 0, W+12, 198, 4, CLR_DARKER_BLUE); rect(X-6, 0, W+12, 198, CLR_LIGHT_GREY);
         ui_begin();
-        // row 1 — SCENARIO (what kind of fight): sets starting posture + headcount
+        // row 1 — SCENARIO (what kind of fight): icon+name tiles. Sets starting posture + headcount.
         print("SCENARIO", X, Y, CLR_WHITE);
-        int sxw = (W - (NSCEN-1)*6) / NSCEN;                 // buttons across, 6px gaps
+        int sxw = (W - (NSCEN-1)*6) / NSCEN;                 // tiles across, 6px gaps
         for (int s=0;s<NSCEN;s++) { int bx = X + s*(sxw+6);
-            if (ui_button(bx, Y+9, sxw, 13, SCEN[s].name)) set_scenario(s);
-            if (scenario==s) rect(bx-1, Y+8, sxw+2, 15, CLR_YELLOW);   // active scenario framed
+            if (ui_button(bx, Y+9, sxw, 27, "")) set_scenario(s);    // empty box = the hit area; icon+name drawn over it
+            spr(24+s, bx + sxw/2 - 8, Y+9);                          // game-mode icon, centred at the top
+            font(FONT_SMALL); print_centered(SCEN[s].name, bx + sxw/2, Y+27, CLR_LIGHT_GREY); font(FONT_NORMAL);
+            if (scenario==s) rect(bx-1, Y+8, sxw+2, 29, CLR_YELLOW); // active mode framed
         }
-        // row 2 — DIFFICULTY (how hard): lethality presets + sliders
-        print("DIFFICULTY", X, Y+27, CLR_WHITE);
+        // row 2 — DIFFICULTY (how hard): lethality presets + sliders, each with its own glyph
+        print("DIFFICULTY", X, Y+44, CLR_WHITE);
         int pxs[3]={X,X+62,X+132}, pw[3]={56,64,56}; const char *pn[3]={"easy","normal","hard"};
-        for (int p=0;p<3;p++) { if (ui_button(pxs[p], Y+38, pw[p], 13, pn[p])) set_preset(p);
-            if (cur_preset==p) rect(pxs[p]-1, Y+37, pw[p]+2, 15, CLR_YELLOW); }
-        int sy = Y+57;                                       // any slider drag → "custom" (no preset highlighted)
-        if (ui_slider(&sl_dmg,   X, sy, W, "damage"))      cur_preset=-1;  sy += 14;
-        if (ui_slider(&sl_rate,  X, sy, W, "fire rate"))   cur_preset=-1;  sy += 14;
-        if (ui_slider(&sl_acc,   X, sy, W, "accuracy"))    cur_preset=-1;  sy += 14;
-        if (ui_slider(&sl_sight, X, sy, W, "sight"))       cur_preset=-1;  sy += 14;
-        if (ui_slider(&sl_supp,  X, sy, W, "suppression")) cur_preset=-1;  sy += 14;
-        if (ui_slider(&sl_ammo,  X, sy, W, "ammo (scarce/reserve/unlimited)")) cur_preset=-1;  sy += 14;
-        if (ui_slider(&sl_heal,  X, sy, W, "healing (none/packs/+regen)")) cur_preset=-1;  sy += 16;
+        for (int p=0;p<3;p++) { if (ui_button(pxs[p], Y+55, pw[p], 13, pn[p])) set_preset(p);
+            if (cur_preset==p) rect(pxs[p]-1, Y+54, pw[p]+2, 15, CLR_YELLOW); }
+        int sy = Y+74, slx = X+10, slw = W-10;               // sliders indented to leave a left-edge glyph; drag → "custom"
+        spr(32, X, sy+2); if (ui_slider(&sl_dmg,   slx, sy, slw, "damage"))      cur_preset=-1;  sy += 14;
+        spr(33, X, sy+2); if (ui_slider(&sl_rate,  slx, sy, slw, "fire rate"))   cur_preset=-1;  sy += 14;
+        spr(34, X, sy+2); if (ui_slider(&sl_acc,   slx, sy, slw, "accuracy"))    cur_preset=-1;  sy += 14;
+        spr(35, X, sy+2); if (ui_slider(&sl_sight, slx, sy, slw, "sight"))       cur_preset=-1;  sy += 14;
+        spr(36, X, sy+2); if (ui_slider(&sl_supp,  slx, sy, slw, "suppression")) cur_preset=-1;  sy += 14;
+        spr(37, X, sy+2); if (ui_slider(&sl_ammo,  slx, sy, slw, "ammo (scarce/reserve/unlimited)")) cur_preset=-1;  sy += 14;
+        spr(38, X, sy+2); if (ui_slider(&sl_heal,  slx, sy, slw, "healing (none/packs/+regen)")) cur_preset=-1;  sy += 16;
         if (ui_button(X,     sy, 116, 16, phase==PH_OVER ? "apply + restart" : "apply + start")) { reset(); phase=PH_PLAYING; show_panel=0; }
         if (ui_button(X+126, sy, 62,  16, "back"))                                                 show_panel=0;
         ui_end();                                            // resolve presses → clicks (without this, only hover works)
@@ -755,8 +765,9 @@ void draw(void) {
         // ---- slim bookend menu: presets + start; "tweak" opens the full panel above ----
         fillp(FILL_CHECKER, -1); rectfill(0, 0, SCREEN_W, SCREEN_H, CLR_BLACK); fillp_reset();   // dim the field
         int X=96, W=128, Y=64;
-        rrectfill(X-12, Y-40, W+24, 132, 4, CLR_DARKER_BLUE); rect(X-12, Y-40, W+24, 132, CLR_LIGHT_GREY);
+        rrectfill(X-12, Y-40, W+24, 152, 4, CLR_DARKER_BLUE); rect(X-12, Y-40, W+24, 152, CLR_LIGHT_GREY);
         if (phase==PH_OVER) {
+            spr(won ? 16 : 17, SCREEN_W/2 - 50, Y-41);   // heart on a clear / skull on a death
             print_centered(won ? "CLEARED" : "YOU DIED", SCREEN_W/2, Y-34, won?CLR_GREEN:CLR_RED);
             print_centered(str("%d / %d down", kills, ecount), SCREEN_W/2, Y-22, CLR_LIGHT_GREY);
         } else {
@@ -773,5 +784,11 @@ void draw(void) {
         if (ui_button(X, Y+24, W, 18, phase==PH_OVER ? "restart" : "start")) { reset(); phase=PH_PLAYING; }
         if (ui_button(X, Y+46, W, 16, "tweak difficulty")) show_panel = 1;
         ui_end();
+        // arsenal + gear legend — the pixel-art sprites showcase what the squad carries
+        // (5 weapons, slot == W_*) and what you can scavenge (medkit + ammo clip).
+        int ly = Y+76;
+        print_centered("arsenal + field gear", SCREEN_W/2, ly-9, CLR_MEDIUM_GREY);
+        for (int w=0;w<NWEAP;w++) spr(w, X + 2 + w*16, ly);
+        spr(8, X + 90, ly); spr(9, X + 106, ly);
     }
 }
