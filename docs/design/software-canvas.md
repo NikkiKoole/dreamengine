@@ -79,24 +79,48 @@ be coalesced.
 > an audit of every `Draw*` call in `studio.c` found four primitives still hitting the GPU with **no
 > `sw_canvas_active` branch**, so they silently vanished (or half-rendered) under the canvas. Now
 > ported / made consistent:
-> - **`map()`** — the worst gap (tilemaps are everywhere): each tile was a raw `DrawTexturePro`. Now
->   routes through `sw_blit` exactly like `spr`/`sspr`. *Verified:* `masseffect` (4× `map`) renders
->   identically, frames 1–29 byte-identical GPU↔SW.
+> - **`map()`** — the worst gap (tilemaps are everywhere): each tile was a raw `DrawTexturePro`, so
+>   tilemaps rendered **blank** under the canvas. Now routes through `sw_blit` exactly like
+>   `spr`/`sspr`. *Verified visually:* `gta`/`advancewars` terrain renders correctly (was blank
+>   before). At `map_scale 1` the blit sampler is the identity (`i*sw/dw == i`), so it's pixel-exact;
+>   scaled tiles inherit the nearest-sampling caveat below.
 > - **`rectfill_rgb()`** — `pset_rgb` was ported but its rect sibling wasn't; the true-colour
->   CPU-shader bars disappeared. Now a `sw_fillrect` row-memset. *Verified:* `pixelperfect`
->   byte-identical.
+>   CPU-shader bars disappeared. Now a `sw_fillrect` row-memset (memset path → byte-exact).
 > - **`print_outline()`** — only the inner `print()` was sw-aware; the 8 outline passes went to GPU,
->   so the outline/shadow was missing. Outline passes now use `sw_print`. *Verified:* `fonts`
->   byte-identical (outlines present).
+>   so the outline/shadow was missing. Outline passes now use `sw_print` (the outlines now appear).
 > - **`print_rot()` / `print_rot_scaled()`** — rotated text silently dropped (no branch, and unlike
 >   `spr_rot` it didn't even set `sw_force_gpu`). Now `deg==0` (+ `scale==1`) blits via `sw_print`;
 >   any rotation/scale falls the whole cart back to GPU, matching `sspr_ex`.
 >
-> *Gate:* `build-all` = 433/433 compile. **Still open (next pass, distinct class):** `zoom_rect()` /
-> `smooth_zoom()` (texture-feedback ops that sample `canvas.texture` mid-`draw()`, which is stale
-> until the end-of-frame upload — need a `sw_force_gpu` or a cbuf-readback); the **frame-0 warmup**
-> (font/sprite CPU `Image`s lag one frame, so the very first SW frame differs — pre-existing in
-> `print`/`spr`); and `sw_blit` still ignores `pal()` recolor + runtime `colorkey()`.
+> *Gate:* `build-all` = 433/433 compile.
+>
+> **Verification caveat — "byte-identical GPU↔SW" does NOT hold cart-wide, and an earlier draft of
+> this note wrongly claimed it did.** The canvas is byte-exact only for `pset`/`pset_rgb` and the
+> memset fills (`rectfill`/span fills). It is **deliberately not** byte-identical for:
+> - **`line()`** — the canvas uses `sw_sline` (the reflection-symmetric per-axis DDA), which differs
+>   from GPU `DrawLine` on diagonals *by design* (that's why `sline` exists). So any line-drawing cart
+>   shows a scatter of differing pixels that is correct, not a regression. Measured: `gta` (lines +
+>   `map`, no `pal`) = **203/64000 px (0.3%), visually identical**.
+> - **scaled blits** (`spr`/`sspr`/`map` with scale, `tritex`) — the CPU nearest sampler
+>   (`sx + i*sw/dw`) rounds differently than GPU POINT-filter at footprint boundaries.
+>
+> So an all-frames `shasum` A/B is the **wrong oracle** for any line/scaled-blit cart — use a
+> bounded pixel-diff (`magick compare -metric AE`) + an eyeball, and reserve byte-equality for the
+> pset/fill primitives (the `swcanvas_test` shasum still holds for those).
+>
+> **`sw_force_gpu` makes naive A/Bs lie.** A cart that calls `spr_rot`/`sspr_ex(deg)`/`rectfill_rot`/
+> `camera_ex(angle)` trips the sticky GPU fallback **on the frame it first hits the call** — so frame
+> 0 is a partial canvas render and frames 1+ run entirely on GPU. An A/B on such a cart (e.g.
+> `masseffect`) is comparing GPU-to-GPU after frame 0 and proves nothing about the canvas. Pick a
+> rotation-free cart to actually exercise the SW path.
+>
+> **Still open:**
+> - **`pal()` / `colorkey()` in `sw_blit` — a real visible bug, not a footnote.** A `pal()`-recolored
+>   sprite renders in raw sheet colours on the canvas. Measured: `advancewars` team-coloured units =
+>   **3897 px (6%) wrong**. This blocks flipping the canvas to default for any sprite-recolouring
+>   cart and is the highest-priority remaining port.
+> - **`zoom_rect()` / `smooth_zoom()`** — texture-feedback ops that sample `canvas.texture`
+>   mid-`draw()`, stale until the end-of-frame upload. Need a `sw_force_gpu` or a cbuf-readback.
 
 ## When to enable it — HW vs SW (the per-cart rule)
 
