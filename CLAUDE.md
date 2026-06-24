@@ -128,6 +128,8 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              compose-clips.js stitch baked clips into one reel (ffmpeg xfade) from a .reel manifest
              ui-audit.js     UI bug finder (off-screen text, overlaps, dead widgets, hidden panels)
              mirror-diff.js  golden-pixel-diff harness: assert a render's symmetry invariant headless
+             road-check.js   correctness oracle for coverage-based roads: framebuffer invariants (no naked
+                             edges / strays / floating kerb) at ANY angle; --all = config-matrix gate; --overlay
              build-site.js / publish-cart.sh   build wasm carts + gallery → site/; publish + push
              mobile-lint.js  static report card: can a phone play this cart?
              wav-analyze.js / tune-check.js / dc-check.js / level-check.js / fx-check.js /
@@ -217,10 +219,13 @@ tilemap canvas IS the sprite sheet — click a tile to edit. Auto-exported as `b
 **Sprites don't have to be hand-drawn here.** Need a sprite *in code* — UI icons/buttons, HUD
 glyphs, procedural tiles, anything using the extended palette 16–31? Author it with
 `tools/sprite-draw.js` from a `<cart>.cart.js` (don't hand-roll flat arrays). Worked examples:
-`boom` (toolbar button icons), `masseffect` (units + tiles). Full API + the three sprite patterns:
-[`docs/guides/cart-authoring.md`](docs/guides/cart-authoring.md). Iterate with
-`node tools/sprite-preview.js <cart>` — renders the slots to one labelled PNG (no compile/run), so
-you tweak the JS and re-look in seconds.
+`boom` (toolbar button icons), `masseffect` (units + tiles), `flank` (HUD/menu glyphs). Full API +
+the three sprite patterns: [`docs/guides/cart-authoring.md`](docs/guides/cart-authoring.md). Iterate
+with `node tools/sprite-preview.js <cart>` — renders the slots to one labelled PNG (no compile/run),
+so you tweak the JS and re-look in seconds.
+A small icon glyph reads where a word can't: a cramped text HUD/panel (`HP 80  ammo 12|36`) becomes
+**minimal and beautiful** by swapping labels for code-drawn glyphs (♥/clip/skull) — `flank` is the
+worked example (HUD row, start-menu legend, mode-tile + per-slider icons).
 
 ## Fonts
 
