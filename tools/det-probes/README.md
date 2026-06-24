@@ -20,12 +20,18 @@ bash tools/det-probes/run.sh      # build+run all three on arm64 / x86-64 (Roset
 | `detstress.c` | `sline` + `sfill` (from `tools/carts/linesym.c`) | dense slope fan + rotating polys → float path is device-stable |
 | `stritex.c`   | software `tritex` (edge-function + top-left rule) | textured triangle is device-stable **and** two tris tile a quad with `overlap=0 gap=0` |
 | `rotstroke.c` | rotated outline via "rotate endpoints → `sline`" | a square outline stays **1 connected component at all 360°** (no gap), device-stable |
+| `rotfill.c`   | rotated fill via **inverse** mapping vs forward (Fork 2) | inverse is **gap-free at all 360°** (1 component, stable area), device-stable; forward leaves up to **1166 holes** (~19%) |
 
 ## Findings (2026-06-24, Apple M1 host)
 
-All three are **bit-identical** across arm64 / x86-64 / wasm, and FMA-contraction-immune
+All four are **bit-identical** across arm64 / x86-64 / wasm, and FMA-contraction-immune
 (`-ffp-contract=on/fast/off` all agree — the divides leave no contractable surface). So goal-B
 determinism is reachable with the **existing float code** — no fixed-point rewrite forced.
+
+`rotfill` also proves **Fork 2's inverse-mapping claim**: rotating a *filled* shape by visiting each
+dest pixel and rotating it back to shape-local coords is gap-free by construction at every angle,
+where forward-mapping (rotate each source pixel + round) staircases into holes. So rotated fills can
+run in software without a GPU fallback; rotated *strokes* remain the harder sub-case (see the doc).
 
 **The one build rule this surfaces:** never `-ffast-math`. It *does* shift the result (consistently
 across platforms, but it's a footgun if one build enables it and another doesn't). Keep FP flags

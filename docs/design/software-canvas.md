@@ -250,6 +250,13 @@ rotation-in-software until there's measured demand. (The "translation-camera-onl
 >   a Mode-7 background) — i.e. *exactly* the case the 2026-06 note isolated as the only thing
 >   rotation actually forces onto the per-pixel path. So if Fork-2/C ever needs to grow a
 >   rotating-fill path, inverse mapping is how, without a GPU fallback.
+>   > **Measured (2026-06-24) — proven in `tools/det-probes/rotfill.c`.** Inverse-mapping a filled
+>   > rectangle is **gap-free at all 360°** (always 1 connected component, area stable at ~6160px)
+>   > and **bit-identical across arm64/x86-64/wasm**; forward-mapping the same rect leaves up to
+>   > **1166 holes (~19% of the shape)** at the worst angle. So the rotated-*fill* path is validated
+>   > — gap-free *and* deterministic — confirming inverse mapping (not GPU fallback) is the tool for
+>   > rotating fills. (Rotated *strokes* are still the open sub-case below; RotSprite is the quality
+>   > layer for rotated *sprites*, see the note after Fork 3's region.)
 > - It does **not** rescue rotated *stroked* primitives (a 1px `line`/`circ` outline). Those are
 >   still rasterized forward in screen space, so they re-inherit the consistency/aliasing problem
 >   (`rasterization-consistency.md`) and need a sub-pixel line drawer (Xiaolin-Wu-class) to look
