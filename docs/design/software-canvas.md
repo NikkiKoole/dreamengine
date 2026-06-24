@@ -286,15 +286,22 @@ rotation-in-software until there's measured demand. (The "translation-camera-onl
 > "smooth rotation" mode** for when a cart wants it. Only relevant once rotation runs in software at
 > all (Fork-2 demand); filed here as the answer for that day. (Algorithm: the "rotsprite" scaler, as
 > used by Aseprite/LibGDX.)
-> > **Measured (2026-06-24) — `tools/det-probes/rotspr.c` shows why the naive options aren't enough.**
-> > A rotated sprite is `rotfill`'s inverse mapping + a texture sample, so the *footprint* is gap-free
-> > and bit-identical across arches — but the *content* degrades, and each cheap method fails a
-> > different way: **nearest-neighbour** fragments a 1px frame into ≤7 pieces and misses 21% of source
-> > texels at the worst angle; **4×4 supersample + majority vote** smooths edges but erases a lone
-> > single-pixel detail (survives only 196/360 angles vs nearest's 308). So preserving *both* thin
-> > lines and lone pixels through rotation genuinely needs the edge-aware RotSprite scaler — neither
-> > nearest nor plain supersampling is a substitute. Confirms RotSprite as the real (opt-in) answer,
-> > not a nice-to-have.
+> > **Measured (2026-06-24) — `tools/det-probes/rotspr.c`, three methods head-to-head.** A rotated
+> > sprite is `rotfill`'s inverse mapping + a texture sample, so the *footprint* is gap-free and
+> > bit-identical across arches; the question is *content* quality. Tested **nearest** (== the GPU
+> > point-filter path we ship today), **4×4 supersample+majority**, and real **RotSprite** (EPX/Scale2x
+> > ×3 → 8× edge-aware upscale, rotate, mode-downscale). Result, and it splits by feature type:
+> > - **Thin LINES (the common, realistic case): RotSprite wins decisively** — a 1px frame stays ≤2
+> >   connected pieces vs nearest's 7, and the diagonal stays continuous where nearest/supersample
+> >   dash it. This is the headline RotSprite win and the reason it's the route.
+> > - **A truly-lone 1px pixel: a resolution-floor edge case, and RotSprite is *not* best at it** —
+> >   nearest catches the lone dot most (308/360) because point-sampling rewards any overlap, while
+> >   vote-based downscales drop a sub-pixel-sized feature more (super 252, RotSprite 156). EPX
+> >   rescues *connected* detail, not solitary specks; a lone pixel rotating is unstable in any method.
+> > Takeaway: **what we ship now (GPU point-filter) is quality-equal to software *nearest***, so moving
+> > sprite rotation to software loses nothing and adds determinism; and **RotSprite is a strict upgrade
+> > for real sprite content** (outlines, connected detail) that the GPU can't easily do — confirming it
+> > as the opt-in quality mode, with the honest caveat that it's about lines/shape, not lone specks.
 
 ### Fork 3 — compositing (falls out of Fork 2)
 

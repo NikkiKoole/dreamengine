@@ -22,7 +22,7 @@ bash tools/det-probes/run.sh      # build+run all three on arm64 / x86-64 (Roset
 | `rotstroke.c` | rotated outline via "rotate endpoints → `sline`" | a square outline stays **1 connected component at all 360°** (no gap), device-stable |
 | `rotfill.c`   | rotated fill via **inverse** mapping vs forward (Fork 2) | inverse is **gap-free at all 360°** (1 component, stable area), device-stable; forward leaves up to **1166 holes** (~19%) |
 | `rotline.c`   | crisp rotated 1px line via `sline` (rotated strokes) | **uniform-width (excess 0) + connected (1 comp) at all 360°**, device-stable; only residual is per-degree *shimmer* (churn up to ~line length), an aesthetic of crisp/no-AA rotation |
-| `rotspr.c`    | rotated *sprite* = inverse-map + texture sample (nearest vs supersample) | footprint gap-free + device-stable, but thin CONTENT degrades both ways — nearest fragments the 1px frame (≤7 pieces, 21% texels dropped), supersample erases the lone dot (196/360). Motivates RotSprite (edge-aware) |
+| `rotspr.c`    | rotated *sprite*: nearest vs supersample vs **RotSprite** (EPX×3 upscale→rotate→mode-downscale) | footprint gap-free + device-stable. **RotSprite keeps thin LINES nearly intact** (frame ≤2 pieces vs nearest's 7; diagonal continuous) — the real win. A truly-lone 1px dot is a resolution-floor edge case (nearest 308 > super 252 > RotSprite 156 /360): point-sampling catches a speck best, vote-based methods drop it. |
 
 ## Findings (2026-06-24, Apple M1 host)
 
