@@ -169,9 +169,8 @@ typedef struct { V2 p; int prog1, prog2; } Xing;
 #define LIGHT_GRN 300          // green phase (frames)
 // ── chase: a pursuer cuts off-road to intercept, then boxes the suspect ──
 #define BEELINE_RANGE 220.0f   // this close, a pursuer drives STRAIGHT at the target (leaves the road if shorter)
-#define LOCKIN_RANGE   75.0f   // this close, it stops tailing and BOXES — aims ahead of + to a flank of the suspect
-#define LOCKIN_LEAD    34.0f   // how far ahead of the suspect to aim (cut off its escape)
-#define LOCKIN_SIDE    24.0f   // flank offset — one cop each side makes a pincer
+#define LOCKIN_RANGE   75.0f   // this close, a cop stops tailing and parks in a slot against the suspect
+#define LOCKIN_PARK    13.0f   // park-slot distance from the suspect (≈ a car length → it parks touching)
 #define SCATTER_RANGE  46.0f   // a civilian within this of a reckless car pulls aside & brakes (scatter)
 
 typedef struct {
@@ -1142,21 +1141,26 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     // CHASE override: a pursuer that's closed in cuts STRAIGHT at the target (off-road if the road
     // would take the long way — it just eats the grass penalty), and when very close it BOXES the
     // suspect: aim ahead of it (cut off the escape) and to one flank, so two cops pincer it in.
-    // Full throttle — cops push, they don't keep a polite gap.
+    // Cops push (no polite gap). Far → beeline straight at the suspect (off-road allowed). Close →
+    // each cop takes a slot RIGHT against the suspect (one in front, one behind) and PARKS there —
+    // brake to a halt at the slot rather than full-throttling past it (which just circles). Two cops
+    // sandwich the suspect so it can't pull away.
     if (c->target >= 0 && c->target < S->ncars + S->ncross) {
         Car *t = &S->car[c->target];
         float rx = t->px - c->px, ry = t->py - c->py;
         float dist = fsqrt(rx*rx + ry*ry);
         if (dist < BEELINE_RANGE) {
+            bool boxing = dist < LOCKIN_RANGE;
             float ax = t->px, ay = t->py;
-            if (dist < LOCKIN_RANGE) {                   // box it: ahead + a flank (per-cop side)
-                float side = (idx & 1) ? 1.0f : -1.0f;
-                ax += dx(LOCKIN_LEAD, t->ang) + dx(LOCKIN_SIDE, t->ang + 90.0f*side);
-                ay += dy(LOCKIN_LEAD, t->ang) + dy(LOCKIN_SIDE, t->ang + 90.0f*side);
+            if (boxing) {                                 // park slot: ahead of (idx even) / behind (odd) the suspect
+                float slot = t->ang + ((idx & 1) ? 180.0f : 0.0f);
+                ax += dx(LOCKIN_PARK, slot); ay += dy(LOCKIN_PARK, slot);
             }
-            float des = atan2_deg(ay - c->py, ax - c->px);
+            float sdx = ax - c->px, sdy = ay - c->py, sdist = fsqrt(sdx*sdx + sdy*sdy);
+            float des = atan2_deg(sdy, sdx);
             turn = clamp(awrap(des - c->ang) / 7.0f, -1.0f, 1.0f);
-            thr  = 1.0f;
+            // beeline: full throttle. boxing: drive to the slot, then ease & brake to park on it.
+            thr = !boxing ? 1.0f : (sdist > 14.0f ? 1.0f : sdist > 6.0f ? -0.2f : -1.0f);
         }
     }
 
@@ -2019,6 +2023,11 @@ void spec(void) {
     }
     expect(dmin < 30.0f, "chase: a pursuer routes to and reaches its target (closes the distance)");
     expect(cut_grass, "chase: a pursuer cuts off-road (grass) to intercept, not only follows the road");
+    // having boxed the (pinned) suspect, the cop PARKS on it — stays close and comes to rest,
+    // rather than circling at speed.
+    float rxe = cop->px - ppx, rye = cop->py - ppy;
+    float de = fsqrt(rxe*rxe + rye*rye), ve = cop->spd < 0 ? -cop->spd : cop->spd;
+    expect(de < 40.0f && ve < 0.6f, "chase: a cop PARKS on the suspect (close and stopped), not circling");
 
     // ── scatter: a civilian yields (brakes) when a reckless car (cop) is right beside it. ──
     gen_track(0x1234u);
