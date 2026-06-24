@@ -159,8 +159,8 @@ typedef struct { V2 p; int prog1, prog2; } Xing;
 // *line to follow* changes (cl[] here, road_at() in the open world later).
 #define RACE_CARS    7         // RACE: 1 player + 6 AI, one per personality
 #define TRAFFIC_CARS 32        // TRAFFIC: a big crowd on the loop — long queues behind a red
-#define TRAFFIC_CARS_X 20      // TRAFFIC + CROSS: a thinner loop crowd, so the give-way road finds gaps
-#define TRAFFIC_CROSS 14       // TRAFFIC + CROSS: the second track's stream
+#define TRAFFIC_CARS_X 13      // TRAFFIC + CROSS: a thin loop crowd so arrivals don't outpace one-at-a-time junctions
+#define TRAFFIC_CROSS 10       // TRAFFIC + CROSS: the second track's stream (kept light for the same reason)
 #define CARS_MAX     48        // array bound (>= loop crowd + cross stream)
 #define RACE_LAPS 3
 #define COLL_R    16.0f        // car-to-car avoidance radius (world px)
@@ -1820,20 +1820,23 @@ void spec(void) {
         gen_track(seeds[t]);
         S->traffic = true; S->cross = true;
         put_all_at_start();
-        step(900);
-        int moving = 0, wedged = 0;
+        int collisions = 0;
+        for (int chunk = 0; chunk < 150; chunk++) {       // 900 frames, sampled — collisions caught over TIME
+            step(6);
+            for (int a = 0; a < S->ncars; a++)
+                for (int b = S->ncars; b < S->ncars + S->ncross; b++) {
+                    float rx = S->car[b].px - S->car[a].px, ry = S->car[b].py - S->car[a].py;
+                    if (rx*rx + ry*ry >= (2.0f*CAR_HALF_L)*(2.0f*CAR_HALF_L)) continue;
+                    float fwd = rx*dx(1,S->car[a].ang) + ry*dy(1,S->car[a].ang);
+                    float lat = rx*dx(1,S->car[a].ang+90) + ry*dy(1,S->car[a].ang+90);
+                    if ((fwd<0?-fwd:fwd) < 2.0f*CAR_HALF_L && (lat<0?-lat:lat) < 2.0f*CAR_HALF_W) collisions++;
+                }
+        }
+        int moving = 0;
         for (int i = 0; i < S->ncars + S->ncross; i++)
             if ((S->car[i].spd < 0 ? -S->car[i].spd : S->car[i].spd) > 0.5f) moving++;
-        for (int a = 0; a < S->ncars; a++)
-            for (int b = S->ncars; b < S->ncars + S->ncross; b++) {
-                float rx = S->car[b].px - S->car[a].px, ry = S->car[b].py - S->car[a].py;
-                if (rx*rx + ry*ry >= (2.0f*CAR_HALF_L)*(2.0f*CAR_HALF_L)) continue;
-                float fwd = rx*dx(1,S->car[a].ang) + ry*dy(1,S->car[a].ang);
-                float lat = rx*dx(1,S->car[a].ang+90) + ry*dy(1,S->car[a].ang+90);
-                if ((fwd<0?-fwd:fwd) < 2.0f*CAR_HALF_L && (lat<0?-lat:lat) < 2.0f*CAR_HALF_W) wedged++;
-            }
+        expect_eq(collisions, 0, "reservation: no cross-track collision over a long run (every seed)");
         expect(moving >= 4, "reservation: no gridlock — cars still moving after a long run (every seed)");
-        expect_eq(wedged, 0, "reservation: no cross-track wedge at the end (every seed)");
     }
 }
 #endif

@@ -177,7 +177,17 @@ respawn at the cross-road's ends (it's not a loop) or it bends back — decide i
   The grant uses a **claim score** (soonest-to-arrive, biased by aggression = priority track + `PERS.aggro`)
   — the hook for **"crazy vs careful" drivers** (widen the bias, shorten a bold driver's stop gap, etc).
   The ring shows orange = reserved; the `D` overlay draws a line from each owner to its junction.
-  Remaining: per-driver personality on the claim, and a rule toggle (priority / 4-way / signal).
+  **Throughput vs. crash-freeness (2026-06-24):** single-car ownership passes only one car per claim, so
+  on a long run congestion can build (the junction clears slower than two busy streams arrive). A
+  **per-track "green phase"** (a whole platoon streams through, then switch) was built to fix that — but
+  it could NOT be made crash-free across seeds: at the phase boundary a prog-vs-physical mismatch on
+  curved tracks let a rare cross-track contact through (the spec's over-time, multi-seed collision check
+  caught 3 on one seed; tuning all-red/guards only shuffled it). Reverted to the proven single-car (0
+  collisions over time on all 4 spec seeds) and instead **lightened the density** (`TRAFFIC_CARS_X` 13 /
+  `TRAFFIC_CROSS` 10) so arrivals match one-at-a-time capacity — flows without buildup, stays crash-free.
+  A crash-free per-track would need physical-distance (not prog-distance) box-clear checks at the switch;
+  parked as a future option if higher density is wanted. Remaining: per-driver personality on the claim,
+  and a rule toggle (priority / 4-way / signal).
 
 **Watch out for:** deadlock (two priority rules that both yield → everyone stops); pick an asymmetric
 rule first. And the existing TRAFFIC light is on the loop — decide whether it stays, moves to the
