@@ -150,6 +150,21 @@ static float decay_at(float x, float y) {
 }
 static float fertility_at(float x, float y) { return clamp(noise3(x * FERT_FREQ, y * FERT_FREQ, (float)lf_seed + 400.0f), 0.0f, 1.0f); }
 
+// ── land value: a COMPOSED field (no new seed) — how desirable a parcel is.
+// waterfront/low-lying amenity + central density + green surroundings, minus dereliction.
+// Pure fn of the fields above → emergent "nice vs rough" districts, nothing hand-placed.
+static float value_at(float x, float y) {
+    float e = elev_raw(x, y);
+    float shore = clamp(1.0f - (e - ELEV_SAND) / 0.16f, 0.0f, 1.0f);   // near sea level ≈ near water → premium
+    float v = 0.50f                                                    // every term centred so the field sits at ~0.5, not dragged low
+            + 0.20f * shore                                            // waterfront amenity (one-sided bonus)
+            + 0.45f * (urban_density_at(x, y) - 0.50f)                 // central/urban land
+            + 0.25f * (fertility_at(x, y)     - 0.50f)                 // green amenity
+            - 0.45f * (decay_at(x, y)         - 0.50f);                // dereliction — but MID decay is neutral, not a penalty
+    v = 0.50f + (v - 0.50f) * 1.30f;                                   // gentle contrast around mid so districts read
+    return clamp(v, 0.0f, 1.0f);
+}
+
 // MODIFIER collapse — punch the roof/massing open to foundation + spill rubble (reads
 // phase-4 output, transforms it). MODIFIER overgrow — creep growth into the wreckage,
 // scaled by decay × fertility. Both pure fns of (body, hash, fields); run in order.
@@ -353,7 +368,9 @@ static int block_lots(int bx, int by, int zone, LotSlot *out, int cap) {
             unsigned lh = hash2((int)sh + i * 2399, (int)(sh >> 5) - i * 41);
             out[n].lot = r; out[n].hash = lh; out[n].outward = (unsigned char)outward;
             out[n].attached = (unsigned char)(attach_res && lw <= 64);
-            out[n].massing  = (unsigned char)massing_at(r.x + r.w / 2.0f, r.y + r.h / 2.0f, zone, lh);
+            int m = massing_at(r.x + r.w / 2.0f, r.y + r.h / 2.0f, zone, lh);
+            if (zone == ZN_RES && m < 3 && value_at(r.x + r.w / 2.0f, r.y + r.h / 2.0f) > 0.72f) m++;  // prime lots build bulkier
+            out[n].massing  = (unsigned char)m;
             n++;
         }
     }
@@ -392,7 +409,7 @@ typedef struct { Rect r; int label; int touch; } Room;
 typedef struct { int x, y, len, vert, dpos, dlen; } Wall;
 #define MAX_ROOMS 32
 #define MAX_WALLS 32
-typedef struct { Rect shell; int type, outward; Room room[MAX_ROOMS]; int nroom; Wall wall[MAX_WALLS]; int nwall; int egx, egy, entry_room; } Plan;
+typedef struct { Rect shell; int type, outward; float value; Room room[MAX_ROOMS]; int nroom; Wall wall[MAX_WALLS]; int nwall; int egx, egy, entry_room; } Plan;
 typedef struct { int min_w, min_h, maxdepth; float bias_lo, bias_hi; } SplitP;
 static const SplitP SPLIT[ZN_N] = {
     [ZN_RES] = { 13, 13, 4, 0.34f, 0.66f },
@@ -457,6 +474,12 @@ static void assign_labels(Plan *p) {
         if (ki >= 0) p->room[ki].label = RM_KITCHEN;
         int e = p->entry_room;
         if (e >= 0 && e != liv && p->room[e].label == RM_BED && (long)p->room[e].r.w * p->room[e].r.h < avg) p->room[e].label = RM_HALL;
+        if (p->value > 0.70f && n >= 5) {                    // prime homes get an ensuite (second bath)
+            int eb = -1;
+            for (int i = 0; i < n; i++) { if (p->room[i].label != RM_BED) continue;
+                if (eb < 0 || (long)p->room[i].r.w * p->room[i].r.h < (long)p->room[eb].r.w * p->room[eb].r.h) eb = i; }
+            if (eb >= 0) p->room[eb].label = RM_BATH;
+        }
     } else if (p->type == ZN_COM) {
         for (int i = 0; i < n; i++) p->room[i].label = RM_BACK;
         int shop = (front >= 0) ? front : big; p->room[shop].label = RM_SHOP;
@@ -467,11 +490,17 @@ static void assign_labels(Plan *p) {
         if (n > 1 && small != big) p->room[small].label = RM_OFFICE;
     }
 }
-static void plan_build(Plan *p, Rect shell, int type, int outward, unsigned h) {
-    p->shell = shell; p->type = type; p->outward = outward; p->nroom = p->nwall = 0; p->entry_room = -1;
+static void plan_build(Plan *p, Rect shell, int type, int outward, unsigned h, float value) {
+    p->shell = shell; p->type = type; p->outward = outward; p->value = value; p->nroom = p->nwall = 0; p->entry_room = -1;
     Rect interior = { shell.x + 1, shell.y + 1, shell.w - 2, shell.h - 2 };
+    SplitP sp = SPLIT[type];
+    if (type == ZN_RES) {                                    // value drives how finely a home subdivides
+        sp.maxdepth += value > 0.66f ? 1 : value < 0.33f ? -1 : 0;
+        int bigger = (int)((1.0f - value) * 5.0f);           // poorer homes: larger min room → fewer, cruder rooms
+        sp.min_w += bigger; sp.min_h += bigger;
+    }
     if (interior.w < 4 || interior.h < 4) emit_room(p, interior);
-    else bsp(p, interior, h, 0, &SPLIT[type]);
+    else bsp(p, interior, h, 0, &sp);
     int cx = shell.x + shell.w / 2, cy = shell.y + shell.h / 2, ix = cx, iy = cy;
     switch (outward) {
         case 0: p->egx = cx; p->egy = shell.y;               ix = cx; iy = shell.y + 2;            break;
@@ -499,17 +528,40 @@ static void edge(int x0, int y0, int len, int vert, int gap0, int gaplen, int co
         if (gaplen > 0 && gx >= gap0 && gx < gap0 + gaplen) continue;
         if (vert) pset(x0, y0 + i, col); else pset(x0 + i, y0, col); }
 }
-static void furnish(const Room *rm) {
+static void furnish(const Room *rm, float value) {
     Rect r = rm->r; int ix = r.x + 2, iy = r.y + 2, iw = r.w - 4, ih = r.h - 4;
     if (iw < 4 || ih < 4) return;
     int cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    bool rich = value > 0.50f, lux = value > 0.78f;        // extra furniture as the home gets nicer
     switch (rm->label) {
-        case RM_BED:    rectfill(ix, iy, iw * 3 / 5, ih / 2, CLR_INDIGO); rectfill(ix + 1, iy + 1, (iw * 3 / 5) - 2, 2, CLR_LIGHT_PEACH); break;
-        case RM_LIVING: rectfill(ix, iy + ih - 4, iw * 2 / 3, 3, CLR_DARK_RED); rectfill(cx - 3, cy, 6, 3, CLR_DARK_BROWN); break;
-        case RM_KITCHEN:rectfill(ix, iy, iw, 2, CLR_LIGHT_GREY); rectfill(ix, iy, 2, ih, CLR_LIGHT_GREY); rectfill(ix + iw - 3, iy + 1, 2, 2, CLR_DARK_GREY); break;
-        case RM_BATH:   rectfill(ix, iy, iw / 2 + 1, 3, CLR_BLUE); circfill(ix + iw - 2, iy + ih - 2, 1, CLR_WHITE); break;
+        case RM_BED: {
+            int bw = iw * 3 / 5; rectfill(ix, iy, bw, ih / 2, CLR_INDIGO); rectfill(ix + 1, iy + 1, bw - 2, 2, CLR_LIGHT_PEACH);  // bed + pillow
+            if (iw >= 9)               rectfill(ix + bw + 1, iy, 2, 2, CLR_DARK_BROWN);              // nightstand
+            if (rich && iw >= 9 && ih >= 10) rect(ix + 1, iy + ih - 4, iw - 2, 3, CLR_DARK_RED);     // rug
+            if (lux  && iw >= 11)      rectfill(ix + iw - 3, iy + ih - 5, 3, 5, CLR_DARK_BROWN);      // wardrobe
+            break;
+        }
+        case RM_LIVING:
+            rectfill(ix, iy + ih - 4, iw * 2 / 3, 3, CLR_DARK_RED);                                   // sofa
+            rectfill(cx - 3, cy, 6, 3, CLR_DARK_BROWN);                                               // coffee table
+            if (iw >= 9 && ih >= 9)    rect(ix + 1, iy + 1, iw - 2, ih - 6, CLR_BROWN);               // rug
+            if (rich && iw >= 8)       rectfill(ix, iy, iw / 2, 2, CLR_DARKER_GREY);                  // TV console
+            if (lux  && iw >= 11)      rectfill(ix + iw - 4, iy + ih - 4, 4, 3, CLR_DARK_RED);        // armchair
+            break;
+        case RM_KITCHEN:
+            rectfill(ix, iy, iw, 2, CLR_LIGHT_GREY); rectfill(ix, iy, 2, ih, CLR_LIGHT_GREY);         // counters
+            rectfill(ix + iw - 3, iy + 1, 2, 2, CLR_DARK_GREY);                                       // appliance
+            if (rich && iw >= 9 && ih >= 9) rectfill(cx - 2, cy, 4, 3, CLR_DARK_BROWN);               // island/table
+            break;
+        case RM_BATH:
+            rectfill(ix, iy, iw / 2 + 1, 3, CLR_BLUE);                                                // tub
+            circfill(ix + iw - 2, iy + ih - 2, 1, CLR_WHITE);                                         // sink
+            if (iw >= 7) rectfill(ix + iw - 3, iy, 2, 2, CLR_WHITE);                                  // toilet
+            break;
         case RM_SHOP:   for (int yy = iy + 1; yy < iy + ih - 3; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); rectfill(ix, iy + ih - 2, iw, 2, CLR_BROWN); break;
-        case RM_OFFICE: rectfill(ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN); rectfill(ix + 1, iy + 4, 3, 3, CLR_DARK_GREY); break;
+        case RM_OFFICE: rectfill(ix, iy, iw * 2 / 3, 3, CLR_DARK_BROWN); rectfill(ix + 1, iy + 4, 3, 3, CLR_DARK_GREY);
+            if (rich && ih >= 8) rectfill(ix + iw - 2, iy, 2, ih - 1, CLR_DARK_BROWN);                // bookshelf
+            break;
         case RM_BAY:    for (int yy = iy + 2; yy < iy + ih - 3; yy += 7) for (int xx = ix + 2; xx < ix + iw - 3; xx += 8) { if (hash2(xx, yy + lf_seed) & 1) continue; rectfill(xx, yy, 4, 4, CLR_BROWN); rect(xx, yy, 4, 4, CLR_DARK_BROWN); } break;
         case RM_STORE: case RM_BACK: for (int yy = iy + 1; yy < iy + ih - 1; yy += 3) line(ix, yy, ix + iw - 1, yy, CLR_DARK_BROWN); break;
         case RM_HALL:   rectfill(cx - 1, iy, 3, ih, CLR_DARK_RED); break;
@@ -519,7 +571,7 @@ static void plan_draw(const Plan *p, Show s) {
     Rect sh = p->shell;
     rectfill(sh.x + 1, sh.y + 1, sh.w - 2, sh.h - 2, SLAB_COL);
     if (s.floors) for (int i = 0; i < p->nroom; i++) { Rect r = p->room[i].r; rectfill(r.x, r.y, r.w, r.h, RM_FLOOR[p->room[i].label]); }
-    if (s.props) for (int i = 0; i < p->nroom; i++) furnish(&p->room[i]);
+    if (s.props) for (int i = 0; i < p->nroom; i++) furnish(&p->room[i], p->value);
     if (s.walls) for (int i = 0; i < p->nwall; i++) { Wall w = p->wall[i];
         if (w.vert) { for (int y = w.y; y < w.y + w.len; y++) if (!(y >= w.dpos && y < w.dpos + w.dlen)) pset(w.x, y, WALL_INT); }
         else        { for (int x = w.x; x < w.x + w.len; x++) if (!(x >= w.dpos && x < w.dpos + w.dlen)) pset(x, w.y, WALL_INT); } }
@@ -543,11 +595,15 @@ static void plan_draw(const Plan *p, Show s) {
 }
 
 // ── the roof (what you see at city zoom) + outdoor yard/driveway ──────────────────
-static void draw_roof(Rect b, int zone, int massing, unsigned h) {
-    static const int ROOF_RES [5] = { CLR_RED, CLR_DARK_RED, CLR_BROWN, CLR_PEACH, CLR_DARK_PURPLE };
+static void draw_roof(Rect b, int zone, int massing, unsigned h, float value) {
+    static const int ROOF_RES [5] = { CLR_DARK_PURPLE, CLR_DARK_RED, CLR_BROWN, CLR_RED, CLR_PEACH };  // drab→warm, low→high value
     static const int ROOF_COM [4] = { CLR_DARK_GREY, CLR_TRUE_BLUE, CLR_BLUE_GREEN, CLR_INDIGO };
     static const int ROOF_IND [3] = { CLR_DARKER_BLUE, CLR_DARKER_GREY, CLR_DARK_GREY };
-    int col = zone == ZN_RES ? ROOF_RES[h % 5] : zone == ZN_COM ? ROOF_COM[h % 4] : ROOF_IND[h % 3];
+    int col;
+    if (zone == ZN_RES) {
+        int vi = (int)(value * 4.999f) + (h % 4 == 0 ? ((h >> 2) & 1 ? 1 : -1) : 0);  // value sets the tier; occasional ±1 jitter for texture
+        col = ROOF_RES[vi < 0 ? 0 : vi > 4 ? 4 : vi];
+    } else col = zone == ZN_COM ? ROOF_COM[h % 4] : ROOF_IND[h % 3];
     rectfill(b.x, b.y, b.w, b.h, col);
     rect(b.x, b.y, b.w, b.h, CLR_BROWNISH_BLACK);
     if (massing >= 1) {
@@ -560,7 +616,7 @@ static void draw_roof(Rect b, int zone, int massing, unsigned h) {
     }
 }
 static void border_edge(Rect r, int style);                  // defined with pave/stamp below
-static void draw_outdoor(Rect lot, Rect b, int outward, int zone, int attached, unsigned h, bool detail) {
+static void draw_outdoor(Rect lot, Rect b, int outward, int zone, int attached, unsigned h, bool detail, float value) {
     int dc = CLR_MEDIUM_GREY, dx = b.x + b.w / 2, dy = b.y + b.h / 2;
     switch (outward) {
         case 0: line(dx, lot.y, dx, b.y, dc);                       break;
@@ -569,15 +625,17 @@ static void draw_outdoor(Rect lot, Rect b, int outward, int zone, int attached, 
         case 3: line(lot.x, dy, b.x, dy, dc);                       break;
     }
     if (detail && zone == ZN_RES && !attached) {
-        border_edge(lot, h % 3);                              // fenced/hedged/walled yard boundary
-        int yx, yy;
-        switch (outward) {
-            case 0:  yx = lot.x + 3 + (int)(frac01(h) * (lot.w > 6 ? lot.w - 6 : 1)); yy = lot.y + 5; break;
-            case 2:  yx = lot.x + 3 + (int)(frac01(h) * (lot.w > 6 ? lot.w - 6 : 1)); yy = lot.y + lot.h - 1; break;
-            case 1:  yx = lot.x + lot.w - 2; yy = lot.y + 3 + (int)(frac01(h) * (lot.h > 6 ? lot.h - 6 : 1)); break;
-            default: yx = lot.x + 3;         yy = lot.y + 3 + (int)(frac01(h) * (lot.h > 6 ? lot.h - 6 : 1)); break;
+        border_edge(lot, value > 0.66f ? 2 : value > 0.42f ? 0 : 1);   // wall (affluent) / hedge / picket fence
+        if (value >= 0.34f) {                                          // poorest lots stay bare
+            int yx, yy;
+            switch (outward) {
+                case 0:  yx = lot.x + 3 + (int)(frac01(h) * (lot.w > 6 ? lot.w - 6 : 1)); yy = lot.y + 5; break;
+                case 2:  yx = lot.x + 3 + (int)(frac01(h) * (lot.w > 6 ? lot.w - 6 : 1)); yy = lot.y + lot.h - 1; break;
+                case 1:  yx = lot.x + lot.w - 2; yy = lot.y + 3 + (int)(frac01(h) * (lot.h > 6 ? lot.h - 6 : 1)); break;
+                default: yx = lot.x + 3;         yy = lot.y + 3 + (int)(frac01(h) * (lot.h > 6 ? lot.h - 6 : 1)); break;
+            }
+            draw_tree(yx, yy, h, 0);
         }
-        draw_tree(yx, yy, h, 0);
     }
 }
 
@@ -648,21 +706,20 @@ static void draw_city_block(int bx, int by, float zoom, bool want_peel, bool out
         Rect lot = slots[i].lot, b; int outward = slots[i].outward, att = slots[i].attached;
         if (!footprint_body(lot, outward, zone, att, &b)) continue;
         n_bld++;
-        draw_outdoor(lot, b, outward, zone, att, slots[i].hash, outdoor_detail);
         float fcx = b.x + b.w / 2.0f, fcy = b.y + b.h / 2.0f;
-        float dec = decay_at(fcx, fcy), fert = fertility_at(fcx, fcy);
+        float dec = decay_at(fcx, fcy), fert = fertility_at(fcx, fcy), val = value_at(fcx, fcy);
+        draw_outdoor(lot, b, outward, zone, att, slots[i].hash, outdoor_detail, val);
         bool peel = want_peel && (b.w * zoom >= MIN_OPEN_PX || b.h * zoom >= MIN_OPEN_PX);
         if (peel) {
-            Plan p; plan_build(&p, b, zone, outward, hmix(slots[i].hash, 3));
+            Plan p; plan_build(&p, b, zone, outward, hmix(slots[i].hash, 3), val);
             Show s = { .floors = true, .walls = true, .doors = zoom >= 0.95f, .win = zoom >= 0.95f, .props = zoom >= 1.5f };
             plan_draw(&p, s); n_open++;
             if (dbg) circ(p.egx, p.egy, 1, CLR_GREEN);
         } else {
-            draw_roof(b, zone, slots[i].massing, slots[i].hash);
+            draw_roof(b, zone, slots[i].massing, slots[i].hash, val);
         }
-        if (dec >= RUIN_TH) {                                // RUINS modifier pipeline (over roof OR plan)
-            collapse_fill(b, slots[i].hash, dec);
-            overgrow_fill(b, slots[i].hash, dec, fert);
+        if (dec >= RUIN_TH) {                                // RUINS modifier — roof view only; a peeled plan shows the intact layout
+            if (!peel) { collapse_fill(b, slots[i].hash, dec); overgrow_fill(b, slots[i].hash, dec, fert); }
             n_ruin++;
         }
     }
@@ -728,6 +785,7 @@ static void tile(float cam_x, float cam_y, float zoom) {
 
 // ── inspection overlay: the field that drives the world, as a tint ───────────────
 static int dens_ramp(float d) { return d < 0.25f ? CLR_DARK_BLUE : d < 0.5f ? CLR_INDIGO : d < 0.75f ? CLR_ORANGE : CLR_RED; }
+static int value_ramp(float v) { return v < 0.30f ? CLR_DARK_RED : v < 0.48f ? CLR_ORANGE : v < 0.64f ? CLR_YELLOW : v < 0.80f ? CLR_LIME_GREEN : CLR_GREEN; }
 static const int KIND_COL[CV_N] = { CLR_DARK_BROWN, CLR_LIME_GREEN, CLR_PINK, CLR_DARK_GREEN, CLR_BLUE, CLR_PEACH, CLR_LIGHT_GREY };
 static const int WK_COL[3] = { CLR_DARK_GREEN, CLR_YELLOW, CLR_RED };
 static void draw_overlay(float cam_x, float cam_y, float zoom) {
@@ -741,10 +799,24 @@ static void draw_overlay(float cam_x, float cam_y, float zoom) {
             int col;
             if (ovl == 1)      col = WK_COL[world_kind_at(wx + OV / 2.0f, wy + OV / 2.0f)];
             else if (ovl == 2) col = KIND_COL[cover_at(wx + OV / 2.0f, wy + OV / 2.0f).kind];
-            else               col = dens_ramp(cover_at(wx + OV / 2.0f, wy + OV / 2.0f).dens);
+            else if (ovl == 3) col = dens_ramp(cover_at(wx + OV / 2.0f, wy + OV / 2.0f).dens);
+            else               col = value_ramp(value_at(wx + OV / 2.0f, wy + OV / 2.0f));
             rectfill(wx, wy, OV, OV, col);
         }
     fillp_reset();
+    if (ovl == 4) {                              // value mode: annotate with the numeric field (screen-space so it stays legible at any zoom)
+        camera(0, 0);
+        font(FONT_TINY);
+        char vb[8];
+        for (int sy = 12; sy < SCREEN_H - 18; sy += 22)
+            for (int sx = 2; sx < SCREEN_W - 12; sx += 24) {
+                float wx = (sx - SCREEN_W / 2.0f) / zoom + cam_x + SCREEN_W / 2.0f;
+                float wy = (sy - SCREEN_H / 2.0f) / zoom + cam_y + SCREEN_H / 2.0f;
+                snprintf(vb, sizeof vb, "%.2f", (double)value_at(wx, wy));
+                print(vb, sx, sy, CLR_BLACK);
+            }
+        font(FONT_NORMAL);
+    }
 }
 
 // ── shared probe ─────────────────────────────────────────────────────────────────
@@ -761,7 +833,7 @@ static const char *probe(float fx, float fy) {
     for (int i = 0; i < nl; i++) {
         Rect b; if (!footprint_body(slots[i].lot, slots[i].outward, zone, slots[i].attached, &b)) continue;
         if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
-        Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3));
+        Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3), value_at(b.x + b.w / 2.0f, b.y + b.h / 2.0f));
         int ri = room_at(&p, x, y);
         snprintf(buf, sizeof buf, "%s / %s", ZN_NAME[zone], ri >= 0 ? RM_NAME[p.room[ri].label] : "wall"); return buf;
     }
@@ -774,6 +846,8 @@ static const char *probe(float fx, float fy) {
 static float cam_x = 700, cam_y = 520;
 static float zoom  = 0.34f;
 static int   seed  = 3;
+static int   drag_on = 0, drag_mx, drag_my;       // left-drag to pan
+static float drag_cx, drag_cy;
 
 void init(void) { lf_seed = seed; }
 
@@ -787,10 +861,16 @@ void update(void) {
     if (key('X')) zoom /= 1.04f;
     zoom += mouse_wheel() * 0.08f * zoom;
     zoom = clamp(zoom, 0.12f, 5.0f);
+    if (mouse_pressed(MOUSE_LEFT)) { drag_on = 1; drag_mx = mouse_x(); drag_my = mouse_y(); drag_cx = cam_x; drag_cy = cam_y; }
+    if (mouse_released(MOUSE_LEFT)) drag_on = 0;
+    if (drag_on && mouse_down(MOUSE_LEFT)) {          // grab-the-map: world point under the cursor stays put
+        cam_x = drag_cx - (mouse_x() - drag_mx) / zoom;
+        cam_y = drag_cy - (mouse_y() - drag_my) / zoom;
+    }
     if (keyp('R')) { seed++; lf_seed = seed; }
     if (keyp('F')) roof_off = !roof_off;
     if (keyp('G')) dbg = !dbg;
-    if (keyp('O')) ovl = (ovl + 1) % 4;
+    if (keyp('O')) ovl = (ovl + 1) % 5;
 }
 
 void draw(void) {
@@ -806,7 +886,7 @@ void draw(void) {
 
     rectfill(0, 0, SCREEN_W, 9, CLR_BLACK);
     char buf[88];
-    static const char *OVN[4] = { "off", "world", "cover", "dens" };
+    static const char *OVN[5] = { "off", "world", "cover", "dens", "value" };
     const char *mode = roof_off ? "DOLLHOUSE" : zoom >= ROOF_LIFT_Z ? "PEELED" : "ROOFS";
     int x = print("CITYPLAN", 3, 1, CLR_YELLOW);
     snprintf(buf, sizeof buf, "  s%d  z%.2f  %s  open %d/%d  ruin %d  ovl:%s", seed, (double)zoom, mode, n_open, n_bld, n_ruin, OVN[ovl]);
@@ -816,7 +896,7 @@ void draw(void) {
     font(FONT_NORMAL);
     print(probe(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f), 3, SCREEN_H - 16, CLR_WHITE);
     font(FONT_SMALL);
-    print("WASD/ZX move  R seed  F lift roofs  O overlay  G grid  (zoom in = roofs lift)",
+    print("WASD/ZX or drag move  wheel zoom  R seed  F roofs  O overlay  G grid  (zoom in = roofs lift)",
           3, SCREEN_H - 7, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
 }
