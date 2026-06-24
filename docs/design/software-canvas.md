@@ -149,6 +149,13 @@ be coalesced.
 > bounded pixel-diff (`magick compare -metric AE`) + an eyeball, and reserve byte-equality for the
 > pset/fill primitives (the `swcanvas_test` shasum still holds for those).
 >
+> **Tools for verifying a canvas change** (and where they fit in the wider gate map —
+> [`../guides/checks-and-oracles.md`](../guides/checks-and-oracles.md)): **`canvas-diff.js`** (the
+> GPU-vs-canvas oracle — bakes in the `sw_force_gpu` guard, the `DE_CPU_LINE` reference, and a
+> `--bytecheck` shasum mode), the **`swcanvas_test`** probe cart (byte-identical pset/fill check),
+> **`mirror-diff.js`** (symmetry), **`road-check.js`** (the coverage-field road oracle), and
+> **`profile-fleet.js`** for the perf A/B (recipe under the map-cart table above).
+>
 > **`DE_CPU_LINE=on` neutralises the line diff for A/B (2026-06-24).** Setting it routes `line()`
 > (and `bezier`/2-pt `poly`) through `de_cpu_line` — the pset-dispatched twin of `sw_sline`, *same*
 > symmetric DDA — even off-canvas, so the GPU reference build and the software-canvas build draw the

@@ -207,8 +207,10 @@ Must land in **four** places in the same change, or it won't compile / autocompl
    grouping/order). Constants too.
 
 API signatures churn during design — re-read the *current* `studio.h` declaration before updating
-the other three. **Then usually ship a cart that exercises it, with a screenshot** (tutorial or
-example) — see "Tutorial carts".
+the other three. Changing an *existing* signature? `node tools/api-usage.js` first for its blast
+radius (call counts + the studio.h↔docs↔shell.js cross-check), then `node tools/build-all.js` after
+to confirm all carts still compile. **Then usually ship a cart that exercises it, with a screenshot**
+(tutorial or example) — see "Tutorial carts".
 
 ## Sprite editor
 
@@ -334,6 +336,10 @@ profiler JSON has `workMsAvg/Max`, `calls[]`, `work[]`. Both work in any native 
   sugar over `de_state()`); a cart wanting `S` for else just removes those defines.
 - **Data-driven carts: name your indices** via an enum (`m->param[VK_FENV]`), never raw numbers —
   inserting a knob mid-list once silently cross-wired knobs + presets.
+- **Which check to run for a change → [`docs/guides/checks-and-oracles.md`](docs/guides/checks-and-oracles.md)**
+  — the reverse index (task → gate) for render/perf/audio/cart-logic/docs. Check it before hand-rolling
+  a verification; the matching deterministic oracle usually already exists (`canvas-diff`, `mirror-diff`,
+  `road-check`, `build-all`, `spec`, the audio gates below, …).
 - **Audio self-tests** (run the matching one after the matching edit; all deterministic, `--save`
   re-blesses an intended change; findings in [`docs/design/audio-notes.md`](docs/design/audio-notes.md)):
   - touched `runtime/sound.h` (queues/requests): `node tools/play.js soundcheck script /dev/null
