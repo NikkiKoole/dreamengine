@@ -99,6 +99,8 @@ const clangArgs = [
   `-DSCREEN_W=${SW}`, `-DSCREEN_H=${SH}`, '-DSCALE=2',
   `-DMAP_W=${MW}`, `-DMAP_H=${MH}`, `-DCELL_W=${CW}`, `-DCELL_H=${CH}`,
   '-DTOUCH_CONTROLS_DEFAULT=0', '-DDE_TRACE', '-Os', '-fno-delete-null-pointer-checks',
+  // dev pass-through: DE_DEFINES=FOO,BAR=1 → -DFOO -DBAR=1 (e.g. DE_DEFINES=DE_FIELD_ROADS)
+  ...(process.env.DE_DEFINES ? process.env.DE_DEFINES.split(',').filter(Boolean).map(d => '-D' + d) : []),
   `"${mk.RAYLIB}/lib/libraylib.a"`,
   '-framework OpenGL', '-framework Cocoa', '-framework IOKit',
   '-framework CoreVideo', '-framework CoreFoundation', '-framework CoreMIDI',

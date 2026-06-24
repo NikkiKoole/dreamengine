@@ -96,6 +96,18 @@ static float uy(float d){ float s=sin_deg(d); return (s>-1e-4f&&s<1e-4f)?0.f:s; 
 // breaks left/right mirror on fractional coords (cx+12.7→172 but cx-12.7→147 = 13 away). Use on curved kerbs.
 static int ri(float v){ return (int)roundf(v); }
 
+// TWO layers over the structural road (declared early — corner_bike/cross_markings read them):
+//   paint    = PAINTED-ON markings — lane lines, dashes, dividers, turn arrows, stop bars, give-way,
+//              crosswalks, elephant's feet, parking ticks, circulation arrows. Toggled live by 'n'.
+//   surfaces = raised/paved SURFACES — bike & median lane tints, the roundabout & free-right islands,
+//              the splitter, bulb-outs, driveways. These are road STRUCTURE, so they stay on in play.
+// road-check builds -DDE_NO_MARKINGS to drop BOTH ⇒ the bare asphalt+kerb the framebuffer oracle needs.
+#ifdef DE_NO_MARKINGS
+static int   paint = 0, surfaces = 0;   // headless gate: bare structural road (asphalt + kerb only)
+#else
+static int   paint = 1, surfaces = 1;
+#endif
+
 // ── SEAM (2026-06-23): the ≤1px CORNER FLOOR is the kerb STROKE, not the fill. ─────────────────
 // Investigation (linesym probe + mirror-diff colour-classify; full writeup in docs/design/
 // streetlab-corner-symmetry-plan.md) pinned it: the corner FILL (fill_corner → polyfill) is ALREADY
@@ -203,8 +215,9 @@ static void corner_bike(CurbReturn c, float R){
     enum { N=10 }; int xy[4*(N+1)]; int k=0;
     for (int i=0;i<=N;i++){ float a=a0+d*i/N; xy[k++]=ri(c.ox+cosf(a)*R);         xy[k++]=ri(c.oy+sinf(a)*R); }
     for (int i=N;i>=0;i--){ float a=a0+d*i/N; xy[k++]=ri(c.ox+cosf(a)*(R+BIKEW)); xy[k++]=ri(c.oy+sinf(a)*(R+BIKEW)); }
-    polyfill(xy, 2*(N+1), CLR_BROWN);
-    float px=c.ox+cosf(a0)*(R+BIKEW), py=c.oy+sinf(a0)*(R+BIKEW);   // the carriageway-side edge line (white)
+    polyfill(xy, 2*(N+1), CLR_BROWN);                              // the terracotta band is SURFACE
+    if (!paint) return;
+    float px=c.ox+cosf(a0)*(R+BIKEW), py=c.oy+sinf(a0)*(R+BIKEW);   // the carriageway-side edge line (white) is PAINT
     for (int i=1;i<=N;i++){ float a=a0+d*i/N, x=c.ox+cosf(a)*(R+BIKEW), y=c.oy+sinf(a)*(R+BIKEW);
         line(ri(px),ri(py),ri(x),ri(y),CLR_WHITE); px=x; py=y; }
 }
@@ -244,6 +257,13 @@ static int   netview  = 0;    // M4: 0 = junction detail (M1–M3), 1 = the stre
 static int   pattern  = PAT_GRID;
 static int   netseed  = 1;
 static int   curveAmt = 0;    // M4c: 0 = straight chords … 3 = winding (the §8.5 curvature knob; bows each edge)
+// FIELD-BASED ROADS (docs/design/field-based-road-rendering.md) — 'g' toggles it LIVE for A/B. Default
+// OFF (shipping = per-arm casing + mirror_blit); -DDE_FIELD_ROADS flips the default on for headless gates.
+#ifdef DE_FIELD_ROADS
+static int   field_roads = 1;
+#else
+static int   field_roads = 0;
+#endif
 
 static float leg_bearing(int i){ float b=legs[i].base + (legs[i].crossing?(float)skew:0.f); return fmodf(b+3600,360); }
 static int   leg_present(int i){ return !(isT && i==3); }              // T drops North (leg 3)
@@ -319,14 +339,17 @@ static void cross_markings(float cx,float cy,float b,float kstdP,float kstdM,flo
     float dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
     float cx0=cx+dx*cstd, cy0=cy+dy*cstd, x1=cx+dx*reach, y1=cy+dy*reach;
     float inner = drive_inner();                            // driving lanes start here (outside the median)
-    if (medOn){                                             // a raised centre median (light-grey + kerbs)
+    if (medOn){                                             // a raised centre median (SURFACE: light-grey + kerbs)
+        if (surfaces){
         lane_band(cx,cy,b, 0, MEDHW, +1, cstd,reach, CLR_LIGHT_GREY);
         lane_band(cx,cy,b, 0, MEDHW, -1, cstd,reach, CLR_LIGHT_GREY);
         edge_line(cx,cy,b, MEDHW,+1, cstd,reach, CLR_BROWNISH_BLACK);
         edge_line(cx,cy,b, MEDHW,-1, cstd,reach, CLR_BROWNISH_BLACK);
-    } else if (twltlOn){                                     // Stage-1 #3: TWO-WAY LEFT-TURN LANE (painted centre lane)
+        }
+    } else if (twltlOn){                                     // Stage-1 #3: TWO-WAY LEFT-TURN LANE (PAINTED centre lane)
         // each side: a SOLID yellow (outer, no through-cross) + a DASHED yellow just inside (left-turners enter);
         // surface stays asphalt. Alternating left-turn arrows down the centreline = the bidirectional tell.
+        if (paint){
         for (int s=-1;s<=1;s+=2){
             edge_line(cx,cy,b, TWLTLHW, s, cstd,reach, CLR_YELLOW);            // outer solid yellow
             float o=TWLTLHW-1.5f;                                             // inner dashed yellow (may enter)
@@ -339,10 +362,11 @@ static void cross_markings(float cx,float cy,float b,float kstdP,float kstdM,flo
             line((int)ax,(int)ay,(int)(ax-nx*s*2-dx*1.5f),(int)(ay-ny*s*2-dy*1.5f),CLR_YELLOW);   // barb
             line((int)ax,(int)ay,(int)(ax-nx*s*2+dx*1.5f),(int)(ay-ny*s*2+dy*1.5f),CLR_YELLOW);   // barb
         }
-    } else {
+        }
+    } else if (paint){
         dashed(cx0,cy0,x1,y1,CLR_YELLOW);                   // the centreline (no centre treatment)
     }
-    for (int k=1;k<lanesPer;k++){                           // dashed driving-lane dividers
+    if (paint) for (int k=1;k<lanesPer;k++){               // dashed driving-lane dividers
         float o=inner+k*LANEW;
         dashed(cx0+nx*o,cy0+ny*o, x1+nx*o,y1+ny*o, CLR_WHITE);
         dashed(cx0-nx*o,cy0-ny*o, x1-nx*o,y1-ny*o, CLR_WHITE);
@@ -352,7 +376,7 @@ static void cross_markings(float cx,float cy,float b,float kstdP,float kstdM,flo
     float pi=park_inner(), bi=bike_inner();
     for (int s=-1;s<=1;s+=2){
         float kstd = (s>0)?kstdP:kstdM;
-        if (parkOn){                                        // PARKING (inboard) — ends PCLEAR back (the clear zone)
+        if (parkOn && paint){                               // PARKING is paint only (bay edge + ticks) — ends PCLEAR back
             float ps=kstd+PCLEAR;
             edge_line(cx,cy,b, pi,s, ps,reach, CLR_WHITE);
             float qx0=cx+dx*ps, qy0=cy+dy*ps; float L=sqrtf((x1-qx0)*(x1-qx0)+(y1-qy0)*(y1-qy0));
@@ -361,9 +385,9 @@ static void cross_markings(float cx,float cy,float b,float kstdP,float kstdM,flo
                 line((int)(qx+nx*s*pi),(int)(qy+ny*s*pi),(int)(qx+nx*s*(pi+PARKW)),(int)(qy+ny*s*(pi+PARKW)),CLR_WHITE);
             }
         }
-        if (bikeOn){                                        // BIKE (outermost, at the kerb) — wraps the corner via corner_bike()
-            lane_band(cx,cy,b, bi, bi+BIKEW, s, kstd,reach, CLR_BROWN);
-            edge_line(cx,cy,b, bi,s, kstd,reach, CLR_WHITE);
+        if (bikeOn){                                        // BIKE: terracotta SURFACE (always) + white edge LINE (paint)
+            if (surfaces) lane_band(cx,cy,b, bi, bi+BIKEW, s, kstd,reach, CLR_BROWN);
+            if (paint)    edge_line(cx,cy,b, bi,s, kstd,reach, CLR_WHITE);
         }
     }
 }
@@ -590,6 +614,24 @@ static void draw_freeright(float cx,float cy,float bA,float bB,float bm){
     for (float r=ri+0.5f; r<ro; r+=2.f)               // transverse dashes across the slip = give-way
         line((int)(cc.ox+dx*r),(int)(cc.oy+dy*r),(int)(cc.ox+dx*(r+1)),(int)(cc.oy+dy*(r+1)),CLR_WHITE);
 }
+// FIELD free-right: a clean pork-chop ISLAND overlay. The field (fr_render) already laid the GENEROUS
+// rounded corner (radius frR = the turn) as asphalt + a uniform kerb; this drops a raised LIGHT_GREY island
+// (the small cornerR fillet at the corner) into it, leaving the right-turn SLIP as the asphalt ring around it.
+// A markings-layer overlay (drive-on-right, gated under `markings`) — so a markings-off render stays the clean
+// field road and road-check stays meaningful. Far simpler + tidier than the old slip/ring/re-lay dance.
+static void draw_freeright_island(float cx,float cy,float HW,float bA,float bB,float bm){
+    float kx,ky; edge_corner(cx,cy,HW, bA,bB,bm,&kx,&ky);
+    CurbReturn cc = curb_return(kx,ky, bA,bB, frR);      // the SAME fillet the field corner used (centre cc.o)
+    float islR = frR - SLIPW; if (islR < 2) islR = 2;    // island = corner shrunk by one slip-width ⇒ CONCENTRIC arcs
+    fill_corner(kx,ky, cc, islR, CLR_LIGHT_GREY);        // raised island surface (mountable kerb-grey)
+    stroke_corner(cc, islR, CLR_BROWNISH_BLACK);         // island kerb = the slip's inner edge
+    // the slip is now a CONSTANT-width ring [islR, frR] about cc.o at any angle (no more skew-dependent width).
+    // give-way dashes (PAINT) across it where it rejoins the exit arm (the bA tangent radius).
+    if (!paint) return;
+    float a0=atan2f(cc.t1y-cc.oy, cc.t1x-cc.ox), dx=cosf(a0), dy=sinf(a0);
+    for (float r=islR+0.5f; r<frR; r+=2.f)
+        line((int)(cc.ox+dx*r),(int)(cc.oy+dy*r),(int)(cc.ox+dx*(r+1)),(int)(cc.oy+dy*(r+1)),CLR_WHITE);
+}
 
 // the junction TREATMENT is exactly one of {0 plain, 1 turn lanes, 2 free-right, 3 roundabout} — mutually
 // exclusive (each is a whole-corner channelization scheme that re-draws the corners differently).
@@ -623,6 +665,8 @@ void update(void){
     if (keyp('b')||keyp('B')) bikeOn = (bikeOn+1)%3;         // M7/Pass3: off → lanes → +straight-through crossing
     if (keyp(';'))            parkOn = !parkOn;              // M7: parking lane
     if (keyp('d')||keyp('D')) driveways = (driveways+1)&3;   // Stage-1 #3c: driveways per-side cycle off→+→−→both
+    if (keyp('n')||keyp('N')) paint = !paint;                // toggle the PAINTED markings (lines/dashes/arrows); surfaces stay
+    if (keyp('g')||keyp('G')) field_roads = !field_roads;    // toggle field-based road rendering (A/B vs the old per-arm path)
     if (cornerR<0) cornerR=0;  if (cornerR>28) cornerR=28;
     if (islandR<3) islandR=3;  if (islandR>20) islandR=20;   // M6: stays MINI (small, traversable)
     if (frR<8) frR=8;       if (frR>24) frR=24;           // Stage-1 #2: free-right turning radius
@@ -904,6 +948,106 @@ static void mirror_blit(int cxr,int cyr,int rad){
         }
 }
 
+// ── FIELD-BASED KERB (docs/design/field-based-road-rendering.md) — behind DE_FIELD_ROADS, OFF by
+//    default (the shipped path stays mirror_blit + casing-fillet). The kerb becomes the COVERAGE
+//    OUTLINE of the asphalt region — an asphalt pixel with a non-asphalt 4-neighbour — derived from a
+//    geometric is_asphalt() predicate (arm-ray union ∪ curb-return fillets). Uniform 1px at ANY angle
+//    and symmetric BY CONSTRUCTION, so it replaces the per-arm casing pass + stroke_corner +
+//    casing-fillet + mirror_blit at once. The asphalt SURFACE is still laid by polyfill (arm bands +
+//    fill_corner) — only the thin outline is scanned per-pixel, so it's the cheap "math, no fill"
+//    cost (~0.7ms), not skewlab's full per-pixel fill. Markings stay a separate longitudinal layer. ──
+// Toggled LIVE by the 'g' key (field_roads) so you can A/B against the old per-arm path in one window;
+// default OFF (shipping path stays mirror_blit) — built -DDE_FIELD_ROADS just flips the DEFAULT on (for
+// the headless gates). The helpers always compile; only the runtime bool decides which path draws.
+static float fr_cx, fr_cy, fr_HW2, fr_rad2, fr_disc2;     // fr_disc2 = circulatory-disc radius² (roundabout; 0 = none)
+static float fr_dx[NLEG], fr_dy[NLEG]; static int fr_n;
+enum { FR_NP = 12 };                                          // fillet polygon verts (apex K + 11 arc samples)
+static float fr_fil[NLEG][2*FR_NP]; static int fr_nfil;       // cached fillet polygons (FLOAT — snap-free ⇒ symmetric)
+
+static int fr_pip(const float *xy, int n, float px, float py){   // even-odd point-in-polygon (float)
+    int c=0; for (int i=0,j=n-1;i<n;j=i++){
+        float yi=xy[2*i+1], yj=xy[2*j+1];
+        if ((yi>py)!=(yj>py)){
+            float xc=xy[2*i]+(xy[2*j]-xy[2*i])*(py-yi)/(yj-yi);
+            if (px<xc) c^=1;
+        }
+    } return c;
+}
+// the arm-capsule union: rays from the hub (opposite arm covers behind). Squared distance, no sqrt.
+static int fr_arm(float px, float py){
+    for (int i=0;i<fr_n;i++){
+        float t=(px-fr_cx)*fr_dx[i]+(py-fr_cy)*fr_dy[i]; if(t<0)t=0;
+        float ex=px-(fr_cx+fr_dx[i]*t), ey=py-(fr_cy+fr_dy[i]*t);
+        if (ex*ex+ey*ey <= fr_HW2) return 1;
+    }
+    return 0;
+}
+// inside a curb-return fillet? (only tested near the hub, where the fillets live)
+static int fr_fillet(float px, float py){
+    float hx=px-fr_cx, hy=py-fr_cy;
+    if (hx*hx+hy*hy > fr_rad2) return 0;
+    for (int f=0;f<fr_nfil;f++) if (fr_pip(fr_fil[f], FR_NP, px, py)) return 1;
+    return 0;
+}
+// asphalt = arm-ray union ∪ curb-return fillets ∪ (roundabout) circulatory disc.
+static int fr_road(float px,float py){
+    if (fr_disc2>0){ float hx=px-fr_cx, hy=py-fr_cy; if (hx*hx+hy*hy <= fr_disc2) return 1; }   // circulatory disc
+    return fr_arm(px,py) || fr_fillet(px,py);
+}
+// paint a boundary pixel during the proud-kerb dilation: a PINCH (a lone non-road pixel enclosed by road
+// on all 4 sides — the sub-pixel grass cusp where a skewed arm meets the circulatory disc) becomes asphalt,
+// so it can't survive as an interior dark "stray"; every other boundary pixel is the 1px proud kerb.
+static void fr_put(int x,int y){
+    float px=x+0.5f, py=y+0.5f;
+    int L=fr_road(px-1,py), R=fr_road(px+1,py), U=fr_road(px,py-1), D=fr_road(px,py+1);
+    if ((L&&R)||(U&&D)) pset(x,y,CLR_DARK_GREY);   // 1px-wide pinch (road on opposite sides) → fill it; no interior kerb
+    else pset(x,y,CLR_BROWNISH_BLACK);             // ordinary boundary → 1px proud kerb
+}
+// FIELD RENDER — the SINGLE SOURCE OF TRUTH for the road surface AND its kerb, both from one snap-free
+// float predicate (arm union ∪ curb-return fillets). Fills the asphalt itself (so it can't disagree with
+// the kerb — the per-arm polyfill is skipped on this path) and draws the kerb PROUD (1px OUTSIDE the
+// asphalt, like the old casing convention ⇒ A/B aligns) by dilating: for each road pixel, paint any
+// non-road 4-neighbour as kerb. Uniform 1px at any angle, symmetric by construction (float, no ri snap).
+static void fr_render(float cx,float cy,float HW,const float*brg,int n,float disc){
+    fr_cx=cx; fr_cy=cy; fr_HW2=HW*HW; fr_n=n; fr_disc2=disc*disc;
+    for (int i=0;i<n;i++){ fr_dx[i]=ux(brg[i]); fr_dy[i]=uy(brg[i]); }
+    fr_nfil=0;
+    for (int i=0; i<n && disc<=0; i++){                       // ROUNDABOUT: the disc replaces the corner fillets — skip them
+        float bA=brg[i], bB=brg[(i+1)%n], gap=fmodf(bB-bA+3600,360);
+        if (gap<=0.5f || gap>=179.5f) continue;
+        float R = (freeRight && fr_fits(gap)) ? frR : cornerR;   // free-right: a GENEROUS rounded corner (the right-turn slip)
+        float bm=bA+gap*0.5f, kx,ky; edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
+        CurbReturn c=curb_return(kx,ky, bA,bB, R);
+        float a0=atan2f(c.t1y-c.oy,c.t1x-c.ox), a1=atan2f(c.t2y-c.oy,c.t2x-c.ox);
+        float d=a1-a0; while(d>M_PI)d-=2*M_PI; while(d<-M_PI)d+=2*M_PI;
+        float *xy=fr_fil[fr_nfil]; int k=0;
+        xy[k++]=kx; xy[k++]=ky;
+        for (int s=0;s<=10;s++){ float a=a0+d*s/10; xy[k++]=c.ox+cosf(a)*R; xy[k++]=c.oy+sinf(a)*R; }
+        fr_nfil++;
+    }
+    // pip cutoff = the ACTUAL fillet extent (acute skew corners reach (HW+R)/tan(half) from the hub —
+    // far past a fixed radius, which clipped them ⇒ sharp corners). Take the furthest fillet vertex.
+    fr_rad2 = (HW+cornerR)*(HW+cornerR);
+    for (int f=0;f<fr_nfil;f++) for (int v=0;v<FR_NP;v++){
+        float vx=fr_fil[f][2*v]-cx, vy=fr_fil[f][2*v+1]-cy, d2=vx*vx+vy*vy;
+        if (d2>fr_rad2) fr_rad2=d2;
+    }
+    fr_rad2 += 4;                                             // small margin
+    int y0=0, y1=SCREEN_H-TOOLBAR;                            // fill from the top edge (the N arm runs up behind the title, like the per-arm bands) down to the toolbar
+    for (int y=y0;y<y1;y++) for (int x=0;x<SCREEN_W;x++){
+        float px=x+0.5f, py=y+0.5f;
+        if (!fr_road(px,py)) continue;
+        pset(x,y,CLR_DARK_GREY);                              // asphalt (the field fills it ⇒ kerb can't disagree)
+        // proud kerb: paint the non-road neighbours — but NOT across a play-area border (a road running
+        // off-screen there is a legit exit, not an edge to kerb). pset clips, but the border guard keeps
+        // the mouth open so the arm meets the screen edge cleanly.
+        if (x>0          && !fr_road(px-1,py)) fr_put(x-1,y);
+        if (x<SCREEN_W-1 && !fr_road(px+1,py)) fr_put(x+1,y);
+        if (y>y0         && !fr_road(px,py-1)) fr_put(x,y-1);
+        if (y<y1-1       && !fr_road(px,py+1)) fr_put(x,y+1);
+    }
+}
+
 void draw(void){
     static bool pget_on=false; if(!pget_on){ enable_pget(true); pget_on=true; }   // for mirror_blit read-back
     ui_begin();
@@ -913,6 +1057,7 @@ void draw(void){
     float HW=cross_hw();                                   // M7: half-width = the sum of the typed lanes present
     float REACH=SCREEN_W+SCREEN_H;                         // run each arm well past the screen edge
     int idx[NLEG]; float brg[NLEG]; int n=present_legs(idx,brg);
+    int field_now = field_roads;   // all junction modes on the field (network view is the early-return above)
 
     // M5: SIDEWALK footprint = the whole junction inflated by SW, drawn FIRST (under the road). The asphalt
     // then covers the inner part, leaving an SW-wide sidewalk ring around everything — wrapping the corners
@@ -932,7 +1077,7 @@ void draw(void){
     // asphalt = the union of arm bands (collinear arm pairs ⇒ a continuous strip ⇒ the centre is always
     // covered, no gap). casing pass (1px proud) first, asphalt pass second, so a kerb edge shows at the
     // outer band edges while the central overlap stays clean asphalt.
-    for (int pass=0; pass<2; pass++){
+    for (int pass = field_now?2:0; pass<2; pass++){   // field: skip the per-arm bands entirely — fr_render fills asphalt + kerb
         float w = HW + (pass?0:1);
         int col = pass ? CLR_DARK_GREY : CLR_BROWNISH_BLACK;
         for (int i=0;i<n;i++){
@@ -950,32 +1095,39 @@ void draw(void){
     //    REOPEN the mouths, so the kerb survives only on the grass wedges between arms. ──
     float ICR = round_icr();
     if (peds) circfill((int)cx,(int)cy,(int)(ICR+SW),CLR_LIGHT_GREY);   // sidewalk ring around the circulatory
-    circfill((int)cx,(int)cy,(int)ICR+1,CLR_BROWNISH_BLACK);            // circulatory outer kerb (trimmed next)
-    circfill((int)cx,(int)cy,(int)ICR,  CLR_DARK_GREY);                 // circulatory asphalt
-    for (int i=0;i<n;i++){                                              // reopen each arm mouth through the kerb
-        float b=brg[i], dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
-        float ox=cx+dx*REACH, oy=cy+dy*REACH;
-        int q[8]={(int)(cx+nx*HW),(int)(cy+ny*HW),(int)(cx-nx*HW),(int)(cy-ny*HW),
-                  (int)(ox-nx*HW),(int)(oy-ny*HW),(int)(ox+nx*HW),(int)(oy+ny*HW)};
-        polyfill(q,4,CLR_DARK_GREY);
+    if (field_now){
+        // FIELD: the circulatory disc is just another term in the road predicate (disc ∪ arms) ⇒ the kerb
+        // (proud outline) traces the ring + arm mouths uniformly, no circfill/reopen dance.
+        fr_render(cx,cy,HW,brg,n, ICR);
+    } else {
+        circfill((int)cx,(int)cy,(int)ICR+1,CLR_BROWNISH_BLACK);        // circulatory outer kerb (trimmed next)
+        circfill((int)cx,(int)cy,(int)ICR,  CLR_DARK_GREY);            // circulatory asphalt
+        for (int i=0;i<n;i++){                                          // reopen each arm mouth through the kerb
+            float b=brg[i], dx=ux(b),dy=uy(b), nx=ux(b+90),ny=uy(b+90);
+            float ox=cx+dx*REACH, oy=cy+dy*REACH;
+            int q[8]={(int)(cx+nx*HW),(int)(cy+ny*HW),(int)(cx-nx*HW),(int)(cy-ny*HW),
+                      (int)(ox-nx*HW),(int)(oy-ny*HW),(int)(ox+nx*HW),(int)(oy+ny*HW)};
+            polyfill(q,4,CLR_DARK_GREY);
+        }
     }
-    if (bikeOn){                                                       // the bike lane CIRCULATES — a terracotta ring
+    // island + bike ring + splitters are SURFACES; arrows/give-way/crosswalk are PAINT. (Bare = disc+arms.)
+    if (surfaces && bikeOn){                                           // the bike lane CIRCULATES — a terracotta ring
         circfill((int)cx,(int)cy,(int)ICR,        CLR_BROWN);          // just inside the kerb (the outer circulatory),
         circfill((int)cx,(int)cy,(int)(ICR-BIKEW),CLR_DARK_GREY);      // carved back to a BIKEW-wide ring; it meets the
         circ((int)cx,(int)cy,(int)(ICR-BIKEW),CLR_WHITE);             // approach bike lanes at each (reopened) mouth
     }
-    draw_island(cx,cy);
-    draw_circulation(cx,cy);
+    if (surfaces) draw_island(cx,cy);
+    if (paint)    draw_circulation(cx,cy);
     for (int i=0;i<n;i++){                                              // per approach: cross-section, splitter, give-way, crossing
         float b=brg[i];
         // the approach lanes are laterally offset, so a straight bike lane's nearest point to the hub is
         // sqrt(ICR^2+HW^2) > ICR — it never reaches the ring, leaving a grey wedge. Start it at sqrt(ICR^2-HW^2),
         // the axial distance where its kerb-side edge actually crosses the ring radius ⇒ it FLARES in and meets it.
         float din = round_flare(ICR, HW);
-        cross_markings(cx,cy,b, din, din, ICR+3, REACH);              // #4: kerb lanes flare to the ring (symmetric — the ring handles skew)
-        draw_splitter(cx,cy,b, ICR, 16);                               // teardrop splitter (deflect + ped refuge)
-        give_way(cx,cy,b, ICR+1.5f, HW);                               // yield line at the circulatory edge
-        if (peds) draw_crosswalk(cx,cy,b,HW, ICR+3);                    // crossing set back behind the give-way
+        cross_markings(cx,cy,b, din, din, ICR+3, REACH);              // self-splits: bike SURFACE always, lane lines = paint
+        if (surfaces) draw_splitter(cx,cy,b, ICR, 16);                 // teardrop splitter (deflect + ped refuge)
+        if (paint)    give_way(cx,cy,b, ICR+1.5f, HW);                 // yield line at the circulatory edge
+        if (paint && peds) draw_crosswalk(cx,cy,b,HW, ICR+3);          // crossing set back behind the give-way
     }
   } else {
     // curb returns: one per CONVEX gap between adjacent arms (skip the 180° straight back of a T)
@@ -987,22 +1139,32 @@ void draw(void){
         // Stage-1 #2: slip + pork-chop island — only where it FITS (deep enough corner: acute / generous radius).
         // Shallow obtuse corners have no room and fall through to a plain curb return.
         if (freeRight && fr_fits(gap)){
-            if (bikeOn){
-                // the CYCLE TRACK wraps the kerb corner as its own continuous path, OUTSIDE the slip: pave the
-                // corner, lay the slip inboard, then wrap the bike band round it (the slip nests within).
-                edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
-                CurbReturn cw=curb_return(kx,ky, bA,bB, cornerR);
-                fill_corner(kx,ky, cw, cornerR, CLR_DARK_GREY);
-                draw_freeright(cx,cy, bA,bB, bm);
-                corner_bike(cw, cornerR);
-                stroke_corner(cw, cornerR, CLR_BROWNISH_BLACK);
-            } else {
-                draw_freeright(cx,cy, bA,bB, bm);
+            // FIELD: fr_render lays the GENEROUS rounded corner (radius frR = the turn) as asphalt + kerb;
+            // the pork-chop island overlays in the markings section (draw_freeright_island). Old path below.
+            if (!field_now){
+                if (bikeOn){
+                    // the CYCLE TRACK wraps the kerb corner as its own continuous path, OUTSIDE the slip: pave the
+                    // corner, lay the slip inboard, then wrap the bike band round it (the slip nests within).
+                    edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
+                    CurbReturn cw=curb_return(kx,ky, bA,bB, cornerR);
+                    fill_corner(kx,ky, cw, cornerR, CLR_DARK_GREY);
+                    draw_freeright(cx,cy, bA,bB, bm);
+                    corner_bike(cw, cornerR);
+                    stroke_corner(cw, cornerR, CLR_BROWNISH_BLACK);
+                } else {
+                    draw_freeright(cx,cy, bA,bB, bm);
+                }
             }
             continue;
         }
         edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
         CurbReturn c=curb_return(kx,ky, bA, bB, cornerR);
+        if (field_now){
+            // FIELD: fr_render() (after the loop) fills the rounded-corner asphalt AND the kerb from one
+            // float predicate — uniform 1px at any angle ⇒ no fill_corner kerb, no casing fillet, no
+            // stroke_corner, no mirror_blit. (kx,ky/c computed above are unused here; bike wrap is step 4.)
+            (void)c;
+        } else {
         // KERB EDGE. Orthogonal (~90°) corners suffered a ~2px dark notch: the straight arms' 1px-proud
         // BROWNISH_BLACK casing (the asphalt pass insets it) pokes past an HW-tangent kerb. Fix = round the
         // casing too — a fillet at HW+1 UNDER the HW asphalt ⇒ a 1px casing ring that meets the straight
@@ -1021,33 +1183,57 @@ void draw(void){
         fill_corner(kx,ky, c, cornerR, CLR_DARK_GREY);     // asphalt insets ⇒ leaves the 1px casing kerb
         if (bikeOn) corner_bike(c, cornerR);               // #5a: the bike lane wraps the corner (just inside the kerb)
         if (!casing) stroke_corner(c, cornerR, CLR_BROWNISH_BLACK);   // skew/bike: uniform 1px kerb edge
+        }
     }
 
-    // MIRROR-BLIT the symmetric orthogonal 4-way: reflect the junction-core pixels so the four kerbs
-    // are pixel-identical (the kerb floor → 0 by construction; a symmetric line couldn't — snap
-    // conflict, see the ri() SEAM). Skew/T/free-right keep the per-corner path (no symmetry there).
-    if (!isT && skew==0 && !freeRight){
+    if (field_now){
+        fr_render(cx,cy,HW,brg,n,0);          // field: fills rounded-corner asphalt + kerb (replaces fill_corner kerb + mirror_blit)
+    } else if (!isT && skew==0 && !freeRight){
+        // MIRROR-BLIT the symmetric orthogonal 4-way: reflect the junction-core pixels so the four kerbs
+        // are pixel-identical (the kerb floor → 0 by construction; a symmetric line couldn't — snap
+        // conflict, see the ri() SEAM). Skew/T/free-right keep the per-corner path (no symmetry there).
         int rad=(int)(HW+cornerR+(peds?SW:0))+2;
         mirror_blit(ri(cx),ri(cy),rad);
     }
 
+    // FIELD free-right: the pork-chop ISLAND is a surface (the give-way dashes inside it are paint — gated there).
+    if (surfaces && field_now && freeRight) for (int i=0;i<n;i++){
+        float bA=brg[i], bB=brg[(i+1)%n], gap=fmodf(bB-bA+3600,360);
+        if (gap<=0.5f || gap>=179.5f || !fr_fits(gap)) continue;
+        draw_freeright_island(cx,cy,HW, bA,bB, bA+gap*0.5f);
+    }
+    // FIELD bike: wrap the protected cycle track around each plain corner so it's CONTINUOUS with the arm
+    // lanes (the band sits just inside the field kerb). Skip free-right corners — they have their own treatment.
+    if (surfaces && field_now && bikeOn && !roundabout) for (int i=0;i<n;i++){
+        float bA=brg[i], bB=brg[(i+1)%n], gap=fmodf(bB-bA+3600,360);
+        if (gap<=0.5f || gap>=179.5f) continue;
+        if (freeRight && fr_fits(gap)) continue;
+        float bm=bA+gap*0.5f, kx,ky; edge_corner(cx,cy,HW, bA,bB,bm, &kx,&ky);
+        corner_bike(curb_return(kx,ky, bA,bB, cornerR), cornerR);
+    }
+
     // markings, median islands + stop bar per arm. startd clears the arm's corners (acute corners reach
     // further down the arm) — and, with turn lanes, the median nose too (no centreline over the island).
-    for (int i=0;i<n;i++){
+    for (int i=0;i<n;i++){                                   // always runs: cross_markings self-splits surface/paint
         float b=brg[i], df=arm_face(brg,n,i,HW);
         // the cleared THROAT of the arm is at the curb-return TANGENT, ~cornerR beyond the bare corner K
         // (arm_face). Every mouth marking — stop bar, crosswalk, median, turn bay, arrow — keys off this
         // `mouth` datum, NOT df, so they sit at the rounded mouth instead of poking back into the fillet.
         float mouth = df + cornerR;
-        float kstdP = kerb_start(brg,n,i,HW,cornerR,+1);   // PER SIDE, at the curb-return TANGENT: +90 faces the
-        float kstdM = kerb_start(brg,n,i,HW,cornerR,-1);   // next gap, -90 the prev — meets the arc even on obtuse corners
+        // PER SIDE, at the curb-return TANGENT: +90 faces the next gap, -90 the prev. A FREE-RIGHT corner uses
+        // the bigger frR radius, so the kerb-side lanes (bike/parking) must start at the frR tangent there —
+        // else their white edge line pokes into the slip curve (the loose-pixels artifact).
+        float gP = fmodf(brg[(i+1)%n]-brg[i]+3600,360), gM = fmodf(brg[i]-brg[(i-1+n)%n]+3600,360);
+        float RP = (freeRight && fr_fits(gP)) ? frR : cornerR, RM = (freeRight && fr_fits(gM)) ? frR : cornerR;
+        float kstdP = kerb_start(brg,n,i,HW,RP,+1);
+        float kstdM = kerb_start(brg,n,i,HW,RM,-1);
         float cstd = (turnLanes && mouth+POCKET+PTAPER+3 > mouth+3) ? mouth+POCKET+PTAPER+3 : mouth+3;  // centre: past the turn bay
         cross_markings(cx,cy,b,kstdP,kstdM,cstd,REACH);
         float dx=ux(b),dy=uy(b), ix=ux(b-90),iy=uy(b-90);
         if (turnLanes){
-            // #2: the channelizing splitter draws ONLY when there's no continuous median; with a median, the
-            // left-turn bay is just the GAP the median leaves at the junction (it begins at startd, past the mouth).
-            if (!medOn && !twltlOn) draw_median(cx,cy,b,mouth);   // splitter only when the centre is bare (no median/TWLTL)
+            // the channelizing splitter is a raised island (SURFACE); the bay lines + arrows are PAINT.
+            if (surfaces && !medOn && !twltlOn) draw_median(cx,cy,b,mouth);   // splitter only when the centre is bare
+            if (paint){
             // #1: delineate the inner DRIVING lane (next to the median/centre) as the left-turn lane — a SOLID
             // white line at its outer edge, where the dashed dividers leave off. Median-aware via drive_inner().
             if (lanesPer>=2){
@@ -1066,25 +1252,26 @@ void draw(void){
                      (int)(cx+dx*(mouth+POCKET)+ix*ro),(int)(cy+dy*(mouth+POCKET)+iy*ro),CLR_WHITE);
                 turn_arrow_at(cx,cy,b,mouth, drive_outer()-LANEW*0.5f, -1, CLR_WHITE);
             }
+            }
         }
-        // Stage-1 #1: bulb-out — the kerb extends into the parking clear-zone, narrowing the crossing. Only when
-        // there's NO kerb-side bike lane: a classic bulb (parking→sidewalk) and a protected bike-lane corner are
-        // different treatments, and with bike on the corner-wrap IS the corner treatment (stacking them frays under skew).
-        if (peds && parkOn && !bikeOn) draw_bulb(cx,cy,b,kstdP,kstdM);
-        // M5: zebra crosswalk at the mouth. With bulbs it shortens to the driving lanes (the zebra sits between the bulbs).
+        // Stage-1 #1: bulb-out — a kerb extension (SURFACE) into the parking clear-zone. Only with no kerb-side bike lane.
+        if (surfaces && peds && parkOn && !bikeOn) draw_bulb(cx,cy,b,kstdP,kstdM);
+        if (paint){
+        // M5: zebra crosswalk at the mouth (PAINT). With bulbs it shortens to the driving lanes.
         if (peds) draw_crosswalk(cx,cy,b, parkOn?drive_outer():HW, mouth);
-        // #3: stop bar across the inbound DRIVING lanes only (drive-on-right: inbound = the b-90 side) — it spans
-        // [drive_inner, drive_outer], so it clears the raised median and stops short of the bike/parking lanes.
+        // #3: stop bar across the inbound DRIVING lanes only (drive-on-right: inbound = the b-90 side) — spans
+        // [drive_inner, drive_outer], so it clears the median and stops short of the bike/parking lanes.
         float sb = peds ? mouth+1+CWDEP+1 : mouth+1;
         float mx=cx+dx*sb, my=cy+dy*sb, si=drive_inner(), so=drive_outer();
         line((int)(mx+ix*si),(int)(my+iy*si),(int)(mx+ix*so),(int)(my+iy*so),CLR_WHITE);
-        if (bikeOn>=2 && !isT) bike_thru(cx,cy,b,mouth);   // #5b (opt-in): straight-through crossing — not on a T (no through movement)
+        if (bikeOn>=2 && !isT) bike_thru(cx,cy,b,mouth);   // #5b (opt-in): elephant's feet — paint
+        }
     }
   }
 
     // ── Stage-1 #3c: DRIVEWAYS — mid-block low-volume access, per-side bitmask (1=+90, 2=-90). Drawn for every
     //    present arm AFTER the junction so they compose with any treatment; set back past the corner clearance. ──
-    if (driveways) for (int i=0;i<n;i++){
+    if (surfaces && driveways) for (int i=0;i<n;i++){       // driveway apron + kerb wings = SURFACE (a physical kerb-cut)
         float b=brg[i];
         for (int s=-1;s<=1;s+=2){
             if (!(driveways & (s>0?1:2))) continue;
@@ -1108,6 +1295,10 @@ void draw(void){
         snprintf(bb,sizeof bb,"%s  -  %d corners%s%s%s", isT?"T-junction":"4-way crossing", count_corners(),
                  turnLanes?"  -  turn bays":freeRight?"  -  free-right slips":"", peds?"  -  pavement + crossings":"", dwy);
     print(bb, 4,13, CLR_ORANGE);
+    // A/B mode tag — tells the truth: FIELD green when the field is ACTUALLY drawing this mode; ORANGE
+    // "old*" when the toggle is on but the mode (roundabout/free-right) still falls back to the per-arm path.
+    print(!field_roads?"[g]arm" : field_now?"[g]FIELD":"[g]old*", SCREEN_W-32, 13,
+          !field_roads?CLR_DARK_GREY : field_now?CLR_GREEN:CLR_ORANGE);
 
     // ── toolbar (three rows) ── row1 = cross-section lane types (incl. pavement) · row2 = curb/lanes/view · row3 = skew/topology/treatment
     rectfill(0, SCREEN_H-TOOLBAR, SCREEN_W, TOOLBAR, CLR_BLACK);
