@@ -136,7 +136,14 @@ respawn at the cross-road's ends (it's not a loop) or it bends back — decide i
   **priority car a crash-avoidance brake** — it keeps right of way but won't drive *through* a
   give-way car that has mis-committed into the box. Net: **0 T-bones over ~1440 frames, both roads
   flow, cross cars get through** (4 spec assertions). Junctions render as a ring (red = a priority
-  car holds it). The remaining rules (give-way / 4-way-stop / cross-road light) are Phase D toggles.
+  car holds it). **Flow tuning (the "they don't dare" fix):** the first cut was too timid — only ~13
+  traversals/1440f and visible queues — because the box-occupancy guard blocked entry on *any* car,
+  serialising the give-way road to one car per gap. Fix: only a *priority* car blocks the box (a
+  same-road car ahead just platoons through), assume a brisker crossing speed, and let the priority
+  car start its crash-brake at the give-way car's *commit* point (not dead-centre) so it has room to
+  stop. Result: ~21 traversals/1440f, still 0 T-bones; the spec now asserts `crossings_done ≥ 12` so
+  a regression to timid behaviour fails. The remaining rules (give-way / 4-way-stop / cross-road
+  light) are Phase D toggles.
 - **Phase D — feel + tune.** Visualize yields (a car waiting at a crossing), balance densities so it
   doesn't deadlock, and add a setup toggle (cross-road on/off, or which rule). Spec: no deadlock
   (both roads still moving after N frames).

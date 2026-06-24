@@ -115,7 +115,7 @@
 // ── right-of-way at the crossings (Phase C — priority-road rule) ──
 #define XBOX_LOOK    300.0f     // how far ahead a give-way car looks for a crossing (px)
 #define XPRI_LOOK    420.0f     // pre-filter: ignore priority cars past this (the time test does the real work)
-#define XCLEAR_MGN   10.0f      // safety margin (frames) added to my time-to-clear the box
+#define XCLEAR_MGN   14.0f      // safety margin (frames) added to my time-to-clear the box
 
 // levers — NAME the indices (CLAUDE.md): a reorder must fail at the compiler,
 // not silently cross-wire sliders ↔ presets
@@ -886,13 +886,13 @@ static float crossing_yield_gap(Car *c, int idx) {
             // measured from the stop line (not from however far out I spot it). Assume
             // I reach ~half cruise from a standstill so a waiting car still takes a gap.
             float vref = c->spd < 0 ? -c->spd : c->spd;
-            float vmin = MAX_SPD * PERS[c->pers].spd_cap * 0.5f;
+            float vmin = MAX_SPD * PERS[c->pers].spd_cap * 0.7f;
             if (vref < vmin) vref = vmin;
             float t_clear = (Rstop + Rocc + CAR_HALF_L) / vref;
-            // (a) never drive into a box occupied right now (any car) — also keeps two
-            //     give-way cars from piling in together (the follower waits).
-            for (int j = 0; j < total && !conflict; j++) {
-                if (j == idx) continue;
+            // (a) never drive into a box a PRIORITY car is in — but a same-road car ahead
+            //     does NOT block (it's crossing my way, car-following keeps us spaced), so
+            //     a whole platoon of give-way cars can stream through one open gap.
+            for (int j = 0; j < S->ncars && !conflict; j++) {
                 float rx = S->car[j].px - S->xpt[i].p.x, ry = S->car[j].py - S->xpt[i].p.y;
                 if (rx*rx + ry*ry < occ*occ) conflict = true;
             }
@@ -911,12 +911,14 @@ static float crossing_yield_gap(Car *c, int idx) {
             }
         } else {
             // PRIORITY road: don't yield on principle — but DO brake to avoid a crash
-            // if a give-way car has (mis)committed and is physically in the junction
-            // ahead. A safety net for the rare gap-acceptance error; priority flow is
-            // otherwise untouched (a clear junction never brakes a priority car).
+            // if a give-way car has (mis)committed toward the junction ahead. Catch it
+            // out to Rstop (its commit point), not just dead-centre, so a fast priority
+            // car has room to stop. A safety net for the rare gap-acceptance error; a
+            // clear junction never brakes a priority car.
+            float pdef = Rstop;
             for (int j = S->ncars; j < total && !conflict; j++) {
                 float rx = S->car[j].px - S->xpt[i].p.x, ry = S->car[j].py - S->xpt[i].p.y;
-                if (rx*rx + ry*ry < occ*occ) conflict = true;
+                if (rx*rx + ry*ry < pdef*pdef) conflict = true;
             }
         }
         if (conflict) { float gap = dme - Rstop; if (gap < best) best = gap; }
@@ -1689,6 +1691,6 @@ void spec(void) {
     expect_eq(conflicts, 0, "right-of-way: a loop car and a cross car never share a junction (no T-bones)");
     expect(vloop  > 0.5f, "right-of-way: the priority loop keeps flowing");
     expect(vcross > 0.5f, "right-of-way: the give-way cross-road still flows (not starved to a stop)");
-    expect(crossings_done >= 4, "right-of-way: cross cars actually get through the junctions (gaps accepted)");
+    expect(crossings_done >= 12, "right-of-way: cross cars actually get through the junctions (gaps accepted, not timid)");
 }
 #endif
