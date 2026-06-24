@@ -147,6 +147,9 @@ static Font            font_tiny  = {0};
 static Font            font_comic = {0};
 static Font            font_thin = {0};
 static int             active_font_id = FONT_NORMAL;
+// CPU copies of each font atlas (for the software-canvas glyph blit; filled at load via
+// LoadImageFromTexture). Same index meaning as active_font_id via cur_font_img().
+static Image           game_font_img = {0}, font_small_img = {0}, font_tiny_img = {0}, font_comic_img = {0}, font_thin_img = {0};
 static bool            custom_font = false;
 static Color           palette[PALETTE_SIZE];
 static Color           base_palette[PALETTE_SIZE];   // pristine copy, for pal_reset()
@@ -1774,6 +1777,14 @@ int main(int argc, char **argv) {
         UnloadImage(img);
     }
 
+    // CPU copies of the font atlases for the software-canvas glyph blit (sw_print). RGBA so
+    // GetImageColor is a plain read; alpha is the glyph mask (LoadFontFromImage keyed the bg out).
+    game_font_img  = LoadImageFromTexture(game_font.texture);  ImageFormat(&game_font_img,  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    font_small_img = LoadImageFromTexture(font_small.texture); ImageFormat(&font_small_img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    font_tiny_img  = LoadImageFromTexture(font_tiny.texture);  ImageFormat(&font_tiny_img,  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    font_comic_img = LoadImageFromTexture(font_comic.texture); ImageFormat(&font_comic_img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    font_thin_img  = LoadImageFromTexture(font_thin.texture);  ImageFormat(&font_thin_img,  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
     if (SPRITES_DATA_LEN > 0) {
         Image img = LoadImageFromMemory(".png", SPRITES_DATA, SPRITES_DATA_LEN);
         if (img.width > 0) {
@@ -2338,6 +2349,35 @@ static Font cur_font(void) {
     if (active_font_id == FONT_THIN) return font_thin;
     return game_font;
 }
+static Image *cur_font_img(void) {
+    if (active_font_id == FONT_SMALL) return &font_small_img;
+    if (active_font_id == FONT_TINY)  return &font_tiny_img;
+    if (active_font_id == FONT_COMIC) return &font_comic_img;
+    if (active_font_id == FONT_THIN)  return &font_thin_img;
+    return &game_font_img;
+}
+// software text: blit each glyph from the font atlas (tinted to `color`), mirroring DrawTextEx's
+// glyph iteration at scale 1 (these bitmap fonts draw at baseSize). Returns the pen x after the text.
+static int sw_print(const char *text, int x, int y, Color tint) {
+    Font f = cur_font(); Image *img = cur_font_img();
+    if (!img->data) return x;
+    int penx = x, peny = y;
+    for (int i = 0; text[i]; ) {
+        int sz; int cp = GetCodepointNext(&text[i], &sz); i += sz;
+        if (cp == '\n') { peny += f.baseSize; penx = x; continue; }
+        int gi = GetGlyphIndex(f, cp);
+        Rectangle r = f.recs[gi];
+        int ox = f.glyphs[gi].offsetX, oy = f.glyphs[gi].offsetY;
+        for (int gy = 0; gy < (int)r.height; gy++)
+            for (int gx = 0; gx < (int)r.width; gx++) {
+                Color a = GetImageColor(*img, (int)r.x + gx, (int)r.y + gy);
+                if (a.a >= 128) sw_pset(penx + ox + gx, peny + oy + gy, tint);
+            }
+        int adv = f.glyphs[gi].advanceX; if (adv == 0) adv = (int)r.width;
+        penx += adv;
+    }
+    return penx;
+}
 
 static float cur_font_size(void) {
     Font f = cur_font();
@@ -2350,10 +2390,7 @@ int text_width(const char *t) {
 
 int print(const char *text, int x, int y, int color) {
     PROF("print");
-    // Phase-0 software canvas: text is deferred (HUD layer, Phase 2 ports it as a CPU glyph blit).
-    // For the probe, skip the GPU DrawTextEx (it'd draw outside the texture target). The few HUD
-    // labels vanish under DE_SOFTWARE_CANVAS=on; perf/byte-identity carts don't depend on them.
-    if (sw_canvas_active) return x + text_width(text);
+    if (sw_canvas_active) { sw_print(text, x, y, palette[color % PALETTE_SIZE]); return x + text_width(text); }
     DrawTextEx(cur_font(), text, (Vector2){ (float)x, (float)y },
                cur_font_size(), 0, palette[color % PALETTE_SIZE]);
     int w = text_width(text);
