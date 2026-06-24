@@ -132,6 +132,46 @@ be coalesced.
 > all rotation) is **2× faster** on the canvas. So a cart only nets a penalty if it's *rotation-pure*
 > (`rottext`); the per-cart opt-in / auto-fallback model leaves those on GPU.
 
+> **Rotated-sampling optimization (2026-06-25) — baseline + the wins.** Target: the CPU blit/sampling
+> path (`de_cpu_img_rot`/`sw_blit`/`sw_tritex`). Worst-case cart `tools/carts/rotstress.c` (spinning
+> sprite storm, `RS_COUNT`/UP-DOWN; profile with `DE_SOFTWARE_CANVAS=on DE_AUDIO=off`, sample
+> `build/rotstress-dbg`). **BASELINE (`workMsAvg`, software canvas, M1):**
+>
+> | sprites | GPU | canvas | slowdown |
+> |---|---|---|---|
+> | 400 | 0.34 | 3.17 | 9.3× |
+> | 1000 | 0.47 | 4.47 | 9.4× |
+> | 2000 | 0.73 | 7.39 | 10.1× |
+> | 4000 | 1.14 | 12.70 | 11.1× |
+>
+> Sample leaves @4000 (self-time; `-O2` inlines `de_cpu_img_rot` into `spr_rot`): `spr_rot` **1799**
+> (the inverse-map loop) · `GetImageColor` **377** (per-pixel gather) · `sw_pset` **244** (plot).
+>
+> **Three wins applied (all byte-identical — `canvas-diff` 0px on masseffect/cityview/rottext after
+> each; these are determinism-critical):**
+> - **A — direct texel read** (`img_texel()`): skip the non-inlined raylib `GetImageColor` call + its
+>   per-pixel format `switch` with a typed RGBA8 load (falls back for other formats; `spritesheet_img`
+>   forced to RGBA8 at load). Used by `sw_blit`/`sw_tritex`/`de_cpu_img_rot`.
+> - **B — no-scale fast path**: `de_cpu_img_rot` skips the per-pixel `(fxu*sw/dw)` mul/div when
+>   `sw==dw && sh==dh` (the `spr_rot` case) → `sx + (int)fxu`. Byte-exact at SPRITE_SIZE=16 (power of
+>   two) and matches the `rotspr` probe's `floor` sampling.
+> - **C — inline the plot** (the biggest): on the canvas path, plot straight to the cbuf via `sw_pset`
+>   instead of the `pset_rgb → pset → sw_pset` dispatch chain (the off-canvas `DE_CPU_RASTER` reference
+>   keeps `pset_rgb`).
+>
+> **Result (`workMsAvg`, 2-run avg):**
+>
+> | sprites | baseline | now (A+B+C) | gain | slowdown vs GPU |
+> |---|---|---|---|---|
+> | 400 | 3.17 | **2.65** | −16% | 9.3× → 8.3× |
+> | 1000 | 4.47 | **3.88** | −13% | 9.4× → 8.6× |
+> | 2000 | 7.39 | **5.51** | −25% | 10.1× → 7.7× |
+> | 4000 | 12.70 | **9.81** | −23% | 11.1× → 8.7× |
+>
+> ~¼ off the rotated-sampling path, byte-identical, no SIMD. **Next levers if needed** (diminishing,
+> higher-effort): SIMD/NEON on the contiguous fills/`cls` (not the random-access rotated gather);
+> the `uint8` paletted buffer (Fork-1, 4× smaller upload) for low-end. `-ffast-math` stays **off**
+> (it reintroduces the cross-arch drift the quantized matrix fixes).
 > **Phase 2 loose-ends sweep (2026-06-24).** "Feature-complete for common carts" was over-claimed —
 > an audit of every `Draw*` call in `studio.c` found four primitives still hitting the GPU with **no
 > `sw_canvas_active` branch**, so they silently vanished (or half-rendered) under the canvas. Now

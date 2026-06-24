@@ -556,6 +556,18 @@ static inline Color sw_recolor(Color c) {
 static inline bool sw_keyed(Color c) {
     return sw_colorkey_on && c.r == sw_colorkey_rgb.r && c.g == sw_colorkey_rgb.g && c.b == sw_colorkey_rgb.b;
 }
+// fast texel read — direct typed load for the common RGBA8 case (the sheet/atlases), bypassing the
+// non-inlined raylib GetImageColor call + its per-pixel format switch (the per-pixel sampling hotspot).
+// Byte-identical to GetImageColor for RGBA8; falls back for any other format. OOB → blank (matches
+// raylib). The blits sample inside valid regions, so the bounds check is a cheap guard, not the path.
+static inline Color img_texel(const Image *img, int x, int y) {
+    if ((unsigned)x >= (unsigned)img->width || (unsigned)y >= (unsigned)img->height) return (Color){0,0,0,0};
+    if (img->format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+        const unsigned char *p = (const unsigned char *)img->data + ((size_t)y * img->width + x) * 4;
+        return (Color){ p[0], p[1], p[2], p[3] };
+    }
+    return GetImageColor(*img, x, y);
+}
 // software sprite blit: nearest-sample spritesheet_img → cbuf via sw_pset (camera+clip), with
 // optional flip and nearest scaling (src wxh → dst wxh). Alpha<128 = transparent (PNG colorkey);
 // the runtime colorkey() colour is skipped too. use_pal applies the pal() swap (spr/sspr — NOT
@@ -567,7 +579,7 @@ static void sw_blit(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int 
         int syy = fy ? (sy + sh - 1 - j * sh / dh) : (sy + j * sh / dh);
         for (int i = 0; i < dw; i++) {
             int sxx = fx ? (sx + sw - 1 - i * sw / dw) : (sx + i * sw / dw);
-            Color c = GetImageColor(spritesheet_img, sxx, syy);
+            Color c = img_texel(&spritesheet_img, sxx, syy);
             if (c.a < 128 || sw_keyed(c)) continue;
             sw_pset(dx + i, dy + j, recolor ? sw_recolor(c) : c);
         }
@@ -593,7 +605,7 @@ static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,flo
             float l0=w0/area, l1=w1/area, l2=w2/area;
             int iu=(int)(l0*u0+l1*u1+l2*u2), iv=(int)(l0*v0+l1*v1+l2*v2);
             if ((unsigned)iu<(unsigned)spritesheet_img.width && (unsigned)iv<(unsigned)spritesheet_img.height) {
-                Color cc = GetImageColor(spritesheet_img, iu, iv);
+                Color cc = img_texel(&spritesheet_img, iu, iv);
                 // plot via pset_rgb (arbitrary sampled RGB, no palette index) → backend-agnostic:
                 // on-canvas → sw_pset → cbuf; off-canvas (DE_CPU_RASTER) → DrawPixel. tritex uses the
                 // keyed sheet; no pal swap (matches GPU).
@@ -1890,6 +1902,7 @@ int main(int argc, char **argv) {
     if (SPRITES_DATA_LEN > 0) {
         Image img = LoadImageFromMemory(".png", SPRITES_DATA, SPRITES_DATA_LEN);
         if (img.width > 0) {
+            ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);   // so img_texel()'s fast path always applies
             spritesheet_img = img;
             spritesheet = LoadTextureFromImage(img);
             SetTextureFilter(spritesheet, TEXTURE_FILTER_POINT);
@@ -2439,6 +2452,7 @@ static void de_cpu_img_rot(Image *img, int sx, int sy, int sw, int sh, int dx, i
     float c = roundf(cosf(a) * 4096.f) / 4096.f, s = roundf(sinf(a) * 4096.f) / 4096.f;
     float px0 = dx + ox, py0 = dy + oy;                       // pivot (world)
     bool recolor = use_pal && pal_active;
+    bool oncanvas = sw_canvas_active;                          // hoist: plot straight to cbuf vs the pset dispatch
     Color tint = fonttint >= 0 ? palette[fonttint % PALETTE_SIZE] : (Color){0,0,0,0};
     // screen bbox = the 4 dest corners rotated forward about the pivot
     float cxx[4] = { dx - px0, dx + dw - px0, dx + dw - px0, dx - px0 };
@@ -2455,11 +2469,14 @@ static void de_cpu_img_rot(Image *img, int sx, int sy, int sw, int sh, int dx, i
         float lx = c * ddx + s * ddy, ly = -s * ddx + c * ddy;     // rotate dest by -a
         float fxu = lx + ox, fyu = ly + oy;                        // dest-local (0..dw, 0..dh)
         if (fxu < 0 || fxu >= dw || fyu < 0 || fyu >= dh) continue;
-        int ssx = sx + (int)(fxu * sw / dw), ssy = sy + (int)(fyu * sh / dh);   // nearest source texel
-        Color cc = GetImageColor(*img, ssx, ssy);
-        if (fonttint >= 0) { if (cc.a < 128) continue; pset_rgb(px, py, (tint.r << 16) | (tint.g << 8) | tint.b); }
-        else { if (cc.a < 128 || sw_keyed(cc)) continue; if (recolor) cc = sw_recolor(cc);
-               pset_rgb(px, py, (cc.r << 16) | (cc.g << 8) | cc.b); }
+        int ssx, ssy;                                              // nearest source texel
+        if (sw == dw && sh == dh) { ssx = sx + (int)fxu;          ssy = sy + (int)fyu; }          // no scale (spr_rot) — skip the mul/div
+        else                      { ssx = sx + (int)(fxu*sw/dw);  ssy = sy + (int)(fyu*sh/dh); }  // scaled
+        Color cc = img_texel(img, ssx, ssy);
+        if (fonttint >= 0) { if (cc.a < 128) continue; cc = tint; }
+        else { if (cc.a < 128 || sw_keyed(cc)) continue; if (recolor) cc = sw_recolor(cc); }
+        if (oncanvas) sw_pset(px, py, cc);                                    // straight to cbuf (hot path)
+        else pset_rgb(px, py, (cc.r << 16) | (cc.g << 8) | cc.b);            // off-canvas DE_CPU_RASTER reference
     }
 }
 // sprite wrapper (spritesheet, sprite mode)
