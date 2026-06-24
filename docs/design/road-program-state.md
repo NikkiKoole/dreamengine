@@ -61,6 +61,49 @@ crossing from the seed").
   algorithm, and state-of-the-art beyond the 2001/2008 pillars (learned generative models). See
   [`road-hierarchy-notes.md`](road-hierarchy-notes.md) → "Open questions".
 
+## Audit (2026-06-24) — the genuine misses, consolidated
+
+A pass over `road-hierarchy-notes.md` (§2/§7/§8/§9/§10) against what `streetlab` actually ships, to
+surface gaps that were real but scattered/buried below (some framed as "already covered" or "add if
+needed", so invisible). Split by kind — **a miss is designed-in-the-notes + in-scope + not built AND
+not deliberately deferred.** Deferred-by-plan items are NOT misses; they're in the Roadmap below.
+
+**Genuine misses (named in the research, in-scope, no milestone):**
+- [ ] **Staggered junction (the "double-T")** — §2/§7 + §10 open-Q. The minor road is OFFSET so it meets
+      the through road as TWO T-junctions a short distance apart (L-R or R-L stagger), breaking one
+      high-conflict 4-way into two priority 3-leg junctions. **The first primitive that needs TWO hubs**
+      offset along a shared through carriageway — streetlab's single-hub model can't express it (T just
+      drops an arm). The curb-return grammar is angle-agnostic so each hub re-solves for free; the work
+      is the two-hub layout. *Currently "parked" in the Roadmap (step, line ~162) — promoted here as the
+      top buildable miss.*
+- [ ] **Standalone pedestrian refuge island** — §2/§7 ("refuge islands"). Exists today ONLY implicitly:
+      the turn median (M3) and roundabout splitter (M6) "double as" refuges. There is **no refuge island
+      on a plain median crossing** (a nose of raised median at the crosswalk, gap for the ped). *Refines
+      the Backlog's "refuge islands are already covered" note — the standalone primitive is the gap.*
+- [ ] **`loops-and-lollipops` as a distinct network pattern** — §7/§8.1 name it separately. streetlab has
+      cul-de-sac (dendritic tree + sparse loops); loops-and-lollipops (loop roads feeding cul-de-sac stems)
+      is folded into it, not separately selectable. Likely a cheap 6th `gen_network` pattern.
+- [ ] **`dendricity` metric** — §8.2 SNDi measure #2 (tree-likeness). We ship degree + dead-ends + circuity
+      + sinuosity + degree-share, but NOT dendricity. *The Backlog says "add if needed" — flagged here so
+      the SNDi four-measure set is visibly incomplete.*
+
+**Built-but-thin (shipped, but narrower than the notes intend):**
+- [ ] **Bulb-out / curb extension** — `draw_bulb()` is locked to the one config `peds && parking && !bike`;
+      it appears nowhere else. The notes treat it as a general corner treatment.
+- [ ] **`roadMark` model** (§5, `road-geometry-refs.md` "worth taking next") — markings are hardcoded;
+      no per-boundary type (solid/broken) · colour · width · lane-change rule.
+
+**Possibly out-of-scope (logged so the decision is explicit, not an oversight):**
+- [ ] **Signalized vs priority control** — §7 arterial row + §10 open-Q. Everything today is give-way/stop-bar.
+      This is a signals/phasing/timing layer, **not geometry** — arguably belongs to a future control layer,
+      not this geometry sandbox. Decide explicitly rather than leave it implied-missing.
+- [ ] **Lane predecessor/successor links** (§5) — only needed once routing runs; deferred to the world tier.
+
+**Deferred-by-plan (NOT misses — tracked in the Roadmap / Known deferrals):** modal active-travel layer
+(Facet C, Stage 2.5) · crossings & priority markings pass · field-rendering cutover (blocked on
+`software-canvas.md`) · two-tier major→minor generator (Phase 2) · one-way streets (Phase 2) · integration
+streetlab × roadnet2 × roadlab (Phase 3).
+
 ## Backlog — loose ends scattered through the research (ranked, addable now)
 
 Pulled from `road-hierarchy-notes` §2 / §5 / §8 — named in the research, in-scope for the sandbox, unbuilt.

@@ -205,6 +205,10 @@ OR an edge; the *goes-its-own-way* path must be an edge.
 - Exact geometry of the named-but-unverified at-grade primitives: staggered junctions, free-right slips,
   splitter/turn channelizing islands, signalized-vs-priority control (AASHTO Green Book intersection chapter,
   NACTO directly).
+- **Build-gap ledger (audit 2026-06-24):** which of these primitives are designed-but-unbuilt vs built-but-thin
+  vs deferred-by-plan is now tracked in one place → [`road-program-state.md`](road-program-state.md) →
+  "Audit (2026-06-24) — the genuine misses". Top buildable miss: the **staggered junction (double-T)**;
+  others: standalone **refuge island**, **loops-and-lollipops** pattern, the **dendricity** SNDi measure.
 
 *Facet B (network topology — from the B-dive's own open questions):*
 - The **per-pattern numeric metric table** (intersection density/km², link-node/β index, γ index, block size,
