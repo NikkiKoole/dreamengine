@@ -23,12 +23,40 @@
 // card). Drawn back-to-front (painter's) so near blocks overlap far ones.
 //
 // CONTROLS — arrows drive · M cycle view · [ ] zoom out/in · R reseed city
+//
+// VERDICT (same corner, same heading, headless A/B): mode 2 (HEADING-UP) is the
+// keeper — real-reading blocks, walls straight up, diagonals only on footprints
+// and the road grid. Mode 1 is the calm no-rotation map view; mode 3 is for
+// props not boxes; mode 4 shows the melty diagonal-walls cost we're avoiding.
+//
+// WHERE THIS GOES NEXT (ideas, roughest → most load-bearing):
+//   - THE HYBRID (the real test): mode 2 for buildings + mode 3 billboards for
+//     trees / people / lamp-posts / signs in the SAME scene. Boxes get walls,
+//     thin props face you as cards — that's the "Zelda town you can drive" look.
+//   - NORTH-UP READABILITY: mode 1 reads flat. Taller/more-shaded front walls or
+//     a thin roof-edge outline gives it pop without introducing any diagonals.
+//   - BUILDING COLLISION: today the car drives onto/through buildings. Footprint
+//     collision makes it a street, not a diorama (feeds the sloop drive feel).
+//   - WIRE TO THE WORLD: this is big-game-backlog seam #2 (the cityscape
+//     renderer). Swap the seeded grid for the composer's road_at()/lotfill atoms
+//     so it draws the REAL world instead of a demo grid.
+//   - DEPTH POLISH: per-building drop shadow on the ground, window rows on tall
+//     walls (cheap dithered bands), night palette + lit windows, a horizon tint.
+//   - Capture the "UP stays screen-up" rule + this 4-mode finding in a
+//     docs/design/ note so it outlives this header.
 
 #define PITCH   42          // block centre-to-centre, world units
 #define ROADH   7.0f        // half road width
 #define RANGE   7           // cells drawn each side of the car
 #define HSCALE  1.0f        // how tall a height unit reads on screen
 #define NMAT    6
+#define TILE_W  6.0f        // world units per 16px texture tile (keeps bricks crisp)
+#define QUARTER 0x7BDE      // ~25% black dither (1-bits transparent)
+#define MAXREP  6           // cap texture repeats per wall (stress-test ceiling)
+
+// material → wall texture slot (sprites in cityview.cart.js): 0 brick 1 block 2 glass 3 stucco
+static const int MATSLOT[NMAT] = { 1, 0, 3, 2, 1, 3 };
+static int clampi(int v, int lo, int hi) { return v<lo?lo:(v>hi?hi:v); }
 
 typedef struct { int roof, lit, shade; } Mat;
 static const Mat MAT[NMAT] = {
@@ -51,7 +79,7 @@ typedef struct {
   float camx, camy, rot;      // camera: eased pos + eased rotation(deg applied to world)
   float zoom;
   int   mode, seed;
-  bool  started;
+  bool  started, tex;
 } State;
 static State S;
 
@@ -96,7 +124,7 @@ static void reset(void) {
   S.px = 6; S.py = ROADH+2; S.ang = 0; S.spd = 0;
   S.camx = S.px; S.camy = S.py; S.rot = 0;
   S.zoom = 2.2f;
-  if (!S.started) { S.mode = M_NORTH; S.zoom = 2.2f; }
+  if (!S.started) { S.mode = M_NORTH; S.zoom = 2.2f; S.tex = true; }
   S.started = true;
 }
 
@@ -109,6 +137,7 @@ void update(void) {
   if (keyp('2')) S.mode = M_HEADING;
   if (keyp('3')) S.mode = M_BILLBOARD;
   if (keyp('4')) S.mode = M_LEANOUT;
+  if (keyp('T')) S.tex = !S.tex;
   if (key('[')) S.zoom = fmaxf(0.9f, S.zoom*0.97f);
   if (key(']')) S.zoom = fminf(6.0f, S.zoom*1.03f);
   if (keyp('R')) { S.seed++; reset(); }
@@ -134,6 +163,39 @@ void update(void) {
   S.rot += d * 0.16f;
 }
 
+// texture-map one wall quad: ground edge a→b, roof edge ca→cb (screen coords).
+// the wall is subdivided into RX×RY tiles, each mapped to the FULL 16px texture
+// slot — that REPEATS the bricks (no stretch) AND keeps each affine triangle
+// small (no PS1 swim). a dither-shadow overlay darkens side-facing walls.
+static void wall_tex(float ax,float ay, float bx,float by, float cax,float cay, float cbx,float cby,
+                     int slot, int rxN, int ryN, float facing) {
+  int scol = slot % 8, srow = slot / 8;
+  float su = scol*16.0f, sv = srow*16.0f;
+  float u0 = su+0.5f, u1 = su+15.5f, vtop = sv+0.5f, vbot = sv+15.5f;
+  for (int j=0;j<ryN;j++) {
+    float g0=(float)j/ryN, g1=(float)(j+1)/ryN;   // 0 = ground, 1 = roof
+    for (int i=0;i<rxN;i++) {
+      float f0=(float)i/rxN, f1=(float)(i+1)/rxN;  // along the wall
+      #define PX(f,g) (int)(((ax+(bx-ax)*(f))*(1-(g))) + ((cax+(cbx-cax)*(f))*(g)))
+      #define PY(f,g) (int)(((ay+(by-ay)*(f))*(1-(g))) + ((cay+(cby-cay)*(f))*(g)))
+      int x00=PX(f0,g0),y00=PY(f0,g0), x10=PX(f1,g0),y10=PY(f1,g0);
+      int x11=PX(f1,g1),y11=PY(f1,g1), x01=PX(f0,g1),y01=PY(f0,g1);
+      #undef PX
+      #undef PY
+      tritex(x00,y00,u0,vbot, x10,y10,u1,vbot, x11,y11,u1,vtop);
+      tritex(x00,y00,u0,vbot, x11,y11,u1,vtop, x01,y01,u0,vtop);
+    }
+  }
+  // sparse patterns only — a 50% checker collapses into diagonal lines on a
+  // sheared wall. front wall = clean, mid = dots, most side-on = ~25% dither.
+  int pat = facing>0.66f ? 0 : (facing>0.40f ? FILL_DOTS : QUARTER);
+  if (pat) {
+    fillp(pat, -1);                               // black on 0-bits, holes transparent
+    quadfill((int)ax,(int)ay,(int)bx,(int)by,(int)cbx,(int)cby,(int)cax,(int)cay, CLR_BLACK);
+    fillp_reset();
+  }
+}
+
 // draw one building's geometry (modes 1/2/4) — visible walls then roof cap.
 static void draw_bldg_geo(Bldg *b, bool leanout) {
   // footprint corners CCW-ish
@@ -154,18 +216,29 @@ static void draw_bldg_geo(Bldg *b, bool leanout) {
     for (int i=0;i<4;i++) project(wx[i], wy[i], b->h, &rx[i], &ry[i]);
   }
 
-  // visible walls: outward normal (rotated to screen) points toward the viewer
-  // (downward, screen-y > 0). draw the more side-on one first, frontmost last.
+  // visible walls: a wall is exposed iff its screen-space outward normal points
+  // OPPOSITE the roof's shift direction (the side the roof slides off of).
+  //   straight-up extrusion → shift = screen-up, so the down-facing (south) walls
+  //   show;  lean-out → shift = radially away from screen centre, so the walls
+  //   facing back TOWARD centre show. One test, both behaviours.
   // edges: 0:(0-1) 1:(1-2) 2:(2-3) 3:(3-0)
   float c = cos_deg(S.rot), s = sin_deg(S.rot);
   // world outward normals of each edge for an axis-aligned footprint:
   // edge0 top(-y): (0,-1) · edge1 right(+x): (1,0) · edge2 bottom(+y): (0,1) · edge3 left(-x): (-1,0)
   float nwx[4] = { 0,  1, 0, -1 };
   float nwy[4] = {-1,  0, 1,  0 };
+  float sdx, sdy;                               // unit roof-shift direction (screen)
+  if (leanout) {
+    float bcx=(gx[0]+gx[1]+gx[2]+gx[3])*0.25f - SCREEN_W*0.5f;
+    float bcy=(gy[0]+gy[1]+gy[2]+gy[3])*0.25f - SCREEN_H*0.5f;
+    float L=sqrtf(bcx*bcx+bcy*bcy)+1e-4f; sdx=bcx/L; sdy=bcy/L;
+  } else { sdx=0; sdy=-1; }
   int   order[4]; int n=0; float key_[4];
   for (int e=0;e<4;e++) {
-    float ny = nwx[e]*s + nwy[e]*c;             // screen-y of the rotated normal
-    if (ny > 0.001f) { order[n]=e; key_[n]=ny; n++; }
+    float nsx = nwx[e]*c - nwy[e]*s;            // rotate world normal into screen
+    float nsy = nwx[e]*s + nwy[e]*c;
+    float facing = -(nsx*sdx + nsy*sdy);        // >0 = exposed wall
+    if (facing > 0.001f) { order[n]=e; key_[n]=facing; n++; }
   }
   // sort visible walls by facing (least-front first → painter's within the box)
   for (int i=0;i<n;i++) for (int j=i+1;j<n;j++)
@@ -173,10 +246,18 @@ static void draw_bldg_geo(Bldg *b, bool leanout) {
 
   for (int k=0;k<n;k++) {
     int e = order[k]; int a=e, bb=(e+1)&3;
-    // brighter for the most front-facing wall, darker for the side
-    int col = (key_[k] > 0.6f) ? MAT[b->mat].lit : MAT[b->mat].shade;
-    quadfill((int)gx[a],(int)gy[a], (int)gx[bb],(int)gy[bb],
-             (int)rx[bb],(int)ry[bb], (int)rx[a],(int)ry[a], col);
+    if (S.tex) {
+      float wlen = (e&1) ? (b->y1-b->y0) : (b->x1-b->x0);
+      int rxN = clampi((int)(wlen/TILE_W + 0.5f), 1, MAXREP);
+      int ryN = clampi((int)(b->h /TILE_W + 0.5f), 1, MAXREP);
+      wall_tex(gx[a],gy[a], gx[bb],gy[bb], rx[a],ry[a], rx[bb],ry[bb],
+               MATSLOT[b->mat], rxN, ryN, key_[k]);
+    } else {
+      // flat fill: brighter for the most front-facing wall, darker for the side
+      int col = (key_[k] > 0.6f) ? MAT[b->mat].lit : MAT[b->mat].shade;
+      quadfill((int)gx[a],(int)gy[a], (int)gx[bb],(int)gy[bb],
+               (int)rx[bb],(int)ry[bb], (int)rx[a],(int)ry[a], col);
+    }
   }
   // roof cap
   quadfill((int)rx[0],(int)ry[0],(int)rx[1],(int)ry[1],
@@ -244,5 +325,5 @@ void draw(void) {
   // HUD
   rectfill(0,0,SCREEN_W,9, CLR_BLACK);
   print(MODE_NAME[S.mode], 3, 2, CLR_YELLOW);
-  print("M:view  [ ]:zoom  R:city", SCREEN_W-148, 2, CLR_LIGHT_GREY);
+  print(S.tex?"M:view T:tex* [ ]:zoom":"M:view T:tex [ ]:zoom", SCREEN_W-150, 2, CLR_LIGHT_GREY);
 }
