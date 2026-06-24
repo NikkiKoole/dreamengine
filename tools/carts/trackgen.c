@@ -167,6 +167,11 @@ typedef struct { V2 p; int prog1, prog2; } Xing;
 #define REACT_N   3            // car-following reaction lag (frames) — seeds phantom jams
 #define LIGHT_RED 480          // red phase (frames) — long, so a real line of cars builds
 #define LIGHT_GRN 300          // green phase (frames)
+// ── chase: a pursuer cuts off-road to intercept, then boxes the suspect ──
+#define BEELINE_RANGE 220.0f   // this close, a pursuer drives STRAIGHT at the target (leaves the road if shorter)
+#define LOCKIN_RANGE   75.0f   // this close, it stops tailing and BOXES — aims ahead of + to a flank of the suspect
+#define LOCKIN_LEAD    34.0f   // how far ahead of the suspect to aim (cut off its escape)
+#define LOCKIN_SIDE    24.0f   // flank offset — one cop each side makes a pincer
 
 typedef struct {
     float px, py, vx, vy, spd, ang;
@@ -1133,6 +1138,27 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
     if (s < TG_GAP0 && v < 0.8f) thr = -1.0f;            // snug behind the obstacle & slow → settle
                                                           // to a dead stop (no reaction-lag creep)
 
+    // CHASE override: a pursuer that's closed in cuts STRAIGHT at the target (off-road if the road
+    // would take the long way — it just eats the grass penalty), and when very close it BOXES the
+    // suspect: aim ahead of it (cut off the escape) and to one flank, so two cops pincer it in.
+    // Full throttle — cops push, they don't keep a polite gap.
+    if (c->target >= 0 && c->target < S->ncars + S->ncross) {
+        Car *t = &S->car[c->target];
+        float rx = t->px - c->px, ry = t->py - c->py;
+        float dist = fsqrt(rx*rx + ry*ry);
+        if (dist < BEELINE_RANGE) {
+            float ax = t->px, ay = t->py;
+            if (dist < LOCKIN_RANGE) {                   // box it: ahead + a flank (per-cop side)
+                float side = (idx & 1) ? 1.0f : -1.0f;
+                ax += dx(LOCKIN_LEAD, t->ang) + dx(LOCKIN_SIDE, t->ang + 90.0f*side);
+                ay += dy(LOCKIN_LEAD, t->ang) + dy(LOCKIN_SIDE, t->ang + 90.0f*side);
+            }
+            float des = atan2_deg(ay - c->py, ax - c->px);
+            turn = clamp(awrap(des - c->ang) / 7.0f, -1.0f, 1.0f);
+            thr  = 1.0f;
+        }
+    }
+
     // REACTION LAG — but ASYMMETRIC. Braking is PROMPT (you hit the brakes the instant
     // you see danger); only ACCELERATION is sluggish (slow to get going again). Delaying
     // the brake is what rear-ended the car ahead; lagging only the throttle still gives
@@ -1965,12 +1991,15 @@ void spec(void) {
     cop->target = 0; cop->reckless = true;
     float rx0 = cop->px - ppx, ry0 = cop->py - ppy;
     float d0 = fsqrt(rx0*rx0 + ry0*ry0), dmin = d0;
+    bool cut_grass = false;
     for (int f = 0; f < 2000; f++) {                 // keep the player pinned while the cop hunts it down
         P.px = ppx; P.py = ppy; P.spd = 0; P.vx = P.vy = 0;
         step(1);
         float rx = cop->px - ppx, ry = cop->py - ppy, d = fsqrt(rx*rx + ry*ry);
         if (d < dmin) dmin = d;
+        if (cop->offtrack) cut_grass = true;         // it left the road to cut across
     }
     expect(dmin < 30.0f, "chase: a pursuer routes to and reaches its target (closes the distance)");
+    expect(cut_grass, "chase: a pursuer cuts off-road (grass) to intercept, not only follows the road");
 }
 #endif

@@ -12,7 +12,7 @@ flow, no box-overlap, red-builds-a-queue / no-bolt / no-reverse, stop-and-go spr
 **second-track crossing** (geometry/crossings; stream spawns + flows; right-of-way reservation —
 no T-bones by construction, no gridlock, both tracks flow, across 4 seeds), a **routing seed**
 (cars turn onto the other track at crossings — the 2 loops become a tiny network), and a **chase**
-(a pursuer routes to and reaches its target). **Rough
+(routes to (a pursuer routes to and reaches its target). reaches its target, AND cuts off-road to intercept). **Rough
 edge:** on the tightest procedural corner a fast car can still clip the apex (localized, recovers).
 
 > **DIRECTION (2026-06-24): criminal-city / car chases.** The game's meat is traffic AI, with
@@ -21,9 +21,12 @@ edge:** on the tightest procedural corner a fast car can still clip the apex (lo
 > the player, turn onto the other loop at a crossing; ambient = coin-flip, pursuers = route toward
 > target) and **chase** (`Car.target` + `Car.reckless`; key `C` turns the 2 nearest cars into reckless
 > cops that route to the player, drive near race pace, and run lights/junctions — blue flashing cars,
-> "CHASE!" banner). Crash-free guarantees still hold for rule-followers; reckless cars opt out (chase
-> crashes are intentional drama). Next small hooks: a per-driver style dial + ambient cars scattering
-> from a chase. The real version still wants the road graph + extracted brain header.
+> "CHASE!" banner). Pursuers also **cut off-road** to intercept (beeline straight at the target inside
+> `BEELINE_RANGE`, eating the grass penalty — the natural cost) and **box the suspect** when very close
+> (`LOCKIN_RANGE`: aim ahead of + to a flank, one cop each side → a pincer). Crash-free guarantees still
+> hold for rule-followers; reckless cars opt out (chase crashes are intentional drama). Next small hooks:
+> a per-driver style dial + ambient cars scattering from a chase. The real version still wants the road
+> graph + extracted brain header.
 
 > **DESIGN PIVOT (2026-06-24):** the "cross-road" started as a straight road cutting the loop
 > (Phases A–C below), but it's now a **second full race track** — an independent loop (`gen_track2`,
