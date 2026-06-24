@@ -2459,10 +2459,12 @@ int print_outline(const char *text, int x, int y, int color, int outline_color) 
     float sz = cur_font_size();
     Font  f  = cur_font();
     static const int offsets[8][2] = {{-1,-1},{0,-1},{1,-1},{-1,0},{1,0},{-1,1},{0,1},{1,1}};
-    for (int i = 0; i < 8; i++)
-        DrawTextEx(f, text,
-                   (Vector2){ (float)(x + offsets[i][0]), (float)(y + offsets[i][1]) },
-                   sz, 0, oc);
+    for (int i = 0; i < 8; i++) {
+        if (sw_canvas_active) sw_print(text, x + offsets[i][0], y + offsets[i][1], oc);
+        else DrawTextEx(f, text,
+                        (Vector2){ (float)(x + offsets[i][0]), (float)(y + offsets[i][1]) },
+                        sz, 0, oc);
+    }
     return print(text, x, y, color);
 }
 
@@ -2472,6 +2474,10 @@ int print_rot(const char *text, int x, int y, float deg, int color, int pivot) {
     if (pivot) {              // pivot 1 = rotate around the text's center; (x,y) is that center
         org.x = text_width(text) / 2.0f;
         org.y = cur_font_size() / 2.0f;
+    }
+    if (sw_canvas_active) {   // deg 0 = a normal blit; any rotation → whole-cart GPU fallback (Fork-2/C)
+        if (deg == 0.0f) return sw_print(text, x, y, palette[color % PALETTE_SIZE]);
+        sw_force_gpu = true; return x + text_width(text);
     }
     DrawTextPro(cur_font(), text, (Vector2){ (float)x, (float)y }, org,
                 deg, cur_font_size(), 0, palette[color % PALETTE_SIZE]);
@@ -2486,6 +2492,10 @@ int print_rot_scaled(const char *text, int x, int y, float deg, int scale, int c
     if (pivot) {                               // pivot 1 = rotate around the (scaled) text center
         org.x = (text_width(text) * scale) / 2.0f;
         org.y = sz / 2.0f;
+    }
+    if (sw_canvas_active) {   // unscaled + unrotated = a normal blit; scaling or rotation → GPU fallback
+        if (deg == 0.0f && scale == 1) return sw_print(text, x, y, palette[color % PALETTE_SIZE]);
+        sw_force_gpu = true; return x + text_width(text) * scale;
     }
     DrawTextPro(cur_font(), text, (Vector2){ (float)x, (float)y }, org,
                 deg, sz, 0, palette[color % PALETTE_SIZE]);
@@ -2524,8 +2534,10 @@ void rectfill(int x, int y, int w, int h, int color) {
 // raw 24-bit filled block: 0xRRGGBB straight to the canvas, no palette. one call
 // per shader cell beats a pset_rgb pixel-loop (chunky CPU shaders, true-colour bars).
 void rectfill_rgb(int x, int y, int w, int h, int hex) {
-    PROF("rectfill");
-    DrawRectangle(x, y, w, h, (Color){ (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 });
+    PROF("rectfill_rgb");
+    Color c = { (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 };
+    if (sw_canvas_active) { sw_fillrect(x, y, w, h, c); return; }   // cbuf row memset (the true-colour CPU-shader path)
+    DrawRectangle(x, y, w, h, c);
 }
 
 // filled rect centred at (cx,cy), rotated `deg`° — emitted as real GPU geometry (two
@@ -3093,8 +3105,13 @@ void map(int cx, int cy, int sx, int sy, int cw, int ch) {
             int v = mget(cx + xi, cy + yi);
             if (v == 0) continue;  // cell 0 = empty (skipped)
             // pull a CELL_W×CELL_H rect from the sheet, blit it scaled to dw×dh (no smoothing)
-            Rectangle src = { (float)((v % cols) * CELL_W), (float)((v / cols) * CELL_H), (float)CELL_W, (float)CELL_H };
-            Rectangle dst = { (float)(sx + xi * dw), (float)(sy + yi * dh), (float)dw, (float)dh };
+            int srcx = (v % cols) * CELL_W, srcy = (v / cols) * CELL_H;
+            int dstx = sx + xi * dw,        dsty = sy + yi * dh;
+            if (sw_canvas_active) {   // same tiled blit as spr/sspr, just onto the cbuf
+                sw_blit(srcx, srcy, CELL_W, CELL_H, dstx, dsty, dw, dh, false, false); continue;
+            }
+            Rectangle src = { (float)srcx, (float)srcy, (float)CELL_W, (float)CELL_H };
+            Rectangle dst = { (float)dstx, (float)dsty, (float)dw, (float)dh };
             DrawTexturePro(spritesheet, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
         }
     }

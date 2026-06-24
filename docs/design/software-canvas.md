@@ -75,6 +75,29 @@ be coalesced.
 > zoom; rotation falls back to GPU.) Full write-up:
 > [`software-canvas-phase0-plan.md`](software-canvas-phase0-plan.md).
 
+> **Phase 2 loose-ends sweep (2026-06-24).** "Feature-complete for common carts" was over-claimed —
+> an audit of every `Draw*` call in `studio.c` found four primitives still hitting the GPU with **no
+> `sw_canvas_active` branch**, so they silently vanished (or half-rendered) under the canvas. Now
+> ported / made consistent:
+> - **`map()`** — the worst gap (tilemaps are everywhere): each tile was a raw `DrawTexturePro`. Now
+>   routes through `sw_blit` exactly like `spr`/`sspr`. *Verified:* `masseffect` (4× `map`) renders
+>   identically, frames 1–29 byte-identical GPU↔SW.
+> - **`rectfill_rgb()`** — `pset_rgb` was ported but its rect sibling wasn't; the true-colour
+>   CPU-shader bars disappeared. Now a `sw_fillrect` row-memset. *Verified:* `pixelperfect`
+>   byte-identical.
+> - **`print_outline()`** — only the inner `print()` was sw-aware; the 8 outline passes went to GPU,
+>   so the outline/shadow was missing. Outline passes now use `sw_print`. *Verified:* `fonts`
+>   byte-identical (outlines present).
+> - **`print_rot()` / `print_rot_scaled()`** — rotated text silently dropped (no branch, and unlike
+>   `spr_rot` it didn't even set `sw_force_gpu`). Now `deg==0` (+ `scale==1`) blits via `sw_print`;
+>   any rotation/scale falls the whole cart back to GPU, matching `sspr_ex`.
+>
+> *Gate:* `build-all` = 433/433 compile. **Still open (next pass, distinct class):** `zoom_rect()` /
+> `smooth_zoom()` (texture-feedback ops that sample `canvas.texture` mid-`draw()`, which is stale
+> until the end-of-frame upload — need a `sw_force_gpu` or a cbuf-readback); the **frame-0 warmup**
+> (font/sprite CPU `Image`s lag one frame, so the very first SW frame differs — pre-existing in
+> `print`/`spr`); and `sw_blit` still ignores `pal()` recolor + runtime `colorkey()`.
+
 ## When to enable it — HW vs SW (the per-cart rule)
 
 The canvas is **opt-in per cart**, because it's not a universal win. The trade is simple: it replaces
