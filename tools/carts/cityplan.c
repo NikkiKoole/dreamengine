@@ -921,26 +921,30 @@ static void draw_overlay(float cam_x, float cam_y, float zoom) {
     }
 }
 
-// ── shared probe ─────────────────────────────────────────────────────────────────
-static const char *probe(float fx, float fy) {
-    static char buf[56];
+// ── shared probe — fills `top` (the container: house/farm/wild) and `bot` (the detail) ──
+static void hover_at(float fx, float fy, char *top, char *bot, int cap) {
     int wk = world_kind_at(fx, fy);
-    if (wk == WK_WILD) { snprintf(buf, sizeof buf, "wild / %s", CV_NAME[cover_at(fx, fy).kind]); return buf; }
+    if (wk == WK_WILD) { snprintf(top, cap, "wilderness"); snprintf(bot, cap, "%s", CV_NAME[cover_at(fx, fy).kind]); return; }
     if (wk == WK_FARM) { int fxi = ifloordiv((int)fx, FIELD_P), fyi = ifloordiv((int)fy, FIELD_P);
-        snprintf(buf, sizeof buf, "farmland / %s", CR_NAME[hash2(fxi + lf_seed * 257, fyi * 7 + 13) % CR_N]); return buf; }
+        snprintf(top, cap, "farmland"); snprintf(bot, cap, "%s", CR_NAME[hash2(fxi + lf_seed * 257, fyi * 7 + 13) % CR_N]); return; }
     int bx = ifloordiv((int)fx, BLK_P), by = ifloordiv((int)fy, BLK_P), IN = BLK_P - ST_W;
     int zone = zone_at(bx * BLK_P + ST_W + IN / 2.0f, by * BLK_P + ST_W + IN / 2.0f);
-    if (posmod((int)fx, BLK_P) < ST_W || posmod((int)fy, BLK_P) < ST_W) { snprintf(buf, sizeof buf, "%s  street", ZN_NAME[zone]); return buf; }
+    if (posmod((int)fx, BLK_P) < ST_W || posmod((int)fy, BLK_P) < ST_W) { snprintf(top, cap, "%s", ZN_NAME[zone]); snprintf(bot, cap, "street"); return; }
     LotSlot slots[40]; int nl = block_lots(bx, by, zone, slots, 40); int x = (int)fx, y = (int)fy;
     for (int i = 0; i < nl; i++) {
         Rect b; if (!footprint_body(slots[i].lot, slots[i].outward, zone, slots[i].attached, &b)) continue;
         if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
         Plan p; plan_build(&p, b, zone, slots[i].outward, hmix(slots[i].hash, 3), value_at(b.x + b.w / 2.0f, b.y + b.h / 2.0f));
         int ri = room_at(&p, x, y);
-        const char *kind = (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone];   // RES shows its archetype
-        snprintf(buf, sizeof buf, "%s / %s", kind, ri >= 0 ? RM_NAME[p.room[ri].label] : "wall"); return buf;
+        snprintf(top, cap, "%s", (zone == ZN_RES) ? ARCH_NAME[arch_of(p.value, p.nroom)] : ZN_NAME[zone]);   // RES → archetype
+        snprintf(bot, cap, "%s", ri >= 0 ? RM_NAME[p.room[ri].label] : "wall");
+        return;
     }
-    snprintf(buf, sizeof buf, "%s  yard", ZN_NAME[zone]); return buf;
+    snprintf(top, cap, "%s", ZN_NAME[zone]); snprintf(bot, cap, "yard");
+}
+static const char *probe(float fx, float fy) {
+    static char buf[56], t[28], b[28];
+    hover_at(fx, fy, t, b, sizeof t); snprintf(buf, sizeof buf, "%s / %s", t, b); return buf;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -952,7 +956,7 @@ static int   seed  = 3;
 static int   drag_on = 0, drag_mx, drag_my;       // left-drag to pan
 static float drag_cx, drag_cy;
 
-void init(void) { lf_seed = seed; }
+void init(void) { lf_seed = seed; mouse_hide(); }   // we draw our own cursor
 
 void update(void) {
     float pan = 7.0f / zoom;
@@ -976,6 +980,28 @@ void update(void) {
     if (keyp('O')) ovl = (ovl + 1) % 5;
 }
 
+// custom cursor + a little inspector panel naming what's under the pointer
+static void draw_cursor_and_hover(void) {
+    int mx = mouse_x(), my = mouse_y();
+    if (mx <= 0 && my <= 0) return;                       // no real pointer (e.g. headless bake) → draw nothing
+    if (!drag_on) {                                       // inspector panel (hidden while panning)
+        float wx = (mx - SCREEN_W / 2.0f) / zoom + cam_x + SCREEN_W / 2.0f;
+        float wy = (my - SCREEN_H / 2.0f) / zoom + cam_y + SCREEN_H / 2.0f;
+        char top[28], bot[28]; hover_at(wx, wy, top, bot, sizeof top);
+        font(FONT_SMALL);
+        int tw = 0; while (top[tw]) tw++; int bw = 0; while (bot[bw]) bw++;
+        int w = (tw > bw ? tw : bw) * 5 + 7, h = 17, px = mx + 9, py = my + 6;
+        if (px + w > SCREEN_W) px = mx - w - 3;
+        if (py + h > SCREEN_H) py = my - h - 3;
+        if (px < 0) px = 0; if (py < 0) py = 0;
+        rectfill(px, py, w, h, CLR_BLACK); rect(px, py, w, h, CLR_LIGHT_GREY);
+        print(top, px + 3, py + 2, CLR_WHITE);
+        print(bot, px + 3, py + 9, CLR_LIGHT_GREY);
+        font(FONT_NORMAL);
+    }
+    for (int r = 0; r <= 7; r++) line(mx, my + r, mx + r, my + r, CLR_WHITE);   // arrow, tip at (mx,my)
+    line(mx, my, mx, my + 7, CLR_BLACK); line(mx, my + 7, mx + 7, my + 7, CLR_BLACK); line(mx, my, mx + 7, my + 7, CLR_BLACK);
+}
 void draw(void) {
     cls(CLR_BLACK);
     camera_ex((int)cam_x, (int)cam_y, zoom, 0);
@@ -1002,4 +1028,5 @@ void draw(void) {
     print("WASD/ZX or drag move  wheel zoom  R seed  F roofs  O overlay  G grid  (zoom in = roofs lift)",
           3, SCREEN_H - 7, CLR_MEDIUM_GREY);
     font(FONT_NORMAL);
+    draw_cursor_and_hover();
 }
