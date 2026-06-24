@@ -286,6 +286,15 @@ rotation-in-software until there's measured demand. (The "translation-camera-onl
 > "smooth rotation" mode** for when a cart wants it. Only relevant once rotation runs in software at
 > all (Fork-2 demand); filed here as the answer for that day. (Algorithm: the "rotsprite" scaler, as
 > used by Aseprite/LibGDX.)
+> > **Measured (2026-06-24) — `tools/det-probes/rotspr.c` shows why the naive options aren't enough.**
+> > A rotated sprite is `rotfill`'s inverse mapping + a texture sample, so the *footprint* is gap-free
+> > and bit-identical across arches — but the *content* degrades, and each cheap method fails a
+> > different way: **nearest-neighbour** fragments a 1px frame into ≤7 pieces and misses 21% of source
+> > texels at the worst angle; **4×4 supersample + majority vote** smooths edges but erases a lone
+> > single-pixel detail (survives only 196/360 angles vs nearest's 308). So preserving *both* thin
+> > lines and lone pixels through rotation genuinely needs the edge-aware RotSprite scaler — neither
+> > nearest nor plain supersampling is a substitute. Confirms RotSprite as the real (opt-in) answer,
+> > not a nice-to-have.
 
 ### Fork 3 — compositing (falls out of Fork 2)
 

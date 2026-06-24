@@ -16,11 +16,12 @@ expect() {
     rotstroke) echo "hash=5e00a7b6d35f00e3 angles=360 worst_components=1 broken_angles=0";;
     rotfill)   echo "hash=1bb18dd98c29e263 | INVERSE: area 6122..6168 comps<=1 | FORWARD worst_holes=1166";;
     rotline)   echo "hash=f93ea939dda443a3 | worst_excess=0 worst_components=1 max_churn_per_deg=268";;
+    rotspr)    echo "hash=b2f38d10bebf58ab | src_solid=75 | NEAREST: worst_dropped=16 frame_comps<=7 dot_survives=308/360 | SUPERSAMPLE: dot_survives=196/360";;
   esac
 }
 
 fail=0
-for p in detstress stritex rotstroke rotfill rotline; do
+for p in detstress stritex rotstroke rotfill rotline rotspr; do
   echo "== $p =="
   clang -O2 "$p.c" -o "/tmp/$p.arm"  2>/dev/null
   clang -arch x86_64 -O2 "$p.c" -o "/tmp/$p.x86" 2>/dev/null || true
