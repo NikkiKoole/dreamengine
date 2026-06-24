@@ -231,6 +231,12 @@ static bool            sw_force_gpu     = false;            // sticky: cart used
 #define CPU_RASTER_DEFAULT 0
 #endif
 static bool            cpu_raster_enabled = CPU_RASTER_DEFAULT;   // env DE_CPU_RASTER=on
+// DE_AUDIO=off — skip audio entirely (no InitAudioDevice/sound_init, no miniaudio callback thread).
+// The effects bus (reverb tail, set-and-hold inserts) processes the master every callback even on
+// silence, so a silent or sound-free cart still pays for it; this removes it. Wins: cleaner CPU
+// profiles (the audio thread stops polluting `sample`), real savings on sound-free carts, a low-end
+// lever. Cart audio calls become harmless no-ops (queues are never drained). Default on.
+static bool            audio_off = false;
 static uint32_t        sw_cbuf[SCREEN_W * SCREEN_H];          // CPU framebuffer (Fork 1: RGBA on desktop)
 static inline uint32_t sw_pack(Color c) { return (uint32_t)c.r | ((uint32_t)c.g<<8) | ((uint32_t)c.b<<16) | 0xFF000000u; }
 // internal patterned-fill helpers — the public fills call these when fillp() is on
@@ -1746,6 +1752,8 @@ int main(int argc, char **argv) {
       if (sc && strcmp(sc, "on") == 0) { sw_canvas_enabled = true; sw_canvas_active = true; } }  // DE_SOFTWARE_CANVAS=on
     { const char *cl = getenv("DE_CPU_RASTER");         // CPU rasterizers off-canvas too (A/B hygiene, see decl):
       if (cl && strcmp(cl, "on") == 0) cpu_raster_enabled = true; }   // DE_CPU_RASTER=on → line()/rectfill_rot → CPU everywhere
+    { const char *ao = getenv("DE_AUDIO");              // DE_AUDIO=off → skip all audio (see decl):
+      if (ao && strcmp(ao, "off") == 0) audio_off = true; }
     const char *window_title           = "dreamengine";
 #ifndef PLATFORM_WEB
     int         screenshot_mode        = 0;
@@ -1810,10 +1818,12 @@ int main(int argc, char **argv) {
     if (det_mode) { SetRandomSeed(seed); srand(seed); }   // reproducible rnd()/rnd_float()/shake
 #endif
 #ifndef PLATFORM_WEB
-    if (wav_path) { sound_synth_mode = true; wav_stream_open(wav_path); }
-    InitAudioDevice();
-    sound_init();
-    midi_input_init();   // CoreMIDI keyboard input (no-op if no device / non-macOS)
+    if (wav_path) { sound_synth_mode = true; wav_stream_open(wav_path); audio_off = false; }  // --wav needs the synth
+    if (!audio_off) {                                   // DE_AUDIO=off skips audio entirely
+        InitAudioDevice();
+        sound_init();
+        midi_input_init();   // CoreMIDI keyboard input (no-op if no device / non-macOS)
+    }
 #endif
     SetTargetFPS(60);
 
@@ -1943,9 +1953,11 @@ int main(int argc, char **argv) {
     if (pget_snapshot.data) UnloadImage(pget_snapshot);
     UnloadRenderTexture(canvas);
     wav_stream_close();    // --wav: patch RIFF sizes and finish the file
-    midi_input_shutdown();
-    sound_shutdown();
-    CloseAudioDevice();
+    if (!audio_off) {                                   // mirror the gated init
+        midi_input_shutdown();
+        sound_shutdown();
+        CloseAudioDevice();
+    }
     CloseWindow();
 #endif
     return 0;
