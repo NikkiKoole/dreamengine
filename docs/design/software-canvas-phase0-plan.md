@@ -1,10 +1,24 @@
 # Software-canvas Phase-0 mechanism probe — the executable plan
 
-> **Genre: ready-to-run plan, NOT yet started.** The concrete next step for
+> **Genre: RAN — result GO (2026-06-24).** Phases 0a+0b are built behind `DE_SOFTWARE_CANVAS`
+> (env, off by default) in `studio.c`. **Byte-identity gate (0a):** the `swcanvas_test` cart
+> (`cls`/`pset`/`pset_rgb`) is **byte-identical** GPU vs `DE_SOFTWARE_CANVAS=on` (same shasum).
+> **Perf gate (0b):** `cityplan`, same harness, **GPU `workMsAvg` 11.4ms → software 5.0ms = 2.3×
+> faster.** The decisive lesson: **fills must stay span-based** — routing `rectfill` per-pixel
+> through `plot_pat` was *2.4× slower* than GPU; a `sw_fillrect` row-memset is what wins. Commits:
+> Phase 0a `133b9d0e`, Phase 0b `ec1b855c`. Next is Phase 2 (port `spr`/`print`/`tritex` as CPU
+> blits, then flip the default) — see `software-canvas.md` runbook.
+>
+> Caveats in this probe (fine for the GO/NO-GO, to clean up in Phase 1/2): `print` is skipped (HUD
+> text absent), `camera_ex` zoom is approximate (sw applies translation only), and `cityplan` is not
+> byte-identical to GPU (it uses world-space `line`→`sline` + per-pixel fills — different, by design;
+> the byte-identity guarantee is for the integer-primitive set, proven on `swcanvas_test`).
+>
+> **Original plan (below), now executed:** the concrete step for
 > [`software-canvas.md`](software-canvas.md) — its Build-runbook Phase 0→1 made executable. The
-> primitive-level questions are all answered (see the `tools/det-probes/` suite + the dated notes in
-> the design doc); **this is the one remaining experiment: wire the mechanism into `studio.c` and
-> A/B on a real cart.** It is the GO/NO-GO for the whole software canvas.
+> primitive-level questions were all answered (the `tools/det-probes/` suite + the dated notes in
+> the design doc); this was the one remaining experiment: wire the mechanism into `studio.c` and
+> A/B on a real cart. It was the GO/NO-GO for the whole software canvas.
 
 ## The one question this answers
 
