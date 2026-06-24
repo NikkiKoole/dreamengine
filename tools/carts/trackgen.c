@@ -950,9 +950,16 @@ static void update_reservations(void) {
             if (d < -(Rocc + CAR_HALF_L) || d > XBOX_LOOK || S->xtimer[k] > XHOLD_MAX) S->xowner[k] = -1;
             else continue;                               // still held
         }
-        // ── free: grant to the best approaching candidate (claim score), if its exit is clear
+        // the PLAYER is a manually-driven car — it parks, wanders, drives off, so it must
+        // never HOLD a junction (it would starve everyone). Instead AI treat it as a moving
+        // obstacle: while it sits physically in the box, leave the crossing free so every AI
+        // (which only enters a junction it owns) yields to it.
+        { float prx = S->car[0].px - S->xpt[k].p.x, pry = S->car[0].py - S->xpt[k].p.y;
+          if (prx*prx + pry*pry < occ*occ) continue; }
+
+        // ── free: grant to the best approaching AI candidate (claim score), if its exit is clear
         int best = -1; float bestscore = -1e9f;
-        for (int i = 0; i < total; i++) {
+        for (int i = 1; i < total; i++) {                // skip the player (i == 0): AI cars only
             Car *c = &S->car[i];
             float d = xing_dist(c, k);
             if (d <= 0 || d > XAPPROACH) continue;       // not approaching / not close enough yet
