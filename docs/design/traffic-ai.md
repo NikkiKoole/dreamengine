@@ -23,10 +23,11 @@ edge:** on the tightest procedural corner a fast car can still clip the apex (lo
 > cops that route to the player, drive near race pace, and run lights/junctions — blue flashing cars,
 > "CHASE!" banner). Pursuers also **cut off-road** to intercept (beeline straight at the target inside
 > `BEELINE_RANGE`, eating the grass penalty — the natural cost) and **box the suspect** when very close
-> (`LOCKIN_RANGE`: aim ahead of + to a flank, one cop each side → a pincer). Crash-free guarantees still
-> hold for rule-followers; reckless cars opt out (chase crashes are intentional drama). Next small hooks:
-> a per-driver style dial + ambient cars scattering from a chase. The real version still wants the road
-> graph + extracted brain header.
+> (`LOCKIN_RANGE`: aim ahead of + to a flank, one cop each side → a pincer). And **ambient cars scatter**:
+> a civilian within `SCATTER_RANGE` of a reckless car veers to the far side and brakes to let the chase
+> through (the "everyone reacts" moment, emergent from one nearby-reckless check). Crash-free guarantees
+> still hold for rule-followers; reckless cars opt out (chase crashes are intentional drama). Next small
+> hook: a per-driver style dial. The real version still wants the road graph + extracted brain header.
 
 > **DESIGN PIVOT (2026-06-24):** the "cross-road" started as a straight road cutting the loop
 > (Phases A–C below), but it's now a **second full race track** — an independent loop (`gen_track2`,

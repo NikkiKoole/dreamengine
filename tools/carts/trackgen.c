@@ -172,6 +172,7 @@ typedef struct { V2 p; int prog1, prog2; } Xing;
 #define LOCKIN_RANGE   75.0f   // this close, it stops tailing and BOXES — aims ahead of + to a flank of the suspect
 #define LOCKIN_LEAD    34.0f   // how far ahead of the suspect to aim (cut off its escape)
 #define LOCKIN_SIDE    24.0f   // flank offset — one cop each side makes a pincer
+#define SCATTER_RANGE  46.0f   // a civilian within this of a reckless car pulls aside & brakes (scatter)
 
 typedef struct {
     float px, py, vx, vy, spd, ang;
@@ -1159,6 +1160,23 @@ static void drive_ai_traffic(Car *c, int idx, float *out_turn, float *out_thr, b
         }
     }
 
+    // AMBIENT SCATTER: a civilian flinches from a chase tearing past — when a reckless car (a
+    // cop) is close, it pulls aside (steer toward the edge away from the cop) and lifts/brakes to
+    // let the chase through. The "everyone reacts" moment, emergent from one nearby-reckless check.
+    if (!c->reckless && c->target < 0) {
+        int total = S->ncars + S->ncross;
+        for (int j = 0; j < total; j++) {
+            if (j == idx || !S->car[j].reckless) continue;
+            float rx = S->car[j].px - c->px, ry = S->car[j].py - c->py;
+            if (rx*rx + ry*ry > SCATTER_RANGE*SCATTER_RANGE) continue;
+            float side = rx*dx(1, c->ang + 90) + ry*dy(1, c->ang + 90);   // cop on my + side?
+            turn += (side > 0 ? -0.7f : 0.7f);                            // veer to the far side
+            if (thr > -0.3f) thr = -0.3f;                                 // brake/yield, let it pass
+            break;
+        }
+        turn = clamp(turn, -1.0f, 1.0f);
+    }
+
     // REACTION LAG — but ASYMMETRIC. Braking is PROMPT (you hit the brakes the instant
     // you see danger); only ACCELERATION is sluggish (slow to get going again). Delaying
     // the brake is what rear-ended the car ahead; lagging only the throttle still gives
@@ -2001,5 +2019,26 @@ void spec(void) {
     }
     expect(dmin < 30.0f, "chase: a pursuer routes to and reaches its target (closes the distance)");
     expect(cut_grass, "chase: a pursuer cuts off-road (grass) to intercept, not only follows the road");
+
+    // ── scatter: a civilian yields (brakes) when a reckless car (cop) is right beside it. ──
+    gen_track(0x1234u);
+    S->traffic = true; S->cross = true;
+    put_all_at_start();
+    S->nx = 0; S->light = -1;                         // isolate from junctions and the light
+    for (int i = 0; i < S->ncars + S->ncross; i++) {  // park everyone out of the way (prog 9000, lane 9)
+        S->car[i].px = -9000.0f - i*80.0f; S->car[i].py = -9000.0f;
+        S->car[i].prog = 9000; S->car[i].spd = 0; S->car[i].lane = S->car[i].want_lane = 9;
+        S->car[i].reckless = false; S->car[i].target = -1; S->car[i].road = 0; S->car[i].offtrack = false;
+    }
+    Car *civ = &S->car[1];
+    civ->prog = 120; civ->spd = MAX_SPD * 0.5f; civ->lane = civ->want_lane = 0;
+    { V2 q = road_cl(0, 120); civ->px = q.x; civ->py = q.y;
+      V2 a = road_cl(0, 121), b = road_cl(0, 119); civ->ang = atan2_deg(a.y-b.y, a.x-b.x); }
+    for (int k = 0; k <= REACT_N; k++) drive_ai_traffic(civ, 1, &turn, &thr, &dr);   // clear road → accelerate
+    float thr_clear = thr;
+    Car *cop2 = &S->car[2];                           // a reckless car appears right beside the civilian
+    cop2->reckless = true; cop2->px = civ->px + 10.0f; cop2->py = civ->py + 8.0f;
+    for (int k = 0; k <= REACT_N; k++) drive_ai_traffic(civ, 1, &turn, &thr, &dr);
+    expect(thr < thr_clear - 0.1f, "scatter: a civilian brakes/yields when a reckless car is right beside it");
 }
 #endif
