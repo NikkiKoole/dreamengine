@@ -1131,6 +1131,27 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     kept clearly separate) would retire the gotcha class. Explicitly **NOT** the cart-os shared-FS idea: the
     dev tools already compose fine through files; this is just tidying where they land. Low leverage, no rush.
 
+45. **Profile the *running* cart at its current state (attach, don't cold-respawn)** *(2026-06-25)*.
+    Today the editor's Profile button (`studio:profile`, `editor/electron/main.cjs`) compiles a fresh
+    `-DDE_PROFILE` build, spawns a **brand-new** instance, waits 1s, runs `/usr/bin/sample <pid> <seconds>`
+    (default 4), then kills it — so it always profiles a **cold** cart from startup. If you've played the cart
+    into some state (minutes in), that state never exists in the thing being measured. The ask: play into a
+    state, *then* click profile and capture **that moment**. Two routes, one nearly free:
+    - **Cheap (mechanism already exists).** A running cart already watches `.bake/profiler_request`
+      (`runtime/studio.c:1288`) and on demand dumps `{frames,workMsAvg,workMsMax,frameMsAvg,calls[]}` for its
+      *recent* frames — live, no respawn, any native build (the live-inspection mailbox, see
+      [debug-harness.md](guides/debug-harness.md) → "Live inspection"). Wire the Profile button to drop that
+      file into the *already-running* cart (from a normal Run) and read it back. Caveat: this is the runtime's
+      self-instrumented per-function work view (`calls[]`/`work[]`), **not** `sample`'s full symbol call-tree —
+      a coarser, different lens.
+    - **Full call-tree at current state.** `/usr/bin/sample <pid>` works on any running process, so it could
+      sample the cart you're already playing — but the editor must **know the running cart's PID**, and it
+      doesn't: the native Run spawns `proc` as a throwaway local `const` (`main.cjs:729`), no handle kept.
+    - **Connection.** Both this and "open two carts at once" need the SAME missing plumbing — **the kernel
+      keeping a handle on running cart processes** instead of fire-and-forget. A process handle/table in
+      `main.cjs` unlocks attach-profiling, multi-cart, and more direct live-inspection at once. See
+      [cart-os.md](design/cart-os.md) → "Why you can't open two carts today."
+
 ---
 
 ## Decided-against / deferred ✗
