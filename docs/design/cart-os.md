@@ -1,5 +1,14 @@
 # Cart OS — carts as tools in a shared environment
 
+> **TL;DR (where this landed):** not an OS — **a launcher + piper + viewer that *feels* like
+> one but is mostly chrome over `spawn()` + the filesystem you already have.** Launch a cart
+> (the `index.json` catalog + `main.cjs`'s spawner, already here), optionally pipe one cart's
+> output into another (one `--out` flag mirroring the shipped `--data`), and show the results
+> (the shared FS / a cart's output in a second pane — Norton-Commander style). The only
+> genuinely-new primitive in the pile is the music **shared clock** (a live `{bpm, beat}`
+> file); everything else is presentation. A weekend-ish, on-brand showcase toy — deliberately
+> *not* a pivot of the "legendary carts, one true core" north star.
+
 > **Status: exploration, fermenting. Not a plan of record.** Captures a design
 > conversation (session, 2026-06-25) sparked by *"we have hundreds of carts — could we
 > make a sort of OS, terminal-based or an Amiga-Workbench GUI, where carts are tools that
