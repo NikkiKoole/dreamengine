@@ -120,7 +120,7 @@ be coalesced.
 > | cart | GPU | canvas | effect | why |
 > |---|---|---|---|---|
 > | `drawall` | ~1.35 | **~0.67** | **2.0×** ✅ | fill/pset/blit-heavy — rotation is a small slice |
-> | `cityview` | ~2.38 | ~2.73 | 1.15× | tritex-bound (1739/frame); CPU edge-raster ≈ GPU + upload |
+> | `cityview` | ~2.38 | ~2.73 | 1.15× | tritex-bound (1739/frame) — **but this is pre-opt; see below** |
 > | `masseffect` | ~1.01 | ~1.28 | 1.27× | `spr_rot` inverse-map vs free GPU rotate |
 > | `sloppytext` | ~0.38 | ~0.49 | 1.3× | rotated glyphs |
 > | `rottext` | ~0.32 | ~0.89 | 2.8× | rotated text — per-glyph inverse-map, the priciest relative |
@@ -131,6 +131,15 @@ be coalesced.
 > (b) the canvas still **wins** when the cart is fill/blit-heavy: `drawall` (every primitive *incl.*
 > all rotation) is **2× faster** on the canvas. So a cart only nets a penalty if it's *rotation-pure*
 > (`rottext`); the per-cart opt-in / auto-fallback model leaves those on GPU.
+>
+> > **`cityview` FLIPPED post-optimization (2026-06-25): now GPU ~2.61 vs canvas ~2.35 — SW ~10%
+> > *faster*** (was 1.15× slower above). It's tritex + span-fill bound (1731 `tritex` + 676 `trifill` +
+> > 311 `polyfill`/frame, near-zero rotated primitives), and **Opt A (`img_texel`)** made the 1731
+> > per-pixel tritex samples cheap enough that the span fills' draw-call-count win (cbuf memset vs ~1000
+> > GPU calls) tips the whole cart to SW. It runs fully on the canvas (no `camera_ex`, byte-identical).
+> > The lesson: the sampling optimizations didn't just speed the SW path — they **moved a cart's HW/SW
+> > verdict** across the line. (The other rows here are still the pre-opt snapshot; `cityview` is the one
+> > that crossed over.)
 
 > **Rotated-sampling optimization (2026-06-25) — baseline + the wins.** Target: the CPU blit/sampling
 > path (`de_cpu_img_rot`/`sw_blit`/`sw_tritex`). Worst-case cart `tools/carts/rotstress.c` (spinning
