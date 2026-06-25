@@ -413,6 +413,75 @@ throwaway carts. **Note `bones → game` and the rotation-atlas baker are *later
 this same proven pipe, not prerequisites** — don't gate the first test on either; prove the
 mechanism with throwaways first.
 
+## First time-synced multicart — the coprime ensemble (and how you launch it)
+
+The music half's equivalent first build. It rides entirely on substrate already named here:
+the clock is the `--data` pipe with a tiny payload, the audio mixing is free from the real OS,
+and every cart already has a `beat` notion (`play.js` already takes `--bpm`).
+
+**The transport is barely a clock.** Don't stream `beat` into a file 60×/s. Carts don't need the
+beat *handed* to them — they need to *agree on tempo + a phase reference* and derive it locally
+(the Ableton-Link insight, in miniature). So the shared transport is three numbers that change
+only on play/stop/tempo:
+
+```
+{ "bpm": 120, "t0": <start timestamp>, "playing": true }
+```
+
+Each cart reads it (once, plus on change) and computes `beat = (now - t0) * bpm/60` from its own
+clock. They stay locked because they share `bpm` + `t0`; drift is only per-process clock wander,
+small over a jam and re-derivable every note. **No new public API** — clock in via `--data`,
+nothing out (same filesystem bridge as everything else here).
+
+**What they play — emergence, not a sequence.** Each cart runs one dead-simple rule keyed to the
+shared beat; the *ensemble* emerges. The first demo: three windows on **coprime** periods —
+A fires every **4** beats, B every **3**, C every **5** — over one clock. Nobody composed the
+groove; it's an interlocking, slowly-phasing polyrhythm (Reich / Euclidean territory) that
+re-emerges into a new texture the moment you change one period. The demo is **its own oracle**:
+coprime rhythms make sync *audible* — locked → the pattern repeats cleanly every LCM (60 beats);
+drifting → you hear the smear. Same trick as the data-pipe ladder (the test is the demo). Voices
+are configured **once** and only *triggered* on the beat — never reconfigure FX per frame
+(`lint-fx-frame.js`). Want melody later? Same shape: each cart picks a scale degree from a rule
+over the shared beat; harmony emerges from the rules + a shared scale, nobody writes a chart.
+
+### How you actually start them — a CLI spawner, not the editor
+
+The launch question collides head-on with "you can't open two carts today" (single-doc editor +
+shared `build/`). **Don't make the editor multi-launch — that *is* building the launcher pane,
+the premature-chrome rung.** And the real blocker isn't UI at all: it's **per-run build
+isolation** — three carts can't share one `build/cart` + one `build/sprites.png`; each needs its
+own `build/run-<slug>/` (own binary, sprites, cwd). Solve that and spawning N is trivial.
+
+So the first "UI" is a **command**, not a GUI:
+
+```
+node tools/jam.js kick3 snare4 hat5 --bpm 120
+```
+
+A ~30-line node spawner that (1) writes the transport `{bpm, t0:<launch time>, playing:true}`,
+(2) compiles each named cart into its own `build/run-<slug>/` (reusing the compile path
+`make-cart.js`/`play.js` already share), (3) spawns each with `--data <transport>` + its own
+`--save-dir`, (4) kills them all on Ctrl-C. Optional nicety: pass window positions so they
+**tile** rather than stack — the difference between "three windows" and "a console."
+
+**Key unification: the launcher *is* the transport master.** `t0` = the moment `jam.js` launches;
+every cart derives `beat` from that *same* `t0`, so they're phase-locked from birth even if they
+start a few ms apart — no separate "clock cart" needed. The general multi-cart launcher and the
+music-sync starter are the **same tool**; music just adds the clock file to the spawn. You're not
+building a launcher *and* a music thing — one spawner that optionally writes a clock.
+
+The launch-UI ladder mirrors the data-pipe one (build bottom-up; each rung wraps the one below):
+
+1. **`jam.js` CLI** — spawns the synced ensemble. No GUI. (Forces per-run build dirs = the real unlock.)
+2. **JS launcher pane** — multi-select carts, "Launch synced," shows bpm/playing + stop/tempo. Calls `jam.js`.
+3. **Amber cart launcher** — renders the list, drops `launch:` + transport-control intent files the
+   kernel watches (the no-new-API bridge from "The face"); CRT tiles of the running windows.
+
+Drift is the only real engineering, and it's deferred: v1 accepts it (re-derive from `t0` each
+note, like MIDI gear re-aligning on each pulse — the looseness is the texture). Reach for a socket,
+a kernel-ticked clock, or single-host sample-lock (Tier 3) *only* if a real jam proves the
+file-derived clock too loose.
+
 ## Open questions to sit with
 
 - Is the shared FS a flat blob store, or does it carry the typed "vector features" /
