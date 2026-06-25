@@ -1,5 +1,6 @@
 #include "studio.h"
 #include <stdio.h>   // snprintf for the HUD readouts
+#include <math.h>    // sinf for the scale pulse
 
 // ── BUNNYMARK — the classic sprite-throughput benchmark ──────────────────────
 // Hold A (or the mouse / a finger) and bunnies pour out of the corner, bounce
@@ -18,13 +19,20 @@
 // and watch the held-bunny count move: the GPU rasterises 32×32 textured quads in
 // hardware; the software canvas blits them on the CPU. One honest number each.
 //
-// The art is a real true-colour PNG (tools/carts/bunnymark_bunny.png) tinted 5
-// ways — see bunnymark.cart.js. Transparency is the sprite's own alpha (no
-// colorkey). Physics is a FIXED per-frame step (no dt()) — deliberately: a
+// The art is bunnymark_bunny.png posterized into the pico32 palette and tinted 5
+// ways via palette-index ramps — see bunnymark.cart.js. Index 0 is transparent
+// (colorkey). Physics is a FIXED per-frame step (no dt()) — deliberately: a
 // benchmark wants the slowdown VISIBLE, so an over-budget frame goes slow-mo
 // instead of teleporting, and you SEE the cliff you're measuring.
 //
-//   HOLD A / mouse / touch — pour bunnies      B — reset
+// X spins the bunnies and C pulse-scales them — both drop the sprite OFF the
+// axis-aligned blit fast path: rotation routes through the inverse-map rasterizer
+// (de_cpu_sspr_rot) and scale through the general per-pixel loop. On the GPU
+// they're ~free (the hardware transforms the quad either way); on the software
+// canvas they cost several× more per sprite. So the two toggles turn bunnymark
+// into a two-axis demonstrator: flip render mode AND spin/scale to feel the gap.
+//
+//   HOLD A / mouse / touch — pour      X — spin      C — pulse-scale      R — reset
 // ─────────────────────────────────────────────────────────────────────────────
 
 #define MAXB     200000           // hard cap (≈4 MB of bunnies; you'll hit the fps wall first)
@@ -43,6 +51,8 @@ typedef struct { float x, y, vx, vy; unsigned char tint; } Bunny;
 static Bunny bun[MAXB];
 static int   n;                   // live bunny count
 static int   best_held;           // most bunnies while still holding ~60fps (session high score)
+static bool  spin_on;             // X — rotate each bunny (off the blit fast path → rotated rasterizer)
+static bool  scale_on;            // C — pulse the bunny size (off the fast path → scaled blit)
 
 // random float in [0, m)
 static float frnd(float m) { return (rnd(10001) / 10000.0f) * m; }
@@ -69,12 +79,15 @@ static void seed_scattered(void) {
 }
 
 void init(void) {
-    n = 0; best_held = 0;               // transparency is the sprite's alpha — no colorkey() needed
+    colorkey(0);                        // index 0 = transparent (background of the posterized bunny)
+    n = 0; best_held = 0;
     for (int i = 0; i < START_N; i++) seed_scattered();
 }
 
 void update(void) {
-    if (btnp(0, BTN_B)) init();                              // reset
+    if (keyp('R')) init();                                   // reset (keeps spin/scale modes)
+    if (keyp('X')) spin_on  = !spin_on;                      // toggle rotation
+    if (keyp('C')) scale_on = !scale_on;                     // toggle pulse-scale
     if (btn(0, BTN_A) || mouse_down(0))                      // pour while held
         for (int i = 0; i < ADD_RATE; i++) spawn_one();
 
@@ -102,13 +115,24 @@ void update(void) {
 void draw(void) {
     cls(CLR_DARKER_BLUE);
 
-    // bunnies — each is one plain sspr() of its pre-tinted 32×32 sheet region. No
-    // pal(): the colour is baked in, so the GPU batches every bunny into one draw
-    // call and the software canvas does a straight copy (no per-pixel recolor).
-    // This is the whole benchmark — keep it a pure blit.
+    // bunnies. Plain (no spin/scale): one sspr() of the pre-tinted 32×32 sheet
+    // region — the axis-aligned blit fast path (GPU batches all into ~1 draw call;
+    // software does a straight row copy). With spin or scale on, each bunny goes
+    // through sspr_ex (rotate + scale): ~free on the GPU, but off the fast path on
+    // the software canvas (rotated rasterizer / per-pixel scaled blit). That gap is
+    // the whole point of the two toggles.
+    int f = frame();
     for (int i = 0; i < n; i++) {
         int t = bun[i].tint;
-        sspr(BTX[t], BTY[t], BUNNY_SZ, BUNNY_SZ, (int)bun[i].x, (int)bun[i].y, BUNNY_SZ, BUNNY_SZ);
+        int x = (int)bun[i].x, y = (int)bun[i].y;
+        if (spin_on || scale_on) {
+            int   sz  = BUNNY_SZ;
+            if (scale_on) { float s = 1.0f + 0.4f * sinf(f * 0.06f + i * 0.5f); sz = (int)(BUNNY_SZ * s); if (sz < 2) sz = 2; }
+            float deg = spin_on ? (f * 3.0f + i * 37.0f) : 0.0f;
+            sspr_ex(BTX[t], BTY[t], BUNNY_SZ, BUNNY_SZ, x, y, sz, sz, deg, sz / 2, sz / 2);
+        } else {
+            sspr(BTX[t], BTY[t], BUNNY_SZ, BUNNY_SZ, x, y, BUNNY_SZ, BUNNY_SZ);
+        }
     }
 
     // ── HUD ──────────────────────────────────────────────────────────────
@@ -117,15 +141,19 @@ void draw(void) {
     snprintf(buf, sizeof buf, "BUNNIES %d", n);
     print(buf, 4, 3, CLR_WHITE);
 
-    int f = fps();
-    int ms = f > 0 ? (1000 + f / 2) / f : 0;                // rounded ms/frame
-    snprintf(buf, sizeof buf, "%d FPS  %d ms", f, ms);
-    print(buf, 4, 12, f >= 55 ? CLR_LIME_GREEN : (f >= 30 ? CLR_YELLOW : CLR_RED));
+    int fp = fps();
+    int ms = fp > 0 ? (1000 + fp / 2) / fp : 0;             // rounded ms/frame
+    snprintf(buf, sizeof buf, "%d FPS  %d ms", fp, ms);
+    print(buf, 4, 12, fp >= 55 ? CLR_LIME_GREEN : (fp >= 30 ? CLR_YELLOW : CLR_RED));
+
+    // active-mode chips (lit when on) — these push sprites OFF the fast path
+    print("SPIN",  108, 12, spin_on  ? CLR_PINK       : CLR_DARK_GREY);
+    print("SCALE", 138, 12, scale_on ? CLR_LIME_GREEN : CLR_DARK_GREY);
 
     snprintf(buf, sizeof buf, "60fps held @ %d", best_held);
     print(buf, SCREEN_W - text_width(buf) - 4, 3, CLR_LIGHT_GREY);
 
     font(FONT_TINY);
-    print("HOLD A/mouse: pour   B: reset   settings>rendering: GPU vs software", 4, SCREEN_H - 7, CLR_DARK_GREY);
+    print("A/mouse pour   X spin   C scale   R reset   settings>rendering: GPU vs software", 4, SCREEN_H - 7, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
