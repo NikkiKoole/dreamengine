@@ -596,6 +596,18 @@ rotation-in-software until there's measured demand. (The "translation-camera-onl
 > `sloop` via the *full* option-1 path (port `rectfill_rot`/`line` to CPU writes), and only then.
 > It's the proof that a real non-`pset`, non-fill profile shape exists — GPU draw-call *count* — and
 > that "the software canvas isn't a universal speedup" is a fact, not a hedge.
+>
+> > **Measured now that `rectfill_rot` is SW (2026-06-25): `sloop` GPU 3.20ms vs canvas 4.33ms — ~35%
+> > SLOWER in SW.** It's the canonical *rotation-bound → stays GPU* cart (the mirror of `crowd`/`drawall`).
+> > The road ribbon is **992 `rectfill_rot`/frame** (each segment a rotated rect); on GPU that's hardware
+> > `DrawRectanglePro`, in SW it's 992 per-pixel inverse-map fills. With ~zero per-pixel work (`pset` 41),
+> > there's no SW win to offset the rotated-fill cost. Two notes: (1) that 4.33 is the SW path *actually
+> > running* — headless with no steering keeps the road straight (`camera_ex(angle≈0)`), so `sw_force_gpu`
+> > never trips; the moment you steer, `camera_ex(angle≠0)` trips the **sticky** fallback and sloop runs
+> > on the GPU (3.20) for the session, which is correct for it. (2) The Case-1 hybrid wouldn't help —
+> > sloop's cost is 992 *individual* rotated rects (Case-2 shape), not a whole-view camera transform. So
+> > sloop is the clean counter-example to the per-cart rule: **do NOT opt a geometry/rotation cart into
+> > the canvas** — the canvas is for the `pset`/fill/per-pixel carts.
 
 > **Note — *inverse* mapping is the third software option for the rotated case (and the one
 > option A missed).** Option A above is *forward* mapping (transform each primitive's coords, then
