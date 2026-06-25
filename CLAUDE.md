@@ -326,6 +326,10 @@ profiler JSON has `workMsAvg/Max`, `calls[]`, `work[]`. Both work in any native 
 
 ## Key things to know
 
+- **The shell is `zsh`: an unquoted `$VAR` does NOT word-split** (a bash-ism). `cmd $LIST` passes the
+  whole string as ONE argument (e.g. `profile-fleet.js $SET` → one bogus "cart"; a multi-file `clang
+  $FLAGS` → "no such file"). Fix: inline the words, build an **array** `args=(a b c)` + `"${args[@]}"`,
+  or force-split with `${=VAR}`. (A recurring agent trip-up — it bit this repo's profiling loops.)
 - `node_modules` requires Node 22 — `nvm use 22` before any npm commands.
 - `main.cjs`/`preload.cjs` are CommonJS (`.cjs`) because `package.json` is `"type": "module"`;
   editing them needs an Electron restart (`npm start`); Vite hot-reloads everything else.
