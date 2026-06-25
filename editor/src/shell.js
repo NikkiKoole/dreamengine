@@ -41,6 +41,9 @@ function showPixels() {
 }
 
 function switchTab(name) {
+  // leaving the current view dismisses any open build/profile report
+  clearTimeout(hideTimer)
+  buildLog.style.display = 'none'
   captureHistoryScroll()   // grab the history iframe's scroll WHILE it's still visible
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
@@ -1252,15 +1255,39 @@ function showLog(result) {
   buildLog.style.display = 'block'
   buildLog.innerHTML = ''
 
-  // close button
+  // pinned action group (copy + close) — stays top-right while the report scrolls
+  const actions = document.createElement('div')
+  actions.className = 'build-actions'
+
+  const copy = document.createElement('button')
+  copy.className = 'build-action'
+  copy.textContent = '⧉ copy'
+  copy.title = 'copy this report to the clipboard'
+  copy.addEventListener('click', async () => {
+    // every report line is a <div>; the action buttons are <button>, so this
+    // grabs the report text only (no glyphs from these controls)
+    const text = [...buildLog.querySelectorAll('div')].map(d => d.textContent).join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      copy.textContent = '✓ copied'
+      setTimeout(() => { copy.textContent = '⧉ copy' }, 1200)
+    } catch {
+      copy.textContent = '✗ failed'
+      setTimeout(() => { copy.textContent = '⧉ copy' }, 1200)
+    }
+  })
+  actions.appendChild(copy)
+
   const close = document.createElement('button')
-  close.className = 'build-close'
+  close.className = 'build-action build-close'
   close.textContent = '×'
+  close.title = 'close'
   close.addEventListener('click', () => {
     clearTimeout(hideTimer)
     buildLog.style.display = 'none'
   })
-  buildLog.appendChild(close)
+  actions.appendChild(close)
+  buildLog.appendChild(actions)
 
   if (result.profile) { renderProfile(result); return }
 
@@ -1328,7 +1355,8 @@ function renderProfile(result) {
 
   const head = document.createElement('div')
   head.className = 'build-ok'
-  head.textContent = `⏱ profiled ${seconds}s`
+  const who = currentCartName ? `“${currentCartName}”` : 'cart'
+  head.textContent = `⏱ profiled ${who} · ${seconds}s`
   buildLog.appendChild(head)
 
   // ── C — frame budget ───────────────────────────────────────────

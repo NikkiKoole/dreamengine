@@ -216,15 +216,14 @@ html, body {
   display: none;
   position: fixed;
   top: var(--topbar-h);
-  left: 0; right: 0;
+  left: 0; right: 0; bottom: 0;   /* fill the editor area regardless of how few lines the report has */
   background: #16171a;
   font-size: 11px;
   line-height: 1.6;
   padding: 6px 28px 6px 14px;
   white-space: pre;
   overflow-x: auto;
-  overflow-y: auto;
-  max-height: calc(100vh - var(--topbar-h) - 24px);   /* long reports (profiler) scroll instead of running off-screen */
+  overflow-y: auto;   /* long reports (profiler) scroll instead of running off-screen */
   border-bottom: 1px solid var(--border);
   z-index: 90;
 }
@@ -236,19 +235,30 @@ html, body {
 .build-warn  { color: #ff6fb5; }
 .build-error { color: #ff6e6e; }
 
-.build-close {
-  position: absolute;
-  top: 4px; right: 8px;
-  background: none;
+/* pinned to the viewport (panel is position:fixed) so it stays put as the
+   report scrolls underneath */
+.build-actions {
+  position: fixed;
+  top: calc(var(--topbar-h) + 4px);
+  right: 20px;
+  z-index: 91;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.build-action {
+  background: #16171a;
   border: none;
   color: var(--fg-dim);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
   font-family: var(--font);
 }
-.build-close:hover { color: var(--fg); }
+.build-action:hover { color: var(--fg); }
+.build-close { font-size: 16px; padding: 0 6px; }
 
 /* ── runtime log (printh output + exit banner) ───────────── */
 #runtime-log {
