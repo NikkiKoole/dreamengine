@@ -2,3 +2,6 @@ build/
 .DS_Store
 *.DS_Store
 .claude/
+
+# experimental: roadview / external-data carts (osm-roads.js output)
+data/

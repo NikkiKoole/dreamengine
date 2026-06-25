@@ -286,6 +286,19 @@ static bool  pause_active = false;
 static int   pause_sel    = 0;    // 0 = Continue, 1 = Restart
 static char **restart_argv = NULL;
 
+// EXPERIMENTAL (not committed API): --data <file> lets a data-driven cart load a
+// JSON blob at runtime (parse it with runtime/json.h) instead of baking geometry
+// into its source. de_data_path() returns the path, falling back to $DE_DATA so a
+// cart is testable via env without threading the flag through every harness. If the
+// data-cart experiment is dropped, delete this + the --data line + the studio.h decl.
+static const char *de_data_path_v = NULL;
+// EXPERIMENTAL companion: drag a file onto the window → de_dropped_file() returns its
+// path for that one frame (captured each tick before update()). Lets a data cart reload
+// a new JSON by drag & drop. de_open_path() reveals a folder in Finder/Explorer so you
+// can find where the data lives. Same revert story as --data above.
+static char de_drop_buf[1024];
+static int  de_drop_valid = 0;
+
 // keys the cart reads via key()/keyp()/keyr() are "claimed" — the pause
 // hotkey skips them, so a cart using the whole keyboard (sh101's two-manual
 // piano takes P) doesn't fight the overlay. Claims are sticky per cart run.
@@ -1539,6 +1552,13 @@ static void loop_step(void) {
         }
     // characters typed this frame for text_input()
     { int n = 0, ch; while ((ch = GetCharPressed()) != 0 && n < 31) text_buf[n++] = (char)ch; text_buf[n] = 0; }
+    // EXPERIMENTAL: capture a file dropped onto the window (valid this frame only)
+    de_drop_valid = 0;
+    if (IsFileDropped()) {
+        FilePathList fl = LoadDroppedFiles();
+        if (fl.count > 0) { snprintf(de_drop_buf, sizeof de_drop_buf, "%s", fl.paths[0]); de_drop_valid = 1; }
+        UnloadDroppedFiles(fl);
+    }
     // fade is immediate-mode like every other draw call: it clears each frame, so a
     // cart must re-assert fade() every frame it wants the screen dimmed. This is why
     // a conditional `if (gameover) fade(0.5f);` clears itself once the state ends —
@@ -1832,6 +1852,7 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--dump-every") == 0 && i + 1 < argc) dump_every = atoi(argv[++i]);
         else if (strcmp(argv[i], "--save-dir") == 0 && i + 1 < argc) save_dir_set(argv[++i]);
         else if (strcmp(argv[i], "--wav")    == 0 && i + 1 < argc) wav_path = argv[++i];
+        else if (strcmp(argv[i], "--data")   == 0 && i + 1 < argc) de_data_path_v = argv[++i];  // EXPERIMENTAL (see de_data_path_v)
 #ifdef DE_SPEC
         else if (strcmp(argv[i], "--spec")   == 0) spec_mode = 1;
 #endif
@@ -4002,6 +4023,26 @@ void *de_state(int bytes) {
         de_state_cap = bytes;
     }
     return de_state_mem;
+}
+
+// EXPERIMENTAL (see de_data_path_v): the --data <file> path, or $DE_DATA, or NULL.
+const char *de_data_path(void) { return de_data_path_v ? de_data_path_v : getenv("DE_DATA"); }
+
+// EXPERIMENTAL: path of a file dropped on the window this frame (drag & drop), else NULL.
+const char *de_dropped_file(void) { return de_drop_valid ? de_drop_buf : NULL; }
+
+// EXPERIMENTAL: reveal a file/folder in the OS file manager (so you can find the data dir).
+void de_open_path(const char *path) {
+    if (!path || !*path) return;
+    char cmd[1100];
+#if defined(__APPLE__)
+    snprintf(cmd, sizeof cmd, "open \"%s\"", path);
+#elif defined(_WIN32)
+    snprintf(cmd, sizeof cmd, "explorer \"%s\"", path);
+#else
+    snprintf(cmd, sizeof cmd, "xdg-open \"%s\"", path);
+#endif
+    int rc = system(cmd); (void)rc;
 }
 
 void save_bytes(const void *data, int len) {

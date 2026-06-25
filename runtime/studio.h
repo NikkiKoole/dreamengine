@@ -790,6 +790,9 @@ int  load_int(const char *key, int def);     // read a named value back — retu
 void save_bytes(const void *data, int len);  // save a whole block of bytes (a struct/array) — for big state the 64 int slots can't hold
 int  load_bytes(void *out, int max);          // read it back into `out` (up to max bytes); returns bytes read, 0 if never saved
 void *de_state(int bytes);                    // a zero-filled, engine-owned block of `bytes` bytes — keep your whole cart's state in it. Unlike a plain global it survives a live code-reload. The starter cart wraps this as STATE { ... }; (declare once) + S->field (use), so you rarely call it directly.
+const char *de_data_path(void);               // EXPERIMENTAL: path from --data <file> (or $DE_DATA), else NULL — a data-driven cart loads this JSON at runtime via runtime/json.h. Not committed API; may be removed.
+const char *de_dropped_file(void);            // EXPERIMENTAL: path of a file dropped onto the window THIS frame (drag & drop), else NULL — reload a data cart by dropping a new file. Not committed API.
+void        de_open_path(const char *path);   // EXPERIMENTAL: reveal a file/folder in the OS file manager (Finder/Explorer), so you can find where data files live. Not committed API.
 
 // ------------------------------------------------------------
 // noise — smooth random values (0..1). nearby inputs → similar outputs.
