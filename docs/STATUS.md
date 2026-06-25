@@ -1119,6 +1119,18 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     `mirror_blit` could become a reusable engine helper. Rule of
     thumb still holds for the un-fixed cases (skew/T/free-right): **spec the geometry, eyeball the pixels.**
 
+44. **Tool-output hygiene — one predictable home for tool artifacts** *(2026-06-25, surfaced from the
+    [cart-os](design/cart-os.md) discussion but independent of it)*. Tool outputs are scattered across
+    ad-hoc locations with no naming convention: `build/.bake/<name>/screenshot.png`, `build/screenshot.png`,
+    `--dump <dir>`, `--trace <f>`, `build/.bake/*_request` (the live-inspection mailbox). The concrete
+    papercut: `build/.bake/<name>/screenshot.png` is the fresh baked frame, while **`build/screenshot.png`
+    drifts** (it belongs to the running editor) — enough of a trap that CLAUDE.md carries it as an explicit
+    "NEVER read this one" gotcha. That's a recurring "which file is the fresh one" mistake, and it's pure
+    convention, not a missing capability. **Lever is naming/layout discipline, not a new system** — a single
+    documented namespace (e.g. everything tool-emitted under `build/out/<tool>/…`, the editor's own scratch
+    kept clearly separate) would retire the gotcha class. Explicitly **NOT** the cart-os shared-FS idea: the
+    dev tools already compose fine through files; this is just tidying where they land. Low leverage, no rush.
+
 ---
 
 ## Decided-against / deferred ✗
