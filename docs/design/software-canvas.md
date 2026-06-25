@@ -175,10 +175,45 @@ be coalesced.
 >
 > ~⅓ off the rotated-sampling path, byte-identical, no SIMD. Post-D the `-fno-inline` profile is
 > `GetImageColor` **gone** (377 → 2; A worked) and the time split between the inverse-map loop math and
-> the now-minimal cbuf write. **Next levers** (diminishing, higher-effort): SIMD/NEON on the *contiguous*
-> fills/`cls` (not the random-access rotated gather); the `uint8` paletted buffer (Fork-1, 4× smaller
-> upload) for low-end. `-ffast-math` stays **off** (it reintroduces the cross-arch drift the quantized
-> matrix fixes).
+> the now-minimal cbuf write.
+>
+> **Ceiling measured — CPU micro-opts are tapped out (2026-06-25).** Tested on rotstress: `-ffast-math`
+> ≈ **+4–5%** (and it reintroduces the cross-arch drift the quantized matrix fixes — stays **off**);
+> `-O3 -mcpu=native` (the compiler's full auto-vectorizer + NEON) ≈ **+5%** over `-Os`. When clang with
+> native NEON finds only 5%, that *is* the SIMD ceiling: the rotated loop is **gather + branch bound**
+> (each pixel inverse-maps to a random source texel, then branches on alpha/colorkey), which doesn't
+> vectorize. So **hand-NEON isn't worth it here** — SIMD's home is the *contiguous* ops (`cls`, solid
+> `sw_fillrect`, the cbuf clear/upload), not this gather. One free, portable, deterministic lever
+> remains: building the runtime `-O2`/`-O3` instead of `-Os` (~5%) — a build-policy call in
+> `main.cjs`/`play.js`, not code.
+>
+> **The ~7× residual vs GPU is inherent, and that's the design telling the truth.** The software
+> canvas's reason to exist is the **per-pixel** work — the `pset`/fill-bound carts that win 2–4×, plus
+> capabilities the GPU does badly or not at all (`pget`, full-screen palette cycling, read-modify-write
+> `fade`/blend, cross-device determinism). Rotation is the GPU's strength (it transforms geometry for
+> free), so SW will always trail there by ~an order of magnitude no matter how tight the loop. The
+> takeaway is **not** "keep optimizing rotation" — it's "rotation is cheap enough in SW to be *correct
+> and deterministic* (8ms for 4000 spinning sprites, in budget), and if a cart is ever genuinely
+> rotation-bound, the answer is to put *that layer* back on the GPU (see the hybrid note below), not to
+> chase CPU cycles." The `uint8` paletted buffer (Fork-1, 4× smaller upload) is still the lever for
+> low-end, where the upload, not the math, is the ceiling.
+>
+> **Hybrid (the "GPU-rotate, keep the rest SW" question) — yes, but composite, don't read back.** The
+> literal "rotate on GPU and get the pixels *back* into the cbuf" is a **loser**: a GPU→CPU readback
+> (`glReadPixels`/`LoadImageFromTexture`) stalls the pipeline ~1–5ms *per readback* — worse than the
+> whole 8ms SW path. The viable shape is to composite on the GPU side, no readback:
+> - **Whole-view rotation** (`camera_ex(angle)`): render the world to `cbuf` in SW (every per-pixel win
+>   intact), then **rotate the canvas texture at the final present** (one quad — free). This is **Fork-2
+>   Option 3 / B** above; the catch is a screen-space HUD needs a layer split (draw world rotated, then
+>   HUD unrotated on top). It replaces today's whole-cart `sw_force_gpu` for the rotating-camera case.
+> - **Rotated sprites as a top layer** (player/bullets/FX over a SW world): keep the base SW, then draw
+>   the `spr_rot`/`sspr_ex` calls via GPU `DrawTexturePro` **on top of the presented canvas** — GPU
+>   rotation, no readback. Constraint: those sprites must be a top layer (z-order: SW base, GPU rotated
+>   over it); SW drawn *on top of* a rotated sprite needs a flush/interleave (the compositing cost).
+>
+> Both trade the rotated layer's **determinism + free any-z-order** for GPU speed — a per-cart choice,
+> and the natural evolution of Option C (keep the SW base instead of forcing the whole cart to GPU).
+> Demand-gated: no shipped cart is rotation-bound enough in SW to need it yet.
 > **Phase 2 loose-ends sweep (2026-06-24).** "Feature-complete for common carts" was over-claimed —
 > an audit of every `Draw*` call in `studio.c` found four primitives still hitting the GPU with **no
 > `sw_canvas_active` branch**, so they silently vanished (or half-rendered) under the canvas. Now
