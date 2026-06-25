@@ -102,6 +102,47 @@ visual skin over it later.
 
 ---
 
+## Kernel + sibling shells (the Win 3.1 / DOS model)
+
+The natural way to picture the layering is **Windows 3.1 on DOS** — a text substrate
+underneath, a GUI shell on top. But the precise mapping matters, because the obvious
+reading ("the Workbench runs on top of the terminal") is the wrong one and leads to a
+backwards build.
+
+| Win 3.1 / DOS | Here |
+|---|---|
+| **DOS** (the kernel: FS, loads & runs programs) | `main.cjs` + the shared FS + the pipe-compose primitive |
+| **COMMAND.COM** (the prompt) | the terminal |
+| **Windows 3.1** (the GUI) | the Workbench |
+
+The load-bearing detail: **Win 3.1 did not run on top of COMMAND.COM — it ran on top of
+DOS and bypassed the prompt entirely.** You could *launch* it from the prompt, but once
+up it talked to the kernel directly. The terminal and Windows were **siblings**, both
+sitting on DOS. Same here: the Workbench sits on the **kernel** (shared FS + pipe
+substrate), exactly as the terminal does — not on the terminal.
+
+Why this earns its keep:
+
+1. **It prevents a backwards build.** "Workbench on top of terminal" tempts you into having
+   the GUI shell out to the text shell and scrape its stdout — fragile, like a GUI
+   screen-scraping a CLI. The right move: define one small **kernel API** — `list carts`,
+   `run cart`, `read/write FS`, `compose pipe` — and make *both* the terminal and the
+   Workbench thin clients of it.
+2. **So "terminal-first" really means "kernel-first."** The terminal isn't the
+   foundation; it's the *cheapest client that forces the foundation to exist*. Build the
+   Tier-1 substrate, and a text prompt is the smallest UI that proves it. The Workbench
+   becomes a second skin over the same API later, paying nothing the terminal didn't
+   already pay. That — not any dependency of the GUI on the terminal — is why terminal-first
+   is the sensible order.
+3. **The analogy even predicts where the pain lands.** Win 3.1's fragile part was
+   **cooperative multitasking** — one misbehaving app could hang the whole desktop. That is
+   exactly the **Tier 3** risk: a multi-cart libtcc host where one cart's segfault takes the
+   host down ([`cart-as-script.md`](cart-as-script.md) Step 4). Tier 1 dodges it (separate
+   processes, file handoff); the Workbench is where you'd have to solve it — the same wall
+   Microsoft only really cleared with the NT kernel.
+
+---
+
 ## Three tiers (rough → ambitious)
 
 ### Tier 1 — Pipes (the MVP; mostly already here)
@@ -189,8 +230,10 @@ one flag.
 - Is the shared FS a flat blob store, or does it carry the typed "vector features" /
   tilemap / audio-buffer schemas so pipes are *typed* (a cart advertises what it eats and
   emits)? The `index.json` metadata could grow `consumes`/`produces` tags.
-- Terminal-first or Workbench-first as the *visible* surface, given the substrate is the
-  same either way?
+- ~~Terminal-first or Workbench-first as the visible surface?~~ **Settled (this session):
+  kernel-first.** Both are sibling shells over the same kernel API; the terminal is just
+  the cheapest client that forces the substrate to exist. See "Kernel + sibling shells"
+  above.
 - Does "shared processes" ever mean genuinely concurrent live carts (Tier 3), or is
   sequential file-handoff (Tier 1) actually the whole need — the same question ADR-0001
   answered "no" to for coroutines?
