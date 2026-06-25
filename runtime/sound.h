@@ -3978,15 +3978,17 @@ typedef struct {
     float ring;                   // base ring time (s) at full pedal
     float symp;                   // sympathetic-resonance level
     float detune;                 // 2nd-string detune ratio (1.0 = single string)
+    float dd;                     // double-decay depth (the struck fast-initial-drop; per voicing — higher = drier/shorter)
+    float knock;                  // hammer-knock base (onset thump amount; per voicing — felt grand ≠ plectrum ≠ tangent)
     const char *name;
 } PianoVoicing;
 static const PianoVoicing PIANO_V[6] = {
-    { {110,200,440,1800},{0.8f,0.7f,0.5f,0.4f}, {0.35f,0.55f,0.50f,0.25f}, 0.25f,0.45f,0.12f,0.25f,0.55f,4.0f,0.15f,1.000694f,"grand" },
-    { {110,200,480,2200},{0.8f,0.7f,0.5f,0.4f}, {0.35f,0.60f,0.55f,0.35f}, 0.35f,0.65f,0.11f,0.30f,0.55f,5.0f,0.20f,1.000462f,"bright" },
-    { {200,400,900,1800},{0.5f,0.4f,0.3f,0.3f}, {0.80f,0.60f,0.40f,0.20f}, 0.70f,0.92f,0.08f,0.15f,0.25f,1.4f,0.00f,1.0f,     "harpsi" },
-    { {180,360,720,1500},{0.6f,0.5f,0.4f,0.3f}, {1.00f,0.70f,0.45f,0.25f}, 0.50f,0.70f,0.15f,0.40f,0.75f,3.0f,0.25f,1.0f,     "dulcimer" },
-    { {150,300,600,1200},{0.8f,0.6f,0.4f,0.3f}, {0.50f,0.30f,0.15f,0.08f}, 0.10f,0.20f,0.50f,0.10f,0.18f,1.6f,0.05f,1.0f,     "clavichord" },
-    { {400,800,1600,3200},{0.4f,0.3f,0.3f,0.2f},{0.80f,0.60f,0.40f,0.20f}, 0.60f,0.35f,0.25f,0.55f,0.45f,5.0f,0.10f,1.0f,     "celesta" },
+    { {110,200,440,1800},{0.8f,0.7f,0.5f,0.4f}, {0.35f,0.55f,0.50f,0.25f}, 0.25f,0.45f,0.12f,0.25f,0.55f,4.0f,0.15f,1.000694f, 0.020f,0.45f, "grand" },
+    { {110,200,480,2200},{0.8f,0.7f,0.5f,0.4f}, {0.35f,0.60f,0.55f,0.35f}, 0.35f,0.65f,0.11f,0.30f,0.55f,5.0f,0.20f,1.000462f, 0.022f,0.60f, "bright" },
+    { {200,400,900,1800},{0.5f,0.4f,0.3f,0.3f}, {0.80f,0.60f,0.40f,0.20f}, 0.70f,0.92f,0.08f,0.15f,0.25f,1.4f,0.00f,1.0f,      0.045f,0.30f, "harpsi" },
+    { {180,360,720,1500},{0.6f,0.5f,0.4f,0.3f}, {1.00f,0.70f,0.45f,0.25f}, 0.50f,0.70f,0.15f,0.40f,0.75f,3.0f,0.25f,1.0015f,   0.018f,0.55f, "dulcimer" },
+    { {150,300,600,1200},{0.8f,0.6f,0.4f,0.3f}, {0.50f,0.30f,0.15f,0.08f}, 0.10f,0.20f,0.50f,0.10f,0.18f,1.6f,0.05f,1.0f,      0.030f,0.20f, "clavichord" },
+    { {400,800,1600,3200},{0.4f,0.3f,0.3f,0.2f},{0.80f,0.60f,0.40f,0.20f}, 0.60f,0.35f,0.25f,0.55f,0.45f,5.0f,0.10f,1.0f,      0.010f,0.35f, "celesta" },
 };
 // per-voicing string brightness (navkit pluckBrightness — high-harmonic RETENTION, the presence
 // lever) + damping (pluckDamping ≈ 0.999 — a near-lossless string; the note decays via the AMP
@@ -4024,13 +4026,14 @@ static void sound_piano_start(Voice *v) {
     hard += (vel - 0.6f) * 0.45f;                       // VELOCITY → hammer brightness: soft = darker felt, hard = brighter/edgier
     if (hard < 0.02f) hard = 0.02f; if (hard > 0.98f) hard = 0.98f;
     // DOUBLE DECAY: a strong extra per-period loss at the strike that relaxes away (~0.2s) → the
-    // fast initial drop into a long aftersound (the piano envelope; a single rate = a harp).
-    // eng_p[2] scales it (bank-default 0.5 → 1.0×; cart knob 0..1 → 0..2× via instrument_mode idx 2).
-    v->pn_dd = 0.020f * (v->eng_p[2] * 2.0f);
-    // HAMMER KNOCK: a default broadband onset thump (harder hammer → sharper/louder click), ON for
-    // piano independent of MODE_STRING_CLICK (eng_p[1] still adds the cart-tunable pick noise on top).
-    // eng_p[3] scales it (bank-default 0.5 → 1.0×; cart knob 0..1 → 0..2× via instrument_mode idx 3).
-    v->pn_knock = (0.30f + 0.50f * hard) * (v->eng_p[3] * 2.0f) * (0.25f + 0.85f * vel);  // VELOCITY → knock: a soft press barely thumps, a hard strike cracks
+    // fast initial drop into a long aftersound (the piano envelope; a single rate = a harp). Per-voicing
+    // base (pv->dd); eng_p[2] scales it (bank-default 0.5 → 1.0×; cart knob 0..1 → 0..2× via idx 2).
+    v->pn_dd = pv->dd * (v->eng_p[2] * 2.0f);
+    // HAMMER KNOCK: a broadband onset thump, ON by default (eng_p[1] still adds the cart-tunable pick
+    // noise on top). Per-voicing base (pv->knock — felt grand ≠ plectrum ≠ tangent); eng_p[3] scales it
+    // (bank-default 0.5 → 1.0×; cart knob 0..1 → 0..2× via idx 3); VELOCITY scales it (soft press barely
+    // thumps, hard strike cracks).
+    v->pn_knock = pv->knock * (v->eng_p[3] * 2.0f) * (0.25f + 0.85f * vel);
     float cut = 0.05f + 0.85f * hard, lp = 0.0f;
     for (int i = 0; i < len; i++) {
         v->noise_state = (v->noise_state * 1103515245 + 12345) & 0x7fffffff;
