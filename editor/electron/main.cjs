@@ -208,6 +208,15 @@ function saveDirArgs(cfg) {
   return ['--save-dir', `saves/${slug}`]
 }
 
+// Environment for a spawned cart. The render backend (GPU vs software canvas) is a
+// runtime env var the studio reads at startup (studio.c: DE_SOFTWARE_CANVAS), so no
+// recompile is needed to switch — just relaunch. settings.renderMode === 'software'
+// flips it on. NOTE: in live mode this only takes effect on a host RELAUNCH, so
+// renderMode is folded into liveSignature() to force one when it changes.
+function cartEnv(cfg) {
+  return { ...process.env, DE_SOFTWARE_CANVAS: cfg?.renderMode === 'software' ? 'on' : 'off' }
+}
+
 // macOS clang command for a native cart build. optFlags swaps between the
 // shipping build (-Os) and the profiling build (-O1 -fno-inline, which keeps
 // studio.c primitives as distinct, named symbols so `sample` can attribute
@@ -290,14 +299,17 @@ let liveProc = null
 let liveSig  = null
 function fileMtime(p) { try { return fs.statSync(p).mtimeMs } catch { return 0 } }
 function fileHash(p)  { try { return require('crypto').createHash('md5').update(fs.readFileSync(p)).digest('hex') } catch { return '' } }
-function liveSignature(dims) {
+function liveSignature(dims, cfg) {
   // What forces a host REBUILD/relaunch (vs. an in-place hot reload). studio sources +
   // dims are baked into the host binary; so are sprites/map (via the embedded data
   // headers). BUT the editor rewrites sprites.png/map.dat on every run, so keying on
   // their mtime would relaunch the window every time — key on their CONTENT instead, so
   // an unchanged sheet keeps the same signature and the cart hot-reloads in place.
+  // renderMode rides along: the GPU/software choice is an env var read only at host
+  // startup, so changing it must relaunch the host rather than hot-reload in place.
   return JSON.stringify({
     dims,
+    renderMode: cfg?.renderMode || 'gpu',
     studio:  fileMtime(path.join(RUNTIME_DIR, 'studio.c')),
     studioH: fileMtime(path.join(RUNTIME_DIR, 'studio.h')),
     syms:    fileMtime(path.join(RUNTIME_DIR, 'studio_tcc_symbols.h')),
@@ -331,7 +343,7 @@ function buildTccHost(dims) {
 // already written cart.c + the data headers before we get here.
 async function runLive(dims, cfg, wc) {
   const send = (ch, payload) => { if (!wc.isDestroyed()) wc.send(ch, payload) }
-  const sig  = liveSignature(dims)
+  const sig  = liveSignature(dims, cfg)
 
   // host already up for this exact build → cart.c was just rewritten; file-watch reloads.
   if (liveProc && !liveProc.killed && sig === liveSig) {
@@ -351,7 +363,7 @@ async function runLive(dims, cfg, wc) {
 
   const cartTitle = cfg?.cartName ? `dreamengine (live): ${cfg.cartName}` : 'dreamengine (live)'
   const proc = spawn(TCC_HOST_BIN, ['--cart', CART_SRC, '--title', cartTitle, ...saveDirArgs(cfg)],
-    { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
+    { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR, env: cartEnv(cfg) })
   proc.stdout.on('data', c => send('cart:log', c.toString()))
   proc.stderr.on('data', c => send('cart:log', c.toString()))   // [tcc] compiled / hot-reloaded / errors
   proc.on('exit', (code, signal) => {
@@ -714,7 +726,7 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
       const wc = _event.sender
       const send = (ch, payload) => { if (!wc.isDestroyed()) wc.send(ch, payload) }
       const cartTitle = cfg?.cartName ? `dreamengine: ${cfg.cartName}` : 'dreamengine'
-      const proc = spawn(CART_BIN, ['--title', cartTitle, ...saveDirArgs(cfg)], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
+      const proc = spawn(CART_BIN, ['--title', cartTitle, ...saveDirArgs(cfg)], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR, env: cartEnv(cfg) })
       proc.stdout.on('data', chunk => send('cart:log', chunk.toString()))   // raylib trace (warnings only) + stray printf
       proc.stderr.on('data', chunk => send('cart:log', chunk.toString()))   // printh() output
       proc.on('exit', (code, signal) => send('cart:exit', { code, signal }))
@@ -795,7 +807,7 @@ ipcMain.handle('studio:profile', async (_event, code, cfg) => {
       // clear any stale perf.json so a crash-before-first-flush can't show old data
       try { fs.unlinkSync(path.join(BUILD_DIR, 'perf.json')) } catch {}
 
-      const proc = spawn(CART_BIN, ['--title', cartTitle, ...saveDirArgs(cfg)], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR })
+      const proc = spawn(CART_BIN, ['--title', cartTitle, ...saveDirArgs(cfg)], { detached: false, stdio: ['ignore', 'pipe', 'pipe'], cwd: BUILD_DIR, env: cartEnv(cfg) })
       let exited = false
       proc.stdout.on('data', chunk => send('cart:log', chunk.toString()))
       proc.stderr.on('data', chunk => send('cart:log', chunk.toString()))

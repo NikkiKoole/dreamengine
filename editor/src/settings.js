@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal', scaleFilter: 0 }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal', scaleFilter: 0, renderMode: 'gpu' }
 
 // ── key bindings ──────────────────────────────────────────────
 // Values are raylib (GLFW) keycodes — letters/digits are ASCII, specials match
@@ -88,6 +88,7 @@ function load() {
     backend:       localStorage.getItem('backend')   || DEFAULTS.backend,
     buildMode:     localStorage.getItem('buildMode') || DEFAULTS.buildMode,
     scaleFilter:   parseInt(localStorage.getItem('scaleFilter') || DEFAULTS.scaleFilter),
+    renderMode:    localStorage.getItem('renderMode') || DEFAULTS.renderMode,
     keymap:        loadKeymap(),
   }
 }
@@ -311,6 +312,20 @@ export function buildSettingsPanel(el) {
   ))
   backendSection.appendChild(note('native: a fresh optimised build each run. live: a persistent libtcc host JIT-compiles the cart and hot-reloads it on every run/save — game state in de_state() survives the swap. desktop app only; sprite/screen changes relaunch the live window. "Build for web" is unaffected.'))
   el.appendChild(backendSection)
+
+  // ── rendering (GPU vs software canvas) ────────────────────────
+  const renderSection = section('rendering')
+  renderSection.appendChild(select(
+    'render backend',
+    [
+      { value: 'gpu',      label: 'hardware (GPU) — immediate-mode, default' },
+      { value: 'software', label: 'software (CPU canvas) — rasterise on the CPU' },
+    ],
+    settings.renderMode,
+    v => { settings.renderMode = v; save('renderMode', v) },
+  ))
+  renderSection.appendChild(note('software draws the whole screen into a CPU framebuffer and uploads it once per frame (DE_SOFTWARE_CANVAS). It wins 2–3.5× on pset/fill-bound carts (pixel art, top-down painters) and is a wash on GPU/draw-call-bound ones; carts that rotate the whole view (camera_ex angle) auto-fall back to the GPU regardless. A runtime switch — no recompile — takes effect on the next ▶ run (live: relaunches the window).'))
+  el.appendChild(renderSection)
 
   // ── profiler (advanced) ───────────────────────────────────────
   const profSection = section('profiler')
