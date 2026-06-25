@@ -21,7 +21,7 @@ const https = require('https');
 const { execFileSync } = require('child_process');
 
 const argv = process.argv.slice(2);
-const opt = { json: null, out: 'build/.fml-textures', tile: 16, saturate: 1.4, posterize: 0,
+const opt = { json: null, out: 'build/.fml-textures', tile: 16, saturate: 1.4, contrast: 2.4, posterize: 0,
               palette: 'editor/public/palettes/pico32.json' };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -29,6 +29,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--out') opt.out = argv[++i];
   else if (a === '--tile') opt.tile = parseInt(argv[++i], 10);
   else if (a === '--saturate') opt.saturate = parseFloat(argv[++i]);
+  else if (a === '--contrast') opt.contrast = parseFloat(argv[++i]);   // luma-contrast stretch so faint tile/weave patterns survive quantising
   else if (a === '--posterize') opt.posterize = parseInt(argv[++i], 10);
   else if (a === '--palette') opt.palette = argv[++i];
   else { console.error('fml-textures: unknown arg', a); process.exit(1); }
@@ -115,6 +116,23 @@ function saturate(img, f) {
   }
   return img;
 }
+// luma-contrast stretch around the image's MEAN brightness: push light/dark apart (preserving
+// hue + average tone) so a faint tile-grout / herringbone pattern spreads onto distinct palette
+// entries instead of collapsing to one. f=1 no-op; f>1 amplifies the per-pixel luma deviation.
+function lumaContrast(img, f) {
+  if (!f || f === 1) return img;
+  const n = img.w * img.h; let mean = 0;
+  for (let i = 0; i < n; i++) mean += 0.3 * img.rgba[i * 4] + 0.59 * img.rgba[i * 4 + 1] + 0.11 * img.rgba[i * 4 + 2];
+  mean /= n;
+  const clamp = (v) => v < 0 ? 0 : v > 255 ? 255 : v;
+  for (let i = 0; i < n; i++) {
+    const r = img.rgba[i * 4], g = img.rgba[i * 4 + 1], b = img.rgba[i * 4 + 2];
+    const d = (0.3 * r + 0.59 * g + 0.11 * b - mean) * (f - 1);   // signed luma delta, scaled
+    img.rgba[i * 4] = clamp(r + d); img.rgba[i * 4 + 1] = clamp(g + d); img.rgba[i * 4 + 2] = clamp(b + d);
+  }
+  return img;
+}
+
 function posterize(img, levels) {
   if (!levels || levels < 2) return img;
   const step = 255 / (levels - 1);
@@ -182,7 +200,7 @@ function get(url) {
     catch (e) { console.warn(`  ${ref}: sips decode failed`); continue; }
     let img = decodePNG(fs.readFileSync(stem + '.png'));
     img = downscale(img, opt.tile);
-    saturate(img, opt.saturate); posterize(img, opt.posterize);
+    saturate(img, opt.saturate); lumaContrast(img, opt.contrast); posterize(img, opt.posterize);
     const idx = quantize(img, palette);
     refToTex[ref] = textures.length;
     textures.push({ w: img.w, h: img.h, px: Array.from(idx, v => (v < 0 ? 0 : v)) });
