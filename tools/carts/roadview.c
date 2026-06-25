@@ -18,31 +18,34 @@
 //                     (--data <file> / $DE_DATA still force a specific file.)
 //
 //   ◄▲▼► / WASD   pan  ·  left-drag  grab the map  ·  wheel  zoom  ·  0  reset view
-//   B  toggle building footprints (filled blocks; auto-shown once you zoom in close)
+//   B / T  toggle building footprints / tree dots (both auto-shown once you zoom in close)
 //   drag a .json onto the window → load it   ·   OPEN button → reveal the data folder
 //
 #include "studio.h"
 #include "json.h"      // EXPERIMENTAL cart-land JSON reader (vendored jsmn)
 #include <stdlib.h>    // abs
 
-enum { K_HIGHWAY, K_ARTERIAL, K_ROAD, K_TRACK, K_WATER, K_CANAL, K_BUILDING, K_N };
+enum { K_HIGHWAY, K_ARTERIAL, K_ROAD, K_TRACK, K_WATER, K_CANAL, K_BUILDING, K_GREEN, K_TREE, K_N };
 
 // per-class style: colour, casing colour, and real-world half-width in metres.
-// WATER and BUILDING are filled areas (hw_m unused); the rest are polylines.
+// WATER/BUILDING/GREEN are filled areas, TREE is a point dot (hw_m unused); rest are polylines.
 typedef struct { int col, casing; float hw_m; const char *label; } Style;
 static const Style ST[K_N] = {
-    /* HIGHWAY  */ { CLR_ORANGE,     CLR_BROWN,     7.0f, "highway"  },
-    /* ARTERIAL */ { CLR_YELLOW,     CLR_BROWN,     5.0f, "arterial" },
-    /* ROAD     */ { CLR_LIGHT_GREY, CLR_DARK_GREY, 3.0f, "road"     },
-    /* TRACK    */ { CLR_BROWN,      CLR_BROWN,     1.5f, "track"    },
-    /* WATER    */ { CLR_BLUE,       CLR_BLUE,      0.0f, "water"    },
-    /* CANAL    */ { CLR_BLUE,       CLR_BLUE,      4.0f, "canal"    },
-    /* BUILDING */ { CLR_DARK_GREY,  CLR_DARK_GREY, 0.0f, "building" },
+    /* HIGHWAY  */ { CLR_ORANGE,     CLR_BROWN,      7.0f, "highway"  },
+    /* ARTERIAL */ { CLR_YELLOW,     CLR_BROWN,      5.0f, "arterial" },
+    /* ROAD     */ { CLR_LIGHT_GREY, CLR_DARK_GREY,  3.0f, "road"     },
+    /* TRACK    */ { CLR_BROWN,      CLR_BROWN,      1.5f, "track"    },
+    /* WATER    */ { CLR_BLUE,       CLR_BLUE,       0.0f, "water"    },
+    /* CANAL    */ { CLR_BLUE,       CLR_BLUE,       4.0f, "canal"    },
+    /* BUILDING */ { CLR_DARK_GREY,  CLR_DARK_GREY,  0.0f, "building" },
+    /* GREEN    */ { CLR_DARK_GREEN, CLR_DARK_GREEN, 0.0f, "park"     },
+    /* TREE     */ { CLR_GREEN,      CLR_GREEN,      0.0f, "trees"    },
 };
 
-// buildings (footprints) are LOD-gated: only filled once you've zoomed in enough that a
-// footprint is a few pixels — keeps the wide view a clean road network, reveals blocks up close.
+// footprints + tree dots are LOD-gated: only drawn once zoomed in enough that they are a
+// few pixels (sub-pixel at fit = wasted draws + clutter). Trees are finer → a higher gate.
 #define BUILD_GATE_PPM 0.12f
+#define TREE_GATE_PPM  0.25f
 
 #define MAXPTS  800000                               // higher than roads alone need — buildings are dense
 #define MAXPOLY  80000
@@ -61,6 +64,7 @@ static float camx, camy;                             // world point at screen ce
 static float ppm = 0.2f, fitppm = 0.2f;              // pixels per metre (zoom)
 static int   dragging = 0, drag_px, drag_py;
 static int   buildings_on = 1;                       // B toggles footprint fills (still LOD-gated)
+static int   trees_on = 1;                           // T toggles tree dots (still LOD-gated)
 
 // world (metres) → screen pixels; Y flips so north is up
 static int sx(float wx) { return SCREEN_W / 2 + (int)((wx - camx) * ppm); }
@@ -82,6 +86,8 @@ static int kind_of(const char *js, const jsmntok_t *t) {
     if (json_eq(js, t, "water"))    return K_WATER;
     if (json_eq(js, t, "canal"))    return K_CANAL;
     if (json_eq(js, t, "building")) return K_BUILDING;
+    if (json_eq(js, t, "green"))    return K_GREEN;
+    if (json_eq(js, t, "tree"))     return K_TREE;
     return K_ROAD;
 }
 
@@ -124,8 +130,9 @@ static void load_from(const char *path) {
                     PY[nps] = (float)json_num(js, &tok[pi + 1 + j * 2 + 1]);
                     nps++;
                 }
-                if (nps - start >= 2) {
-                    ways[npoly].kind = kind; ways[npoly].start = start; ways[npoly].count = nps - start;
+                int cnt2 = nps - start;                       // trees are a single point; lines/areas need >=2
+                if (cnt2 >= 2 || (kind == K_TREE && cnt2 >= 1)) {
+                    ways[npoly].kind = kind; ways[npoly].start = start; ways[npoly].count = cnt2;
                     kcount[kind]++; npoly++;
                 }
             }
@@ -187,6 +194,17 @@ static void fill_areas(int kind) {
     }
 }
 
+// individual trees are point features (one point) → small dots, LOD-gated like footprints.
+static void draw_trees(void) {
+    int r = (int)(3.0f * ppm + 0.5f); if (r < 1) r = 1; if (r > 3) r = 3;   // ~3 m canopy, capped
+    for (int i = 0; i < npoly; i++) {
+        if (ways[i].kind != K_TREE) continue;
+        int x = sx(PX[ways[i].start]), y = sy(PY[ways[i].start]);
+        if (x < -r || x > SCREEN_W + r || y < -r || y > SCREEN_H + r) continue;
+        circfill(x, y, r, ST[K_TREE].col);
+    }
+}
+
 // draw every poly of one class for a phase (0 = casing, 1 = fill)
 static void draw_class(int kind, int phase) {
     const Style *s = &ST[kind];
@@ -201,13 +219,15 @@ static void legend(void) {
     font(FONT_SMALL);
     rectfill(0, SCREEN_H - 9, SCREEN_W, 9, CLR_BLACK);
     int build_shown = buildings_on && ppm >= BUILD_GATE_PPM;   // only list what's actually drawn
+    int tree_shown  = trees_on && ppm >= TREE_GATE_PPM;
     int x = 4;
     for (int k = 0; k < K_N; k++) {
         if (!kcount[k]) continue;
         if (k == K_BUILDING && !build_shown) continue;
+        if (k == K_TREE && !tree_shown) continue;
         rectfill(x, SCREEN_H - 7, 6, 5, ST[k].col);
         print(ST[k].label, x + 8, SCREEN_H - 7, CLR_MEDIUM_GREY);
-        x += 8 + (int)strlen(ST[k].label) * 4 + 8;
+        x += 8 + (int)strlen(ST[k].label) * 4 + 4;
     }
     font(FONT_NORMAL);
 }
@@ -250,6 +270,7 @@ void update(void) {
     }
     if (keyp('0')) fit();
     if (keyp('B') || keyp('b')) buildings_on = !buildings_on;
+    if (keyp('T') || keyp('t')) trees_on = !trees_on;
 }
 
 void draw(void) {
@@ -270,7 +291,8 @@ void draw(void) {
         return;
     }
 
-    // painter's order: water, then building footprints (LOD-gated), then roads on top
+    // painter's order: green ground → water → footprints → roads → tree dots on top
+    fill_areas(K_GREEN);                                     // parks/woods = bottom ground layer
     fill_areas(K_WATER);
     if (buildings_on && ppm >= BUILD_GATE_PPM) fill_areas(K_BUILDING);
     draw_class(K_CANAL, 1);
@@ -278,6 +300,7 @@ void draw(void) {
     draw_class(K_ROAD,  1);
     draw_class(K_ARTERIAL, 0); draw_class(K_HIGHWAY, 0);      // casings
     draw_class(K_ARTERIAL, 1); draw_class(K_HIGHWAY, 1);      // fills
+    if (trees_on && ppm >= TREE_GATE_PPM) draw_trees();       // finest detail, on top
 
     // HUD
     rectfill(0, 0, SCREEN_W, 11, CLR_BLACK);

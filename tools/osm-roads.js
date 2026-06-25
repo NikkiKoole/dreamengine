@@ -50,6 +50,10 @@ function classifyWay(t) {
   if (t.natural === 'water' || t.water || t.waterway === 'riverbank' ||
       t.landuse === 'reservoir' || t.landuse === 'basin') return 'water';   // area, filled
   if (t.building && t.building !== 'no') return 'building';                  // area, filled (footprint)
+  if (t.natural === 'wood' || t.natural === 'scrub' || t.natural === 'grassland' ||
+      t.landuse === 'forest' || t.landuse === 'grass' || t.landuse === 'meadow' ||
+      t.leisure === 'park' || t.leisure === 'garden' || t.leisure === 'nature_reserve')
+    return 'green';                                                         // area, filled (park/wood)
   if (/^(river|canal|stream|drain|ditch)$/.test(t.waterway || '')) return 'canal';  // line
   const hw = t.highway || '';
   if (/^(motorway|trunk)(_link)?$/.test(hw)) return 'highway';
@@ -82,8 +86,8 @@ function buildDoc(source, name, ways) {
   const features = [];
   for (const w of ways) {
     let local = w.pts.map(([x, y]) => [x - minx, y - miny]);
-    if (w.kind !== 'building') local = simplify(local, SIMPLIFY);  // keep small footprints intact
-    if (local.length < 2) continue;
+    if (w.kind !== 'building' && w.kind !== 'tree') local = simplify(local, SIMPLIFY);
+    if (local.length < 1 || (local.length < 2 && w.kind !== 'tree')) continue;  // trees are single points
     const flat = [];
     for (const [x, y] of local) flat.push(round(x), round(y));
     features.push({ kind: w.kind, name: w.name || '', pts: flat });
@@ -160,6 +164,20 @@ function demo() {
     lake.push([1050 + Math.cos(a) * 520, 720 + Math.sin(a) * 360 + (rnd() - 0.5) * 40]);
   }
   ways.push({ kind: 'water', name: 'Vest', pts: lake });
+  // a park (green area) in the NE, with a scatter of individual trees in it
+  const park = [];
+  for (let i = 0; i <= 22; i++) {
+    const a = (i / 22) * Math.PI * 2;
+    park.push([3300 + Math.cos(a) * 480, 1000 + Math.sin(a) * 360 + (rnd() - 0.5) * 40]);
+  }
+  ways.push({ kind: 'green', name: 'Stadspark', pts: park });
+  for (let i = 0; i < 80; i++) {
+    const tx = 3300 + (rnd() - 0.5) * 820, ty = 1000 + (rnd() - 0.5) * 620;
+    if (((tx - 3300) / 480) ** 2 + ((ty - 1000) / 360) ** 2 < 0.9)
+      ways.push({ kind: 'tree', name: '', pts: [[tx, ty]] });
+  }
+  // street trees lining the central avenue
+  for (let x = 600; x < W - 400; x += 90) ways.push({ kind: 'tree', name: '', pts: [[x, H / 2 - 70]] });
   // a scatter of building footprints in the downtown blocks (closed rects = areas)
   for (let bx = 1500; bx < 3200; bx += 240) {
     for (let by = 1100; by < 2300; by += 200) {
@@ -192,6 +210,10 @@ async function overpass(S, W, N, E, name) {
             `way["natural"="water"]${bb};` +
             `way["landuse"~"^(reservoir|basin)$"]${bb};` +
             `way["building"]${bb};` +
+            `way["natural"~"^(wood|scrub|grassland)$"]${bb};` +
+            `way["landuse"~"^(forest|grass|meadow)$"]${bb};` +
+            `way["leisure"~"^(park|garden|nature_reserve)$"]${bb};` +
+            `node["natural"="tree"]${bb};` +
             `);out geom;`;
   console.log(`querying Overpass for bbox ${S},${W},${N},${E} …`);
   // the public instances 504/429 under load — try the mirrors in turn
@@ -217,6 +239,11 @@ async function overpass(S, W, N, E, name) {
   if (!j) throw new Error(`all Overpass mirrors failed (${lastErr})`);
   const ways = [];
   for (const el of j.elements || []) {
+    if (el.type === 'node') {                          // individual trees = point nodes
+      if (el.tags?.natural === 'tree' && el.lat != null)
+        ways.push({ kind: 'tree', name: '', pts: [merc(el.lon, el.lat)] });
+      continue;
+    }
     if (el.type !== 'way' || !el.geometry) continue;
     const kind = classifyWay(el.tags || {});
     if (!kind) continue;
