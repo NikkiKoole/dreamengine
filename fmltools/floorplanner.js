@@ -116,7 +116,9 @@ function fetchFml(pid, cred) {
   if (opt.fetchOnly) { console.log(fml); return; }
 
   const name = opt.name || String(opt.pid);
-  const floor = opt.floor ?? '0', scale = opt.scale ?? '8', maxfurn = opt.maxfurn ?? '280';
+  // maxfurn 0 = never drop by size (real floor coverings are surfaces[]/rs-####, not items[]).
+  // 280 was dropping normal sofas/beds, leaving only tiny decor. Pass --maxfurn N to re-enable a cap.
+  const floor = opt.floor ?? '0', scale = opt.scale ?? '8', maxfurn = opt.maxfurn ?? '0';
   const node = (script, a) => execFileSync('node', [path.join(__dirname, script), ...a], { cwd: ROOT, stdio: 'inherit' });
 
   if (opt.baked) {
@@ -137,7 +139,9 @@ function fetchFml(pid, cred) {
   console.log(`▸ geometry  -> ${dataRel}`);
   node('fml2cart.js', [fml, '--json', data, '--floor', floor, '--scale', scale, '--maxfurn', maxfurn]);
   console.log(`▸ bake art  furniture renders -> ${assets}`);
-  node('fml-assets.js', [fml, '--out', assets, '--max', '24', '--saturate', '2.2', '--posterize', '5']);
+  // gentler than the baked carts (was 2.2/posterize 5): small footprints + heavy saturation turned
+  // furniture into rainbow confetti that all read alike. 1.4 keeps natural tones, no posterize.
+  node('fml-assets.js', [fml, '--out', assets, '--max', '24', '--saturate', '1.4']);
   console.log(`▸ sprites   -> ${dataRel}`);
   node('fml-sprites.js', ['--json', data, '--manifest', path.join(assets, 'manifest.json')]);
   console.log(`▸ textures  resolve rs-#### floor materials -> ${dataRel}`);

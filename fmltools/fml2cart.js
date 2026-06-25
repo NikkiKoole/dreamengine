@@ -156,13 +156,14 @@ for (const a of areas) {
   ai++;
 }
 
-// ---- furniture: oriented boxes (filter out giant surface/ground planes) ----
+// ---- furniture: oriented boxes ----
 const furn = [];
 let skipped = 0;
 for (const it of items) {
-  // skip surface/rug/ground planes (huge flat footprints) — real furniture rarely
-  // exceeds ~2.6m on a side; these big items are the floor-covering layer instead
-  if ((it.width > opt.maxfurn) || (it.height > opt.maxfurn)) { skipped++; continue; }
+  // --maxfurn 0 (the dynamic default) keeps everything: real floor coverings live in surfaces[]
+  // (rs-#### materials), so items[] are genuine objects and shouldn't be dropped by size. A
+  // positive --maxfurn (e.g. 280, the baked-cart default) still drops huge planes if you want.
+  if (opt.maxfurn > 0 && (it.width > opt.maxfurn || it.height > opt.maxfurn)) { skipped++; continue; }
   furn.push({
     cx: PX(it.x), cy: PY(it.y),
     w: PL(it.width), h: PL(it.height),
