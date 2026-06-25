@@ -136,6 +136,28 @@ why some large green/water areas can look absent.
 transit stops + POI points (also make the hover panel rich) → place-name labels → city walls /
 admin boundary.
 
+## Building heights (for the extrude-buildings-downstream goal)
+
+Two ways to get them, cheapest first:
+
+**A. OSM `height` / `building:levels` ride-along** (no new query — we already fetch building tags).
+- In `osm-roads.js`, when `kind==='building'`: parse `tags.height` (metres, e.g. `"12.5"`), else
+  fall back to `tags['building:levels'] * 3` (≈3 m/storey). Stash it on the feature as a new `h`
+  field (next to `sub`); thread it through `writeBin` (one more `float32`/building) and the `.json`.
+- The cart ignores `h` for now (like `sub`) — or could shade footprints by height; the downstream
+  extruder reads it directly.
+- **Caveat: partial coverage.** Many buildings have neither tag → `h=0`/unknown; downstream needs a
+  fallback (a default storey height, or skip-if-unknown). Coverage varies wildly by region.
+
+**B. 3DBAG normalizer** (NL-only, authoritative — a *new* per-source normalizer, the bigger follow-up).
+- The Netherlands' authoritative source is **3DBAG** (`3dbag.nl`): LoD1/LoD2 building models with real
+  heights from AHN lidar + the BAG registry — near-complete coverage, far better than OSM height tags.
+- This is its own tool — `tools/bag-buildings.js` → the *same* `.rvb`/"vector features" schema (with
+  `h`) — exactly the "one cart, per-source normalizer" pattern (see "The pattern" above). A Dutch city
+  would look dramatically better from 3DBAG than from OSM tags.
+- Not OSM/Overpass, so a separate fetch/parse (3DBAG ships GeoPackage / CityJSON tiles); the messy
+  source-specific work stays in the normalizer, the cart still only sees the normalized schema.
+
 ## The smell this fixes
 
 `floorwalker` and `seinelaan` are the *same cart* — identical movement, rendering, collision —
