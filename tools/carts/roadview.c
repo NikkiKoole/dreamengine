@@ -10,7 +10,13 @@
 // footprints get a thin outline so each one stays separable (the JSON also carries the OSM
 // building type in `sub`, for a downstream consumer that extrudes individual buildings).
 // The experiment: data-driven carts that read a blob at runtime instead of regenerating
-// source per dataset (the floorwalker/seinelaan smell). See docs/design/external-data-carts.md.
+// source per dataset (the floorwalker/seinelaan smell).
+//
+//   DESIGN + KNOWLEDGE → docs/design/external-data-carts.md   (the source of truth for this cart)
+//     · session handoff (what works, commits, quick-resume)   · the shared "vector features" schema
+//     · the .rvb binary format spec + why (JSON parse was the load bottleneck)
+//     · the road hierarchy (which OSM highway=* values map to which tier; what's collapsed/dropped)
+//     · open items: hover inspector panel · two-line legend · Breda bbox framing · more road tiers
 //
 //   make the data:   node tools/osm-roads.js --demo            (writes data/demo.rvb)
 //                     node tools/osm-roads.js --place "Delft"   (writes data/delft-*.rvb)
