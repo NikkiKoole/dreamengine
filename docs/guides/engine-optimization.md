@@ -261,6 +261,7 @@ compare/call) and never regresses, so it ships; it's a tail/many-small-fills win
 | 2026-06 | software discs | `circfill`/`ovalfill` scanline span fill + scan clamp | `discstress` byte-identical, `raster_test` 0 | `discstress` 8.4×; oersoep 2.5×, pinball 2.2× (circfill-bound only) | `DE_DISC_FILL=legacy` · `40c38d5` |
 | 2026-06 | software discs | relax span gate `zoom==1 && rot==0` → `rot==0` (zoom is byte-safe; only rotation breaks span tiling) | `discstress` ZOOM scene byte-identical, `raster_test` 0 | **`orbit` 11.46→1.28ms (9×)**, discstress ZOOM 2.46→0.52ms | `DE_DISC_FILL=legacy` · `00dd3f6` |
 | 2026-06 | all software fills | per-frame clamp-box cache (4 matrix inverts → per camera-change) | `clampstress` STATIC+PAN byte-identical, `raster_test` 0 | `clampstress` 28%; qbert 9%, oersoep 10%; neutral on large-fill carts | `DE_CLAMP_CACHE=off` · `13fdeca` |
+| 2026-06-25 | software canvas (rotated blits) | texel-read (`img_texel`) + no-scale fast path + inline-plot + camera/row-pointer hoist on `de_cpu_img_rot`/`sw_blit`/`sw_tritex` | `canvas-diff` 0px (byte-identical), `build-all` | `rotstress` 12.70→8.14ms @4000 (~36%); slowdown vs GPU ~11×→7×; **flipped `cityview` to a SW win** | full write-up in [software-canvas.md](../design/software-canvas.md) "Rotated-sampling optimization" |
 
 ---
 

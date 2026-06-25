@@ -60,6 +60,12 @@ Three corollaries:
 
 ## 2. Where we are now (in code)
 
+> **Disabling audio entirely:** `DE_AUDIO=off` (env) skips `InitAudioDevice` + `sound_init` + the
+> miniaudio callback thread — cart audio calls become harmless no-ops. The effects bus (reverb tail,
+> set-and-hold inserts) processes the master every callback even on silence, so this is a real CPU
+> saving on sound-free carts, a low-end lever, and it de-noises CPU profiles. (`--wav` forces audio
+> back on — it needs the synth.) Profiling how-to: [`../guides/profiler.md`](../guides/profiler.md).
+
 > **Refreshed 2026-06-07**, after the 2026-06-05 wave landed: the first three modeled
 > engines (`INSTR_PLUCK/MALLET/FM` + the six macro functions —
 > [`instrument-engines.md`](instrument-engines.md)), `instrument_choke` (§12),

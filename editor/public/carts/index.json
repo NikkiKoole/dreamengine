@@ -5559,5 +5559,29 @@
       "verlet-integration"
     ],
     "lineage": "Built on the platform-rects per-axis mover; the twist is a single growing variable (ball radius from eaten fruit) that drives BOTH the character art and the jump physics — at threshold the jump becomes an auto-pogo whose impulse scales with size, so growth IS progression. The arms, legs, balls and willy are floppy verlet chains anchored to the body, so they ragdoll as he bounces (cosmetic — the collision/pogo still use the box). A gag cart with an emergent difficulty curve (bigger balls reach higher fruit which grow bigger balls)."
+  },
+  {
+    "title": "drawall — every draw command",
+    "description": "A reference cart that exercises EVERY studio.h drawing primitive in one frame — pixels, lines (thick/bezier), rects (incl. rotated + fillp dither), circles/ovals/arcs/rings, triangles/ngons/stars/polys, rounded rects, sprites (flipped/scaled/rotated, pal()-recoloured, colorkeyed), a tilemap, a textured triangle (tritex), text (outlined/rotated/scaled), camera/clip/zoom_rect — all spinning per frame. The one cart to throw the whole draw layer at (canvas-diff + build-all hit it), doubling as a visual catalogue of what the engine can draw.",
+    "file": "drawall.cart.png",
+    "kind": [
+      "tech-demo"
+    ],
+    "teaches": [
+      "software-rasterizer"
+    ],
+    "lineage": "The software-canvas everything-cart — one frame calling every studio.h draw primitive with per-frame rotation, so a regression in any one shows up in a single canvas-diff run."
+  },
+  {
+    "title": "rotstress — rotated-sprite stress test",
+    "description": "A deliberate worst case for the software canvas rotated-sampling path: a storm of spinning sprites plus big rotated scaled blits and a textured quad, all opaque, so the per-pixel inverse-map + texel gather dominate. Built to be profiled — crank the sprite count with UP/DOWN to push past the frame budget and see where the time goes.",
+    "file": "rotstress.cart.png",
+    "kind": [
+      "probe"
+    ],
+    "teaches": [
+      "software-rasterizer"
+    ],
+    "lineage": "The profiling target for the software-canvas rotated-blit optimization (de_cpu_img_rot) — a crankable worst case used to find the GetImageColor/sw_pset hotspots and measure each win."
   }
 ]
