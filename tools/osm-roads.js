@@ -19,8 +19,14 @@
 // SCHEMA (the shared "vector features" IR — floorplans could emit the same shape):
 //   { "source", "name",
 //     "bbox":  [minx, miny, maxx, maxy],          // local metres, origin at SW corner, Y north-up
-//     "features": [ { "kind": "highway"|"arterial"|"road"|"track",
-//                     "name": "...", "pts": [x0,y0, x1,y1, ...] } ] }   // pts in the same local-metre frame
+//     "features": [ { "kind": <class>, "name": "...",
+//                     "sub": "...",                   // refining OSM tag (building=* type); omitted if none
+//                     "pts": [x0,y0, x1,y1, ...] } ] }  // pts in the same local-metre frame
+//   class ∈ line:  highway arterial road track canal coast rail
+//          area:  water building green sand residential commercial industrial farm parking
+//          point: tree
+//   "sub" lets a downstream consumer (e.g. one that extrudes individual buildings) keep the
+//   OSM building category without re-querying; the roadview cart ignores it.
 //
 // The cart fits bbox→screen and flips Y for the screen's downward axis. Coordinates are
 // already PROJECTED (web-mercator metres) so the cart needs no geo math.
@@ -43,17 +49,33 @@ function merc(lon, lat) {
           R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))];
 }
 
-// OSM tags → our broad classes (null = drop). "water" = a filled area; everything
-// else is a polyline. Water is checked first so a riverbank polygon wins over any
-// stray highway tag on the same way.
+// OSM tags → our broad classes (null = drop). Area kinds (filled): water, building,
+// green, sand, and the landuse "zoning" blocks (residential/commercial/industrial/
+// farm/parking). Line kinds: canal, coast, rail, and the road classes. Order matters
+// (first match wins): water and building are tested first so a riverbank polygon or a
+// footprint wins over any stray landuse/highway tag on the same way.
 function classifyWay(t) {
   if (t.natural === 'water' || t.water || t.waterway === 'riverbank' ||
       t.landuse === 'reservoir' || t.landuse === 'basin') return 'water';   // area, filled
   if (t.building && t.building !== 'no') return 'building';                  // area, filled (footprint)
+  // green ground: parks/woods/grass + cemeteries, allotments, sports, orchards
   if (t.natural === 'wood' || t.natural === 'scrub' || t.natural === 'grassland' ||
       t.landuse === 'forest' || t.landuse === 'grass' || t.landuse === 'meadow' ||
-      t.leisure === 'park' || t.leisure === 'garden' || t.leisure === 'nature_reserve')
+      t.landuse === 'cemetery' || t.landuse === 'allotments' || t.landuse === 'orchard' ||
+      t.landuse === 'vineyard' || t.landuse === 'recreation_ground' || t.landuse === 'village_green' ||
+      t.leisure === 'park' || t.leisure === 'garden' || t.leisure === 'nature_reserve' ||
+      t.leisure === 'pitch' || t.leisure === 'golf_course' || t.leisure === 'recreation_ground')
     return 'green';                                                         // area, filled (park/wood)
+  if (t.natural === 'beach' || t.natural === 'sand') return 'sand';         // area, filled
+  // SimCity-style zoning blocks (area fills): residential=green, commercial=blue, industrial=yellow
+  if (t.landuse === 'residential') return 'residential';
+  if (t.landuse === 'commercial' || t.landuse === 'retail') return 'commercial';
+  if (t.landuse === 'industrial' || t.landuse === 'warehouse' || t.landuse === 'port' ||
+      t.man_made === 'works') return 'industrial';
+  if (t.landuse === 'farmland' || t.landuse === 'farmyard' || t.landuse === 'farm') return 'farm';
+  if (t.amenity === 'parking' || t.landuse === 'garages') return 'parking'; // area, filled
+  if (t.natural === 'coastline') return 'coast';                            // line
+  if (/^(rail|light_rail|tram|subway|narrow_gauge|monorail)$/.test(t.railway || '')) return 'rail';  // line, dashed
   if (/^(river|canal|stream|drain|ditch)$/.test(t.waterway || '')) return 'canal';  // line
   const hw = t.highway || '';
   if (/^(motorway|trunk)(_link)?$/.test(hw)) return 'highway';
@@ -90,7 +112,9 @@ function buildDoc(source, name, ways) {
     if (local.length < 1 || (local.length < 2 && w.kind !== 'tree')) continue;  // trees are single points
     const flat = [];
     for (const [x, y] of local) flat.push(round(x), round(y));
-    features.push({ kind: w.kind, name: w.name || '', pts: flat });
+    const feat = { kind: w.kind, name: w.name || '', pts: flat };
+    if (w.sub) feat.sub = w.sub;                  // refining tag (building type) for downstream consumers
+    features.push(feat);
   }
   return {
     source, name,
@@ -178,13 +202,27 @@ function demo() {
   }
   // street trees lining the central avenue
   for (let x = 600; x < W - 400; x += 90) ways.push({ kind: 'tree', name: '', pts: [[x, H / 2 - 70]] });
+  // SimCity-style zoning blocks (closed rects = areas) — drawn UNDER the buildings/roads.
+  const rect = (kind, x, y, w, h, sub) =>
+    ways.push({ kind, name: '', ...(sub ? { sub } : {}),
+                pts: [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]] });
+  rect('residential', 1500, 1850, 1500, 600);   // green zone (housing) S of centre
+  rect('residential',  900, 1100,  700, 700);
+  rect('commercial',  2300, 1100,  900, 600);    // blue zone (shops) downtown
+  rect('industrial',  3000, 2000, 1000, 800);    // yellow zone (works) SE edge
+  rect('farm',          80,  200, 1000, 700);    // brown field, SW corner
+  rect('farm',        3300,  100,  900, 600);    // brown field, NE corner
+  rect('parking',     2250, 1720,  220, 150);    // a lot beside the commercial zone
+  // a rail line cutting NW→SE across town (drawn dashed)
+  ways.push({ kind: 'rail', name: 'Spoorlijn', pts: wig(20, -100, 2400, W + 100, 400, 120) });
   // a scatter of building footprints in the downtown blocks (closed rects = areas)
+  const btypes = ['house', 'apartments', 'commercial', 'retail', 'industrial'];
   for (let bx = 1500; bx < 3200; bx += 240) {
     for (let by = 1100; by < 2300; by += 200) {
       if (!inDisc(bx, by) || rnd() < 0.25) continue;        // gaps = streets/yards
       const w = 70 + rnd() * 90, h = 60 + rnd() * 80;        // 6–16 m footprints
       const ox = bx + (rnd() - 0.5) * 40, oy = by + (rnd() - 0.5) * 40;
-      ways.push({ kind: 'building', name: '',
+      ways.push({ kind: 'building', name: '', sub: btypes[(s >> 4) % btypes.length],
                   pts: [[ox, oy], [ox + w, oy], [ox + w, oy + h], [ox, oy + h], [ox, oy]] });
     }
   }
@@ -204,15 +242,16 @@ async function geocode(place) {
 // ---- Overpass fetch for a bbox ----
 async function overpass(S, W, N, E, name) {
   const bb = `(${S},${W},${N},${E})`;
-  const q = `[out:json][timeout:90];(` +
+  const q = `[out:json][timeout:120];(` +
             `way["highway"]${bb};` +
+            `way["railway"~"^(rail|light_rail|tram|subway|narrow_gauge|monorail)$"]${bb};` +
             `way["waterway"~"^(river|canal|stream|drain|ditch|riverbank)$"]${bb};` +
-            `way["natural"="water"]${bb};` +
-            `way["landuse"~"^(reservoir|basin)$"]${bb};` +
+            `way["natural"~"^(water|coastline|beach|sand)$"]${bb};` +
             `way["building"]${bb};` +
             `way["natural"~"^(wood|scrub|grassland)$"]${bb};` +
-            `way["landuse"~"^(forest|grass|meadow)$"]${bb};` +
-            `way["leisure"~"^(park|garden|nature_reserve)$"]${bb};` +
+            `way["landuse"]${bb};` +                                  // all landuse → classifyWay keeps zoning/green, drops the rest
+            `way["leisure"~"^(park|garden|nature_reserve|pitch|golf_course|recreation_ground)$"]${bb};` +
+            `way["amenity"="parking"]${bb};` +
             `node["natural"="tree"]${bb};` +
             `);out geom;`;
   console.log(`querying Overpass for bbox ${S},${W},${N},${E} …`);
@@ -245,9 +284,11 @@ async function overpass(S, W, N, E, name) {
       continue;
     }
     if (el.type !== 'way' || !el.geometry) continue;
-    const kind = classifyWay(el.tags || {});
+    const tags = el.tags || {};
+    const kind = classifyWay(tags);
     if (!kind) continue;
-    ways.push({ kind, name: el.tags?.name || '',
+    ways.push({ kind, name: tags.name || '',
+                sub: kind === 'building' ? (tags.building !== 'yes' ? tags.building : '') : '',
                 pts: el.geometry.map(g => merc(g.lon, g.lat)) });
   }
   if (!ways.length) throw new Error('no roads in that bbox');

@@ -3,11 +3,14 @@
 // A broad-strokes map of an actual place. The road network is NOT generated and NOT
 // baked into this cart — it's a JSON file fetched from OpenStreetMap (or the synthetic
 // --demo set) and loaded when the cart starts, via --data <file>. Swap the file, see a
-// different city; the cart never changes. Each way is classed HIGHWAY / ARTERIAL / ROAD
-// / TRACK and drawn in its colour, widths sized in real metres so they fatten as you
-// zoom in. The experiment: data-driven carts that read a blob at runtime instead of
-// regenerating source per dataset (the floorwalker/seinelaan smell). See
-// docs/design/external-data-carts.md.
+// different city; the cart never changes. Roads are classed HIGHWAY / ARTERIAL / ROAD /
+// TRACK (widths in real metres, so they fatten as you zoom in); rail is a dashed line.
+// Underneath sit SimCity-style zoning blocks — residential = green, commercial = blue,
+// industrial = yellow, farm = brown, parking = grey — plus parks, water and sand. Building
+// footprints get a thin outline so each one stays separable (the JSON also carries the OSM
+// building type in `sub`, for a downstream consumer that extrudes individual buildings).
+// The experiment: data-driven carts that read a blob at runtime instead of regenerating
+// source per dataset (the floorwalker/seinelaan smell). See docs/design/external-data-carts.md.
 //
 //   make the data:   node tools/osm-roads.js --demo            (writes data/demo.json)
 //                     node tools/osm-roads.js --place "Delft"   (writes data/delft.json)
@@ -25,21 +28,33 @@
 #include "json.h"      // EXPERIMENTAL cart-land JSON reader (vendored jsmn)
 #include <stdlib.h>    // abs
 
-enum { K_HIGHWAY, K_ARTERIAL, K_ROAD, K_TRACK, K_WATER, K_CANAL, K_BUILDING, K_GREEN, K_TREE, K_N };
+enum { K_HIGHWAY, K_ARTERIAL, K_ROAD, K_TRACK, K_WATER, K_CANAL, K_BUILDING, K_GREEN, K_TREE,
+       K_RESIDENTIAL, K_COMMERCIAL, K_INDUSTRIAL, K_FARM, K_PARKING, K_SAND, K_RAIL, K_COAST, K_N };
 
-// per-class style: colour, casing colour, and real-world half-width in metres.
-// WATER/BUILDING/GREEN are filled areas, TREE is a point dot (hw_m unused); rest are polylines.
+// per-class style: colour, casing/outline colour, and real-world half-width in metres.
+// Area fills (hw_m unused): WATER/BUILDING/GREEN/SAND + the zoning blocks RESIDENTIAL/
+// COMMERCIAL/INDUSTRIAL/FARM/PARKING. For BUILDING, `casing` is the footprint OUTLINE
+// (drawn 1px around the fill so each footprint stays separable). TREE is a point dot.
+// Lines (use hw_m): the road classes, CANAL, COAST, and RAIL (dashed).
 typedef struct { int col, casing; float hw_m; const char *label; } Style;
 static const Style ST[K_N] = {
-    /* HIGHWAY  */ { CLR_ORANGE,     CLR_BROWN,      7.0f, "highway"  },
-    /* ARTERIAL */ { CLR_YELLOW,     CLR_BROWN,      5.0f, "arterial" },
-    /* ROAD     */ { CLR_LIGHT_GREY, CLR_DARK_GREY,  3.0f, "road"     },
-    /* TRACK    */ { CLR_BROWN,      CLR_BROWN,      1.5f, "track"    },
-    /* WATER    */ { CLR_BLUE,       CLR_BLUE,       0.0f, "water"    },
-    /* CANAL    */ { CLR_BLUE,       CLR_BLUE,       4.0f, "canal"    },
-    /* BUILDING */ { CLR_DARK_GREY,  CLR_DARK_GREY,  0.0f, "building" },
-    /* GREEN    */ { CLR_DARK_GREEN, CLR_DARK_GREEN, 0.0f, "park"     },
-    /* TREE     */ { CLR_GREEN,      CLR_GREEN,      0.0f, "trees"    },
+    /* HIGHWAY     */ { CLR_ORANGE,       CLR_BROWN,        7.0f, "highway"     },
+    /* ARTERIAL    */ { CLR_YELLOW,       CLR_BROWN,        5.0f, "arterial"    },
+    /* ROAD        */ { CLR_LIGHT_GREY,   CLR_DARK_GREY,    3.0f, "road"        },
+    /* TRACK       */ { CLR_BROWN,        CLR_BROWN,        1.5f, "track"       },
+    /* WATER       */ { CLR_BLUE,         CLR_BLUE,         0.0f, "water"       },
+    /* CANAL       */ { CLR_BLUE,         CLR_BLUE,         4.0f, "canal"       },
+    /* BUILDING    */ { CLR_DARK_GREY,    CLR_LIGHT_GREY,   0.0f, "building"    },  // casing = outline
+    /* GREEN       */ { CLR_DARK_GREEN,   CLR_DARK_GREEN,   0.0f, "park"        },
+    /* TREE        */ { CLR_GREEN,        CLR_GREEN,        0.0f, "trees"       },
+    /* RESIDENTIAL */ { CLR_MEDIUM_GREEN, CLR_MEDIUM_GREEN, 0.0f, "residential" },  // SimCity R = green
+    /* COMMERCIAL  */ { CLR_TRUE_BLUE,    CLR_TRUE_BLUE,    0.0f, "commercial"  },  // SimCity C = blue
+    /* INDUSTRIAL  */ { CLR_LIGHT_YELLOW, CLR_LIGHT_YELLOW, 0.0f, "industrial"  },  // SimCity I = yellow
+    /* FARM        */ { CLR_BROWN,        CLR_BROWN,        0.0f, "farm"        },
+    /* PARKING     */ { CLR_MEDIUM_GREY,  CLR_MEDIUM_GREY,  0.0f, "parking"     },
+    /* SAND        */ { CLR_LIGHT_PEACH,  CLR_LIGHT_PEACH,  0.0f, "sand"        },
+    /* RAIL        */ { CLR_DARKER_GREY,  CLR_DARKER_GREY,  2.0f, "rail"        },  // dashed line
+    /* COAST       */ { CLR_DARK_BLUE,    CLR_DARK_BLUE,    1.0f, "coast"       },
 };
 
 // footprints + tree dots are LOD-gated: only drawn once zoomed in enough that they are a
@@ -88,6 +103,14 @@ static int kind_of(const char *js, const jsmntok_t *t) {
     if (json_eq(js, t, "building")) return K_BUILDING;
     if (json_eq(js, t, "green"))    return K_GREEN;
     if (json_eq(js, t, "tree"))     return K_TREE;
+    if (json_eq(js, t, "residential")) return K_RESIDENTIAL;
+    if (json_eq(js, t, "commercial"))  return K_COMMERCIAL;
+    if (json_eq(js, t, "industrial"))  return K_INDUSTRIAL;
+    if (json_eq(js, t, "farm"))        return K_FARM;
+    if (json_eq(js, t, "parking"))     return K_PARKING;
+    if (json_eq(js, t, "sand"))        return K_SAND;
+    if (json_eq(js, t, "rail"))        return K_RAIL;
+    if (json_eq(js, t, "coast"))       return K_COAST;
     return K_ROAD;
 }
 
@@ -191,7 +214,40 @@ static void fill_areas(int kind) {
         }
         if (maxx < 0 || minx > SCREEN_W || maxy < 0 || miny > SCREEN_H) continue;
         polyfill(sxy, c, col);
+        // outline: when casing differs from fill (buildings), trace the ring 1px so each
+        // footprint stays visually separable — matters for downstream "extract buildings".
+        int oc = ST[kind].casing;
+        if (oc != col) {
+            for (int j = 0; j + 1 < c; j++)
+                line(sxy[j * 2], sxy[j * 2 + 1], sxy[(j + 1) * 2], sxy[(j + 1) * 2 + 1], oc);
+            line(sxy[(c - 1) * 2], sxy[(c - 1) * 2 + 1], sxy[0], sxy[1], oc);   // close the ring
+        }
     }
+}
+
+// rail: a thin DASHED line (drawn as gapped dots), so it reads as track, not road.
+static void stroke_dashed(int start, int count, int r, int col) {
+    if (r < 1) r = 1;
+    int phase = 0;
+    for (int k = 0; k + 1 < count; k++) {
+        int x0 = sx(PX[start + k]),     y0 = sy(PY[start + k]);
+        int x1 = sx(PX[start + k + 1]), y1 = sy(PY[start + k + 1]);
+        if ((x0 < -r && x1 < -r) || (x0 > SCREEN_W + r && x1 > SCREEN_W + r) ||
+            (y0 < -r && y1 < -r) || (y0 > SCREEN_H + r && y1 > SCREEN_H + r)) continue;
+        int dx = x1 - x0, dy = y1 - y0;
+        int seg = (abs(dx) > abs(dy)) ? abs(dx) : abs(dy);
+        int steps = seg / (r * 2); if (steps < 1) steps = 1;
+        for (int s = 0; s <= steps; s++) {
+            if (phase++ & 1) continue;                       // every other dot → dash
+            float t = (float)s / steps;
+            circfill(x0 + (int)(dx * t), y0 + (int)(dy * t), r, col);
+        }
+    }
+}
+static void draw_rail(void) {
+    int r = (int)(ST[K_RAIL].hw_m * ppm + 0.5f); if (r < 1) r = 1; if (r > 2) r = 2;
+    for (int i = 0; i < npoly; i++)
+        if (ways[i].kind == K_RAIL) stroke_dashed(ways[i].start, ways[i].count, r, ST[K_RAIL].col);
 }
 
 // individual trees are point features (one point) → small dots, LOD-gated like footprints.
@@ -225,6 +281,7 @@ static void legend(void) {
         if (!kcount[k]) continue;
         if (k == K_BUILDING && !build_shown) continue;
         if (k == K_TREE && !tree_shown) continue;
+        if (x > SCREEN_W - 24) break;                        // don't run a long legend off-screen
         rectfill(x, SCREEN_H - 7, 6, 5, ST[k].col);
         print(ST[k].label, x + 8, SCREEN_H - 7, CLR_MEDIUM_GREY);
         x += 8 + (int)strlen(ST[k].label) * 4 + 4;
@@ -291,11 +348,20 @@ void draw(void) {
         return;
     }
 
-    // painter's order: green ground → water → footprints → roads → tree dots on top
-    fill_areas(K_GREEN);                                     // parks/woods = bottom ground layer
+    // painter's order: zoning blocks → green → water → footprints → rail → canals →
+    // coast → roads → tree dots on top.
+    fill_areas(K_FARM);                                      // zoning area fills (bottom ground layer)
+    fill_areas(K_RESIDENTIAL);
+    fill_areas(K_COMMERCIAL);
+    fill_areas(K_INDUSTRIAL);
+    fill_areas(K_PARKING);
+    fill_areas(K_SAND);
+    fill_areas(K_GREEN);                                     // parks/woods over the zoning tints
     fill_areas(K_WATER);
     if (buildings_on && ppm >= BUILD_GATE_PPM) fill_areas(K_BUILDING);
+    draw_rail();                                             // dashed
     draw_class(K_CANAL, 1);
+    draw_class(K_COAST, 1);
     draw_class(K_TRACK, 1);
     draw_class(K_ROAD,  1);
     draw_class(K_ARTERIAL, 0); draw_class(K_HIGHWAY, 0);      // casings
