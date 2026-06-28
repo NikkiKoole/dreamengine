@@ -135,6 +135,9 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              road-check.js   correctness oracle for coverage-based roads: framebuffer invariants (no naked
                              edges / strays / floating kerb) at ANY angle; --all = config-matrix gate; --overlay
              build-site.js / publish-cart.sh   build wasm carts + gallery → site/; publish + push
+             osm-roads.js    EXPERIMENTAL: fetch real OSM road geometry → "vector features" JSON/.rvb the
+                             roadview cart loads at RUNTIME (--bbox/--place/--demo/--convert); swap cities by
+                             swapping files, no cart regen (see docs/design/external-data-carts.md)
              mobile-lint.js  static report card: can a phone play this cart?
              wav-analyze.js / tune-check.js / dc-check.js / level-check.js / fx-check.js /
                              soak-check.js / web-audio-check.js   audio gates (see "Key things to know")
