@@ -114,8 +114,16 @@ mirrors sw_print's advance → headless omnichord now matches Raylib exactly. ~~
 `#ifndef DE_NO_RAYLIB` (SW keys per-pixel), and `GetRandomValue` got a real LCG. **heroes** (tilemap +
 11 sprites) renders **pixel-identical** to Raylib headless. (masseffect's unit sprites render too; its
 map grid diverges only because its camera/wave state rides Raylib's exact rng sequence — not a sprite
-bug.) Remaining: (3) audio: wire `de_audio_render` → `sound_callback`. Then the iOS shell (`project.yml
--DDE_NO_RAYLIB`, CanvasView blit, CoreAudio) — the spike-1/2 work already proved that half.
+bug.) ~~(3) audio~~ DONE — `de_audio_render` pumps `sound_callback` (the real mixer); `de_frame`'s
+`loop_step` advances the sequencer via `sound_tick`. tb303 rendered headless with NO Raylib is
+**byte-identical** to the Raylib `--wav` (correlation 1.00000) once the first-frame dt matches det_mode.
+
+**All three follow-ups closed — the portable engine is complete on desktop:** real `studio.c` + `sound.h`
+render graphics (omnichord 2D, heroes tilemap+sprites pixel-identical) AND audio (tb303 byte-identical),
+headless, with zero Raylib / zero frameworks. `tools/headless-nr.c` is the proof harness (frame→PPM,
+audio→WAV). **Next is purely the iOS shell**: `project.yml` with `-DDE_NO_RAYLIB` + the runtime sources,
+`CanvasView` blitting `de_framebuffer()` (flip — sw_cbuf is bottom-up), CoreAudio pulling
+`de_audio_render()` — all three already proven by spikes 1/2 with the stand-in `canvas.c`/`audio.c`.
 
 ## The three refactors that unlock iOS (and help web)
 
