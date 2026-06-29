@@ -186,6 +186,10 @@ What I'd actually ship, weighing tribe over craft. (My assessment; tribe sizes f
 - **The loyal niche: dungeon synth (`ancient-library`) + the IDM/Warp set (`braindance`/`plaid`/
   `squarepusher`).** Small tribes, but the kind that *evangelize* and pay — and the IDM carts are
   engine-rich *and* tribe-rich, the rare overlap.
+- **The cult-instrument dark horses (see §3.8):** `martenot` (Ondes Martenot — extinct, Radiohead's
+  grail, *near-zero competition*), `easel` (Buchla), `solina` (string machine), `kaoss` (Korg Kaoss
+  Pad). The same omnichord logic — razor-precise tribe + extreme price gap — applied to instruments
+  with *even more devoted* cults. Plus the `hurdygurdy` → dungeon-synth two-birds bridge.
 - **Honest "build for love, not money":** `gamelan`, `carlos`, `addis`, `tango`, `mariachi`. The
   engine's proudest work; commercially marginal. Keep them free in the gallery as the soul of the
   project (the north-star "legible-and-delightful" bar) — don't expect them to carry IAP.
@@ -193,6 +197,35 @@ What I'd actually ship, weighing tribe over craft. (My assessment; tribe sizes f
 Bottom line: **the radios' build order was set by what teaches the engine; the *product* order should
 be set by where the tribes are.** The two lists barely overlap — `lofi`, `italo`, `vapor`, `handpan`
 and `plantasia` are the commercial sleepers hiding in plain sight, none of them top of the craft list.
+
+### 3.8 Beyond the obvious: the holy-grail / cult-instrument modules
+
+The shelf already holds carts that homage instruments whose *real* versions are **rare,
+unobtainable, or absurdly expensive**. That's the strongest possible version of the §1 price-anchor
+move: the "I'll never own the real thing" gap is extreme, the tribe is razor-precise, and — for the
+truly rare ones — there's almost no charming lo-fi competition on a phone. These are arguably *better*
+instrument-module bets than half the genre racks. **All tribes below web-verified 2026-06-29.**
+
+| Cart | Instrument | Tribe (verified) | Where they gather (leads) | Hook / caveat |
+|---|---|---|---|---|
+| **`martenot`** ✅ | **Ondes Martenot** (1928) | The ultimate rarity: **only ~70 of 281 ever built survive** — "threatened with extinction." Jonny Greenwood (Radiohead) is its public *champion*; classical + film-score + electronic aficionados; a documentary (*Wavemakers*) follows the community. | Radiohead/Greenwood fan spaces, r/synthesizers, classical-electronic & film-score circles | "The extinct instrument Radiohead made famous — playable, in your pocket." **Near-zero lo-fi competition.** The standout. |
+| **`easel`** ✅ (+ `lpg`) | **Buchla Music Easel** / low-pass gate | **West-Coast synthesis holy grail** (~$2,100+ hardware). Beloved by Suzanne Ciani, Morton Subotnick, Alessandro Cortini (NIN), Kaitlyn Aurelia Smith. | **Loopy Pro forum already has a West-Coast/Buchla/Serge thread**; r/synthesizers; r/modular | "West-Coast weirdness — electricity as the instrument." ⚠️ *Caveat:* Arturia ships a software **Easel V**, so compete on lo-fi charm/price/touch, not feature parity. |
+| **`solina`** ✅ | **ARP/Eminent Solina String Ensemble** (1974) | The string-machine cult — "a sound that can't be sampled." Heard on Eno, Air, Joy Division, the Cure, Gorillaz, Prince. | Vintage-synth forums (Gearspace, VSE), r/synthesizers, ambient/synthwave crossover | "That lush, shimmering string-machine wash — the secret sauce of a hundred records." ⚠️ Some VST competition. |
+| **`kaoss`** ✅ | **Korg Kaoss Pad** XY effect/sampler | DJ / electronic staple **since 1998**; Korg shipped a brand-new **Kaoss Pad V in Jan 2026** — a live, current line. | DJ communities, r/DJs, electronic-producer spaces | "X-Y finger chaos — mangle anything in real time." *Shape: effect/sampler → an effect AUv3, not a generative jam.* |
+| **`hurdygurdy`** ✅ | hurdy-gurdy | Real **neo-medieval / pagan-folk** revival (Faun, Omnia; festivals like Castlefest). **Directly overlaps the dungeon-synth tribe** (medieval-fantasy aesthetic) — sources link the two genres explicitly. | r/dungeonsynth (shared), neo-medieval/pagan-folk & neofolk communities, Castlefest scene | "Crank the drone — score the tavern, the dungeon, the procession." **The two-birds bridge into the `ancient-library` tribe.** |
+| **`turing`** ✅ | **Music Thing Modular Turing Machine** | "One of the most popular **Eurorack DIY** projects" (since 2012); active generative/modular following (#turingmachine on IG, many offshoots incl. Mutable Marbles, VCV Rack). | r/modular, ModularGrid, generative-music communities | "Random looping sequences that slip and evolve — generative basslines you steer." *Shape: generative sequencer, rack-adjacent.* |
+
+**A distinct second product line — "expressive playables."** A cluster of *continuous-pitch /
+gestural* carts don't fit the sequencer-rack shape at all; they're for **performance**, so they'd
+ship as *play-it* toys + AUv3 *instruments* (not generative jams): `glassharmonica` (Franklin's eerie
+glass), `heldnotes` (theremin), musical saw, `otamatone`, `monochord`, `fretboard`, `mouthharp`,
+`voxlab` (formant voice — a Toy-Town/circuit-bend angle). Smaller individually, but novelty- and
+video-friendly, and a coherent sub-brand ("Tinyjam: the strange-instruments shelf").
+
+**Product-shape reminder:** several cult carts are **effects or loopers, not jams** (`kaoss`,
+`spacecho`, `tapeloop`, `lpg`). As tinyjams they're *effect AUv3s* / *performance toys* — a different
+store listing and pitch than the generative genre racks. Name the shape up front so the campaign and
+the IAP copy match what the buyer gets.
 
 ## 4. The cross-cutting channels (where *every* campaign also posts)
 
