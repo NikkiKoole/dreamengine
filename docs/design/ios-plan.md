@@ -46,7 +46,7 @@ Each spike is a small throwaway that kills one unknown. Riskiest cheap-thing fir
 | 1 | software-canvas framebuffer → on-screen, driven by the iOS callback loop | the render path + loop inversion | sim | ✅ **done** — C RGBA buffer → CGImage → `CADisplayLink`; see `ios/history/spike1-canvas-loop.png` |
 | 2 | audio: a C synth filling a CoreAudio render callback (`AVAudioSourceNode`) | the audio path | sim | ✅ **done** — stand-in arpeggio; VU meter proves callback pulled; `sound.h` swap-in is the follow-up. See `ios/history/spike2-audio-vu.png` |
 | 3 | save: a `save_bytes` blob in the Documents dir via an Obj-C path bridge | the save layer | sim | — |
-| 4 | StoreKit 2 + a local `.storekit` config (StoreKitTest): buy / entitlements / restore, queried from C | the IAP model, no account/network | sim | — |
+| 4 | StoreKit 2 + a local `.storekit` config (StoreKitTest): buy / entitlements, queried from C | the IAP model, no account/network | sim | ✅ **done** — in-house bridge (`Store.swift` + `tinyjam_store.h` via `@_cdecl`); headless XCTest buys → unlocks (master pass unlocks all). See `ios/history/spike4-storekit-gate.png` |
 | 5 | App Group: app writes `unlocked:<rack>`, a second target reads it | entitlement sharing for AUv3 | sim | — |
 | 6 | CloudKit sync of a saved tinyjam across devices (native-only nicety) | free cross-device sync | sim | — |
 | 7 | minimal AUv3 extension makes sound in a host | the killer feature | **device + signing** | — |
@@ -75,3 +75,14 @@ already uses, extended to iOS.
 - Then spikes 2–4 (audio, save, StoreKit-local) — all still simulator-free-tier.
 - `ios/` is a new top-level dir; if it grows, give it a one-line entry in the `docs/README.md` layout
   tree (and CLAUDE.md project-structure) so it stays discoverable.
+
+Gotchas captured (so nobody re-hits them):
+- **Swift is 5.9.2** (Xcode 15.1) — no `nonisolated(unsafe)` (that's 5.10+). Plain `static var` for
+  the C-readable entitlement cache.
+- **`Tinyjam.storekit` currently ships in the app bundle** (so `SKTestSession` finds it via the main
+  bundle). Harmless for the spike; **exclude it from release builds** before shipping.
+- **StoreKit-test purchases persist per-simulator** across plain launches — handy (the in-app gate
+  shows unlocked) but reset with `xcrun simctl` / `session.clearTransactions()` if you want a clean
+  locked state.
+- **`simctl launch` does NOT apply a scheme's StoreKit config** — that's why the headless proof is an
+  XCTest using `SKTestSession(configurationFileNamed:)`, not a plain app launch.

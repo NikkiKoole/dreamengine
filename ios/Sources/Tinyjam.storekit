@@ -1,0 +1,43 @@
+{
+  "appPolicies" : { "eula" : "", "policies" : [] },
+  "identifier" : "F1A2B3C4",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "00000000-0000-0000-0000-000000000001",
+      "localizations" : [
+        { "description" : "The Rebirth acid-techno rack.", "displayName" : "Tinyjam: Rebirth", "locale" : "en_US" }
+      ],
+      "productID" : "com.tinyjam.rebirth",
+      "referenceName" : "Rebirth",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "00000000-0000-0000-0000-000000000002",
+      "localizations" : [
+        { "description" : "The Funk groovebox rack.", "displayName" : "Tinyjam: Funk", "locale" : "en_US" }
+      ],
+      "productID" : "com.tinyjam.funk",
+      "referenceName" : "Funk",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "00000000-0000-0000-0000-000000000003",
+      "localizations" : [
+        { "description" : "Unlock every rack, now and future.", "displayName" : "Tinyjam Master Pass", "locale" : "en_US" }
+      ],
+      "productID" : "com.tinyjam.masterpass",
+      "referenceName" : "Master Pass",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : { "_failTransactionsEnabled" : false },
+  "subscriptionGroups" : [],
+  "version" : { "major" : 3, "minor" : 0 }
+}

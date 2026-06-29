@@ -1,5 +1,6 @@
 #include "canvas.h"
 #include "audio.h"
+#include "tinyjam_store.h"
 #include <math.h>
 
 static uint8_t fb[DE_W * DE_H * 4];
@@ -45,4 +46,11 @@ void de_update(double t) {
     for (int x = 0; x < DE_W; x++)
         for (int y = 4; y < 10; y++)
             pset(x, y, x < vu ? 120 : 36, x < vu ? 230 : 30, x < vu ? 140 : 40);
+    // store gate indicator (top-right): green if the Rebirth rack is unlocked, else red.
+    // Proves the C→Swift StoreKit bridge round-trips, reflecting live entitlements (a purchase
+    // from the headless test persists in the simulator's StoreKit-test store → shows green).
+    int unlocked = Store_IsModuleUnlocked("com.tinyjam.rebirth");
+    for (int y = 14; y < 22; y++)
+        for (int x = DE_W - 10; x < DE_W - 2; x++)
+            pset(x, y, unlocked ? 90 : 220, unlocked ? 220 : 60, unlocked ? 110 : 60);
 }

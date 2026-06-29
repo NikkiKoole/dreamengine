@@ -19,3 +19,23 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Bridging-Header.h
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
+  TinyjamHelloTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: TinyjamHello
+      - sdk: StoreKitTest.framework
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.tinyjam.hello.tests
+schemes:
+  TinyjamHello:
+    build:
+      targets:
+        TinyjamHello: all
+    run: {}
+    test:
+      targets:
+        - TinyjamHelloTests

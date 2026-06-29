@@ -14,6 +14,9 @@ struct ContentView: View {
             Color.black.ignoresSafeArea()
             CanvasViewRep().ignoresSafeArea()
         }
-        .onAppear { AudioEngine.shared.start() }   // spike 2 — start the synth
+        .onAppear {
+            AudioEngine.shared.start()   // spike 2 — start the synth
+            Store_Init()                 // spike 4 — load products + entitlements
+        }
     }
 }
