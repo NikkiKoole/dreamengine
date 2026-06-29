@@ -95,7 +95,7 @@ hook. (Channels are **leads to verify**, not confirmed live.)
 | **ancient-library** (dungeon synth) ✅ | **Dungeon synth** — one of the most passionate, self-contained micro-scenes online; a real mid-2010s→now Bandcamp/YouTube boom. A *perfect* bullseye. | **r/dungeonsynth** (active — manually confirmed), Dungeon Synth Archives (YouTube), the **Bandcamp dungeon-synth tag** (the scene's home) | "Hurdy-gurdy drones, stone mallets and a ghost choir — score your own dungeon." |
 | **space-age bachelor pad** (exotica) ✅ | **Exotica / tiki / lounge** revival — Martin Denny, Esquivel, Les Baxter devotees. Niche but moneyed and aesthetic-obsessed. | **Tiki Central** (tikicentral.com — active exotica/lounge forum), exotica/lounge subreddits & groups | "Vibraphone, bird calls and bongos — mix a cocktail-lounge loop." |
 | **radiophonic** (vintage sci-fi) | **BBC Radiophonic Workshop / Delia Derbyshire** fans, hauntology crowd (Ghost Box-adjacent), vintage-sci-fi sound nerds. | hauntology communities, ambient/experimental subreddits, Delia/Radiophonic fan spaces | "Theremin, wobbling tape and noise clicks — make a lost BBC test transmission." |
-| **spaghetti western** (desert noir) | **Morricone** / film-score fans, "desert noir" aesthetic crowd. | r/filmscores, soundtrack communities, Western-revival pockets | "Whistling saw, twang and a lonely trumpet — your own standoff theme." |
+| **spaghetti western** (desert noir) ✅ | **Morricone** / film-score fans, "desert noir" aesthetic crowd. | **Film Score Monthly**, **Filmtracks**, **Maintitles** forums, Morricone FB collector groups, r/Soundtracks | "Whistling saw, twang and a lonely trumpet — your own standoff theme." |
 | **broken fairground** (carnival macabre) ✅ | Dark-ambient / horror-soundtrack / creepy-carnival aesthetic fans (+ the Halloween/haunt crowd). | Cryo-Chamber-style dark-ambient communities, creepy-carnival Spotify/YouTube playlists, haunt/Halloween forums | "A calliope that's slightly wrong — carnival music for a haunted one." |
 | **toy-town glitch** (circuit-bent) ✅ | **Circuit-benders**, glitch & lo-fi experimentalists. | the **bent // broken festival** + circuit-bent.net, glitch/experimental communities, the bent-toy scene | "Bent nursery-toy sounds, but they stay in tune — broken on purpose." |
 
@@ -126,7 +126,8 @@ What was confirmed vs. still a lead. ✅ in the tables above marks rows backed b
 | **Mellotron / prog** (tape-choir) | ✅ active | Vintage Synth Explorer + TalkBass threads; Steven Wilson/King Crimson lineage. ⚠️ software competition (Arturia Mellotron V, GForce) — compete on charm. |
 | **Dark-ambient / horror-carnival** (Broken Fairground) | ✅ active | Cryo-Chamber-style dark-ambient (Atrium Carceri), creepy-carnival Spotify/YouTube playlists, the Halloween/haunt community. |
 | **Krautrock / motorik** (motorik) | ✅ documented | Real tribe (Neu!/Can/Stereolab-as-gateway, "Krautmania", Quietus essays). Niche, literate, loyal. |
-| **Spaghetti-Western / Morricone** + **yacht-rock** | ⏳ leads | Morricone's fandom is obviously massive but I couldn't pin a *specific* forum (r/filmscores/soundtrack are the likely homes); yacht-rock revival not yet verified. Confirm the exact channel before campaigning. |
+| **Spaghetti-Western / Morricone** | ✅ active | Dedicated film-score forums: **Film Score Monthly (FSM)**, **Filmtracks**, **Maintitles**, Movie Music UK, even a Morricone discussion board; + ProgArchives threads, Facebook collector groups, r/Soundtracks. 400+ scores, devoted collector base. |
+| **Yacht-rock** (yacht) | ✅ hot right now | A live revival: **HBO's *Yacht Rock: A DOCKumentary*** (Nov 2024) → global on Netflix (Jun 2025), Questlove-driven, "Steely Dan/Toto cool again" (Variety/NPR); tribute-band scene; Mac DeMarco/Thundercat cited as heirs (ties to `jangle`/`citypop`). |
 
 ### 3.6 The radio stations as tinyjams — and the craft-vs-market warning
 
@@ -161,7 +162,8 @@ tribes**. **For tinyjam product selection, re-rank by tribe — do not inherit t
   `dub` (dub-reggae gear scene) · `plantasia` (the cottagecore/**houseplant** + synth crossover — the
   2019 Sacred Bones reissue went *viral via plant-care communities*, charted #6 US indie).
 - **Tier-B (passionate niche — the bullseyes that punch above their size):** dungeon synth
-  (`ancient-library`) · exotica (`exotica`, Tiki Central) · `motorik` (krautrock) · `yacht` (yacht-rock).
+  (`ancient-library`) · exotica (`exotica`, Tiki Central) · `motorik` (krautrock) · `yacht` (yacht-rock —
+  riding a live 2024–25 HBO/Netflix-doc revival; arguably Tier-A right now).
 - **Tier-C (craft darlings, commercially niche — build for love/lineage, not the register):** `gamelan`,
   `carlos`, `addis`, `tango`, `mariachi`, `bossa`, `satie`, `afrobeat`.
 
