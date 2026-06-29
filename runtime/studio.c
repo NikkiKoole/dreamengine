@@ -1824,13 +1824,24 @@ static void save_dir_set(const char *dir) {
 #endif
 
 // Engine-owned PNG decode — the single entry point for turning an embedded .png
-// blob into an Image (platform seam, phase B/C). Raylib backends use Raylib's
-// decoder (stb_image internally), so this is bit-identical to the inline
-// LoadImageFromMemory calls it replaced. The DE_NO_RAYLIB branch (vendored
-// stb_image → DeImage) lands with the iOS backend, in this one place.
+// blob into an Image (platform seam, phase B/C). Both backends decode with the
+// SAME stb_image code (Raylib uses it internally), so the result is bit-identical.
+#ifdef DE_NO_RAYLIB
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG               // the engine only embeds PNG blobs
+#include "stb_image.h"
+static Image de_image_decode(const unsigned char *png, int len) {
+    int w = 0, h = 0, ch = 0;
+    stbi_uc *px = stbi_load_from_memory(png, len, &w, &h, &ch, 4);   // force RGBA8888
+    Image img = { px, w, h, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+    return img;
+}
+#else
 static Image de_image_decode(const unsigned char *png, int len) {
     return LoadImageFromMemory(".png", png, len);
 }
+#endif
 
 #ifdef DE_NO_RAYLIB
 // ============================================================================
@@ -1872,8 +1883,14 @@ void de_init(DeRenderer renderer) {
     if (MAP_DATA_LEN >= sizeof(map_data)) memcpy(map_data, MAP_DATA, sizeof map_data);
     else                                  memset(map_data, 0, sizeof map_data);
     de_setup_baked_fonts();
-    // sprites: spritesheet stays empty until de_image_decode's stb branch lands;
-    // carts that don't spr() are unaffected (img_texel guards on width).
+    if (SPRITES_DATA_LEN > 0) {                 // decode the embedded sheet (stb_image) for the SW sprite path
+        Image s = de_image_decode(SPRITES_DATA, SPRITES_DATA_LEN);
+        if (s.width > 0) {
+            spritesheet_img = s;                // sw_blit/img_texel read this CPU image (no GPU texture)
+            spritesheet.width = s.width;        // the sprite/map guards check spritesheet.width and derive
+            spritesheet.height = s.height;      // cols = spritesheet.width/SPRITE_SIZE — set dims, id stays 0
+        }
+    }
     sound_synth_mode = true; sound_init();
     init();                                      // the cart's init()
     last_time = GetTime();
@@ -2527,6 +2544,11 @@ void colorkey(int color) {
     // bakes palette[color] into the texture at this moment, even if pal() changes it later.
     sw_colorkey_on = (color >= 0 && color < PALETTE_SIZE);
     if (sw_colorkey_on) sw_colorkey_rgb = palette[color];
+#ifndef DE_NO_RAYLIB
+    // GPU path: bake the key out into the sheet texture. The software path needs
+    // none of this — it keys per-pixel at blit time via sw_colorkey_on/_rgb (set
+    // above) — and these Raylib Image/Texture ops are stubs under DE_NO_RAYLIB
+    // that would clobber spritesheet to 0x0 and trip the spritesheet.width guards.
     Image tmp = ImageCopy(spritesheet_img);
     if (color >= 0 && color < PALETTE_SIZE) {
         ImageFormat(&tmp, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
@@ -2537,6 +2559,7 @@ void colorkey(int color) {
     spritesheet = LoadTextureFromImage(tmp);
     SetTextureFilter(spritesheet, TEXTURE_FILTER_POINT);
     UnloadImage(tmp);
+#endif
 }
 
 void spr(int index, int x, int y) {
@@ -4221,6 +4244,10 @@ void shake(float a)       { if (a > shake_amt) shake_amt = a; }
 int print_scaled(const char *t, int x, int y, int color, int scale) {
     PROF("print_scaled");
     if (scale < 1) scale = 1;
+    if (sw_canvas_active || cpu_raster_enabled) {   // SW/CPU scaled-glyph blit (deg 0) — else GPU text is lost on the canvas
+        if (scale != 1) { de_cpu_print_rot(t, x, y, 0.0f, scale, color, 0); return x + text_width(t) * scale; }
+        return sw_print(t, x, y, palette[color % PALETTE_SIZE]);
+    }
     float sz = cur_font_size() * scale;
     DrawTextEx(cur_font(), t, (Vector2){ (float)x, (float)y },
                sz, 0, palette[color % PALETTE_SIZE]);

@@ -34,7 +34,16 @@ int GetCharPressed(void) { return 0; }
 int GetFPS(void) { return 0; }
 Vector2 GetMousePosition(void) { Vector2 r = {0}; return r; }
 float GetMouseWheelMove(void) { return 0; }
-int GetRandomValue(int min, int max) { return 0; }
+// real: rnd()/rnd_float()/shake and procedural carts need varied values (a 0-stub
+// collapses positions/cameras). Deterministic LCG — NOT Raylib's exact sequence, so
+// a no-Raylib render won't be pixel-identical to a seeded Raylib run, just sane.
+static unsigned int de_rng_state = 0x2545F491u;
+int GetRandomValue(int min, int max) {
+    if (max < min) { int t = min; min = max; max = t; }
+    de_rng_state = de_rng_state * 1103515245u + 12345u;
+    unsigned int r = (de_rng_state >> 16) & 0x7fffu;
+    return min + (int)(r % (unsigned int)(max - min + 1));
+}
 Vector2 GetScreenToWorld2D(Vector2 position, Camera2D camera) { Vector2 r = {0}; return r; }
 int GetShaderLocation(Shader shader, const char *uniformName) { return 0; }
 int GetTouchPointCount(void) { return 0; }
@@ -85,7 +94,7 @@ void SetAudioStreamCallback(AudioStream stream, AudioCallback callback) { }
 void SetExitKey(int key) { }
 void SetMasterVolume(float volume) { }
 void SetMouseCursor(int cursor) { }
-void SetRandomSeed(unsigned int seed) { }
+void SetRandomSeed(unsigned int seed) { de_rng_state = seed ? seed : 1u; }
 void SetShaderValue(Shader shader, int locIndex, const void *value, int uniformType) { }
 void SetShaderValueV(Shader shader, int locIndex, const void *value, int uniformType, int count) { }
 void SetTargetFPS(int fps) { }
