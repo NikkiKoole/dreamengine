@@ -1832,6 +1832,59 @@ static Image de_image_decode(const unsigned char *png, int len) {
     return LoadImageFromMemory(".png", png, len);
 }
 
+#ifdef DE_NO_RAYLIB
+// ============================================================================
+// DE_NO_RAYLIB entry points (platform.h) — the host (iOS CADisplayLink, a headless
+// harness, Switch) drives the engine through these instead of studio.c owning main().
+// ============================================================================
+#include "platform.h"
+#include "fonts_baked.h"
+extern double de_host_time;   // the host clock (raylib_compat.c); GetTime() returns it
+
+// bind a baked ROM font (fonts_baked.h) into the existing Font/Image globals, so
+// cur_font()/cur_font_img()/sw_print work unchanged — no GPU, no LoadFontFromImage.
+static void de_bind_font(Font *fnt, Image *img, const DeBakedFont *b) {
+    fnt->baseSize = b->baseSize; fnt->glyphCount = b->glyphCount;
+    fnt->recs   = (Rectangle*)malloc(sizeof(Rectangle) * b->glyphCount);
+    fnt->glyphs = (GlyphInfo*)malloc(sizeof(GlyphInfo) * b->glyphCount);
+    for (int i = 0; i < b->glyphCount; i++) {
+        fnt->recs[i] = (Rectangle){ b->glyphs[i].x, b->glyphs[i].y, b->glyphs[i].w, b->glyphs[i].h };
+        fnt->glyphs[i].value    = b->glyphs[i].value;
+        fnt->glyphs[i].offsetX  = b->glyphs[i].offX;
+        fnt->glyphs[i].offsetY  = b->glyphs[i].offY;
+        fnt->glyphs[i].advanceX = b->glyphs[i].advX;
+    }
+    *img = (Image){ (void*)b->atlas, b->atlasW, b->atlasH, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+}
+static void de_setup_baked_fonts(void) {
+    de_bind_font(&game_font,  &game_font_img,  &DE_BAKED_FONTS[DE_FONT_GAME]);
+    de_bind_font(&font_small, &font_small_img, &DE_BAKED_FONTS[DE_FONT_SMALL]);
+    de_bind_font(&font_tiny,  &font_tiny_img,  &DE_BAKED_FONTS[DE_FONT_TINY]);
+    de_bind_font(&font_comic, &font_comic_img, &DE_BAKED_FONTS[DE_FONT_COMIC]);
+    de_bind_font(&font_thin,  &font_thin_img,  &DE_BAKED_FONTS[DE_FONT_THIN]);
+}
+
+void de_init(DeRenderer renderer) {
+    (void)renderer;                              // software canvas only for now
+    sw_canvas_enabled = sw_canvas_active = true;
+    load_palette();
+    init_touch_layout();
+    if (MAP_DATA_LEN >= sizeof(map_data)) memcpy(map_data, MAP_DATA, sizeof map_data);
+    else                                  memset(map_data, 0, sizeof map_data);
+    de_setup_baked_fonts();
+    // sprites: spritesheet stays empty until de_image_decode's stb branch lands;
+    // carts that don't spr() are unaffected (img_texel guards on width).
+    sound_synth_mode = true; sound_init();
+    init();                                      // the cart's init()
+    last_time = GetTime();
+}
+void de_frame(double t) { de_host_time = t; loop_step(); }   // loop_step draws into sw_cbuf; presents are no-op stubs
+const uint32_t *de_framebuffer(void) { return (const uint32_t*)sw_cbuf; }
+int de_screen_w(void) { return SCREEN_W; }
+int de_screen_h(void) { return SCREEN_H; }
+
+#else  // !DE_NO_RAYLIB — the Raylib desktop/web build owns main()
+
 int main(int argc, char **argv) {
     { const char *pf = getenv("DE_POLY_FILL");          // A/B the polygon fill without recompiling:
       if (pf && strcmp(pf, "legacy") == 0) poly_fill_fast = false; }   // DE_POLY_FILL=legacy → old per-pixel path
@@ -2065,6 +2118,7 @@ int main(int argc, char **argv) {
 #endif
     return 0;
 }
+#endif // !DE_NO_RAYLIB — main() (Raylib build only)
 
 // ------------------------------------------------------------
 // api implementation

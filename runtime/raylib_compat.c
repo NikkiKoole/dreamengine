@@ -1,9 +1,8 @@
 // AUTO-GENERATED stub bodies for the DE_NO_RAYLIB shim (phase D.2).
 // GPU-path / device calls that only need to LINK (never run in software mode).
-// Real bodies live in the hand-written section at the bottom.
+// Real bodies (timing + the software text path) are hand-written at the bottom.
 #include "raylib_compat.h"
 
-// host clock, fed by de_frame(t) (see studio.c)
 double de_host_time = 0.0; float de_host_dt = 1.0f/60.0f;
 
 void BeginDrawing(void) { }
@@ -32,10 +31,7 @@ void EndShaderMode(void) { }
 void EndTextureMode(void) { }
 bool ExportImage(Image image, const char *fileName) { return 0; }
 int GetCharPressed(void) { return 0; }
-int GetCodepointNext(const char *text, int *codepointSize) { return 0; }
 int GetFPS(void) { return 0; }
-int GetGlyphIndex(Font font, int codepoint) { return 0; }
-Color GetImageColor(Image image, int x, int y) { Color r = {0}; return r; }
 Vector2 GetMousePosition(void) { Vector2 r = {0}; return r; }
 float GetMouseWheelMove(void) { return 0; }
 int GetRandomValue(int min, int max) { return 0; }
@@ -53,6 +49,7 @@ void ImageFormat(Image *image, int newFormat) { }
 void InitAudioDevice(void) { }
 void InitWindow(int width, int height, const char *title) { }
 bool IsFileDropped(void) { return 0; }
+FilePathList LoadDroppedFiles(void) { FilePathList r = {0}; return r; }
 bool IsKeyDown(int key) { return 0; }
 bool IsKeyPressed(int key) { return 0; }
 bool IsKeyReleased(int key) { return 0; }
@@ -102,3 +99,15 @@ void rlVertex2f(float x, float y) { }
 // ---- real bodies ----
 double GetTime(void)      { return de_host_time; }
 float  GetFrameTime(void) { return de_host_dt; }
+// software text path: real glyph lookup + atlas read (sw_print needs these).
+int GetCodepointNext(const char *text, int *codepointSize) { *codepointSize = 1; return (unsigned char)text[0]; } // ASCII; UTF-8 TODO
+int GetGlyphIndex(Font font, int codepoint) {
+    for (int i = 0; i < font.glyphCount; i++) if (font.glyphs[i].value == codepoint) return i;
+    return 0;
+}
+Color GetImageColor(Image image, int x, int y) {
+    if (!image.data || x < 0 || y < 0 || x >= image.width || y >= image.height) { Color z = {0,0,0,0}; return z; }
+    uint32_t p = ((const uint32_t*)image.data)[y*image.width + x];
+    Color c = { (unsigned char)(p & 0xff), (unsigned char)((p>>8)&0xff), (unsigned char)((p>>16)&0xff), (unsigned char)((p>>24)&0xff) };
+    return c;
+}
