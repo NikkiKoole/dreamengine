@@ -38,6 +38,11 @@ const GENRES = [
   "arcade", "shooter", "platformer", "fighting", "puzzle", "racing",
   "sports", "strategy", "rpg", "adventure", "simulation", "sandbox",
   "tabletop", "maze", "space", "lab", "dating",
+  // finer buckets carved out of the broad ones (2026-06):
+  "tycoon",   // economy/business/empire management (transport, tradewinds, beltworks…)
+  "tactics",  // turn-based squad/artillery combat (advancewars, xcom, worms…)
+  "word",     // word games (boggle, hangman, wordle)
+  "4x",       // explore/expand/exploit/exterminate (civ, fourx, orion)
 ];
 
 // cart lifecycle (de:meta.status) — seeds the curated/featuring views (003-curation)

@@ -62,6 +62,7 @@ is greppable in source (`grep -l adsr-envelope tools/carts/*.c`).
 | `lineage` | yes | one-liner |
 | `description` | yes (flattened) | **string OR parts** — see below |
 | `file` | yes | **derived**, not stored: `<stem>.cart.png` from the `.c` filename |
+| `orientation` | yes (derived) | `portrait` / `square` — **derived** by `build-cart-index.js` from the `.cart.png`'s `de:settings` screen dims at generate time, never hand-tagged (so it can't drift). Omitted for the default 320×200 landscape. Powers a gallery "📱 portrait" filter. |
 | `inputs` / `outputs` | not yet | RESERVED — the data-contract a cart consumes/produces (the "carts that take in AND emit data" direction). Generator ignores until a consumer exists; additive, no future migration. |
 | `see_also` / `notes` | not yet | RESERVED — man-page growth. |
 

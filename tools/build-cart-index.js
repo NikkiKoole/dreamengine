@@ -39,7 +39,23 @@ const fs = require("fs");
 const path = require("path");
 
 const CARTS = path.join(__dirname, "carts");
-const OUT = path.join(__dirname, "..", "editor", "public", "carts", "index.json");
+const PNG_DIR = path.join(__dirname, "..", "editor", "public", "carts");
+const OUT = path.join(PNG_DIR, "index.json");
+
+// orientation is DERIVED from the cart's runtime screen dims (de:settings in the .cart.png),
+// never hand-tagged — so it can't drift from the actual screen. Default 320x200 landscape is
+// omitted (the common case); only portrait/square carts carry the field, for a gallery filter.
+function orientationOf(name) {
+  try {
+    const { extractCartChunks } = require("./make-cart.js");
+    const c = extractCartChunks(fs.readFileSync(path.join(PNG_DIR, `${name}.cart.png`)));
+    const s = JSON.parse(c.settings || "{}");
+    const W = s.screenW ?? 320, H = s.screenH ?? 200;
+    if (H > W * 1.1) return "portrait";
+    if (Math.abs(W - H) <= W * 0.1) return "square";
+  } catch (e) { /* missing/odd png → treat as default landscape */ }
+  return null;
+}
 
 // extract + parse the de:meta block from a .c; null if absent
 function readMeta(src, name) {
@@ -68,6 +84,8 @@ function toEntry(meta, name) {
   e.description = flattenDesc(meta.description);
   e.file = `${name}.cart.png`;
   if (meta.created != null) e.created = meta.created;
+  const ori = orientationOf(name);
+  if (ori) e.orientation = ori;
   e.kind = meta.kind;
   e.teaches = meta.teaches || [];
   if (meta.lineage != null) e.lineage = meta.lineage;

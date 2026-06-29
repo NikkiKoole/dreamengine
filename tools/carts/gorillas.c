@@ -11,7 +11,7 @@
     "title-play-gameover-loop"
   ],
   "lineage": "Direct port of the QBasic Gorillas (1991) classic; adds wind-affected parabolic banana physics and a 4-state turn machine (aim → fly → post-explosion → gameover).",
-  "genre": "strategy",
+  "genre": "tactics",
   "homage": "Gorillas (QBasic, 1991)",
   "description": "Classic QBasic Gorillas. Two gorillas on a city skyline take turns hurling exploding bananas. Adjust angle and power, account for wind. First to 3 hits wins. Left/right: angle — Up/down: power — Z: fire."
 }

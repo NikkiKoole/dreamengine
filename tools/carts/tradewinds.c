@@ -11,7 +11,7 @@
     "state-machine"
   ],
   "lineage": "Extends the Druglord cart's per-port price-skew economy core with an age-of-sail sea chart, shipyard upgrade loop, and two encounter minigames (storm steering, pirate broadside).",
-  "genre": "simulation",
+  "genre": "tycoon",
   "description": "Age-of-sail spice trading across a six-port archipelago. Buy spice, silk, tea, rum, cotton and ivory cheap at their source islands and sell them dear at the home market as prices drift and spike. Sail the sea chart yourself — every voyage costs days and may pitch you into a STORM (steer the wheel to meet the swell or lose cargo and hull) or a PIRATE (a broadside gunnery duel, or gamble a flee on your speed). Spend your gold at the shipyard on a bigger hold, faster hull, more cannons and hull repairs. Build the greatest fortune before the season's 60 days run out — best run is saved. Click a good to buy (right-click sell), the bottom bar for shipyard / set sail, a port on the chart to weigh anchor; keys: arrows pick a good, Z buy / X sell, Q qty, S shipyard, M chart, and in fights Z fires / X flees."
 }
 de:meta */

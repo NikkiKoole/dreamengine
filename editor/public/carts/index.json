@@ -298,7 +298,7 @@
       "finite-state-ai"
     ],
     "lineage": "Demake of Advance Wars (GBA, 2001); novel in distilling the damage-matrix / terrain-defense-stars / capture mechanic into a single-screen hand-authored map with a CPU opponent that takes a full turn.",
-    "genre": "strategy",
+    "genre": "tactics",
     "homage": "Advance Wars (2001)"
   },
   {
@@ -411,6 +411,7 @@
     "description": "ARC FLIP SYMMETRY — a petri dish for streetlab's ≤1px corner floor: why a mirrored arc has the SAME pixel count but a DIFFERENT staircase, and how to fix it. On streetlab's default 4-way intersection the four kerb fillets are mirror-symmetric in real space, yet the rendered kerb edges land ≤1px apart (the docs' accepted floor). The cause: streetlab snaps each arc vertex to the grid with ri() and THEN strokes/fills, so re-rasterising the mirror rounds TWICE — ri(mirror(v)) != mirror(ri(v)) at half-pixel alignments — and the edge drifts. The fix the docs predict: rasterise ONE corner, then BLIT its cells mirrored (a pure index reflection is exact by construction). The cart draws a quarter arc and its flip on a magnified EVEN-width grid (mirror axis on a pixel boundary, like x=160 on a 320 screen): blue = the original, green = flip matches the true mirror, RED/orange = where the naive flip is off a step. A live stat sweeps the sub-pixel phase and counts how many alignments the naive flip breaks at (some — that's why it's a subtle floor) vs the blit flip (zero, always). Controls: Z naive re-raster <-> blit cells (the fix); S stroke <-> fill; left/right sub-pixel phase; up/down radius; R reset. spec() proves the blit is pixel-exact at every phase/radius/shape.",
     "file": "arcsym.cart.png",
     "created": "2026-06-23",
+    "orientation": "square",
     "kind": [
       "tech-demo"
     ],
@@ -510,7 +511,7 @@
       "state-machine"
     ],
     "lineage": "The belt layer of navkit's mechanisms experiment (one-item-per-cell conveyors with backpressure) made into a Factorio-lite: miners + a five-machine crafting tree (smelter/assembler/charger/fabricator + hub) plumbed with belts, on the logic cart's editor + cursor.h. Sibling of the `logic` signal sandbox and `runecrawl` (the signal layer); this is the transport/production layer.",
-    "genre": "simulation",
+    "genre": "tycoon",
     "homage": "Factorio (2020)"
   },
   {
@@ -586,7 +587,7 @@
       "game"
     ],
     "teaches": [],
-    "genre": "puzzle"
+    "genre": "word"
   },
   {
     "title": "boids",
@@ -803,7 +804,7 @@
       "save-load-persistence"
     ],
     "lineage": "Homage to Sensible Software's Cannon Fodder; squad follows a leader-chain trail toward a click target, enemies wander then chase with line-of-sight autofire, and the roster survives between missions via save_bytes — permanent death carrying over is the defining mechanic.",
-    "genre": "strategy",
+    "genre": "tactics",
     "homage": "Cannon Fodder (1993)"
   },
   {
@@ -960,7 +961,7 @@
       "save-load-persistence"
     ],
     "lineage": "Pocket distillation of Civilization (1991) stripped to explore-and-found 4X with no war or rivals; fog-of-war reveal and a noise-generated continent are the structural core.",
-    "genre": "strategy",
+    "genre": "4x",
     "homage": "Civilization (1991)"
   },
   {
@@ -1464,7 +1465,7 @@
       "save-load-persistence"
     ],
     "lineage": "Direct port of the classic Drugwars/Dope Wars formula (1984/1984-inspired text game) into a living tilemap city, adding pal()-recolored pedestrians, ambient music beds, and a per-district price-flavor matrix.",
-    "genre": "simulation",
+    "genre": "tycoon",
     "homage": "Drug Wars (1984)"
   },
   {
@@ -2026,7 +2027,7 @@
       "finite-state-ai"
     ],
     "lineage": "A micro Civilization/4X (explore-expand-exploit-exterminate) on a 15x11 fog-of-war tile map with settler/warrior units, city economy, and a greedy AI rival — a minimal complete 4X loop in ~400 lines.",
-    "genre": "strategy"
+    "genre": "4x"
   },
   {
     "title": "fretboard",
@@ -2200,7 +2201,7 @@
       "title-play-gameover-loop"
     ],
     "lineage": "Direct port of the QBasic Gorillas (1991) classic; adds wind-affected parabolic banana physics and a 4-state turn machine (aim → fly → post-explosion → gameover).",
-    "genre": "strategy",
+    "genre": "tactics",
     "homage": "Gorillas (QBasic, 1991)"
   },
   {
@@ -2362,7 +2363,7 @@
       "save-load-persistence"
     ],
     "lineage": "Classic word-guessing game implemented from scratch with per-blank pop animations and an on-screen clickable alphabet; win/streak counts are the first save_int usage in a pure word/puzzle cart.",
-    "genre": "puzzle"
+    "genre": "word"
   },
   {
     "title": "held notes",
@@ -3127,7 +3128,7 @@
       "title-play-gameover-loop"
     ],
     "lineage": "Descends from Taipan! (1982); the novelty is a readable price-band market UI with per-port skew, daily drift, and rare shortage/glut events that visibly shift arbitrage.",
-    "genre": "simulation",
+    "genre": "tycoon",
     "homage": "Taipan! (1982)"
   },
   {
@@ -3135,6 +3136,7 @@
     "description": "The desktop classic, rebuilt from scratch on the fantasy console. A 16x14 field of beveled tiles hides 30 mines; left-click reveals, and uncovering an empty cell triggers a satisfying flood-fill cascade that opens its whole region in one click. Numbers 1-8 glow in the canonical colors to count adjacent mines; right-click plants a flag. The first click is always safe — mines are seeded only after you commit. A live mine counter and a running timer flank a smiley face that grins, dies, or beams depending on your fate; clearing the board logs your best time. Tap a mine and the whole field detonates with a screen-shaking boom. Left-click reveals, right-click flags, click the face or press R for a new game.",
     "file": "minesweeper.cart.png",
     "created": "2026-06-01",
+    "orientation": "square",
     "kind": [
       "game"
     ],
@@ -3348,7 +3350,7 @@
       "save-load-persistence"
     ],
     "lineage": "Homage to M.U.L.E. (1983, Ozark Softscape); novel in distilling the full economic loop — install, produce, dynamic auction price — into a single-player one-round cart.",
-    "genre": "strategy",
+    "genre": "tycoon",
     "homage": "M.U.L.E. (1983)"
   },
   {
@@ -3558,7 +3560,7 @@
       "finite-state-ai"
     ],
     "lineage": "Homage to Master of Orion (1993); distills 4X into a single-file cart — procedural galaxy placement, greedy nearest-target AI that skips fights it can't win, defender-advantage combat math.",
-    "genre": "strategy",
+    "genre": "4x",
     "homage": "Master of Orion (1993)"
   },
   {
@@ -3872,6 +3874,7 @@
     "description": "A hand-built physical pinball table — gravity, a steel ball that reflects off line-segment walls, swinging flippers with real tip-snap, pop bumpers, slingshots, a DREAM drop-target bank that arms MULTIBALL, a spinner and an orbit multiplier. Z/←/A = left flipper, X/→/D = right, hold ↓ or SPACE to charge the plunger then release to launch, ↑ to nudge (careful — TILT!), SPACE to play/retry.",
     "file": "pinball.cart.png",
     "created": "2026-05-31",
+    "orientation": "portrait",
     "kind": [
       "game"
     ],
@@ -3965,7 +3968,7 @@
       "schedule-driven-agents"
     ],
     "lineage": "Pizza Tycoon (1994) homage; novel in the district-taste / price-tolerance revenue formula and the procedurally-acting rival + mafia event-card system layered over a node city map.",
-    "genre": "simulation",
+    "genre": "tycoon",
     "homage": "Pizza Tycoon (1994)"
   },
   {
@@ -4813,6 +4816,7 @@
     "description": "A vertical-scrolling shoot-em-up (Raiden / 1943 / Tyrian), built around its weapon-upgrade loop. Your fighter hugs the bottom while a tile map() of sea, islands and an airbase scrolls down past you and waves of enemy craft pour in from the top. Shoot down P pods to climb your main gun L1->L5 (single -> twin -> 3-way -> 4-way -> 5-way spread), then keep grabbing them to bolt on side OPTION wingmen that mirror your fire; B pods stock a screen-clearing bomb that wipes every bullet in a white flash. Six foes off a scripted, escalating timeline — sine-weaving popcorn flyers, poppers and gunships that aim shots at you, ground turrets riding the scroll — all one sprite each, pal()-recolored into whole squadrons and flashed white when hit, capped by a 3-phase WARLORD boss with a health bar. A tight 1-pixel-core hitbox, X focus mode to thread bullet curtains, particle explosions with screen-shake, hit-stop on the boss kill, a driving chiptune bed and a last-life red alarm. Death drops you one weapon tier, never to zero; hi-score saved. Arrows/WASD fly (8-way), Z bomb (gun autofires), X focus/slow, SPACE or ENTER to start / restart.",
     "file": "skystrike.cart.png",
     "created": "2026-05-31",
+    "orientation": "portrait",
     "kind": [
       "game"
     ],
@@ -5453,7 +5457,7 @@
       "state-machine"
     ],
     "lineage": "Extends the Druglord cart's per-port price-skew economy core with an age-of-sail sea chart, shipyard upgrade loop, and two encounter minigames (storm steering, pirate broadside).",
-    "genre": "simulation"
+    "genre": "tycoon"
   },
   {
     "title": "traffic jam",
@@ -5499,7 +5503,7 @@
       "title-play-gameover-loop"
     ],
     "lineage": "Pocket homage to Transport Tycoon (1994); novel in using a random-walk river generator to ensure a guaranteed-solvable crossing and wiring a simple cargo-accumulation economy onto a player-laid rail path.",
-    "genre": "simulation",
+    "genre": "tycoon",
     "homage": "Transport Tycoon (1994)"
   },
   {
@@ -5843,6 +5847,7 @@
     "description": "The daily word puzzle, distilled to its purest loop. A hidden five-letter word waits behind six empty rows; type a guess and watch the five tiles flip one-by-one — green for a letter in the right spot, orange for one that's in the word but misplaced, gray for absent — with the proper duplicate-letter rule so repeated letters score honestly. A live on-screen QWERTY keyboard repaints each key to the best news it has earned, an invalid or short guess buzzes and shakes the board, and a solve sets the winning row bouncing over a rising arpeggio while a loss reveals the answer. Your win streak persists between runs. Type A-Z to fill the row, BACKSPACE to delete, ENTER to submit (or click the on-screen keyboard, including its ENT and DEL pads); ENTER on the result screen plays a fresh word.",
     "file": "wordle.cart.png",
     "created": "2026-06-01",
+    "orientation": "portrait",
     "kind": [
       "game"
     ],
@@ -5850,7 +5855,7 @@
       "save-load-persistence"
     ],
     "lineage": "Faithful port of the NYT Wordle mechanic; duplicate-letter scoring rule and per-letter keyboard state are the notable implementation challenges.",
-    "genre": "puzzle",
+    "genre": "word",
     "homage": "Wordle (2021)"
   },
   {
@@ -5894,7 +5899,7 @@
       "title-play-gameover-loop"
     ],
     "lineage": "Homage to Worms (1995), surpassing the Gorillas lineage by adding destructible pixel terrain carved at runtime and physics-driven worm settling.",
-    "genre": "strategy",
+    "genre": "tactics",
     "homage": "Worms (1995)"
   },
   {
@@ -5928,7 +5933,7 @@
       "noise-terrain"
     ],
     "lineage": "Demake of XCOM: Enemy Unknown (2012); novel in adding a persistent cross-mission soldier roster (save_bytes), procedurally noise-scattered cover maps, and overwatch reaction fire.",
-    "genre": "strategy",
+    "genre": "tactics",
     "homage": "X-COM: UFO Defense (1994)"
   },
   {
