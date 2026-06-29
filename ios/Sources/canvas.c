@@ -4,6 +4,8 @@
 #include "save.h"
 #include <math.h>
 
+extern int AppGroup_UnlockedCount(void);   // implemented in AppGroup.swift (@_cdecl)
+
 static uint8_t fb[DE_W * DE_H * 4];
 
 int            de_width(void)       { return DE_W; }
@@ -54,6 +56,12 @@ void de_update(double t) {
     for (int y = 14; y < 22; y++)
         for (int x = DE_W - 10; x < DE_W - 2; x++)
             pset(x, y, unlocked ? 90 : 220, unlocked ? 220 : 60, unlocked ? 110 : 60);
+    // app-group indicator (left of the store gate): magenta if the shared group reports any
+    // unlocked rack — i.e. the entitlement an AUv3 extension would read has propagated.
+    int agc = AppGroup_UnlockedCount();
+    for (int y = 14; y < 22; y++)
+        for (int x = DE_W - 22; x < DE_W - 14; x++)
+            pset(x, y, agc > 0 ? 200 : 40, agc > 0 ? 70 : 30, agc > 0 ? 200 : 50);
     // launch counter — one cyan square per app launch, persisted via de_save_bytes to the
     // iOS Documents dir. Re-running ./build.sh adds a square → proves saves survive relaunch.
     int lc = de_launch_count();

@@ -41,6 +41,7 @@ final class Store {
             if case .verified(let t) = r { owned.insert(t.productID) }
         }
         Store.unlockedIDs = owned
+        AppGroup.setUnlocked(owned)   // mirror to the App Group so AUv3 extensions can read it
     }
 
     static func isUnlocked(_ id: String) -> Bool {

@@ -11,6 +11,11 @@ targets:
     type: application
     platform: iOS
     sources: [Sources]
+    entitlements:
+      path: TinyjamHello.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tinyjam
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

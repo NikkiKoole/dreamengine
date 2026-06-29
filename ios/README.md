@@ -79,6 +79,7 @@ Expect `Test Suite 'StoreTests' passed` (buys a rack → entitlement unlocks; ma
 ## Status
 
 Spike 0 (toolchain) ✅ · 1 (software-canvas render + inverted loop) ✅ · 2 (audio → CoreAudio) ✅ ·
-3 (save → Documents dir) ✅ · 4 (StoreKit 2 + local config, headless) ✅. Next: spike 5 (App Group),
-then 7 (AUv3, needs device + signing). Ladder + decisions in
+3 (save → Documents dir) ✅ · 4 (StoreKit 2 + local config, headless) ✅ · 5 (App Group sharing) ✅.
+The free, simulator-only proving phase is complete. Remaining: 6 (CloudKit, needs iCloud account)
+and 7 (AUv3 in a host — **needs a device + one-time signing setup**). Ladder + decisions in
 [`../docs/design/ios-plan.md`](../docs/design/ios-plan.md).
