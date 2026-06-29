@@ -479,6 +479,13 @@ thing the post promised, on a heavy page; that bleeds conversions.
 - **It's *less* work than the gallery, not more:** the web build already emits a **self-contained
   per-cart bundle** (`cart.html`/`cart.js`/`cart.wasm`); a microsite is just that bundle + a landing
   wrapper at a dedicated URL. Candidate: a `build-site.js` "standalone single-cart" mode.
+- **The page does double duty — so the copy is load-bearing, not decoration.** It's both the *conversion
+  surface* (this section) *and* the *discoverability asset* (§10): crawlers and AI Overviews **can't read
+  a wasm canvas, only text**. So the microsite must emit **real indexable HTML prose** around the
+  canvas — a what-is-this line + the hook, **question-style headings** (what is it / is it free / how does
+  an omnichord work / vs minichord), a short FAQ, and a how-it-works section seeded from
+  [`omnichord-sound-model.md`](omnichord-sound-model.md). A canvas-only page
+  converts *and* ranks worse. (Same copy serves both jobs — write it once, §7.1.)
 - **Host gotcha (one real technical note):** the cart runs on *any* static host — the engine falls back
   to a ScriptProcessor audio path when the page isn't cross-origin-isolated. To get the **better
   AudioWorklet path** you need **COOP/COEP headers**, so host where you can set them — **Netlify /
