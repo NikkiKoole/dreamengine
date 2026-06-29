@@ -236,6 +236,38 @@ video-friendly, and a coherent sub-brand ("Tinyjam: the strange-instruments shel
 store listing and pitch than the generative genre racks. Name the shape up front so the campaign and
 the IAP copy match what the buyer gets.
 
+### 3.9 Channel directory (verified URLs)
+
+The actual links for the channels named above (web-verified 2026-06-29). Reddit / Facebook-group /
+Discord links are canonical homes — confirm any rotating invite link is current before posting.
+
+**Cross-cutting (every campaign):**
+- Loopy Pro forum — https://forum.loopypro.com/
+- Sound Test Room (YouTube) — https://www.youtube.com/channel/UCDU1ULcAb0OMgv0Xi0CbYYw
+- Discchord — https://discchord.com/
+- Gavinski's Tutorials (YouTube) — https://www.youtube.com/channel/UCBuVA1pbhMpToJI_bZBzihw
+
+**Instrument modules:**
+- Strum-harp (omnichord) — FB group https://www.facebook.com/groups/Omnichord.QChord/ · Omnichord Heaven https://www.omnichord-heaven.com/
+- FM box / Dexed — KVR Audio forum https://www.kvraudio.com/forum/ · r/synthesizers https://www.reddit.com/r/synthesizers/
+- Dream synth (moog) / Buchla (easel) / Turing — r/synthesizers · r/modular https://www.reddit.com/r/modular/ · Turing Machine https://www.musicthing.co.uk/Turing-Machine/
+- Tape-keys (Rhodes) / Tape-choir (Mellotron) / Solina — Vintage Synth Explorer forum https://forum.vintagesynth.com/
+
+**Genre racks / scene tribes:**
+- Dungeon synth (ancient-library) — https://www.reddit.com/r/dungeonsynth/
+- Acid / 303 (rebirth-classic) — KVR Audio forum https://www.kvraudio.com/forum/
+- Exotica (space-age pad) — Tiki Central https://tikicentral.com/viewforum.php?forum_id=11
+- Toy-Town glitch / circuit-bending — bent//broken + https://circuit-bent.net/ · r/circuitbending https://www.reddit.com/r/circuitbending/
+- Dub (dub / dubsiren) — Sound On Sound forum https://www.soundonsound.com/forum/
+- Spaghetti Western / Morricone — Filmtracks https://www.filmtracks.com/ · Maintitles https://www.maintitles.net/ · Film Score Monthly https://www.filmscoremonthly.com/
+- Lofi — Lofi Girl (YouTube) https://www.youtube.com/channel/UCSJ4gkVC6NrvII8umztf0Ow
+
+**Wellness / world:**
+- Handpan — handpan.org https://www.handpan.org/
+
+> Still to pin (rotating or not captured): the Omnichord Discord invite, the ReBirth FB community, and
+> the yacht-rock home. Find the live link before relying on them.
+
 ## 4. The cross-cutting channels (where *every* campaign also posts)
 
 Per-tribe outreach is the spearhead; these are the shared amplifiers that every module launch uses:
