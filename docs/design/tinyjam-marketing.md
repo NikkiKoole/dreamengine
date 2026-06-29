@@ -358,6 +358,102 @@ Keep it repeatable — same kit per module, swap the contents:
 
 ---
 
+## 9. How to show up — gift first, then sell (without burning the tribe)
+
+The outreach motion is **sketch-first** (product-notes.md): put the free web cart in strangers' hands,
+watch, learn — *then* sell the native app once a cart demonstrably holds attention. The danger isn't
+the plan; it's the **tone of the approach** and the **honesty of the free→paid transition**. Both are
+load-bearing because instrument cults and scene tribes punish drive-by promo and bait-and-switch hard.
+
+### 9.1 The tone: lead with a gift, not an ask
+
+Same plan, opposite reception:
+
+- ❌ *"I'm building a music app — please beta-test it and tell me how to improve it."* → reads as
+  **unpaid labor + self-promo.** The drive-by-marketing smell tribes punish.
+- ✅ *"I made a little playable [strum-harp] you can mess with in your browser — free, no signup —
+  curious what an actual Omnichord head thinks."* → reads as **one enthusiast sharing a toy.**
+
+Rules that keep it a gift:
+
+- **The product does the talking.** You're handing them something fun and being *open* to reaction,
+  not recruiting labor. "Help me improve" is a humble P.S., never the point.
+- **Make the "help" invisible and optional.** Don't ask for a chore — their *use* is the signal:
+  the **share-your-song URL** (lz-string codec) is feedback *and* free marketing in one; the **A/B
+  toggle / bias knobs** are the RLHF signal (tinydaws-followup) — they tune it just by playing; the
+  **wishlist** is a soft, no-paywall opt-in.
+- **A good post shares a result.** Lead with the free link *and* a song you made with it ("here's a
+  loop — [URL]"), admit it's early, ask one specific humble question ("what does it get wrong to your
+  ears?"). Not "validate my startup."
+- **The trap:** feedback on *the instrument* = gold; recruiting them as a *sales funnel* = the thing
+  that gets you flamed. Keep the free web toy genuinely free and ask-free.
+
+### 9.2 The honest arc: free web = funnel, native app = payoff
+
+The free web cart is a **demo, decided as such from day one** — not a free-forever product you later
+yank. Set the free/paid line *before* you post, so the transition can never feel like a rug-pull. The
+**trademark rule actually makes this cleaner** (§2): the free gallery cart is the *lovingly-named
+homage* ("Omnichord-style strum toy"); the paid app is an *original-named instrument* ("Strumkit").
+They're **not the same product behind a paywall** — they're a free fan homage and a separate paid
+original. That framing is both legally necessary *and* the kindest story to tell the tribe.
+
+### 9.3 If you pull or limit a free web version — do it without betrayal
+
+Pulling or paywalling is legitimate (convert a funnel, cut hosting cost, stop a full-featured freebie
+cannibalizing the app). But the people who showed up early and *helped* are exactly the ones a clumsy
+removal burns. Rules:
+
+1. **Signal the boundary early.** "Free demo — full app coming" up front means nobody feels
+   rug-pulled later. Surprise removal of a thing people grew attached to is the betrayal; a planned
+   graduation isn't.
+2. **Grandfather the early helpers.** The tribe members who gave feedback / shared songs get the app
+   **free or steeply discounted** — a "thank the tribe" gesture. Convert goodwill; don't spend it.
+   *How, concretely (iOS):* **App Store promo codes** are the built-for-this path — free, official,
+   redeemed through Apple, no extra code; a promo code flips the same StoreKit unlock the IAP would
+   (rides spike 4 + the App-Group flag from spike 5). DM a code to each genuine helper personally
+   ("you helped shape this — here it is on me"). Caveats: codes are **limited per app version** (~100)
+   and **expire (~4 weeks)**, the redeemer needs an Apple ID, and it only works **if they have an
+   iPhone**. Keep the list a *discretionary, personal* thank-you to real helpers — never a public
+   "comment to get it free" (that cannibalizes and gets gamed). For helpers **without** an iPhone, the
+   thank-you is a different shape: keep their web version full/unlocked, a credit in the app, or a free
+   copy when other platforms exist. (A self-serve in-app "redeem code" screen is a fallback, but promo
+   codes avoid the App-Review gray area of unlocking outside StoreKit — prefer them.)
+3. **Keep shared song-links alive.** Those URLs are your best marketing — let them keep resolving (a
+   read-only player, or a redirect to the app), because a wall of dead links reads as "this person
+   bailed" and breaks trust.
+4. **Prefer demo-limiting over full removal.** The web stays a *try* (fewer patterns / no full-quality
+   or stems export / no AUv3 / a gentle watermark); the app is *own it*. **Module-of-the-Week
+   rotation** (product-notes-followup) is the soft, no-betrayal version — nothing is free forever, yet
+   nothing is ever yanked.
+5. **If you do remove, frame it as "graduated to a real app," give notice, and thank them** — never a
+   silent disappearance.
+
+### 9.4 Precedent: the Minecraft arc (free → cheap-for-early-adopters → phenomenon)
+
+Minecraft is the canonical worked example of this exact arc, and it ran through the *same indie scene*
+(the TIGSource forums). Free browser "Classic" (2009) built the crowd; paid **Alpha** (2010) launched
+**deliberately cheap — roughly half the eventual price — with a promise: buy now during development,
+the price rises as it nears release, and early buyers get every future update free, forever.** Beta
+raised the price; 1.0 (2011) raised it again; by then it was a global phenomenon. What's *replicable*
+(the structure, not the lightning):
+
+- **The free version stayed** as a permanent funnel even after paid launched — *demo-limiting, not
+  removal* (§9.3.4).
+- **The climbing early-adopter price** is exactly product-notes-followup's Master-Pass ladder — and
+  the cheapest price went to **the early forum crowd who shaped the game** (the grandfather rule,
+  §9.3.2). The people who helped were *rewarded*, not used — which is *why* they evangelized.
+- **Community-as-cocreator:** Notch shipped what the forum asked for, in the open — the gift /
+  "help me improve" loop (§9.1) at full volume. Ownership turned players into the marketing.
+
+> ⚠️ **Caveat:** Minecraft is an *outlier* (a genuinely novel toy + perfect YouTube-Let's-Play timing).
+> Borrow the **structure** — free funnel, early-adopter price ladder, reward the helpers, build in the
+> open — never bank on the **outcome**. "We'll be the next Minecraft" is not a plan; "we'll treat early
+> believers the way Minecraft did" is.
+
+> Net: be generous on the way in (a real, free, ask-free toy), honest about the destination (this
+> becomes a paid app), and kind at the seam (grandfather the helpers, keep links alive). That's the
+> difference between a tribe that *evangelizes* the launch and one that feels used by it.
+
 ## See also
 
 - [`product-notes.md`](product-notes.md) — market thesis, sketch-first, parking lot, **trademark rule**
