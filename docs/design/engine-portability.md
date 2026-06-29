@@ -108,10 +108,14 @@ dormant on desktop/web.
 
 **Open follow-ups before iOS:** ~~(1) text-metric diff~~ FIXED — `MeasureTextEx` was a no-op stub
 returning {0}, so `text_width()`/centering/clip measured zero (dropped trailing label chars); real impl
-mirrors sw_print's advance → headless omnichord now matches Raylib exactly. Remaining: (2) the
-**stb_image** branch of `de_image_decode` (sprite-using carts; omnichord has none so it rendered);
-(3) audio: wire `de_audio_render` → `sound_callback`. Then the iOS shell (`project.yml -DDE_NO_RAYLIB`,
-CanvasView blit, CoreAudio) — the spike-1/2 work already proved that half.
+mirrors sw_print's advance → headless omnichord now matches Raylib exactly. ~~(2) stb_image branch~~ DONE — `runtime/stb_image.h` (raylib's own copy → byte-identical decode);
+`de_image_decode` decodes the sheet into `spritesheet_img`, `de_init` sets `spritesheet.width/height`
+(the sprite/map guards + `cols` derive from it; GPU id stays 0), `colorkey()`'s GPU sheet-rebuild is
+`#ifndef DE_NO_RAYLIB` (SW keys per-pixel), and `GetRandomValue` got a real LCG. **heroes** (tilemap +
+11 sprites) renders **pixel-identical** to Raylib headless. (masseffect's unit sprites render too; its
+map grid diverges only because its camera/wave state rides Raylib's exact rng sequence — not a sprite
+bug.) Remaining: (3) audio: wire `de_audio_render` → `sound_callback`. Then the iOS shell (`project.yml
+-DDE_NO_RAYLIB`, CanvasView blit, CoreAudio) — the spike-1/2 work already proved that half.
 
 ## The three refactors that unlock iOS (and help web)
 
