@@ -59,6 +59,7 @@ What this implies elsewhere (docs to update, things now out of scope).
 | [0020](0020-in-house-tool-curated-showcase.md) | In-house tool + curated public showcase — not a cart-making platform | accepted |
 | [0021](0021-road-geometry-in-2d-sandbox-render-is-an-adapter.md) | Road geometry is developed in the 2D sandbox; the pseudo-3D view is a rendering adapter (geometry stays world-plane) | accepted |
 | [0022](0022-collaboration-is-the-north-star.md) | The maker+Claude collaboration is the north star; learn-to-code retires to lineage (aesthetic constraints kept as art, pedagogical ones relaxed) | accepted |
+| [0023](0023-ship-carts-as-apps-not-the-editor.md) | Ship carts as apps (precompiled native), never the editor — dissolves the consumer-compiler blocker | accepted |
 
 > Back-fill candidates (decisions made but not yet written up): C as the language /
 > no-heap globals+stack; the `.cart.png` zTXt format; carts-carry-their-own-settings

@@ -1,5 +1,17 @@
 # Packaging & distribution — notes
 
+> **⛔ Superseding decision (2026-06-29): shipping the *editor* to consumers is a NON-GOAL.**
+> Per [ADR-0023](../decisions/0023-ship-carts-as-apps-not-the-editor.md), we ship **finished
+> apps** — a cart, or a curated collection of carts (with iOS extras), each **precompiled to a
+> native binary on a dev box.** The consumer downloads a result, never a toolchain or the
+> ability to build carts. That makes "**The real blocker: the run model needs a compiler**"
+> section below a problem we **do not have** — there is nothing to compile on a consumer's
+> machine (and it's why native iOS is tractable: no on-device JIT/compiler needed). The
+> shippable build plan lives in [`product-notes-followup.md`](product-notes-followup.md) §2–§7;
+> the free wasm gallery (also a *result*, not the editor) stays the funnel. Read the rest of
+> this doc as the dev-branding history + the reasoning that *led* to that decision, not as open
+> work.
+
 > **Status: not started.** This is an exploratory scratchpad, not a plan of record.
 > dreamengine has only ever run as a **dev build** — `npm start` launches Vite + an
 > unpackaged Electron (`electron .`) pointed at `localhost:5173`, and the ▶ run button

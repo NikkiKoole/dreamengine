@@ -54,6 +54,11 @@ tinydaws already needs — build the lane→string codec once, reuse for share-l
 
 ## 2. Native iOS — porting C + raylib (the parking-lot "native app", made concrete)
 
+> **Decided ([ADR-0023](../decisions/0023-ship-carts-as-apps-not-the-editor.md)):** what ships is
+> a **precompiled native app** (a cart or a curated collection), never the editor. So this section
+> is the *shippable* build plan — and the reason it's tractable at all: no on-device compiler is
+> needed (the thing iOS forbids), because carts are baked native on the dev box.
+
 `product-notes.md` parks this as "the big one." The conversation makes it feel tractable for *our*
 exact stack (pure C + raylib + `sound.h` rendering headless):
 
