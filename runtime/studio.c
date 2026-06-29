@@ -1819,6 +1819,15 @@ static void save_dir_set(const char *dir) {
 }
 #endif
 
+// Engine-owned PNG decode — the single entry point for turning an embedded .png
+// blob into an Image (platform seam, phase B/C). Raylib backends use Raylib's
+// decoder (stb_image internally), so this is bit-identical to the inline
+// LoadImageFromMemory calls it replaced. The DE_NO_RAYLIB branch (vendored
+// stb_image → DeImage) lands with the iOS backend, in this one place.
+static Image de_image_decode(const unsigned char *png, int len) {
+    return LoadImageFromMemory(".png", png, len);
+}
+
 int main(int argc, char **argv) {
     { const char *pf = getenv("DE_POLY_FILL");          // A/B the polygon fill without recompiling:
       if (pf && strcmp(pf, "legacy") == 0) poly_fill_fast = false; }   // DE_POLY_FILL=legacy → old per-pixel path
@@ -1937,32 +1946,32 @@ int main(int argc, char **argv) {
     SetTextureFilter(canvas_snap.texture, TEXTURE_FILTER_POINT);
 
     {
-        Image fontImage = LoadImageFromMemory(".png", DOS_8X8_FONT, DOS_8X8_FONT_LEN);
+        Image fontImage = de_image_decode(DOS_8X8_FONT, DOS_8X8_FONT_LEN);
         game_font = LoadFontFromImage(fontImage, (DeColor){ 255, 255, 0, 255 }, 0);
         SetTextureFilter(game_font.texture, TEXTURE_FILTER_POINT);
         UnloadImage(fontImage);
         custom_font = true;
     }
     {
-        Image img = LoadImageFromMemory(".png", FONT4X6_DATA, FONT4X6_DATA_LEN);
+        Image img = de_image_decode(FONT4X6_DATA, FONT4X6_DATA_LEN);
         font_small = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 32);
         SetTextureFilter(font_small.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
     {
-        Image img = LoadImageFromMemory(".png", FONT3X5_DATA, FONT3X5_DATA_LEN);
+        Image img = de_image_decode(FONT3X5_DATA, FONT3X5_DATA_LEN);
         font_tiny = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 32);
         SetTextureFilter(font_tiny.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
     {
-        Image img = LoadImageFromMemory(".png", FONTCOMIC10X20_DATA, FONTCOMIC10X20_DATA_LEN);
+        Image img = de_image_decode(FONTCOMIC10X20_DATA, FONTCOMIC10X20_DATA_LEN);
         font_comic = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 0);   // Comic Mono Bold @ 18px, 10×20 cells
         SetTextureFilter(font_comic.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
     {
-        Image img = LoadImageFromMemory(".png", FONTTHIN8X8_DATA, FONTTHIN8X8_DATA_LEN);
+        Image img = de_image_decode(FONTTHIN8X8_DATA, FONTTHIN8X8_DATA_LEN);
         font_thin = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 0);    // IBM CGA "thin" 8×8, narrow-stroke alternate
         SetTextureFilter(font_thin.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
@@ -1977,7 +1986,7 @@ int main(int argc, char **argv) {
     font_thin_img  = LoadImageFromTexture(font_thin.texture);  ImageFormat(&font_thin_img,  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
 
     if (SPRITES_DATA_LEN > 0) {
-        Image img = LoadImageFromMemory(".png", SPRITES_DATA, SPRITES_DATA_LEN);
+        Image img = de_image_decode(SPRITES_DATA, SPRITES_DATA_LEN);
         if (img.width > 0) {
             ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);   // so img_texel()'s fast path always applies
             spritesheet_img = img;
