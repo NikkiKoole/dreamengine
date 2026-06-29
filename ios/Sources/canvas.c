@@ -1,4 +1,5 @@
 #include "canvas.h"
+#include "audio.h"
 #include <math.h>
 
 static uint8_t fb[DE_W * DE_H * 4];
@@ -37,4 +38,11 @@ void de_update(double t) {
         for (int y = DE_H - 12; y < DE_H; y++)
             pset(x, y, phase ? 60 : 40, phase ? 52 : 34, phase ? 72 : 48);
     }
+    // VU meter (top) — driven by the AUDIO thread's RMS, so a moving bar is visual
+    // proof the CoreAudio render callback is actually being pulled.
+    int vu = (int)(de_audio_level() * 6.0f * DE_W);   // ~0.18 peak → near full width
+    if (vu > DE_W) vu = DE_W;
+    for (int x = 0; x < DE_W; x++)
+        for (int y = 4; y < 10; y++)
+            pset(x, y, x < vu ? 120 : 36, x < vu ? 230 : 30, x < vu ? 140 : 40);
 }

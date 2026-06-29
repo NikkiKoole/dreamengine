@@ -1,2 +1,3 @@
-// Exposes the C software-canvas API to Swift.
+// Exposes the C software-canvas + audio APIs to Swift.
 #include "canvas.h"
+#include "audio.h"

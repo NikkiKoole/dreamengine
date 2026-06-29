@@ -38,6 +38,6 @@ how these apps got somewhere. When a spike lands, copy its shot in and add a row
 
 ## Status
 
-Spike 0 (toolchain) ✅ · Spike 1 (software-canvas render + inverted loop) ✅. Next: spike 2 — audio
-(`sound.h` → CoreAudio render callback). Ladder + decisions in
-[`../docs/design/ios-plan.md`](../docs/design/ios-plan.md).
+Spike 0 (toolchain) ✅ · Spike 1 (software-canvas render + inverted loop) ✅ · Spike 2 (audio:
+C synth → CoreAudio render callback) ✅. Next: spike 3 — save (`save_bytes` blob → Documents dir).
+Ladder + decisions in [`../docs/design/ios-plan.md`](../docs/design/ios-plan.md).

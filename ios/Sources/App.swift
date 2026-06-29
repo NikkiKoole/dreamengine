@@ -14,5 +14,6 @@ struct ContentView: View {
             Color.black.ignoresSafeArea()
             CanvasViewRep().ignoresSafeArea()
         }
+        .onAppear { AudioEngine.shared.start() }   // spike 2 — start the synth
     }
 }

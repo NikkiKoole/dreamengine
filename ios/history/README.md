@@ -11,3 +11,4 @@ soon catches the iOS launch-zoom animation (washed-out, wallpaper showing throug
 |---|---|---|
 | `spike0-hello-toolchain.png` | 2026-06-29 | The agentic toolchain end-to-end: xcodegen → xcodebuild (no signing) → simulator boot/install/launch. A SwiftUI hello-world. |
 | `spike1-canvas-loop.png` | 2026-06-29 | The software-canvas render path: C fills an RGBA framebuffer → CGImage → `CADisplayLink`-driven `de_update(t)` (the inverted loop) → crisp lo-fi pixels on screen. Pink ball animates; no GL/ANGLE. |
+| `spike2-audio-vu.png` | 2026-06-29 | The audio path: a C synth fills an `AVAudioSourceNode` render callback (CoreAudio). The green VU bar (top) is driven by the audio thread's RMS — proof the callback is pulled. A C-pentatonic arpeggio plays. |
