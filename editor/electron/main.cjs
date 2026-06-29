@@ -768,6 +768,41 @@ ipcMain.handle('studio:run', async (_event, code, cfg) => {
   })
 })
 
+// DEPLOY TO iPhone: build+sign the LIVE editor buffer for a connected device and launch it,
+// streaming ios/device.sh's progress to the runtime log. prepareCart() already wrote
+// build/{cart.c,sprites_data.h,map_data.h}; EDITOR=1 tells device.sh to use those as the app cart
+// (not re-stage a saved one), and the cart's dims ride in via DE_* env (works for any size). The
+// signed device build is ~90s — this is a deploy button, not a hot-run. Electron + a plugged-in,
+// unlocked iPhone with signing set up (see ios/device.sh) required.
+ipcMain.handle('studio:deploy-ios', async (_event, code, cfg) => {
+  const dims    = prepareCart(code, cfg)
+  const iosDir  = path.join(__dirname, '../../ios')
+  const wc      = _event.sender
+  const log     = (m) => { if (!wc.isDestroyed()) wc.send('cart:log', m) }
+  if (!fs.existsSync(path.join(iosDir, 'device.sh'))) return { ok: false, output: 'ios/device.sh not found' }
+
+  log('── deploy to iPhone ──\nbuilding signed for device (~90s)…\n')
+  const env = {
+    ...process.env,
+    EDITOR: '1',
+    CART:        cfg?.cartName || 'editor',
+    DE_SCREEN_W: String(dims.screenW), DE_SCREEN_H: String(dims.screenH),
+    DE_MAP_W:    String(dims.mapW),    DE_MAP_H:    String(dims.mapH),
+    DE_CELL_W:   String(dims.cellW),   DE_CELL_H:   String(dims.cellH),
+  }
+  return new Promise(resolve => {
+    const proc = spawn('bash', ['device.sh'], { cwd: iosDir, env, stdio: ['ignore', 'pipe', 'pipe'] })
+    let tail = ''
+    const cap = (c) => { const s = c.toString(); tail = (tail + s).slice(-400); log(s) }
+    proc.stdout.on('data', cap)
+    proc.stderr.on('data', cap)
+    proc.on('exit', (codeN) => resolve(codeN === 0
+      ? { ok: true,  output: null }
+      : { ok: false, output: tail.trim() || `device.sh exited ${codeN}` }))
+    proc.on('error', (e) => resolve({ ok: false, output: String(e) }))
+  })
+})
+
 // LIVE auto-reload: while a live host is up, the editor calls this on a debounce as you
 // type. It just rewrites cart.c — the host's file-watch recompiles + hot-reloads it (a
 // bad edit keeps the last good cart running). No sprite re-export, no host rebuild.

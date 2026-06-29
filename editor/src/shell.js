@@ -1224,6 +1224,29 @@ buildWebBtn.addEventListener('click', async () => {
   }
 })
 
+// ── deploy to iPhone (signed device build of the live buffer) ──
+const deployIosBtn = document.getElementById('deploy-ios-btn')
+
+deployIosBtn?.addEventListener('click', async () => {
+  if (!window.studio?.deployIos) return   // Electron-only (browser tab can't spawn the build)
+  const tilemapCanvas = document.querySelector('#tilemap-canvas')
+  if (tilemapCanvas) await window.studio.saveSprites(tilemapCanvas.toDataURL('image/png'))
+  await window.studio.saveMap(getMapBytes())
+
+  const stopDots = busyDots(deployIosBtn, 'deploying', '\u{1F4F1} to iPhone')
+  deployIosBtn.disabled = true
+  rlogClear()   // open the runtime log panel for the device-build progress
+
+  const code = view.state.doc.toString()
+  const result = await window.studio.deployIos(code, { ...settings, cartName: currentCartName })
+
+  stopDots()
+  deployIosBtn.disabled = false
+
+  if (result.ok) showToast('running on iPhone')
+  else showLog(result)
+})
+
 // busy-dots: "⌛ label", "⌛ label.", "⌛ label.." … while a slow build runs.
 // returns a stop() that restores the button's resting text.
 function busyDots(btn, label, resting) {

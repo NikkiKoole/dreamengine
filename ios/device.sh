@@ -33,15 +33,33 @@ stage_cart() {
     || { echo "✗ cart '$1' generation failed"; exit 1; }
   mkdir -p "gen/$2"; cp ../build/cart.c ../build/sprites_data.h ../build/map_data.h "gen/$2/"
 }
-echo "▸ staging carts (gen/app=$CART, gen/au=$AU_CART)…"
-stage_cart "$CART" app
+# EDITOR=1: deploy the editor's LIVE buffer — the editor already wrote build/{cart.c,sprites_data.h,
+# map_data.h} (prepareCart), so use those as the app cart instead of re-staging a saved cart via play.js.
+# The dims come in via DE_* env (any size — see GCC_PREPROCESSOR_DEFINITIONS below). The AU is always a
+# saved cart (epiano); it's audio-only so its dims don't matter.
+if [ -n "${EDITOR:-}" ]; then
+  echo "▸ staging editor cart from build/ → gen/app…"
+  mkdir -p gen/app
+  cp ../build/cart.c ../build/sprites_data.h ../build/map_data.h gen/app/ \
+    || { echo "✗ no editor build/ output to deploy"; exit 1; }
+else
+  echo "▸ staging carts (gen/app=$CART, gen/au=$AU_CART)…"
+  stage_cart "$CART" app
+fi
 stage_cart "$AU_CART" au
 
+# cart dims → preprocessor override (replaces project.yml's; default = the standard 320×200 console).
+# SCALE=1 keeps touches 1:1 with framebuffer pixels. Applies to both targets; harmless for the AU.
+SW="${DE_SCREEN_W:-320}"; SH="${DE_SCREEN_H:-200}"
+MW="${DE_MAP_W:-128}"; MH="${DE_MAP_H:-64}"; CWv="${DE_CELL_W:-16}"; CHv="${DE_CELL_H:-16}"
+DEFS="\$(inherited) DE_NO_RAYLIB=1 SCREEN_W=$SW SCREEN_H=$SH SCALE=1 MAP_W=$MW MAP_H=$MH CELL_W=$CWv CELL_H=$CHv"
+
 CONFIG="${CONFIG:-Debug}"   # CONFIG=Release for the optimized engine (real perf; no #if DEBUG perf overlay)
-echo "▸ generating + building (signed for device, $CONFIG)…"
+echo "▸ generating + building (signed for device, $CONFIG, ${SW}x${SH})…"
 xcodegen generate --spec project.yml >/dev/null
 xcodebuild -project "$SCHEME.xcodeproj" -scheme "$SCHEME" -configuration "$CONFIG" \
   -destination 'generic/platform=iOS' -derivedDataPath build \
+  GCC_PREPROCESSOR_DEFINITIONS="$DEFS" \
   -allowProvisioningUpdates DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic build >/dev/null
 
 echo "▸ installing + launching on device…"
