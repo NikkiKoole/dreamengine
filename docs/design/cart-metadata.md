@@ -54,6 +54,7 @@ is greppable in source (`grep -l adsr-envelope tools/carts/*.c`).
 |---|---|---|
 | `title` | yes | |
 | `status` | not yet | `active`(default) / `showcase` / `retired` / `archive` / `hidden` — seeds the real featuring system (replaces the dead array-order "featured" sort). All carts migrate to `active`. |
+| `created` | yes | birth date `YYYY-MM-DD`, backfilled **once** from the `.c`'s first-add commit (`git log --follow --diff-filter=A`, committer date). Immutable, so it never drifts; **portable** — the cart carries its own age outside git (exported `.cart.png`, native app, the man-page/data-I/O view). New carts set today's date. **In-repo, `build-history.js` + the editor still read git dates** (identical to `created` here), so those tools are deliberately left as-is — `created` is the figured-once, git-independent record. `updated` is NOT stored (it'd go stale): it stays git-derived. |
 | `kind[]` | yes | vocabulary stays in `lint-carts.js` (`KINDS`) |
 | `genre` | yes | required when `kind` includes `game` (`GENRES`) |
 | `homage` | yes | optional |

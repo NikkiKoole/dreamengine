@@ -24,8 +24,9 @@ to the repo via the homes below; treat memory as a scratchpad for the live sessi
 - **Decision** ("why we did/didn't X") → an ADR in `docs/decisions/`.
 - **Shipped / open / cut** → the `docs/STATUS.md` ledger.
 - **How-to / workflow** → `docs/guides/*.md`.
-- **API fn** → the four places in "Adding a new API function". **Cart** → `index.json` tags (feeds
-  the compendium).
+- **API fn** → the four places in "Adding a new API function". **Cart** → a `de:meta` block in the
+  cart's `.c` (`index.json` is *generated* from it — feeds the compendium); see
+  [`docs/design/cart-metadata.md`](docs/design/cart-metadata.md).
 
 If you're tempted to add more than ~2 lines to CLAUDE.md, it belongs in a doc — link it instead.
 
@@ -47,11 +48,12 @@ Two parallel-agent commit hazards (both have bitten):
    - **Exact filenames, never a directory/glob** (`git commit -- editor/` re-sweeps foreign
      changes). And `-m` goes *before* `--`.
    - Backstop: `git diff --cached --name-only` before committing if unsure.
-2. **Shared registry files** (`editor/public/carts/index.json` is the big one) often carry
-   another agent's uncommitted entries. Pathspec does NOT save you here — it commits the current
-   working-tree version, foreign edits and all, which may reference uncommitted cart files (broken
-   refs). If the file is dirty with foreign edits: stash your copy, `git checkout HEAD -- <file>`,
-   splice in ONLY your entry, commit by pathspec, then restore.
+2. **Generated registry files.** `editor/public/carts/index.json` is now **generated** from each
+   cart's `de:meta` block (`tools/build-cart-index.js`) — you never hand-edit it, so a cart's
+   metadata edit touches only its own `.c` (the old shared-index conflict is gone). It's regenerated +
+   committed on bake; if it ever conflicts, don't hand-merge — rerun `node tools/build-cart-index.js`
+   and commit. (For any OTHER hand-maintained shared file dirty with a foreign edit: stash your copy,
+   `git checkout HEAD -- <file>`, splice in ONLY your entry, commit by pathspec, then restore.)
 
 **Destructive-restore guard — a restore you don't notice wipes work you can't see.** `git checkout
 -- <file>` / `git restore <file>` silently throw away *all* uncommitted changes to that path — with
@@ -148,7 +150,10 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              sprite-preview.js  render a .cart.js's sprites to one labelled PNG (no compile/run) — the tight loop for code-drawn sprites
              font-bake.js    bake real-TTF text into sprite-draw canvases at build time
              gen-rom-font.js bake the "extra" bitmap fonts (ROM dumps + EPX) into the shared atlas
-             lint-carts.js   validate index.json (tags + registration); owns the tag vocabulary
+             build-cart-index.js  GENERATE editor/public/carts/index.json from each cart's de:meta block
+                             (cart owns its metadata; index.json is a derived view); --check gates staleness
+             lint-carts.js   validate each cart's de:meta (tags/status/created/description) + assert
+                             index.json in sync; owns the tag vocabulary
              spec.js         run each cart's spec() — the gameplay-logic gate (twin of tune-check)
              cart-info.js    orient on ONE cart: screen/GW×GH, embedded de:source DRIFT vs the .c, registration
              cart-status.js  what's out of date (rebake / publish / stale / compendium)
@@ -253,7 +258,9 @@ worked example (HUD row, start-menu legend, mode-tile + per-slider icons).
 
 ## Tutorial carts
 
-Carts show up in the tutorials panel, driven by `editor/public/carts/index.json`. Each `.cart.png`
+Carts show up in the tutorials panel, driven by `editor/public/carts/index.json` — which is
+**generated** from each cart's `de:meta` block (`tools/build-cart-index.js`, see
+[`docs/design/cart-metadata.md`](docs/design/cart-metadata.md)); never hand-edit it. Each `.cart.png`
 embeds source/sprites/map/settings as zTXt chunks (`de:source` etc.); the visible image is the
 thumbnail. The `de:settings` chunk restores the cart's intended screen/scale/cell/map dims.
 Source-of-truth files live in `tools/carts/`.
@@ -269,13 +276,16 @@ music cart, **imagine the ideal band from the genre BEFORE reading any existing 
 
 **Adding a cart** (full walkthrough: [`docs/guides/cart-authoring.md`](docs/guides/cart-authoring.md)):
 
-1. Write `tools/carts/<name>.c`, opening with a docblock (title + player-facing prose).
+1. Write `tools/carts/<name>.c`, opening with a `de:meta` block then a docblock (title + prose).
+   The `de:meta` carries the metadata: `title`, `kind[]` (games need `genre`), `teaches` (from the
+   `tools/teaches-vocab.js` vocab), `created` (today's `YYYY-MM-DD`), optional `lineage`/`homage`,
+   and `description` (a string or `{summary,detail,controls}`). Schema:
+   [`docs/design/cart-metadata.md`](docs/design/cart-metadata.md).
 2. *(Optional)* `tools/carts/<name>.cart.js` for sprites/map.
-3. `node tools/make-cart.js tools/carts/<name>.c editor/public/carts/<name>.cart.png` (build).
+3. `node tools/make-cart.js tools/carts/<name>.c editor/public/carts/<name>.cart.png` (build) —
+   **this auto-registers the cart** by regenerating `index.json` from your `de:meta`. No manual edit.
 4. `node tools/make-cart.js --run editor/public/carts/<name>.cart.png` (bake real screenshot).
-5. Register in `editor/public/carts/index.json` **with tags** (`kind[]` required; games need
-   `genre`; `teaches` is a required controlled vocabulary in `tools/teaches-vocab.js`; `lineage`
-   one-liner). Then `node tools/lint-carts.js`.
+5. `node tools/lint-carts.js` — validates your `de:meta` + that `index.json` is in sync.
 
 > **When the owner should eyeball or play-test a cart, BAKE IT FIRST** (step 3 re-embed + step 4
 > `--run`) so they can just load it in the editor — that's the preferred way to hand something over

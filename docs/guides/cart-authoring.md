@@ -454,7 +454,7 @@ home-row `A S D F G H J K` — same starting key, no blacks.
 | `tools/carts/XX-name.c` | cart source code |
 | `tools/carts/XX-name.cart.js` | optional sprites + map config |
 | `editor/public/carts/XX-name.cart.png` | finished cart (served to the tutorials page) |
-| `editor/public/carts/index.json` | metadata list for the tutorials panel |
+| `editor/public/carts/index.json` | **generated** metadata list (from each cart's `de:meta` block via `build-cart-index.js`) — never hand-edited |
 | `build/.bake/<name>/` | isolated scratch dir for a `--run` bake (its `screenshot.png` is read back into the cart) |
 | `build/screenshot.png` | last screenshot from the editor |
 | `tools/carts/compile_flags.txt` | clangd flags so the editor lints cart `.c` files correctly |
@@ -494,28 +494,38 @@ needed.
 
 ---
 
-## Adding a tutorial to the editor
+## Adding a cart to the editor
 
-1. Create `tools/carts/XX-name.c` (and optionally `tools/carts/XX-name.cart.js`)
-2. Run the two-step build above
-3. Add an entry to `editor/public/carts/index.json`:
+Each cart owns its metadata in a **`de:meta` block** at the top of its `.c`; the global
+`editor/public/carts/index.json` is **generated** from those blocks (`build-cart-index.js`), so you
+never hand-edit it — and parallel agents stop colliding on it. Full design + schema:
+[`../design/cart-metadata.md`](../design/cart-metadata.md).
 
-```json
+1. Open `tools/carts/XX-name.c` with a `de:meta` block (then the human docblock):
+
+```c
+/* de:meta
 {
   "title": "X. short title",
-  "description": "One sentence. What the student learns.",
-  "file": "XX-name.cart.png",
-  "kind": ["tutorial"]
+  "created": "2026-06-29",
+  "kind": ["tutorial"],
+  "teaches": [],
+  "description": "One sentence. What the student learns."
 }
+de:meta */
+#include "studio.h"
 ```
 
-Tags are required: `kind[]` always (`tutorial`, `game`, `tech-demo`, `toy`, …),
-`genre` for anything with kind `game` (and optional elsewhere when it aids
-browsing — the platformer tutorials carry `"genre": "platformer"`). The
-vocabulary and rules live in `tools/lint-carts.js`; validate with:
+2. *(Optional)* `tools/carts/XX-name.cart.js` for sprites/map.
+3. Run the two-step build above — **the build auto-registers the cart** by regenerating `index.json`
+   from your `de:meta` (no manual edit). A cart with no `de:meta` won't appear, and the build warns
+   when that happens.
+4. Validate: `node tools/lint-carts.js` — checks your `de:meta` and that `index.json` is in sync.
 
-```bash
-node tools/lint-carts.js
-```
+Required fields: `title`, `created` (today's `YYYY-MM-DD`), a non-empty `kind[]` (`tutorial`,
+`game`, `tech-demo`, `instrument`, `toy`, `tool`, `probe`, `generative`), `teaches[]` (use `[]` if
+nothing distinctive), and `description`. `genre` is required when `kind` includes `game`. Optional:
+`status`, `lineage`, `homage`. `description` may be a string or `{summary, detail, controls}`. The
+vocabulary + rules live in `tools/lint-carts.js`.
 
 The tutorials panel picks it up automatically on next reload — no code changes needed.
