@@ -262,6 +262,30 @@ Per-tribe outreach is the spearhead; these are the shared amplifiers that every 
 
 ---
 
+### 4.1 Video — the amplifier, not the first move
+
+Web/tribe outreach is the foundation (the conversion surface every clip points at); video is what makes
+it land and widens its reach. **Sequencing is web-first** — a video with no "play it free" link converts
+nothing, and you can't make a *great* clip until tribe feedback has made the cart great. But video isn't
+a separate *later* phase; it has three jobs that kick in at different times:
+
+1. **Fuel for the outreach** — the first tribe post is far stronger *with* a clip. Video is woven into
+   outreach from day one.
+2. **The reach-widener** — short-form (TikTok / Reels / Shorts) reaches people who'll never read a
+   forum. Forum = depth; video = breadth. Each clip points back at the free web demo.
+3. **The launch payload** — at paid launch, video is the trailer *and* the reviewer fodder (Sound Test
+   Room / Discchord review *on video* — the clip basically *is* the pitch to them).
+
+**The dreamengine edge:** `make-gif.js` + `compose-clips.js` + the **9:16 Game-&-Watch dancer export**
+(tinydaws-followup) mint marketing clips **deterministically, from the cart itself** — park a seed track
+in `tools/clips/<cart>/`, regenerate on demand. Most indies hand-capture a screen recording; we
+*generate* clips. And **audio capture works** — clips carry their sound, which is the whole point for a
+sound-toy — so the content engine is ready: one shareable, audio'd clip per module, repeatably.
+
+**Order of operations:** build cart → web demo + tribe outreach (with a rough clip) → learn & improve →
+polished short-form video to widen reach → at launch, the trailer + reviewer pitch. Don't *gate* on a
+perfect video, but plan for a clip in the very first tribe post.
+
 ## 5. Launch sequencing — which tribe first
 
 Engineering pilot ≠ marketing pilot. The rack format's hardest *technical* handoff is **rebirth-house**
@@ -331,8 +355,8 @@ Load-bearing pieces, all already specced:
 Keep it repeatable — same kit per module, swap the contents:
 
 1. **One playable web demo** (gallery URL) — the no-gate try.
-2. **One 9:16 hero clip** — faceplate in motion + the Game-&-Watch dancer, audio muxed
-   (`make-gif.js`; the silent-clips audio gap is the one thing to close first, see cart-clips.md).
+2. **One 9:16 hero clip** — faceplate in motion + the Game-&-Watch dancer, **with audio**
+   (`make-gif.js` captures sound; see cart-clips.md for the clip pipeline). The amplifier per §4.1.
 3. **One "vibe, not logotype" headline** + 2-line store blurb (the hooks in §3 are drafts).
 4. **One forum post** for Loopy Pro (TestFlight link + clip).
 5. **One tribe-native post** for that module's home (FB group / subreddit / Discord) — written in the
