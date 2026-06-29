@@ -2,6 +2,7 @@
 #include "studio.h"
 #include "raylib.h"
 #include "rlgl.h"      // immediate-mode triangles for tritex()
+#include "color.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -151,8 +152,8 @@ static int             active_font_id = FONT_NORMAL;
 // LoadImageFromTexture). Same index meaning as active_font_id via cur_font_img().
 static Image           game_font_img = {0}, font_small_img = {0}, font_tiny_img = {0}, font_comic_img = {0}, font_thin_img = {0};
 static bool            custom_font = false;
-static Color           palette[PALETTE_SIZE];
-static Color           base_palette[PALETTE_SIZE];   // pristine copy, for pal_reset()
+static DeColor           palette[PALETTE_SIZE];
+static DeColor           base_palette[PALETTE_SIZE];   // pristine copy, for pal_reset()
 // pal()-on-sprites: a palette-swap shader. Sprite texels are exact palette RGBs,
 // so the shader finds each texel's base-palette index and outputs the (possibly
 // remapped) current palette color — reproducing pal() for spr()/sspr() just like
@@ -169,7 +170,7 @@ static bool            cur_pal_dirty = true;
 // `spritesheet` texture (alpha 0); the canvas samples the pristine `spritesheet_img`, so it
 // must skip the key itself. Snapshot the RGB at colorkey() time (matches when the GPU bakes it).
 static bool            sw_colorkey_on  = false;
-static Color           sw_colorkey_rgb = {0};
+static DeColor           sw_colorkey_rgb = {0};
 
 // present-scaling filter, picked in settings → "scaling" (machine-local, -D flag):
 //   0 crisp (nearest, default) · 1 bilinear (smooth) · 2 sharp-bilinear · 3 sharp+gamma
@@ -239,7 +240,7 @@ static bool            cpu_raster_enabled = CPU_RASTER_DEFAULT;   // env DE_CPU_
 // lever. Cart audio calls become harmless no-ops (queues are never drained). Default on.
 static bool            audio_off = false;
 static uint32_t        sw_cbuf[SCREEN_W * SCREEN_H];          // CPU framebuffer (Fork 1: RGBA on desktop)
-static inline uint32_t sw_pack(Color c) { return (uint32_t)c.r | ((uint32_t)c.g<<8) | ((uint32_t)c.b<<16) | 0xFF000000u; }
+static inline uint32_t sw_pack(DeColor c) { return (uint32_t)c.r | ((uint32_t)c.g<<8) | ((uint32_t)c.b<<16) | 0xFF000000u; }
 // internal patterned-fill helpers — the public fills call these when fillp() is on
 static void rectfill_pat(int x, int y, int w, int h, int pattern, int c1, int c0);
 static void circfill_pat(int x, int y, int radius, int pattern, int c1, int c0);
@@ -519,7 +520,7 @@ static inline void sw_plot1(int sx, int sy, uint32_t p) {
 }
 // software-canvas pixel write. zoom==1: one texel (the hot path). zoom!=1: fill the world pixel's
 // screen footprint (a zoom×zoom block) so a zoomed pset/blit/line stays gap-free.
-static inline void sw_pset(int x, int y, Color c) {
+static inline void sw_pset(int x, int y, DeColor c) {
     uint32_t p = sw_pack(c);
     if (cam.zoom == 1.0f) { int sx, sy; sw_w2s(x, y, &sx, &sy); sw_plot1(sx, sy, p); return; }
     int sx0, sy0, sx1, sy1; sw_w2s(x, y, &sx0, &sy0); sw_w2s(x + 1, y + 1, &sx1, &sy1);
@@ -527,14 +528,14 @@ static inline void sw_pset(int x, int y, Color c) {
     for (int yy = sy0; yy < sy1; yy++) for (int xx = sx0; xx < sx1; xx++) sw_plot1(xx, yy, p);
 }
 // software line: the validated reflection-symmetric per-axis DDA (sline), writing sw_pset.
-static void sw_plot_minor(int maj, float v, float mid, int horiz, Color c) {
+static void sw_plot_minor(int maj, float v, float mid, int horiz, DeColor c) {
     float f = floorf(v); int fi = (int)f; float r = v - f; int m;
     if (r != 0.5f) m = (r < 0.5f) ? fi : fi + 1;
     else if (v == mid) { if (horiz) { sw_pset(maj,fi,c); sw_pset(maj,fi+1,c); } else { sw_pset(fi,maj,c); sw_pset(fi+1,maj,c); } return; }
     else m = (mid > v) ? fi + 1 : fi;
     if (horiz) sw_pset(maj, m, c); else sw_pset(m, maj, c);
 }
-static void sw_sline(int x0, int y0, int x1, int y1, Color c) {
+static void sw_sline(int x0, int y0, int x1, int y1, DeColor c) {
     int dx = x1-x0, dy = y1-y0, adx = dx<0?-dx:dx, ady = dy<0?-dy:dy;
     if (adx == 0 && ady == 0) { sw_pset(x0, y0, c); return; }
     if (adx >= ady) { int lo = x0<x1?x0:x1, hi = x0<x1?x1:x0; float ymid = (y0+y1)*0.5f;
@@ -544,7 +545,7 @@ static void sw_sline(int x0, int y0, int x1, int y1, Color c) {
 }
 // software filled rect: clip+camera-offset once, then memset cbuf rows (keeps the span speedup —
 // per-pixel plot_pat here would be far slower than the GPU DrawRectangle it replaces).
-static void sw_fillrect(int x, int y, int w, int h, Color c) {
+static void sw_fillrect(int x, int y, int w, int h, DeColor c) {
     int x0, y0, x1, y1;
     sw_w2s(x, y, &x0, &y0); sw_w2s(x + w, y + h, &x1, &y1);   // camera translate + zoom-scale the rect
     if (clip_active) { if (x0<clip_cx) x0=clip_cx; if (y0<clip_cy) y0=clip_cy;
@@ -555,7 +556,7 @@ static void sw_fillrect(int x, int y, int w, int h, Color c) {
 }
 // one fill-scanline span: cbuf row write under the software canvas, else the GPU DrawRectangle.
 // Lets the circ/oval/poly span fast-paths stay span-based (not per-pixel) on the canvas.
-static inline void sw_span(int x, int y, int w, Color c) {
+static inline void sw_span(int x, int y, int w, DeColor c) {
     if (sw_canvas_active) sw_fillrect(x, y, w, 1, c);
     else DrawRectangle(x, y, w, 1, c);
 }
@@ -563,28 +564,28 @@ static inline void sw_span(int x, int y, int w, Color c) {
 // current palette colour. Same nearest-by-squared-distance argmin as the shader (integer space
 // is monotonic with the shader's normalized space, so the winner is identical). Sprite texels are
 // exact palette RGBs, so "nearest" is "exact" in practice. Caller gates on pal_active.
-static inline Color sw_recolor(Color c) {
+static inline DeColor sw_recolor(DeColor c) {
     int best = 0, bestd = 1 << 30;
     for (int i = 0; i < PALETTE_SIZE; i++) {
         int dr = c.r - base_palette[i].r, dg = c.g - base_palette[i].g, db = c.b - base_palette[i].b;
         int d = dr*dr + dg*dg + db*db;
         if (d < bestd) { bestd = d; best = i; }   // strict < → first match wins, like the shader
     }
-    Color o = palette[best]; o.a = c.a; return o;
+    DeColor o = palette[best]; o.a = c.a; return o;
 }
 // true if this texel is the runtime colorkey (drawn transparent), mirroring colorkey()'s baked hole.
-static inline bool sw_keyed(Color c) {
+static inline bool sw_keyed(DeColor c) {
     return sw_colorkey_on && c.r == sw_colorkey_rgb.r && c.g == sw_colorkey_rgb.g && c.b == sw_colorkey_rgb.b;
 }
 // fast texel read — direct typed load for the common RGBA8 case (the sheet/atlases), bypassing the
 // non-inlined raylib GetImageColor call + its per-pixel format switch (the per-pixel sampling hotspot).
 // Byte-identical to GetImageColor for RGBA8; falls back for any other format. OOB → blank (matches
 // raylib). The blits sample inside valid regions, so the bounds check is a cheap guard, not the path.
-static inline Color img_texel(const Image *img, int x, int y) {
-    if ((unsigned)x >= (unsigned)img->width || (unsigned)y >= (unsigned)img->height) return (Color){0,0,0,0};
+static inline DeColor img_texel(const Image *img, int x, int y) {
+    if ((unsigned)x >= (unsigned)img->width || (unsigned)y >= (unsigned)img->height) return (DeColor){0,0,0,0};
     if (img->format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
         const unsigned char *p = (const unsigned char *)img->data + ((size_t)y * img->width + x) * 4;
-        return (Color){ p[0], p[1], p[2], p[3] };
+        return (DeColor){ p[0], p[1], p[2], p[3] };
     }
     return GetImageColor(*img, x, y);
 }
@@ -635,7 +636,7 @@ static void sw_blit(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int 
         int syy = fy ? (sy + sh - 1 - j * sh / dh) : (sy + j * sh / dh);
         for (int i = 0; i < dw; i++) {
             int sxx = fx ? (sx + sw - 1 - i * sw / dw) : (sx + i * sw / dw);
-            Color c = img_texel(&spritesheet_img, sxx, syy);
+            DeColor c = img_texel(&spritesheet_img, sxx, syy);
             if (c.a < 128 || sw_keyed(c)) continue;
             sw_pset(dx + i, dy + j, recolor ? sw_recolor(c) : c);
         }
@@ -661,7 +662,7 @@ static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,flo
             float l0=w0/area, l1=w1/area, l2=w2/area;
             int iu=(int)(l0*u0+l1*u1+l2*u2), iv=(int)(l0*v0+l1*v1+l2*v2);
             if ((unsigned)iu<(unsigned)spritesheet_img.width && (unsigned)iv<(unsigned)spritesheet_img.height) {
-                Color cc = img_texel(&spritesheet_img, iu, iv);
+                DeColor cc = img_texel(&spritesheet_img, iu, iv);
                 // plot via pset_rgb (arbitrary sampled RGB, no palette index) → backend-agnostic:
                 // on-canvas → sw_pset → cbuf; off-canvas (DE_CPU_RASTER) → DrawPixel. tritex uses the
                 // keyed sheet; no pal swap (matches GPU).
@@ -891,9 +892,9 @@ static void update_stick(void) {
 static void draw_touch_overlay(void) {
     if (!show_touch_ui) return;
 
-    Color ring  = (Color){ 255, 255, 255,  70 };
-    Color knob  = (Color){ 255, 255, 255, 160 };
-    Color press = (Color){ 255, 255, 255, 110 };
+    DeColor ring  = (DeColor){ 255, 255, 255,  70 };
+    DeColor knob  = (DeColor){ 255, 255, 255, 160 };
+    DeColor press = (DeColor){ 255, 255, 255, 110 };
 
     if (stick_touch_id != -1) {
         DrawCircleLines((int)stick_base_x, (int)stick_base_y, STICK_RADIUS, ring);
@@ -902,7 +903,7 @@ static void draw_touch_overlay(void) {
         // resting hint — mirror of A's position on the bottom-left
         int hx = 80;
         int hy = SCREEN_H * SCALE - 80;
-        Color hint = (Color){ 255, 255, 255, 40 };
+        DeColor hint = (DeColor){ 255, 255, 255, 40 };
         DrawCircleLines(hx, hy, STICK_RADIUS, hint);
         DrawCircleV((Vector2){ (float)hx, (float)hy }, STICK_RADIUS * 0.45f, hint);
     }
@@ -925,39 +926,39 @@ static void draw_touch_overlay(void) {
 
 static void load_palette() {
     // standard 16 (0-15)
-    palette[0]  = (Color){ 0,   0,   0,   255 }; // CLR_BLACK          #000000
-    palette[1]  = (Color){ 29,  43,  83,  255 }; // CLR_DARK_BLUE      #1d2b53
-    palette[2]  = (Color){ 126, 37,  83,  255 }; // CLR_DARK_PURPLE    #7e2553
-    palette[3]  = (Color){ 0,   135, 81,  255 }; // CLR_DARK_GREEN     #008751
-    palette[4]  = (Color){ 171, 82,  54,  255 }; // CLR_BROWN          #ab5236
-    palette[5]  = (Color){ 95,  87,  79,  255 }; // CLR_DARK_GREY      #5f574f
-    palette[6]  = (Color){ 194, 195, 199, 255 }; // CLR_LIGHT_GREY     #c2c3c7
-    palette[7]  = (Color){ 255, 241, 232, 255 }; // CLR_WHITE          #fff1e8
-    palette[8]  = (Color){ 255, 0,   77,  255 }; // CLR_RED            #ff004d
-    palette[9]  = (Color){ 255, 163, 0,   255 }; // CLR_ORANGE         #ffa300
-    palette[10] = (Color){ 255, 236, 39,  255 }; // CLR_YELLOW         #ffec27
-    palette[11] = (Color){ 0,   228, 54,  255 }; // CLR_GREEN          #00e436
-    palette[12] = (Color){ 41,  173, 255, 255 }; // CLR_BLUE           #29adff
-    palette[13] = (Color){ 131, 118, 156, 255 }; // CLR_INDIGO         #83769c
-    palette[14] = (Color){ 255, 119, 168, 255 }; // CLR_PINK           #ff77a8
-    palette[15] = (Color){ 255, 204, 170, 255 }; // CLR_LIGHT_PEACH    #ffccaa
+    palette[0]  = (DeColor){ 0,   0,   0,   255 }; // CLR_BLACK          #000000
+    palette[1]  = (DeColor){ 29,  43,  83,  255 }; // CLR_DARK_BLUE      #1d2b53
+    palette[2]  = (DeColor){ 126, 37,  83,  255 }; // CLR_DARK_PURPLE    #7e2553
+    palette[3]  = (DeColor){ 0,   135, 81,  255 }; // CLR_DARK_GREEN     #008751
+    palette[4]  = (DeColor){ 171, 82,  54,  255 }; // CLR_BROWN          #ab5236
+    palette[5]  = (DeColor){ 95,  87,  79,  255 }; // CLR_DARK_GREY      #5f574f
+    palette[6]  = (DeColor){ 194, 195, 199, 255 }; // CLR_LIGHT_GREY     #c2c3c7
+    palette[7]  = (DeColor){ 255, 241, 232, 255 }; // CLR_WHITE          #fff1e8
+    palette[8]  = (DeColor){ 255, 0,   77,  255 }; // CLR_RED            #ff004d
+    palette[9]  = (DeColor){ 255, 163, 0,   255 }; // CLR_ORANGE         #ffa300
+    palette[10] = (DeColor){ 255, 236, 39,  255 }; // CLR_YELLOW         #ffec27
+    palette[11] = (DeColor){ 0,   228, 54,  255 }; // CLR_GREEN          #00e436
+    palette[12] = (DeColor){ 41,  173, 255, 255 }; // CLR_BLUE           #29adff
+    palette[13] = (DeColor){ 131, 118, 156, 255 }; // CLR_INDIGO         #83769c
+    palette[14] = (DeColor){ 255, 119, 168, 255 }; // CLR_PINK           #ff77a8
+    palette[15] = (DeColor){ 255, 204, 170, 255 }; // CLR_LIGHT_PEACH    #ffccaa
     // extended 16 (16-31) — undocumented "secret" colors
-    palette[16] = (Color){ 41,  24,  20,  255 }; // CLR_BROWNISH_BLACK #291814
-    palette[17] = (Color){ 17,  29,  53,  255 }; // CLR_DARKER_BLUE    #111d35
-    palette[18] = (Color){ 66,  33,  54,  255 }; // CLR_DARKER_PURPLE  #422136
-    palette[19] = (Color){ 18,  83,  89,  255 }; // CLR_BLUE_GREEN     #125359
-    palette[20] = (Color){ 116, 47,  41,  255 }; // CLR_DARK_BROWN     #742f29
-    palette[21] = (Color){ 73,  51,  59,  255 }; // CLR_DARKER_GREY    #49333b
-    palette[22] = (Color){ 162, 136, 121, 255 }; // CLR_MEDIUM_GREY    #a28879
-    palette[23] = (Color){ 243, 239, 125, 255 }; // CLR_LIGHT_YELLOW   #f3ef7d
-    palette[24] = (Color){ 190, 18,  80,  255 }; // CLR_DARK_RED       #be1250
-    palette[25] = (Color){ 255, 108, 36,  255 }; // CLR_DARK_ORANGE    #ff6c24
-    palette[26] = (Color){ 168, 231, 46,  255 }; // CLR_LIME_GREEN     #a8e72e
-    palette[27] = (Color){ 0,   181, 67,  255 }; // CLR_MEDIUM_GREEN   #00b543
-    palette[28] = (Color){ 6,   90,  181, 255 }; // CLR_TRUE_BLUE      #065ab5
-    palette[29] = (Color){ 117, 70,  101, 255 }; // CLR_MAUVE          #754665
-    palette[30] = (Color){ 255, 110, 89,  255 }; // CLR_DARK_PEACH     #ff6e59
-    palette[31] = (Color){ 255, 157, 129, 255 }; // CLR_PEACH          #ff9d81
+    palette[16] = (DeColor){ 41,  24,  20,  255 }; // CLR_BROWNISH_BLACK #291814
+    palette[17] = (DeColor){ 17,  29,  53,  255 }; // CLR_DARKER_BLUE    #111d35
+    palette[18] = (DeColor){ 66,  33,  54,  255 }; // CLR_DARKER_PURPLE  #422136
+    palette[19] = (DeColor){ 18,  83,  89,  255 }; // CLR_BLUE_GREEN     #125359
+    palette[20] = (DeColor){ 116, 47,  41,  255 }; // CLR_DARK_BROWN     #742f29
+    palette[21] = (DeColor){ 73,  51,  59,  255 }; // CLR_DARKER_GREY    #49333b
+    palette[22] = (DeColor){ 162, 136, 121, 255 }; // CLR_MEDIUM_GREY    #a28879
+    palette[23] = (DeColor){ 243, 239, 125, 255 }; // CLR_LIGHT_YELLOW   #f3ef7d
+    palette[24] = (DeColor){ 190, 18,  80,  255 }; // CLR_DARK_RED       #be1250
+    palette[25] = (DeColor){ 255, 108, 36,  255 }; // CLR_DARK_ORANGE    #ff6c24
+    palette[26] = (DeColor){ 168, 231, 46,  255 }; // CLR_LIME_GREEN     #a8e72e
+    palette[27] = (DeColor){ 0,   181, 67,  255 }; // CLR_MEDIUM_GREEN   #00b543
+    palette[28] = (DeColor){ 6,   90,  181, 255 }; // CLR_TRUE_BLUE      #065ab5
+    palette[29] = (DeColor){ 117, 70,  101, 255 }; // CLR_MAUVE          #754665
+    palette[30] = (DeColor){ 255, 110, 89,  255 }; // CLR_DARK_PEACH     #ff6e59
+    palette[31] = (DeColor){ 255, 157, 129, 255 }; // CLR_PEACH          #ff9d81
 
     for (int i = 32; i < PALETTE_SIZE; i++) palette[i] = palette[i - 32];  // upper half mirrors 0-31 (see PALETTE_SIZE note)
 
@@ -1023,8 +1024,8 @@ static void draw_watch_overlay(void) {
     int pad = 8, lh = 14;
     int w = 220, h = pad*2 + watch_count * lh;
 
-    DrawRectangle(8, 8, w, h, (Color){ 0, 0, 0, 180 });
-    DrawRectangleLines(8, 8, w, h, (Color){ 200, 200, 200, 120 });
+    DrawRectangle(8, 8, w, h, (DeColor){ 0, 0, 0, 180 });
+    DrawRectangleLines(8, 8, w, h, (DeColor){ 200, 200, 200, 120 });
 
     for (int i = 0; i < watch_count; i++) {
         char line[80];
@@ -1667,7 +1668,7 @@ static void loop_step(void) {
         if (present_sharp) EndShaderMode();
         if (fade_amt > 0.0f)
             DrawRectangle(0, 0, SCREEN_W * SCALE, SCREEN_H * SCALE,
-                          (Color){ 0, 0, 0, (unsigned char)(fade_amt * 255) });
+                          (DeColor){ 0, 0, 0, (unsigned char)(fade_amt * 255) });
         draw_touch_overlay();
         draw_watch_overlay();
     EndDrawing();
@@ -1937,32 +1938,32 @@ int main(int argc, char **argv) {
 
     {
         Image fontImage = LoadImageFromMemory(".png", DOS_8X8_FONT, DOS_8X8_FONT_LEN);
-        game_font = LoadFontFromImage(fontImage, (Color){ 255, 255, 0, 255 }, 0);
+        game_font = LoadFontFromImage(fontImage, (DeColor){ 255, 255, 0, 255 }, 0);
         SetTextureFilter(game_font.texture, TEXTURE_FILTER_POINT);
         UnloadImage(fontImage);
         custom_font = true;
     }
     {
         Image img = LoadImageFromMemory(".png", FONT4X6_DATA, FONT4X6_DATA_LEN);
-        font_small = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 32);
+        font_small = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 32);
         SetTextureFilter(font_small.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
     {
         Image img = LoadImageFromMemory(".png", FONT3X5_DATA, FONT3X5_DATA_LEN);
-        font_tiny = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 32);
+        font_tiny = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 32);
         SetTextureFilter(font_tiny.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
     {
         Image img = LoadImageFromMemory(".png", FONTCOMIC10X20_DATA, FONTCOMIC10X20_DATA_LEN);
-        font_comic = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 0);   // Comic Mono Bold @ 18px, 10×20 cells
+        font_comic = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 0);   // Comic Mono Bold @ 18px, 10×20 cells
         SetTextureFilter(font_comic.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
     {
         Image img = LoadImageFromMemory(".png", FONTTHIN8X8_DATA, FONTTHIN8X8_DATA_LEN);
-        font_thin = LoadFontFromImage(img, (Color){ 255, 255, 0, 255 }, 0);    // IBM CGA "thin" 8×8, narrow-stroke alternate
+        font_thin = LoadFontFromImage(img, (DeColor){ 255, 255, 0, 255 }, 0);    // IBM CGA "thin" 8×8, narrow-stroke alternate
         SetTextureFilter(font_thin.texture, TEXTURE_FILTER_POINT);
         UnloadImage(img);
     }
@@ -2462,8 +2463,8 @@ void colorkey(int color) {
     Image tmp = ImageCopy(spritesheet_img);
     if (color >= 0 && color < PALETTE_SIZE) {
         ImageFormat(&tmp, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-        Color key = palette[color];
-        ImageColorReplace(&tmp, key, (Color){ key.r, key.g, key.b, 0 });
+        DeColor key = palette[color];
+        ImageColorReplace(&tmp, key, (DeColor){ key.r, key.g, key.b, 0 });
     }
     if (spritesheet.width > 0) UnloadTexture(spritesheet);
     spritesheet = LoadTextureFromImage(tmp);
@@ -2529,7 +2530,7 @@ static void de_cpu_img_rot(Image *img, int sx, int sy, int sw, int sh, int dx, i
     float px0 = dx + ox, py0 = dy + oy;                       // pivot (world)
     bool recolor = use_pal && pal_active;
     bool oncanvas = sw_canvas_active;                          // hoist: plot straight to cbuf vs the pset dispatch
-    Color tint = fonttint >= 0 ? palette[fonttint % PALETTE_SIZE] : (Color){0,0,0,0};
+    DeColor tint = fonttint >= 0 ? palette[fonttint % PALETTE_SIZE] : (DeColor){0,0,0,0};
     // screen bbox = the 4 dest corners rotated forward about the pivot
     float cxx[4] = { dx - px0, dx + dw - px0, dx + dw - px0, dx - px0 };
     float cyy[4] = { dy - py0, dy - py0, dy + dh - py0, dy + dh - py0 };
@@ -2562,7 +2563,7 @@ static void de_cpu_img_rot(Image *img, int sx, int sy, int sw, int sh, int dx, i
             int ssx, ssy;                                              // nearest source texel
             if (sw == dw && sh == dh) { ssx = sx + (int)fxu;          ssy = sy + (int)fyu; }          // no scale (spr_rot)
             else                      { ssx = sx + (int)(fxu*sw/dw);  ssy = sy + (int)(fyu*sh/dh); }  // scaled
-            Color cc = img_texel(img, ssx, ssy);
+            DeColor cc = img_texel(img, ssx, ssy);
             if (fonttint >= 0) { if (cc.a < 128) continue; cc = tint; }
             else { if (cc.a < 128 || sw_keyed(cc)) continue; if (recolor) cc = sw_recolor(cc); }
             if (fast) {
@@ -2633,7 +2634,7 @@ static Image *cur_font_img(void) {
 }
 // software text: blit each glyph from the font atlas (tinted to `color`), mirroring DrawTextEx's
 // glyph iteration at scale 1 (these bitmap fonts draw at baseSize). Returns the pen x after the text.
-static int sw_print(const char *text, int x, int y, Color tint) {
+static int sw_print(const char *text, int x, int y, DeColor tint) {
     Font f = cur_font(); Image *img = cur_font_img();
     if (!img->data) return x;
     int penx = x, peny = y;
@@ -2645,7 +2646,7 @@ static int sw_print(const char *text, int x, int y, Color tint) {
         int ox = f.glyphs[gi].offsetX, oy = f.glyphs[gi].offsetY;
         for (int gy = 0; gy < (int)r.height; gy++)
             for (int gx = 0; gx < (int)r.width; gx++) {
-                Color a = GetImageColor(*img, (int)r.x + gx, (int)r.y + gy);
+                DeColor a = GetImageColor(*img, (int)r.x + gx, (int)r.y + gy);
                 if (a.a >= 128) sw_pset(penx + ox + gx, peny + oy + gy, tint);
             }
         int adv = f.glyphs[gi].advanceX; if (adv == 0) adv = (int)r.width;
@@ -2676,7 +2677,7 @@ int print(const char *text, int x, int y, int color) {
 
 int print_outline(const char *text, int x, int y, int color, int outline_color) {
     PROF("print_outline");
-    Color oc = palette[outline_color % PALETTE_SIZE];
+    DeColor oc = palette[outline_color % PALETTE_SIZE];
     float sz = cur_font_size();
     Font  f  = cur_font();
     static const int offsets[8][2] = {{-1,-1},{0,-1},{1,-1},{-1,0},{1,0},{-1,1},{0,1},{1,1}};
@@ -2749,7 +2750,7 @@ void rect(int x, int y, int w, int h, int color) {
         for (int yy = y + 1; yy < y + h - 1; yy++) { plot_pat(x, yy, color); plot_pat(x + w - 1, yy, color); }
         UIAUDIT('R', x, y, w, h, NULL); return;
     }
-    Color c = palette[color % PALETTE_SIZE];
+    DeColor c = palette[color % PALETTE_SIZE];
     int rx = x, ry = y;
     // 1px DrawRectangle slices — no line caps, exact pixel coverage
     DrawRectangle(rx,     ry,     w,   1,   c);  // top
@@ -2775,7 +2776,7 @@ void rectfill(int x, int y, int w, int h, int color) {
 // per shader cell beats a pset_rgb pixel-loop (chunky CPU shaders, true-colour bars).
 void rectfill_rgb(int x, int y, int w, int h, int hex) {
     PROF("rectfill_rgb");
-    Color c = { (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 };
+    DeColor c = { (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 };
     if (sw_canvas_active) { sw_fillrect(x, y, w, h, c); return; }   // cbuf row memset (the true-colour CPU-shader path)
     DrawRectangle(x, y, w, h, c);
 }
@@ -2837,11 +2838,11 @@ static Texture2D fp_texture(int pat, int c1, int c0) {
     for (int i = 0; i < FP_CACHE; i++)
         if (fp_cache[i].used && fp_cache[i].pat == pat && fp_cache[i].c1 == c1 && fp_cache[i].c0 == c0)
             return fp_cache[i].tex;
-    Color px[16];
+    DeColor px[16];
     for (int i = 0; i < 16; i++) {
         int on = (pat >> (15 - i)) & 1;                       // bit 15 = top-left, row-major
-        px[i] = on ? (c1 < 0 ? (Color){ 0, 0, 0, 0 } : palette[c1 % PALETTE_SIZE])
-                   : (c0 < 0 ? (Color){ 0, 0, 0, 0 } : palette[c0 % PALETTE_SIZE]);
+        px[i] = on ? (c1 < 0 ? (DeColor){ 0, 0, 0, 0 } : palette[c1 % PALETTE_SIZE])
+                   : (c0 < 0 ? (DeColor){ 0, 0, 0, 0 } : palette[c0 % PALETTE_SIZE]);
     }
     Image img = { px, 4, 4, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
     Texture2D t = LoadTextureFromImage(img);
@@ -2945,7 +2946,7 @@ void circfill(int cx, int cy, int r, int color) {
     if (disc_fill_fast && r >= 1 && cam.rotation == 0.0f && !fp_on) {
         int x0 = cx - r, y0 = cy - r, x1 = cx + r, y1 = cy + r;
         poly_clamp_scan(&x0, &y0, &x1, &y1);            // skip off-screen rows/cols (the poly-path win)
-        Color col = palette[color % PALETTE_SIZE];
+        DeColor col = palette[color % PALETTE_SIZE];
         float r2 = (float)r * r;
         for (int y = y0; y <= y1; y++) {
             float dy = y + 0.5f - cy;
@@ -3160,7 +3161,7 @@ void bezier(int x0, int y0, int cx, int cy, int x1, int y1, int color) {
 // call. Order-safe: any other primitive that changes texture/mode flushes our pending
 // pixels first, exactly like normal rlgl batching. docs/design/software-canvas.md →
 // "Cheaper alternatives".
-static inline void px_emit(int x, int y, Color c) {
+static inline void px_emit(int x, int y, DeColor c) {
     rlSetTexture(rlGetTextureIdDefault());   // 1x1 white; rlgl no-ops when already bound
     rlBegin(RL_QUADS);
         rlColor4ub(c.r, c.g, c.b, c.a);
@@ -3173,7 +3174,7 @@ static inline void px_emit(int x, int y, Color c) {
 
 void pset(int x, int y, int color) {
     PROF("pset");
-    Color c = palette[color % PALETTE_SIZE];
+    DeColor c = palette[color % PALETTE_SIZE];
     if (sw_canvas_active) { sw_pset(x, y, c); return; }
     if (pset_batch) px_emit(x, y, c);
     else            DrawPixel(x, y, c);
@@ -3183,7 +3184,7 @@ void pset(int x, int y, int color) {
 // canvas is RGBA, so this is the same cost as pset — it's how a CPU shader paints.
 void pset_rgb(int x, int y, int hex) {
     PROF("pset");
-    Color c = { (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 };
+    DeColor c = { (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF, 255 };
     if (sw_canvas_active) { sw_pset(x, y, c); return; }
     if (pset_batch) px_emit(x, y, c);
     else            DrawPixel(x, y, c);
@@ -3212,7 +3213,7 @@ int pget(int x, int y) {
     int ry = (int)s.y;
     if (rx < 0 || rx >= SCREEN_W || ry < 0 || ry >= SCREEN_H) return 0;
     // RT data is bottom-up in raylib; flip Y to match draw coords
-    Color c = GetImageColor(pget_snapshot, rx, SCREEN_H - 1 - ry);
+    DeColor c = GetImageColor(pget_snapshot, rx, SCREEN_H - 1 - ry);
     for (int i = 0; i < PALETTE_SIZE; i++) {
         if (palette[i].r == c.r && palette[i].g == c.g && palette[i].b == c.b) return i;
     }
@@ -3229,7 +3230,7 @@ int pget_rgb(int x, int y) {
     int rx = (int)s.x;
     int ry = (int)s.y;
     if (rx < 0 || rx >= SCREEN_W || ry < 0 || ry >= SCREEN_H) return -1;
-    Color c = GetImageColor(pget_snapshot, rx, SCREEN_H - 1 - ry);   // RT is bottom-up; flip Y
+    DeColor c = GetImageColor(pget_snapshot, rx, SCREEN_H - 1 - ry);   // RT is bottom-up; flip Y
     return (c.r << 16) | (c.g << 8) | c.b;
 }
 
@@ -3239,7 +3240,7 @@ int sget(int sx, int sy) {
     // sheet is loaded straight from PNG (top-down), so no Y flip like pget needs.
     if (!spritesheet_img.data) return 0;
     if (sx < 0 || sx >= spritesheet_img.width || sy < 0 || sy >= spritesheet_img.height) return 0;
-    Color c = GetImageColor(spritesheet_img, sx, sy);
+    DeColor c = GetImageColor(spritesheet_img, sx, sy);
     for (int i = 0; i < PALETTE_SIZE; i++) {
         if (palette[i].r == c.r && palette[i].g == c.g && palette[i].b == c.b) return i;
     }
@@ -3669,7 +3670,7 @@ static void poly_fill_cov(const int *xy, int n, int color) {
         return;
     }
     bool fast = (cam.rotation == 0.0f) && (cam.zoom == 1.0f) && !fp_on;
-    Color col = palette[color % PALETTE_SIZE];
+    DeColor col = palette[color % PALETTE_SIZE];
     float cross[MAXCROSS];
     for (int y = y0; y <= y1; y++) {
         float yc = y + 0.5f;
@@ -4142,7 +4143,7 @@ void pal_reset(void)      { for (int i = 0; i < PALETTE_SIZE; i++) palette[i] = 
 // Resolves into a real palette_set() (palette-and-color.md Layer 2) or gets deleted.
 void palette_hex(int i, int hex) {
     if (i < 0 || i >= PALETTE_SIZE) return;
-    palette[i] = (Color){ (unsigned char)((hex >> 16) & 0xFF),
+    palette[i] = (DeColor){ (unsigned char)((hex >> 16) & 0xFF),
                           (unsigned char)((hex >> 8)  & 0xFF),
                           (unsigned char)( hex        & 0xFF), 255 };
     pal_recompute();
@@ -4167,7 +4168,7 @@ void ovalfill(int cx, int cy, int rx, int ry, int color) {
     if (disc_fill_fast && cam.rotation == 0.0f && !fp_on) {
         int x0 = cx - rx, y0 = cy - ry, x1 = cx + rx, y1 = cy + ry;
         poly_clamp_scan(&x0, &y0, &x1, &y1);
-        Color col = palette[color % PALETTE_SIZE];
+        DeColor col = palette[color % PALETTE_SIZE];
         for (int y = y0; y <= y1; y++) {
             float dyn = (y + 0.5f - cy) / (float)ry;
             float t = 1.0f - dyn * dyn;
