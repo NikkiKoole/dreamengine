@@ -37,12 +37,13 @@ echo "▸ staging carts (gen/app=$CART, gen/au=$AU_CART)…"
 stage_cart "$CART" app
 stage_cart "$AU_CART" au
 
-echo "▸ generating + building (signed for device)…"
+CONFIG="${CONFIG:-Debug}"   # CONFIG=Release for the optimized engine (real perf; no #if DEBUG perf overlay)
+echo "▸ generating + building (signed for device, $CONFIG)…"
 xcodegen generate --spec project.yml >/dev/null
-xcodebuild -project "$SCHEME.xcodeproj" -scheme "$SCHEME" -configuration Debug \
+xcodebuild -project "$SCHEME.xcodeproj" -scheme "$SCHEME" -configuration "$CONFIG" \
   -destination 'generic/platform=iOS' -derivedDataPath build \
   -allowProvisioningUpdates DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic build >/dev/null
 
 echo "▸ installing + launching on device…"
-ios-deploy --id "$DEVICE_ID" --bundle "build/Build/Products/Debug-iphoneos/$SCHEME.app" --justlaunch
-echo "✓ running on device"
+ios-deploy --id "$DEVICE_ID" --bundle "build/Build/Products/$CONFIG-iphoneos/$SCHEME.app" --justlaunch
+echo "✓ running on device ($CONFIG)"
