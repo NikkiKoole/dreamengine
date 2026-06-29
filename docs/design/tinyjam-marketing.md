@@ -268,6 +268,38 @@ Discord links are canonical homes — confirm any rotating invite link is curren
 > Still to pin (rotating or not captured): the Omnichord Discord invite, the ReBirth FB community, and
 > the yacht-rock home. Find the live link before relying on them.
 
+### 3.10 Tribe adjacency — the cozy cluster (and the Adventure Time reframe)
+
+Tribes aren't islands; some overlap into a meta-cluster that cross-sells. The biggest is the
+**cozy / whimsical / lo-fi cluster**: the omnichord (Strumharpy), `lofi`, `plantasia`, `ambient`/`eno`,
+and a candidate "cozy adventure" module all draw the same warm, twinkly, indie-leaning audience.
+Implications:
+
+- **Cross-sell is natural.** A Strumharpy buyer is a prime target for the cozy-adventure module and vice
+  versa — which is exactly what the hub app + Master Pass are *for*. Map adjacencies so bundles and
+  "you might also like" follow the cluster, not random order.
+- **The omnichord is a connective *voice*, not just a module.** Its shimmer is a core colour of the
+  cozy-cartoon palette — it already appears as a comping voice in the Broken Fairground + Space-Age
+  Bachelor Pad racks (§3). So Strumharpy is both a standalone instrument module *and* an ingredient in a
+  cozy-adventure rack. Build once, reuse.
+
+**The Adventure Time reframe — and a third kind of tribe.** §2 named two tribe shapes (instrument cult,
+scene tribe). The Adventure Time crowd is a **third kind: a *fandom* tribe organized around owned IP** —
+the hardest wall of all. Its sound (twinkly omnichord-ish shimmer, BMO-style chiptune, a punky cartoon
+bass, cozy ukulele-folk) is squarely in our wheelhouse and a passionate slice of the cozy cluster. But
+Adventure Time is **Warner Bros. Discovery character IP** — far beyond any instrument trade dress (cf.
+the ReBirth/Roland tale, §2). So:
+
+- **Never** name, skin, or market it as Adventure Time / BMO / Marceline / the axe-bass — *not even in
+  the free funnel* (tolerated fan art ≠ a free thing funnelling into a paid app).
+- **Reach the crowd via the cozy/chiptune aesthetic** they already love — the omnichord shimmer is the
+  bridge — the way dungeon synth evokes Tolkien without licensing it. An original-named "cozy adventure"
+  toy + the right vibe lets the fans self-select, legally.
+- **Open hook (decision):** a punky cartoon bass · a BMO-style chiptune toy/character · cozy ukulele-folk
+  · or a full cozy-adventure rack combining them (with an omnichord-style shimmer voice in the mix).
+- **Legal channels:** chiptune (r/chiptunes, chipmusic.org / Battle of the Bits), cozy-games & VGM
+  communities, ukulele communities — *not* "Adventure Time fan" groups by name. (Verify before posting.)
+
 ## 4. The cross-cutting channels (where *every* campaign also posts)
 
 Per-tribe outreach is the spearhead; these are the shared amplifiers that every module launch uses:
