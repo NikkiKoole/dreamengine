@@ -155,8 +155,11 @@ audio→WAV); `tools/build-nr.sh` is the build/run recipe.
 on the iPhone 15 simulator, CoreAudio pulls the real mixer, UIKit touch drives it. One engine-side gap
 surfaced and was filled: the `de_touch_*` seam (platform.h) had no bodies and the no-Raylib input was
 all-zero stubs — `raylib_compat.c` now backs `de_touch_*` with a touch-point pool that
-`GetTouchPointCount/GetTouchPosition` read. The full shell wiring (project.yml `SCALE=1`, the
-`CanvasView` flip, the stereo `de_audio_render` split) lives in [`ios-plan.md`](ios-plan.md) → "Phase 2".
+`GetTouchPointCount/GetTouchPosition` read. It also synthesizes **mouse from the primary finger**
+(`GetMousePosition`/`IsMouseButton*`) so mouse-driven carts play from touch, plus a `de_key_event`
+key seam — both with raylib's prev/current edge model (`de_input_endframe()` at frame end). The full
+shell wiring (project.yml `SCALE=1`, the `CanvasView` flip, the stereo `de_audio_render` split) lives
+in [`ios-plan.md`](ios-plan.md) → "Phase 2".
 
 ## The three refactors that unlock iOS (and help web)
 

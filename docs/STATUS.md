@@ -1189,8 +1189,11 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     `tritex`/3D GPU-only). **GPU-parity audited + closed:** `pal()` (0px) and scaling were never gaps,
     and **camera rotation now works on the software canvas** (offscreen world layer → rotate-composite;
     a 25° probe is 0.04% off the GPU), so the rotation carts render on iOS. Only `smooth_zoom`'s AA
-    degrades (→ plain zoom). Open follow-ups: MIDI CC → cart knobs; a Metal backend if a `tritex`/3D
-    cart needs iOS. Full record: [`design/ios-plan.md`](design/ios-plan.md) → "Phase 2".
+    degrades (→ plain zoom). **Input wired:** touch→mouse synthesis (the primary finger drives
+    `GetMousePosition`/`IsMouseButton*`, so mouse carts play from touch + the harness can drive them)
+    + a `de_key_event` key seam — proven by injecting a tap into `hotline` (mouse_pressed → gameplay).
+    Open follow-ups (incl. the recommended next) in [`design/ios-plan.md`](design/ios-plan.md) →
+    "Phase 2". Full record there too.
 
 ---
 

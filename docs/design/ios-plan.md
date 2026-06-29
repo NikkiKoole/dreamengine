@@ -110,9 +110,19 @@ sees the C API. Gotcha learned: screenshot ~1.5s after launch or you catch the l
 > rotation carts (`hotline`/`sloop`/`coaster`/`worldpointer`) now render correctly on iOS. Full table:
 > [`engine-portability.md`](engine-portability.md) §"GPU-only feature parity — audited".
 >
-> **Open follow-ups:** (1) MIDI CC → cart knobs (the engine's MIDI is note+bend only today). (2)
-> `smooth_zoom` AA on the CPU (supersample), or accept plain zoom. (3) a Metal GPU backend behind the
-> seam if/when a `tritex`/3D cart needs iOS.
+> **Input wired (2026-06-29):** the no-GPU build was mouse/key zero-stubs, so mouse-driven carts got
+> no input on iOS. Now the **primary finger drives the mouse API** (`GetMousePosition`/`IsMouseButton*`
+> — `raylib_compat.c`), the way a browser synthesizes mouse from touch, so mouse carts play from touch
+> AND the headless harness can drive them by injecting `de_touch_*`. A **key seam** (`de_key_event`)
+> feeds `IsKeyDown/Pressed/Released` (the harness today; an on-screen keyboard later). Proven: a tap
+> injected into `hotline` headless triggers `mouse_pressed → start_game →` rotated gameplay.
+>
+> **Open follow-ups:** (1) **Virtual gamepad/keyboard in the iOS shell — the recommended next** (see
+> [`action-plan.md`](action-plan.md) "Touch-input"): raw `key()` carts (WASD movement, etc.) have no
+> touch equivalent. The engine already has an on-screen d-pad/buttons (`show_touch_ui`/`TOUCH_CONTROLS`)
+> and the `de_key_event` seam is ready — wire them into the iOS shell so gamepad + key carts become
+> playable on the phone. (2) MIDI CC → cart knobs (the engine's MIDI is note+bend only today). (3)
+> `smooth_zoom` AA on the CPU, or accept plain zoom. (4) a Metal GPU backend if a `tritex`/3D cart needs iOS.
 
 Spikes 0–7 proved the iOS *shell* with stand-in `canvas.c`/`audio.c`. Phase 2 plugs the real
 `studio.c` + `sound.h` + a cart (`omnichord` is the target) into it. Scoping (2026-06-29):
