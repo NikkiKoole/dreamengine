@@ -283,22 +283,22 @@ Implications:
   Bachelor Pad racks (§3). So Strumharpy is both a standalone instrument module *and* an ingredient in a
   cozy-adventure rack. Build once, reuse.
 
-**The Adventure Time reframe — and a third kind of tribe.** §2 named two tribe shapes (instrument cult,
-scene tribe). The Adventure Time crowd is a **third kind: a *fandom* tribe organized around owned IP** —
-the hardest wall of all. Its sound (twinkly omnichord-ish shimmer, BMO-style chiptune, a punky cartoon
-bass, cozy ukulele-folk) is squarely in our wheelhouse and a passionate slice of the cozy cluster. But
-Adventure Time is **Warner Bros. Discovery character IP** — far beyond any instrument trade dress (cf.
-the ReBirth/Roland tale, §2). So:
+**The Adventure Time crowd = an audience for Strumharpy, not a product.** §2 named two tribe shapes
+(instrument cult, scene tribe); a fandom like Adventure Time's is a **third kind**, reached by *aesthetic
+kinship*, never by the brand. The intent here is simply *who we show the omnichord toy to*: its cozy,
+twinkly shimmer is the same world that show's music lives in, so its fans are a natural extra audience
+for Strumharpy. Because we ship nothing that touches the IP, there's **no build risk** — only different
+caveats:
 
-- **Never** name, skin, or market it as Adventure Time / BMO / Marceline / the axe-bass — *not even in
-  the free funnel* (tolerated fan art ≠ a free thing funnelling into a paid app).
-- **Reach the crowd via the cozy/chiptune aesthetic** they already love — the omnichord shimmer is the
-  bridge — the way dungeon synth evokes Tolkien without licensing it. An original-named "cozy adventure"
-  toy + the right vibe lets the fans self-select, legally.
-- **Open hook (decision):** a punky cartoon bass · a BMO-style chiptune toy/character · cozy ukulele-folk
-  · or a full cozy-adventure rack combining them (with an omnichord-style shimmer voice in the mix).
-- **Legal channels:** chiptune (r/chiptunes, chipmusic.org / Battle of the Bits), cozy-games & VGM
-  communities, ukulele communities — *not* "Adventure Time fan" groups by name. (Verify before posting.)
+- **You may describe the vibe as a comparison** ("cozy cartoon music, the Adventure Time / Steven
+  Universe world") — normal descriptive/nominative use. Just no art, no logos, no implied endorsement.
+- **The real wall is community etiquette, not law.** Fan spaces (r/adventuretime, fan Discords) often
+  ban or resent self-promo, so the gift-not-ask tone (§9.1) matters *double* here. Favour the
+  promo-tolerant / fan-creation corners, or better, the overlapping **cozy / chiptune / ukulele**
+  communities where sharing a free tool is genuinely welcome.
+- **Parked:** if Strumharpy lands well with this crowd, a dedicated original-named "cozy adventure"
+  module (an omnichord-shimmer voice + chiptune + cozy folk) is a natural follow-up — a later *product*,
+  not a reason to touch the IP now.
 
 ## 4. The cross-cutting channels (where *every* campaign also posts)
 

@@ -33,6 +33,13 @@
 - r/synthesizers: https://www.reddit.com/r/synthesizers/
 - Ambient and lo-fi YouTube, plus the omnichord hashtag on IG/TikTok (for the clip)
 
+**Extra audience (cozy-cartoon / Adventure Time-adjacent):** the shimmer fits that crowd's taste, so
+they're a natural place to show Strumharpy ([marketing §3.10](tinyjam-marketing.md)). Caveat: this is
+an *etiquette* matter, not IP (we ship nothing AT). Fan spaces (r/adventuretime, fan Discords) often
+ban self-promo, so gift-tone only and favour promo-tolerant / fan-creation corners, or lean on the
+overlapping cozy / chiptune / ukulele communities. A vibe comparison in copy is fine ("cozy cartoon
+music, the Adventure Time world"); no logos, art, or implied endorsement.
+
 ---
 
 ## 0. Product name: pick one (decision)
