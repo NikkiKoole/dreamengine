@@ -517,16 +517,28 @@ When a cart demonstrably holds attention, *then*:
 > it **gates the first paid submission**. The free legacy gallery can keep PICO-8 as homage; the product
 > carts + the app need the original set. Design + plan: [`palette-and-color.md`](../design/palette-and-color.md).
 
-> **Decide before paid launch (blocker): the brand architecture.** mipolai.com today leads with a
-> *micro-transaction-free, for-children* promise — and (the maker's call) **that promise can't sit in the
-> umbrella header with Tinyjam's paid IAP underneath it.** That pledge is a trust contract with parents;
-> keep it unambiguous on the kids' line. **Resolution direction:** make Mipolai an *umbrella* whose
-> top-level identity is the broad values (handcrafted, no exploitative monetization, made with care), and
-> move the specific *micro-transaction-free / for-kids* promise **down onto its own line** ("the Mipos"),
-> with **Tinyjam in a separate place under adult rules** (IAP OK). A warm framing can ride on top —
-> *"great apps for kids, and great apps for bigger kids"* — though note "bigger kids" is a *tone*; the
-> actual Tinyjam audience is adult. The **free web demo fits any arrangement**, so this only blocks the
-> first *paid* submission, not the sketch-first phase.
+> **Decide before paid launch: the brand architecture.** mipolai.com today leads with a
+> *handcrafted, micro-transaction-free, offline, for-children* promise — and **almost every one of those
+> is kids-line-specific and doesn't honestly extend to Tinyjam** (agentic/pixel, not hand-drawn; paid
+> IAP; web/AUv3, not offline). Don't water the kids' promise down to fit Tinyjam; don't claim "handcrafted"
+> of an agentic build (same honesty trap as "hand-built engine"). The rule that sorts it:
+>
+> > **Umbrella = intent/ethics values (universally true); lines = execution-specific promises (they differ).**
+>
+> - **Umbrella-safe (both lines):** no dark patterns / honest pricing · made with **care & taste** · by a
+>   **real person, not a factory** · playful, "a bit weird in the good way." Use *care/taste/authorship*
+>   words, not *hand-making* words ("handcrafted"/"hand-drawn" assert *how* it's made, which differs).
+> - **Kids' line ("the Mipos") only:** handcrafted/hand-drawn · micro-transaction-free · offline · for
+>   children. **Tinyjam:** honest one-time pricing (no dark patterns) · the harpy identity · for
+>   music-makers ("bigger kids" works as a *tone*; the real audience is adult).
+>
+> **Cleanest resolution (the maker's idea):** make mipolai.com a **two-door splash — `MIPOS` | `TINYJAM`,
+> two big buttons.** The umbrella then makes *no* line-specific claim (it's a doorway, not a promise), so
+> there's nothing to reconcile; each line keeps its own honest values behind its door. ⚠️ SEO caveat
+> (§10): a two-button door has ~no text, so it won't rank/feed AI Overviews — keep the **rich indexable
+> content on the destination pages** (the MIPOS page, the Tinyjam/Strumharpy page), not the door.
+>
+> The splash + the free Strumharpy demo can go up anytime; only the *paid* App Store line waits on this.
 
 - **The native app** (Phase-2 engine port + the proven spikes), the module as **IAP**, the hub-app
   shell, and the **AUv3** extension (the killer feature).
