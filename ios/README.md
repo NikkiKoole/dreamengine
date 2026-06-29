@@ -50,6 +50,18 @@ xcrun simctl shutdown "iPhone 15"                       # shut the whole simulat
 xcrun simctl io "iPhone 15" screenshot shot.png
 ```
 
+## Run on a real iPhone
+
+```bash
+cd ios
+./device.sh                      # build signed → install → launch on the connected iPhone
+```
+
+One-time setup: add your Apple ID in **Xcode → Settings → Accounts** (mints the signing cert),
+`brew install ios-deploy`, and connect + unlock the phone. We use `ios-deploy` (not `devicectl`)
+because CoreDevice doesn't enroll older devices (iOS 15) without a GUI step. First launch may need:
+iPhone → Settings → General → VPN & Device Management → trust the "Apple Development" profile.
+
 ## Run the StoreKit tests yourself
 
 Proves in-app purchases with **no Apple account and no network** (a local `Tinyjam.storekit`
@@ -79,7 +91,6 @@ Expect `Test Suite 'StoreTests' passed` (buys a rack → entitlement unlocks; ma
 ## Status
 
 Spike 0 (toolchain) ✅ · 1 (software-canvas render + inverted loop) ✅ · 2 (audio → CoreAudio) ✅ ·
-3 (save → Documents dir) ✅ · 4 (StoreKit 2 + local config, headless) ✅ · 5 (App Group sharing) ✅.
-The free, simulator-only proving phase is complete. Remaining: 6 (CloudKit, needs iCloud account)
-and 7 (AUv3 in a host — **needs a device + one-time signing setup**). Ladder + decisions in
-[`../docs/design/ios-plan.md`](../docs/design/ios-plan.md).
+3 (save → Documents dir) ✅ · 4 (StoreKit 2 + local config, headless) ✅ · 5 (App Group sharing) ✅ ·
+**6.5 (standalone app runs on a real iPhone, signed)** ✅. Remaining: 7 (AUv3 in a host) and
+6 (CloudKit). Ladder + decisions in [`../docs/design/ios-plan.md`](../docs/design/ios-plan.md).

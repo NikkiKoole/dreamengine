@@ -11,11 +11,10 @@ targets:
     type: application
     platform: iOS
     sources: [Sources]
-    entitlements:
-      path: TinyjamHello.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.tinyjam
+    # NOTE: the app-group entitlement is re-added in spike 7 (AUv3), once the group is
+    # registered for automatic provisioning. It blocks plain device signing until then,
+    # and the AppGroup UserDefaults suite works without it. (Was: application-groups
+    # group.com.tinyjam.)
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

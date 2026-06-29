@@ -49,7 +49,8 @@ Each spike is a small throwaway that kills one unknown. Riskiest cheap-thing fir
 | 4 | StoreKit 2 + a local `.storekit` config (StoreKitTest): buy / entitlements, queried from C | the IAP model, no account/network | sim | ✅ **done** — in-house bridge (`Store.swift` + `tinyjam_store.h` via `@_cdecl`); headless XCTest buys → unlocks (master pass unlocks all). See `ios/history/spike4-storekit-gate.png` |
 | 5 | App Group: app writes unlocked racks, a reader sees them via the shared suite | entitlement sharing for AUv3 | sim | ✅ **done** — `AppGroup.swift` (UserDefaults suite); Store mirrors entitlements in; test proves write→read. Entitlement wired in `project.yml`; the *true cross-process container* needs signing (lands with the spike-7 extension). See `ios/history/spike5-appgroup.png` |
 | 6 | CloudKit sync of a saved tinyjam across devices (native-only nicety) | free cross-device sync | sim | — |
-| 7 | minimal AUv3 extension makes sound in a host | the killer feature | **device + signing** | — |
+| 6.5 | **standalone app runs on a real iPhone** (signed) | signing + device deploy | **device** | ✅ **done** — iPhone (iOS 15.4.1), maker confirmed running. `ios/device.sh` |
+| 7 | minimal AUv3 extension makes sound in a host | the killer feature | **device + signing** | next |
 
 Spike 1 mechanism shipped: `ios/Sources/canvas.{h,c}` (a stand-in software canvas — a few primitives
 into an RGBA8888 buffer) + `CanvasView.swift` (CGImage from the buffer, `layer.magnificationFilter =
@@ -86,3 +87,10 @@ Gotchas captured (so nobody re-hits them):
   locked state.
 - **`simctl launch` does NOT apply a scheme's StoreKit config** — that's why the headless proof is an
   XCTest using `SKTestSession(configurationFileNamed:)`, not a plain app launch.
+- **Device deploy (spike 6.5):** `devicectl`/CoreDevice does NOT see the iOS-15 iPhone ("No devices
+  found" though `xctrace` lists it) — use **`ios-deploy`** (classic protocol, `brew install ios-deploy`)
+  via `ios/device.sh`. The signing cert is minted on the first signed `xcodebuild` (after adding the
+  Apple ID in Xcode → Settings → Accounts); team `JH2ZCZH58D`. The **app-group entitlement was removed
+  from `project.yml`** to let plain device signing succeed (automatic provisioning didn't include the
+  group) — re-add it in spike 7 once the group is registered. iOS 15.4.1 needs **no Developer Mode**
+  (that's iOS 16+).
