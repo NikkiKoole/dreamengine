@@ -118,6 +118,7 @@
   <a href="#funnel">Funnel</a>
   <a href="#video">Video</a>
   <a href="#sequence">Sequencing</a>
+  <a href="#kit">Launch kit</a>
   <a href="#showup">Show up</a>
   <a href="#trademark">Trademark</a>
 </div></nav>
@@ -392,6 +393,46 @@
     <li><b>First genre rack to market: dungeon synth (ancient-library)</b> — a scene so tight it behaves like an instrument cult. Then acid (rebirth-classic).</li>
     <li>Roll the rest per tribe, each campaign nudging the Master Pass early-adopter price up a notch.</li>
   </ol>
+</div></section>
+
+<!-- LAUNCH KIT -->
+<section id="kit"><div class="wrap">
+  <h2>The launch kit</h2>
+  <div class="lead">The repeatable bundle to bring one module to one tribe — in two stages.</div>
+
+  <h3>Stage 1 — the free web outreach kit <span class="muted">(the real first launch)</span></h3>
+  <div class="scroll"><table>
+    <tr><th>Piece</th><th>What</th><th>Type</th></tr>
+    <tr><td><b>Playable web demo</b></td><td>The cart → wasm, mobile-friendly, genuinely good. The conversion surface.</td><td><span class="b lead-b">build</span></td></tr>
+    <tr><td><b>Share affordance</b></td><td>lz-string "copy link to your song" button wired in — or nothing spreads.</td><td><span class="b lead-b">build</span></td></tr>
+    <tr><td><b>Hero clip</b></td><td>One 9:16 clip with audio (make-gif.js + the dancer).</td><td><span class="b lead-b">build</span></td></tr>
+    <tr><td><b>Positioning</b></td><td>Vibe-not-logotype headline + a "what is this," in the tribe's voice.</td><td><span class="b ok">write</span></td></tr>
+    <tr><td><b>Tribe posts</b></td><td>Gift-not-ask: Loopy Pro + the tribe home, leading with the free link + a song URL.</td><td><span class="b ok">write</span></td></tr>
+    <tr><td><b>Wishlist</b></td><td>"Notify me when the app lands," tagged per module — builds the Stage-2 list.</td><td><span class="b lead-b">build</span> <span class="b ok">write</span></td></tr>
+  </table></div>
+  <p class="muted">Plus a <b>listening setup</b>: where feedback arrives + how you judge "does it hold attention?" — the trigger for Stage 2.</p>
+
+  <div class="callout"><strong>The destination — a dedicated page, NOT the 400-cart gallery.</strong>
+    Different funnel jobs: the gallery is broad discovery; a tribe campaign needs a focused surface —
+    <b>one cart, one URL, one story</b>. Put a <b>tinyjam hub on your own domain</b>
+    (<span class="mono">tinyjam.&lt;domain&gt;/&lt;module&gt;</span>) with a focused page per module. It's
+    <em>less</em> work than the gallery — the web build already emits a self-contained
+    <span class="mono">cart.html/js/wasm</span> bundle; a microsite is that bundle + a landing wrapper.
+    <br><br>
+    <b>⚠ Host gotcha:</b> runs on any static host (ScriptProcessor fallback), but for the better
+    <b>AudioWorklet</b> audio you need <b>COOP/COEP headers</b> → Netlify / Cloudflare Pages / own server,
+    <em>not</em> vanilla GitHub Pages. A quality lever, not a blocker.</div>
+
+  <h3>Stage 2 — the App Store launch kit <span class="muted">(later, gated on the trigger)</span></h3>
+  <ul>
+    <li><b>The native app</b> — Phase-2 engine port + the spikes; module as <b>IAP</b>; hub-app shell; the <b>AUv3</b> killer feature.</li>
+    <li><b>Store listing</b> — original (non-trademark) name, subtitle, description, keywords, screenshots, preview video (the hero clip), icon.</li>
+    <li><b>IAP + pricing</b> — modules + Master Pass; the launch-cheap early-adopter price (the Minecraft ladder).</li>
+    <li><b>Promo codes</b> — ready to DM the helpers (the grandfather move).</li>
+    <li><b>TestFlight</b> → posted to Loopy Pro for expert testers, pre-launch.</li>
+    <li><b>Reviewer outreach</b> — TestFlight + clip to Sound Test Room / Discchord / Gavinski.</li>
+    <li><b>Launch posts</b> — "it's live" to the wishlist + tribes + Loopy Pro, with the trailer.</li>
+  </ul>
 </div></section>
 
 <!-- SHOW UP -->

@@ -376,18 +376,67 @@ Honest limits: keep the blob small so URLs stay short (tinyjam's <1 KB lanes are
 arrangements could hit URL-length caps); the codec carries *song data*, not a persistent *identity* —
 that's the local-drafts layer's job (or, much later, a DB).
 
-## 7. What we make for each campaign (the asset kit)
+## 7. The launch kit — bringing one module to its tribe
 
-Keep it repeatable — same kit per module, swap the contents:
+A **launch kit** is the repeatable bundle of assets + steps to take *one* module to *one* tribe. It
+comes in **two stages**, and per the sketch-first rule (§5, §9) Stage 1 happens long before Stage 2.
 
-1. **One playable web demo** (gallery URL) — the no-gate try.
-2. **One 9:16 hero clip** — faceplate in motion + the Game-&-Watch dancer, **with audio**
-   (`make-gif.js` captures sound; see cart-clips.md for the clip pipeline). The amplifier per §4.1.
-3. **One "vibe, not logotype" headline** + 2-line store blurb (the hooks in §3 are drafts).
-4. **One forum post** for Loopy Pro (TestFlight link + clip).
-5. **One tribe-native post** for that module's home (FB group / subreddit / Discord) — written in the
-   tribe's language, leading with the *instrument/scene*, not the app.
-6. **A wishlist link** tagged to the module.
+### 7.1 Stage 1 — the free web outreach kit (the real first launch)
+
+No App Store yet — get the free web cart in front of the tribe, learn, improve. Six pieces (➤ = a
+build task, ✍️ = a writing task):
+
+1. ➤ **The playable web demo** — the cart built to wasm, **mobile-friendly** (it'll be played on
+   phones), genuinely good (clears the two-part bar). The conversion surface everything points at.
+2. ➤ **The share affordance** — the lz-string "copy link to your song" button wired in (§6.1). Without
+   it nothing spreads peer-to-peer. (Tier-0; not built yet.)
+3. ➤ **The hero clip** — one 9:16 clip *with audio* (make-gif.js + the Game-&-Watch dancer; §4.1).
+4. ✍️ **The positioning** — a *vibe-not-logotype* headline + a one-paragraph "what is this," in the
+   tribe's voice (the §3 hooks are drafts).
+5. ✍️ **The tribe posts** — gift-not-ask (§9.1): one for Loopy Pro, one for the tribe home (FB group /
+   subreddit / Discord), leading with the free link **+ a song URL**, not the app.
+6. ➤✍️ **The wishlist** — a "notify me when the app lands" signup, tagged to the module — builds the
+   list for Stage 2.
+
+Plus a **listening setup**: where feedback arrives and how you'll judge *"does this hold attention?"* —
+the trigger that unlocks Stage 2.
+
+### 7.2 The destination — a dedicated per-module page, NOT the 400-cart gallery
+
+The gallery and a launch page do **different funnel jobs**: the gallery is *broad discovery* (browse
+everything; ADR-0020's curated showcase), but a tribe campaign needs a **focused conversion surface** —
+one cart, one URL, one story. Landing a tribe member in a 400-cart container makes them hunt for the
+thing the post promised, on a heavy page; that bleeds conversions.
+
+- **Recommendation:** a tinyjam hub on the owner's own domain with one focused page per module
+  (`tinyjam.<domain>/<module>` or `<domain>/tinyjam/<module>`) — embeds the playable wasm cart + the
+  hook + the share button + the wishlist + the hero clip. Shared brand/deploy; each campaign links to
+  its own page.
+- **It's *less* work than the gallery, not more:** the web build already emits a **self-contained
+  per-cart bundle** (`cart.html`/`cart.js`/`cart.wasm`); a microsite is just that bundle + a landing
+  wrapper at a dedicated URL. Candidate: a `build-site.js` "standalone single-cart" mode.
+- **Host gotcha (one real technical note):** the cart runs on *any* static host — the engine falls back
+  to a ScriptProcessor audio path when the page isn't cross-origin-isolated. To get the **better
+  AudioWorklet path** you need **COOP/COEP headers**, so host where you can set them — **Netlify /
+  Cloudflare Pages / own server**, *not* vanilla GitHub Pages. Not a blocker; a quality lever. (See
+  audio-threading.md on the SharedArrayBuffer / COOP-COEP wrinkle.)
+- **Still ADR-0020-aligned** — watch + play, never contribute to a server; a one-cart page is the
+  *most* curated showcase possible.
+
+### 7.3 Stage 2 — the App Store launch kit (later, gated on the trigger)
+
+When a cart demonstrably holds attention, *then*:
+
+- **The native app** (Phase-2 engine port + the proven spikes), the module as **IAP**, the hub-app
+  shell, and the **AUv3** extension (the killer feature).
+- **Store listing** — original (non-trademark) app name, subtitle, description, keywords, **screenshots**,
+  a **preview video** (the hero clip repurposed), icon.
+- **IAP + pricing** — modules + Master Pass in App Store Connect; the **launch-cheap early-adopter
+  price** (the Minecraft ladder, §9.4).
+- **Promo codes** generated, ready to DM the helpers (the grandfather move, §9.3).
+- **TestFlight** build → posted to Loopy Pro for expert testers, pre-launch.
+- **Reviewer outreach** — TestFlight + clip to Sound Test Room / Discchord / Gavinski.
+- **Launch posts** — "it's live" to the wishlist + tribes + Loopy Pro, with the trailer.
 
 ---
 
