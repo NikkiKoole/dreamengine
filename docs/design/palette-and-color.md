@@ -165,6 +165,12 @@ to build first.
 
 ### Layer 2 — settable palette per cart *(the Picotron lesson)*
 
+> **Deep dive:** [`dynamic-palettes.md`](dynamic-palettes.md) explores this layer as a *model* (the
+> index becomes a role, not a colour) and resolves the question this layer leaves open — what
+> happens to the `CLR_*` constants when the palette can change (answer: they become *role* names,
+> kept honest by `palettelab`'s role-mapping discipline). Includes the three-way space
+> (fixed/dynamic/truecolor), the "a cart names its own few colours" variant, and the off-role residual.
+
 - `palette_set(i, r, g, b)` (or packed `0xRRGGBB`) + `palette_reset()` —
   the mechanism nearly exists: `pal()`-on-sprites already drives a palette
   texture through a shader ([decision 0007](../decisions/0007-pal-recolors-sprites.md));
