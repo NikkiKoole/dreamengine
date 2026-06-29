@@ -350,6 +350,32 @@ Load-bearing pieces, all already specced:
 
 ---
 
+### 6.1 The sharing layer — URL-codec first, Supabase in the back pocket
+
+How forum people share their work is a real decision; the three tiers live in product-notes-followup
+§save/share + action-plan Tier 0. The call:
+
+- **Now: the lz-string URL codec.** For a forum this isn't just *a* share method — it's *the* primitive:
+  a song **becomes a link** (serialize the <1 KB lane blob → compress → URL-safe base64 →
+  `…github.io/<cart>/?song=…`), pasteable in any forum / Discord / Reddit / DM, that **plays on click
+  with no account, no upload, no server.** Cheapest viral surface in the project; the seed-as-song-code
+  handoff generalized; already what the §6 funnel assumes. It fits the project stance (ADR-0020: a
+  public surface you *watch + play*, never *contribute to a server*) — no server holds user content, so
+  no moderation, spam, PII, or hosting cost.
+- **Pair with IndexedDB / localForage** for local "my drafts" (work survives a refresh). Namespace keys.
+- **Supabase / Firebase: later, and only for a *curated public gallery*** ("browse what others made").
+  A genuine feature, but a heavier, different thing — moderation, spam, PII, a backend to keep warm
+  (Supabase pauses after ~7 days idle), and it cuts against the no-open-contribution stance. If a
+  gallery is wanted, prefer a **hand-curated "featured tinyjams" list** (even a static JSON of the best
+  shared song-URLs — no DB) over open user-generated content.
+- **Native generalizes for free:** the same song blob rides a universal link / share sheet / `tinyjam://`
+  scheme into the iOS app; cross-device sync there is **CloudKit** (free, Apple — ios-plan spike 6),
+  not Supabase.
+
+Honest limits: keep the blob small so URLs stay short (tinyjam's <1 KB lanes are fine; very long
+arrangements could hit URL-length caps); the codec carries *song data*, not a persistent *identity* —
+that's the local-drafts layer's job (or, much later, a DB).
+
 ## 7. What we make for each campaign (the asset kit)
 
 Keep it repeatable — same kit per module, swap the contents:
