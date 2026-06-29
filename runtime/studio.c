@@ -3393,7 +3393,15 @@ void camera_ex(int x, int y, float zoom, float angle) {
     // fall back to the GPU path (Fork-2/C) — rotation breaks the span fast-paths. Sticky: clean
     // switch after one transitional frame. (TODO Option 3: render world 1:1 → GPU-transform at
     // present would keep rotation on the canvas too, but breaks world-then-HUD frames.)
+#ifndef DE_NO_RAYLIB
     if (angle != 0.0f) sw_force_gpu = true;
+#else
+    // no GPU to fall back to (iOS/Switch software-only). Falling back would freeze the cart
+    // (the GPU stubs no-op, sw_cbuf never updates). Instead stay on the SW canvas and ignore
+    // the rotation — the world renders un-rotated but LIVE (rotation on the SW canvas is the
+    // det-probes/rotfill TODO). zoom + translation below still apply. (void)angle;
+    (void)angle;
+#endif
     float zd = zoom > 1.0f ? zoom - 1.0f : 1.0f - zoom;
 #ifndef PLATFORM_WEB
     if (smooth_on && smooth_rt_ok && zd > 0.002f) {       // fractional zoom → capture at 1:1
