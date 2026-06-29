@@ -13,8 +13,8 @@ on-device counterpart).
 
 ## Why this matters for us
 
-We committed to the software canvas for 2D ([ADR-0024](decisions/0024-software-canvas-is-canonical-for-2d.md)):
-the phone rasterizes every pixel on the CPU. So our perf story is a CPU story, and the one question
+We committed to the software canvas for 2D ([ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md)):
+the phone rasterizes every pixel on the CPU (no GL/ANGLE). So our perf story is a CPU story, and the question
 that actually moves it is **"which function eats the frame on the A13?"** — `sw_blit`? `sw_recolor`?
 the rotate-composite? `sound_callback`? Our own counters (the `#if DEBUG` overlay in `CanvasView`,
 the in-cart FPS readout) tell us *how fast*; they can't tell us *where the time goes*. Instruments can,
