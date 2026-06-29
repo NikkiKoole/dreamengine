@@ -60,6 +60,49 @@ into an RGBA8888 buffer) + `CanvasView.swift` (CGImage from the buffer, `layer.m
 (`Sources/Bridging-Header.h`, wired via `SWIFT_OBJC_BRIDGING_HEADER` in `project.yml`) is how Swift
 sees the C API. Gotcha learned: screenshot ~1.5s after launch or you catch the launch-zoom animation.
 
+## Phase 2 — running the REAL engine on iOS (omnichord, not the stand-in)
+
+Spikes 0–7 proved the iOS *shell* with stand-in `canvas.c`/`audio.c`. Phase 2 plugs the real
+`studio.c` + `sound.h` + a cart (`omnichord` is the target) into it. Scoping (2026-06-29):
+
+**What helps us:**
+- `studio.c` already has a **software canvas** — `sw_cbuf[SCREEN_W*SCREEN_H]`, a CPU RGBA framebuffer
+  (`DE_SOFTWARE_CANVAS=on` / `SW_CANVAS_DEFAULT`). Primitives can rasterize on the CPU, no GL. This is
+  the same shape as our spike-1 blit.
+- `sound.h` has **`sound_synth_mode`** (the `--wav` path): the main thread pumps `sound_callback` to
+  fill a buffer with NO audio device. That's the exact hook to feed CoreAudio / the AUv3 render block
+  with the real mixer — same shape as our spike-2 path.
+
+**What's in the way:** `studio.c` (4287 lines) `main()` is deeply Raylib-coupled — `InitWindow`,
+`InitAudioDevice`, `GetCharPressed`/mouse, `LoadFontFromImage`/`LoadTexture`, the `WindowShouldClose`
+loop, `GetTime`. Raylib owns window/input/audio-device/assets/timing; the software canvas only
+replaces primitive *drawing*.
+
+### The fork
+
+- **Path A — raylib-iOS (ghera/ANGLE).** Build `studio.c` against the fork; Raylib provides
+  window/GL(→Metal)/input/audio/assets, we only invert the loop + map touch. Most faithful, least
+  engine surgery; but adds the large ANGLE dependency on an "experimental" fork, and **discards the
+  shell our 8 spikes built**.
+- **Path B — host-less (reuse our spike shell).** Render via `sw_cbuf` → our Metal/CGImage blit
+  (spike 1), audio via `sound_callback` synth-mode → CoreAudio (spike 2), input from UIKit touches,
+  save via spike 3, IAP/AUv3 from spikes 4/5/7. The work is **decoupling `studio.c` from Raylib** for
+  window/input/audio-device/asset-loading/timing — real surgery in a file not written to be host-less,
+  but it reuses everything we've already proven and keeps the own-the-stack ethos (no ANGLE).
+
+**Lean: Path B** — our spikes *are* the Path-B shell; this becomes "plug the real engine into the shell
+we built," and the AUv3 render block calling the real `sound_callback` is the headline. First milestone:
+compile `studio.c` for iOS with Raylib stubbed/removed, render one cart's `draw()` into `sw_cbuf`, blit
+it, and pump `sound_callback` to CoreAudio — then wire touch.
+
+**The maker can change the engine** (confirmed 2026-06-29) — so Path B is a *clean platform seam*, not
+a workaround. The full refactor survey + the load-bearing **software-canvas-vs-GPU renderer decision**
+(gated on fps measurement) live in [`engine-portability.md`](engine-portability.md). That decision
+gates Path B and must be settled (by measuring, on desktop AND device) before the real-engine port.
+
+Deferred and noted by the maker: **fluid/responsive layout** (a CSS-like positioning experiment in one
+cart) — Phase 2 just letterboxes the fixed canvas as the spikes do; revisit responsive later.
+
 ## The reusable loop (what "add an app" becomes)
 
 `ios/` is a toolkit, not a per-app project. Today it's the hello-world; the durable shape is:
