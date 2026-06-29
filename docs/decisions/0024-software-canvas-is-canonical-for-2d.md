@@ -62,10 +62,14 @@ several× faster):
 ## Consequences
 - iOS needs **no ANGLE, no `raylib-iOS` fork, no GL stack** — the biggest porting risk is gone, and
   it fits the own-the-stack ethos.
-- **GPU-only feature parity** is now a known, bounded gap for the portable target: `pal()`
-  (palette-swap shader), the scale/present filters, `smooth_zoom` (offscreen render-texture), and
-  `tritex` are GPU-path features. Carts leaning on them are either reimplemented on the CPU canvas or
-  kept off the iOS list. (`tritex`/3D: explicitly the latter, for now.)
+- **GPU-only feature parity** — audited after this decision (see
+  [`engine-portability.md`](../design/engine-portability.md) §"GPU-only feature parity — audited"), and
+  the gap is narrower than this ADR first assumed: **`pal()` already has full software parity**
+  (`sw_recolor`, `canvas-diff` 0px) and the **scale filter is a non-issue** (no cart uses it; the iOS
+  host scales). The only real portable-2D gaps are **camera rotation** (`camera_ex` angle≠0 — degrades
+  to un-rotated-but-live after a freeze-bug fix; true SW rotation is the `det-probes/rotfill` TODO) and
+  **`smooth_zoom`**'s offscreen-RT antialiasing (degrades to plain zoom). `tritex`/3D stays off-list by
+  perf, per this ADR.
 - A pile of GPU-vs-SW A/B scaffolding can eventually be pruned for the portable build (see
   `engine-portability.md` §"Settle and prune the A/B flags").
 - **Not forever-exclusive:** the seam keeps the GPU path alive, so a later Metal backend can take 3D

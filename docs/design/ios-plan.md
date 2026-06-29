@@ -104,9 +104,15 @@ sees the C API. Gotcha learned: screenshot ~1.5s after launch or you catch the l
 > agree → [ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md): **software canvas
 > canonical for 2D (ANGLE-free iOS), `tritex`/3D GPU-only + off the initial iOS list.**
 >
-> **Open follow-ups:** (1) MIDI CC → cart knobs (the engine's MIDI is note+bend only today). (2)
-> GPU-only-parity carts (`pal()`/scale filters/`smooth_zoom`) reimplemented on the CPU canvas or kept
-> off the iOS list. (3) a Metal GPU backend behind the seam if/when a 3D cart needs iOS.
+> **GPU-parity audited (2026-06-29):** `pal()` already has full software parity (0px) and the scale
+> filter is a non-issue — they were never real gaps. The only portable-2D gaps are **camera rotation**
+> (fixed a freeze → now un-rotated-but-live; true SW rotation is the `det-probes/rotfill` TODO) and
+> `smooth_zoom`'s AA (→ plain zoom). Affected: `hotline`/`sloop`/`coaster`/`worldpointer`. Full table:
+> [`engine-portability.md`](engine-portability.md) §"GPU-only feature parity — audited".
+>
+> **Open follow-ups:** (1) MIDI CC → cart knobs (the engine's MIDI is note+bend only today). (2) a SW
+> camera-rotation rasterizer (so the 4 rotation carts render correctly on iOS), or leave them off-list.
+> (3) a Metal GPU backend behind the seam if/when a 3D cart needs iOS.
 
 Spikes 0–7 proved the iOS *shell* with stand-in `canvas.c`/`audio.c`. Phase 2 plugs the real
 `studio.c` + `sound.h` + a cart (`omnichord` is the target) into it. Scoping (2026-06-29):

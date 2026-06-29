@@ -206,10 +206,33 @@ Together these turn "real engine on iOS" from surgery into "implement one iOS ba
   callback, touch-capable view, save, StoreKit, App Group, AUv3. Phase 2 = plug the real engine into it.
 - **Measurement tools** — `tools/canvas-diff.js` (correctness), `tools/profile-fleet.js` (perf).
 
+## GPU-only feature parity — audited (2026-06-29)
+
+The renderer ADR worried that `pal()`/scale/`smooth_zoom`/`tritex` were all GPU-only and would break
+the portable target. Audited against the actual software-canvas code + `canvas-diff` + the no-Raylib
+build (`build-nr.sh`); the real picture is narrower than feared:
+
+| feature | status on the software canvas | carts |
+|---------|------------------------------|-------|
+| **`pal()`** (palette-swap) | ✅ **full parity** — `sw_recolor()` is the CPU twin of `PAL_FS`; `canvas-diff` = **0px** on palettelab/smooch/neonrain/heroes | 37 |
+| **scale present filter** | ✅ **non-issue** — no cart uses it; on iOS the *host* (`CanvasView`) does nearest-neighbour scaling | 0 |
+| fractional **zoom** (`camera_ex`) | ✅ **works** (orbit renders); only *cosmetically* ≠ GPU (sub-pixel rounding), which doesn't matter with no GPU reference | many |
+| **`smooth_zoom`** (offscreen RT) | ⚠️ GPU-only; degrades to **plain zoom** (the fractional-zoom AA just doesn't apply) | `sloop` |
+| **camera ROTATION** (`camera_ex` angle≠0) | ⚠️ no SW rasterizer yet — **was a freeze bug**, now degrades gracefully (renders un-rotated but LIVE; the `det-probes/rotfill` study is the groundwork for true SW rotation) | `hotline`, `sloop`, `coaster`, `worldpointer` |
+| **`tritex`/3D** | ❌ GPU-only by perf (~89ms on the phone CPU) — off the initial iOS list ([ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md)) | `podracer`, … |
+
+**The freeze bug (fixed):** `camera_ex(angle≠0)` set the sticky `sw_force_gpu` to fall back to the GPU
+path — but with no GPU, the stubs no-op and `sw_cbuf` never updates again, so the *whole cart* froze
+one frame after any rotation (proven: an animated probe is byte-identical frame 1 vs 12). Now guarded
+`#ifndef DE_NO_RAYLIB` — the no-GPU build stays on the SW canvas and ignores the angle (un-rotated but
+live). So nothing freezes; rotation carts just look un-rotated until a SW rotation rasterizer lands.
+
+**Net:** the only *correctness* gaps left for portable 2D are camera rotation and `smooth_zoom`'s AA —
+both cosmetic-degrade now, neither fatal. `pal()` and scaling were never real gaps.
+
 ## Open questions
 
-- **The renderer decision** — software canvas vs GPU (measure fps; desktop **and** device). The gate.
-- **GPU-only feature parity** — reimplement `pal()`/scale/`smooth_zoom`/`tritex` on CPU, or drop/limit
-  them for the portable target?
 - **One renderer or two behind the seam?** Two keeps the GPU path first-class but re-introduces ANGLE
   on iOS. Probably commit to one.
+- **SW camera rotation** — implement the rotated-camera rasterizer (`det-probes/rotfill`/`rotspr` are
+  the studies) so the four rotation carts render correctly on iOS, or leave them off-list.
