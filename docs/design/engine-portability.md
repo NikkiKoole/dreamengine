@@ -83,6 +83,34 @@ The 2D headroom is so large it will survive a phone; the device measurement can 
 **Still owed:** the **device** measurement (iPhone, per the plan) — necessary before this is settled
 as an ADR.
 
+## Built — the platform seam, phase A → D.2 (2026-06-29)
+
+The seam is real and the engine now compiles + renders WITHOUT Raylib. All steps kept desktop
+bit-identical (build-all 439/439, canvas-diff omnichord 0px) — every new path is `#ifdef DE_NO_RAYLIB`,
+dormant on desktop/web.
+
+- **A — universal `DeColor`** (`runtime/color.h`): the engine owns its color type; `typedef Color
+  DeColor` aliases whatever the backend's `Color` is (Raylib's on desktop, the shim's under DE_NO_RAYLIB).
+- **`runtime/platform.h`** — the host↔engine contract: `de_init`/`de_frame`/`de_framebuffer`/
+  `de_screen_w/h` + `de_audio_render` + touch feed; `DE_RENDERER_SOFTWARE`/`_GPU` (two renderers, one
+  seam — software for portable/simple carts, GPU for heavy work).
+- **Decode centralized** → `de_image_decode` (one place; Raylib decoder today, stb_image branch is iOS's).
+- **Fonts baked** (`tools/bake-fonts.c` → `runtime/fonts_baked.h`): Raylib's own `LoadFontFromImage`
+  output (keyed atlas + glyph table) frozen at build time, so the no-Raylib `sw_print` needs no GPU
+  readback and no atlas scan.
+- **D.1 — `runtime/raylib_compat.h`**: the DE_NO_RAYLIB shim (Raylib types/enums + ~94 prototypes,
+  auto-extracted from raylib.h/rlgl.h). `studio.c` compiles with 0 errors sans Raylib.
+- **D.2 — it links + renders**: `raylib_compat.c` (no-op GPU/device stubs + real GetTime/GetGlyphIndex/
+  GetImageColor/GetCodepointNext), `studio.c` `de_init`/`de_frame` (bind baked fonts → globals, run
+  loop_step), and `tools/headless-nr.c` (drive headless, dump `sw_cbuf`). **omnichord renders with NO
+  Raylib / NO frameworks**, matching the Raylib build. `sw_cbuf` is bottom-up — the blit must flip
+  (the iOS CanvasView too).
+
+**Open follow-ups before iOS:** (1) minor right-edge text-metric diff vs Raylib (baked `advanceX`?);
+(2) the **stb_image** branch of `de_image_decode` (sprite-using carts; omnichord has none so it rendered);
+(3) audio: wire `de_audio_render` → `sound_callback`. Then the iOS shell (`project.yml -DDE_NO_RAYLIB`,
+CanvasView blit, CoreAudio) — the spike-1/2 work already proved that half.
+
 ## The three refactors that unlock iOS (and help web)
 
 1. **A platform seam (`platform.h`).** `studio.c`'s `main()` calls Raylib directly — `InitWindow`,
