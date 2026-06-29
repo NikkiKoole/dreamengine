@@ -15,14 +15,22 @@ DEVICE="${DEVICE:-iPhone 15}"
 SHOT="${SHOT:-}"
 SCHEME="TinyjamHello"
 BUNDLE_ID="com.tinyjam.hello"
-CART="${CART:-omnichord}"
+CART="${CART:-omnichord}"       # the standalone app's cart (touch instrument)
+AU_CART="${AU_CART:-tb303}"     # the AUv3 extension's cart (self-playing → audible with no MIDI)
 
-# Phase 2: (re)generate the cart the app compiles — build/{cart.c,sprites_data.h,map_data.h}
-# from tools/carts/$CART.c. This is the "swap a cart" loop, extended to iOS: change CART,
-# re-run, ship a different app. project.yml references ../build/cart.c + ../runtime sources.
-echo "▸ generating cart '$CART' (build/cart.c + data headers)…"
-( cd .. && node tools/play.js "$CART" run --headless --frames 1 >/dev/null 2>&1 ) \
-  || { echo "✗ cart generation failed — run: node tools/play.js $CART run --headless --frames 1"; exit 1; }
+# Phase 2: stage each target's cart — gen/<dir>/{cart.c,sprites_data.h,map_data.h}, generated
+# from tools/carts/<name>.c via play.js. The app and the AUv3 host DIFFERENT carts, so each gets
+# its own staged copy (studio.c #includes the data headers by fixed name; separate dirs avoid a
+# collision). The "swap a cart" loop, extended to iOS: change CART / AU_CART, re-run.
+stage_cart() {   # $1 = cart name, $2 = gen subdir
+  echo "▸ staging cart '$1' → gen/$2/…"
+  ( cd .. && node tools/play.js "$1" run --headless --frames 1 >/dev/null 2>&1 ) \
+    || { echo "✗ cart '$1' generation failed — run: node tools/play.js $1 run --headless --frames 1"; exit 1; }
+  mkdir -p "gen/$2"
+  cp ../build/cart.c ../build/sprites_data.h ../build/map_data.h "gen/$2/"
+}
+stage_cart "$CART"    app
+stage_cart "$AU_CART" au
 
 echo "▸ generating xcodeproj from project.yml…"
 xcodegen generate --spec project.yml >/dev/null
