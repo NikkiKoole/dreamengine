@@ -1,9 +1,15 @@
-# Research insights — what the CHORDESTA thread teaches our launch
+# Research insights — what omnichord-app launches teach us
 
-> Distilled from [`raw/omnichord-chordesta-thread.md`](raw/omnichord-chordesta-thread.md) (a free
-> browser/Android Omnichord posted to r/synthesizers — almost exactly our plan). These are the
-> strategy edits it forces; the load-bearing ones are already applied to
-> [`tinyjam-marketing.md`](tinyjam-marketing.md) and [`tinyjam-launch-strumharp.md`](tinyjam-launch-strumharp.md).
+> **The research routine:** raw threads live verbatim-ish in [`raw/`](raw/); this file is the living
+> distillation that rolls every source up into strategy/copy edits. (Claude can't fetch Reddit directly
+> — it's blocked — so sources are pasted in by the maker; Claude can WebSearch to *find* candidate
+> threads and verify channels, but not pull full thread bodies.) Load-bearing lessons are applied to
+> [`tinyjam-marketing.md`](tinyjam-marketing.md) + [`tinyjam-launch-strumharp.md`](tinyjam-launch-strumharp.md).
+>
+> Sources so far: [`raw/omnichord-chordesta-thread.md`](raw/omnichord-chordesta-thread.md) (a vibe-coded
+> free omnichord on r/synthesizers — **flamed**) and [`raw/omnichord-heaven-oh84-thread.md`](raw/omnichord-heaven-oh84-thread.md)
+> (a 30-year expert's modelled omnichord on r/Omnichord — **near-silence**). Together they teach the
+> opposite halves of the lesson.
 
 ## The big one: our draft copy was written in the style that got flamed
 
@@ -71,26 +77,57 @@ outreach. The reconciliation:
   faking hand-built craft — both backfire: one invites the immune response, the other is the exact
   fabricated-effort lie that sank CHORDESTA. Silence about process is the clean middle.)
 
-## Competitive landscape (named by the thread — verify/keep current)
+## Source 2 — the OH-84 thread: credibility ≠ reach (and a quality bar)
 
-The omnichord-app space is **populated**, so Strumharpy must differentiate (the harpy mascot + the
-pixel/lo-fi identity + iOS polish are the differentiators):
+The mirror image of CHORDESTA. A maker with **30 years of Omnichords + 7 years building**, earnest, no
+hype, no AI-tells, posting to the *exact* niche sub (r/Omnichord) — and it landed at **~10 upvotes /
+5 comments**, with "you are the only person to give any kind of response." Lessons:
+
+1. **Credibility doesn't buy reach.** r/Omnichord is tiny and low-traffic; even deep, genuine craft gets
+   near-silence there. CHORDESTA (flawed, flamed) got **102 up / 91 comments** in the much larger
+   r/synthesizers. **Implication:** the niche sub / FB group are *precision* targets (the right few
+   people, depth) — not volume. Reach needs the bigger subs + short-form video. Don't expect the
+   omnichord niche to be loud.
+2. **Tone confirmed:** earnest + product-focused + zero saga = the *right* register (the little
+   engagement it got was positive). Its problem was the channel's size, not the reception. This is the
+   register our de-clichéd copy already aims for.
+3. **The musicality is the real, ownable differentiator — and a product-quality BAR.** What "no other
+   app includes": the chord-section triads **fudge** notes (drop 3rds/5ths to fit 7ths so a triad reads
+   as the full chord), and the **F# note-wrap** (the strum root isn't always lowest; the top note drops
+   an octave, so strumming bottom→top isn't always ascending). **Omnichord people check for exactly
+   this.** Strumharpy earning their respect = modelling these quirks, not just an "omnichord-ish" strum.
+   This is an *honest, product-side* edge (about the instrument, not the maker) — and dreamengine's deep
+   audio work can plausibly hit it. Added to the launch build-tasks.
+4. **Modelling is CPU-heavy** (OH-84 is desktop-only; a lighter OH-27 serves mobile). A faithful model on
+   a phone is a real perf constraint — feeds the iOS / software-canvas decisions.
+
+## Competitive landscape (named across both threads — verify/keep current)
+
+The omnichord-app space is **crowded** — the differentiation bar is real. Strumharpy's honest
+differentiators: the harpy mascot + pixel/lo-fi identity, **iOS+AUv3 polish** (the thin spot), and
+**authentic musicality** (the fudged triads + F# wrap above).
 
 | Thing | What | Note |
 |---|---|---|
 | **minichord** (minichord.com) | open-source *hardware* | beloved, hackable; the diagonal touch-plate mod is praised. The community's darling. |
 | **Chordion** (olympianoiseco.com) | **iOS** app | the repeatedly-named iOS option — our most direct iOS competitor. Study it. |
+| **Omnichord Heaven OH-84 / OH-27** (omnichord-heaven.com) | modelled web apps (OH-84 desktop, OH-27 mobile), free, copy-protected engine | a 30-yr-expert competitor with the deepest musicality. **OH-27 targets mobile — overlaps our lane.** Their site is a *competitor's*, not a neutral channel (correction below). |
 | **MidiStrum** (f-droid) | open-source Android, MIDI-out | "solid", pairs with Dexed. |
-| **CHORDESTA / web "Harpsichord"** | the thread's app | the web version was someone's *favorite* — a web omnichord can win on feel. |
+| **CHORDESTA / web "Harpsichord"** | the vibe-coded thread app | the web version was someone's *favorite* — a web omnichord can win on feel. |
 
 **iOS is the thin spot.** The OP couldn't do iOS ("no Mac"); demand for an iOS version was explicit and
 unmet (Chordion aside). **That's our lane** (the whole iOS plan).
 
 ## Concrete contacts / channels surfaced
 
-- **SabreSour** — curates soft-synth omnichords for **r/Omnichord** + **OmnichordContentHub.com**. A
-  real reviewer in our exact niche; a natural early, gift-tone outreach (show, don't pitch).
-- **r/Omnichord** (distinct from the Suzuki FB group) — add to the Strumharpy channel list.
+- **SabreSour** — curator/tester of soft-synth omnichords for **r/Omnichord** + **OmnichordContentHub.com**.
+  The most neutral authority in the niche; a natural early, gift-tone outreach (show, don't pitch). But
+  deeply embedded in the scene, so not *fully* disinterested.
+- **r/Omnichord** (distinct from the Suzuki FB group) — a *precision* channel: tiny + low-traffic
+  (see Source 2 — expect quiet), good for the right few, not for reach.
+- **Omnichord Heaven** (omnichord-heaven.com) — ⚠️ **a competitor, not a neutral resource** (they build
+  OH-84/OH-27). Correction to earlier notes that listed their site as a channel. Useful to *study* (the
+  deepest musicality model, the mobile OH-27), not to promote in.
 - **minichord** community — adjacent, friendly, hack-happy; not a place to promote, but to learn the
   audience's taste (scale-lock, bass note, the touch-plate).
 

@@ -27,18 +27,21 @@
 ## Verified channels for this module ([marketing §3.5](tinyjam-marketing.md))
 
 - "Suzuki Omnichord & Qchord" Facebook group (the main bullseye): https://www.facebook.com/groups/Omnichord.QChord/
-- Omnichord Heaven (endorsed resource): https://www.omnichord-heaven.com/ , FB page https://www.facebook.com/Omnichord.Heaven/
-- Omnichord Discord (around 479 members): invite links rotate, find the current one via Omnichord Heaven or the FB group
+- Omnichord Discord (around 479 members): invite links rotate, find the current one via the FB group
 - Loopy Pro forum (the iOS/AUv3 cross-cutting channel): https://forum.loopypro.com/
-- r/synthesizers: https://www.reddit.com/r/synthesizers/
-- r/Omnichord + **OmnichordContentHub.com** — and **SabreSour**, who curates soft-synth omnichords
-  there (a real reviewer in our exact niche; show, don't pitch). Surfaced in the field research below.
+- r/synthesizers (reach): https://www.reddit.com/r/synthesizers/ — bigger + has reach, but AI-allergic
+- r/Omnichord (precision, *low-traffic* — expect quiet) + **OmnichordContentHub.com** / **SabreSour**, the
+  niche's curator/tester (show, don't pitch; embedded in the scene, not fully neutral)
+- ⚠️ **Omnichord Heaven** (omnichord-heaven.com) is a **competitor**, not a channel — they build OH-84/OH-27.
+  Study it (deepest musicality model, mobile OH-27); don't promote there.
+- Ambient and lo-fi YouTube, plus the omnichord hashtag on IG/TikTok (for the clip)
 
-> **Read [`research-insights.md`](research-insights.md) before posting.** A near-identical project
-> (CHORDESTA) was flamed in r/synthesizers as AI-marketing — the burned "couldn't afford it so I built
-> it" pitch, hidden paywall, fresh account. The copy below is rewritten to dodge those. Also: this space
-> is **populated** (minichord, Chordion on iOS, MidiStrum) — iOS polish + the harpy identity are the
-> differentiators.
+> **Read [`research-insights.md`](research-insights.md) before posting.** Two field cases: CHORDESTA
+> (vibe-coded, *flamed* in r/synthesizers for the cliché pitch + hidden paywall + fresh account) and
+> Omnichord Heaven OH-84 (deep expert, *near-silence* in tiny r/Omnichord). Takeaways baked into the copy
+> below: dodge the AI-tells, be transparent, **lead with demo quality** — the space is crowded (minichord,
+> Chordion on iOS, OH-84/OH-27, MidiStrum), so iOS polish, the harpy identity, and **authentic musicality**
+> are the differentiators.
 - Ambient and lo-fi YouTube, plus the omnichord hashtag on IG/TikTok (for the clip)
 
 **Extra audience (cozy-cartoon / Adventure Time-adjacent):** the shimmer fits that crowd's taste, so
@@ -147,6 +150,10 @@ module.
 
 - (build) The omnichord cart to wasm, mobile-friendly, hosted on the dedicated page (own domain,
   COOP/COEP host, see §7.2).
+- (build) **Get the musicality authentic** — the thing omnichord players actually check (from the OH-84
+  thread, see research-insights): the chord-section triads should *fudge* notes (drop 3rds/5ths to fit
+  7ths) and the strum should honour the **F# note-wrap** (root not always lowest; top note drops an
+  octave, so bottom→top isn't always ascending). This is the honest product-side differentiator.
 - (build) Wire the lz-string share button (§6.1).
 - (build) Generate the 9:16 hero clip with audio (make-gif.js plus the dancer, §4.1).
 - (build) Stand up the wishlist signup (tagged).
