@@ -68,6 +68,12 @@ out technically. (See sequencing in §5.)
 > trade-dress line this rule draws. Treat it as the worked cautionary tale: the homage lives free,
 > the *paid* faceplate is original, full stop.
 
+> **Parked asset — the Tinyjams wordmark/logo** (spec, 2026-06-29): stack **"tiny"** in the engine's
+> **tiny font** (FONT_TINY 3×5) over **"JAMS"** in the **normal dos_8x8 font**, inside an **amber
+> heart**, ~**64×64px**. Best rendered *in-engine* for faithful fonts (a tiny logo cart → bake a frame)
+> — deferred until the runtime is settled (it's mid-edit by another agent). A pure-`sprite-draw.js`
+> Node mockup is possible sooner but with approximated glyphs.
+
 ---
 
 ## 3. The portfolio → tribe → channel → hook map
