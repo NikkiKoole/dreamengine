@@ -123,11 +123,24 @@ big in practice. Lane state is <1 KB, so probably never needed.)
   tempo/swing) that all genres instantiate, so every rack shares one format and one player? Likely
   yes (it's basically a tracker model) — but decide *after* a couple of racks exist, not before.
 
-## First move (when greenlit)
+## The sharing channel is the URL — not an in-app text field
 
-Show-code already ships (bare 8-hex `u32`, all 34 stations). The one missing half is **type-a-code-in**:
-a small shared affordance in `radio.h` (since the seed/history plumbing already lives there) that
-lets the player enter 8 hex chars and calls `new_song(pos, typed_seed)` — the same path `R`/`[`/`]`
-already use. Build it once in the shared chassis, prototype on one station (house), then it's live
-everywhere. No envelope, no new format — just close the loop on the codes already on screen. Revisit
-the envelope + blob when the rack lands.
+The whole point is **people sharing links** (`…/house/?seed=A3F90C12`): click the link, the cart
+boots playing that song. The seed lives *in the URL*; there is **no in-app hex typing** on either
+end (that earlier "type-a-code-in" idea is dropped — it only ever made sense on native desktop,
+which isn't the sharing channel; the published web gallery is). Show-code already ships (bare 8-hex
+`u32`, all 34 stations), so this is small and web-only — two halves:
+
+1. **Read `?seed=` at boot** (the keystone — makes every shared link *work*). The gallery shell
+   reads `location.search` and hands the seed to the cart at startup (emscripten `Module.arguments`
+   → `argv`, which `studio.c`'s `main()` already parses for flags). Expose it to carts as a tiny
+   engine call — `unsigned start_seed(void)`, 0 if none. Then **one line in `radio.h`'s boot** —
+   `new_song(pos, start_seed())` when nothing is pinned — and all 34 stations inherit link-loading
+   for free. (Carts that aren't radios can read `start_seed()` directly.)
+2. **Copy a share link** (the nicety — makes *getting* a link one click, not hand-typing the URL).
+   A small cart affordance that `EM_ASM`-writes `location.origin + pathname + "?seed=" + hex(seed)`
+   to the clipboard. The cart already owns the current seed (it's on screen), so it just formats and
+   copies.
+
+No envelope, no new format. When the rack ships editing, the same `?seed=` slot gains a sibling
+`?song=<blob>` (length/param-distinguished, per the decision above) — the URL stays the channel.
