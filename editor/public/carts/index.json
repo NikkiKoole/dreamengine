@@ -5362,6 +5362,7 @@
     "description": "Internal asset cart: draws the Tinyjam wordmark — 'tiny' (FONT_TINY) stacked over 'JAM' (FONT_NORMAL) inside an amber heart — for baking a small logo. Tweak the constants at the top and re-bake to generate variations.",
     "file": "tinyjam.cart.png",
     "created": "2026-06-29",
+    "orientation": "square",
     "kind": [
       "tech-demo"
     ],
