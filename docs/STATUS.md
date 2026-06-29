@@ -1159,6 +1159,19 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
       also `maze`/`space`/`lab`/`dating`, which were silently dropped too.
     - the derived **`orientation`** facet (`portrait`/`square`, emitted by `build-cart-index.js`) now has chips
       ("📱 portrait" / "⬛ square", new `orientation` filter axis), surfacing the mobile-shaped carts.
+47. **✓ MOSTLY DONE 2026-06-29 — the engine runs WITHOUT Raylib (the `DE_NO_RAYLIB` platform seam)**, the
+    foundation for iOS/Switch (iOS Phase 2 / Path B). The real `studio.c` + `sound.h` compile, render, and
+    sound with zero Raylib / zero frameworks, verified headless on desktop: omnichord (2D) + **heroes**
+    (tilemap+sprites) **pixel-identical** to Raylib; **tb303** audio **byte-identical** to the Raylib `--wav`.
+    Built: `runtime/platform.h` (host↔engine seam) · `color.h` (universal `DeColor`) · `raylib_compat.{h,c}`
+    (no-Raylib shim: types/enums + ~94 stubbed prototypes, a few real — text metrics, rng, decode) · baked
+    ROM fonts (`tools/bake-fonts.c` → `fonts_baked.h`) · vendored `stb_image.h` sprite decode · `de_init`/
+    `de_frame`/`de_framebuffer`/`de_audio_render` · `tools/headless-nr.c` (proof harness: frame→PPM, audio→WAV).
+    Decision settled: **two renderers behind one seam** (software now, GPU/Metal later). Kept desktop
+    bit-identical throughout (build-all, canvas-diff 0px) — every path is `#ifdef DE_NO_RAYLIB`. Full record:
+    [`design/engine-portability.md`](design/engine-portability.md). **Remaining = the iOS shell only** (no
+    engine surgery): `ios/project.yml` `-DDE_NO_RAYLIB` + runtime sources, `CanvasView` blit (flip — `sw_cbuf`
+    is bottom-up), CoreAudio → `de_audio_render`. Also open: on-device renderer FPS measurement (the ADR gate).
 
 ---
 

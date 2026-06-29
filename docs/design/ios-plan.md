@@ -62,6 +62,20 @@ sees the C API. Gotcha learned: screenshot ~1.5s after launch or you catch the l
 
 ## Phase 2 — running the REAL engine on iOS (omnichord, not the stand-in)
 
+> **STATUS 2026-06-29: Path B BUILT and desktop-proven — only the iOS shell remains.** The real
+> `studio.c` + `sound.h` now compile, render, and sound with **zero Raylib** (the `DE_NO_RAYLIB`
+> platform seam). Verified headless on desktop: omnichord (2D) + **heroes** (tilemap+sprites) render
+> **pixel-identical** to Raylib; **tb303** audio is **byte-identical** to the Raylib `--wav`. Built:
+> `runtime/platform.h` (seam) · `color.h` (DeColor) · `raylib_compat.{h,c}` (shim+stubs) · baked fonts
+> (`tools/bake-fonts.c`→`fonts_baked.h`) · stb_image sprite decode · `de_init`/`de_frame`/`de_framebuffer`/
+> `de_audio_render` · `tools/headless-nr.c` (proof harness). The fork below is **resolved: Path B.** The
+> renderer decision settled "two renderers, one seam" (software now, GPU/Metal later). Full record:
+> [`engine-portability.md`](engine-portability.md) → "Built — the platform seam".
+>
+> **Remaining = the iOS shell only** (no engine surgery): `project.yml` adds `-DDE_NO_RAYLIB` + the
+> runtime sources + the cart; `CanvasView` blits `de_framebuffer()` (flip — `sw_cbuf` is bottom-up);
+> CoreAudio pulls `de_audio_render()`. All three already proven in spikes 1/2 with the stand-ins.
+
 Spikes 0–7 proved the iOS *shell* with stand-in `canvas.c`/`audio.c`. Phase 2 plugs the real
 `studio.c` + `sound.h` + a cart (`omnichord` is the target) into it. Scoping (2026-06-29):
 
