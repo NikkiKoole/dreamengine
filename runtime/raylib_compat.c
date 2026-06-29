@@ -31,7 +31,12 @@ void EndShaderMode(void) { }
 void EndTextureMode(void) { }
 bool ExportImage(Image image, const char *fileName) { return 0; }
 int GetCharPressed(void) { return 0; }
-int GetFPS(void) { return 0; }
+// real FPS from the host clock (de_host_time). Averaged over a ≥0.5s window and refreshed each
+// window, like raylib's GetFPS — "holds at 60, sags under load." Updated in de_input_endframe().
+static int    de_fps = 0;
+static double de_fps_winstart = 0;
+static int    de_fps_frames = 0;
+int GetFPS(void) { return de_fps; }
 // touch → MOUSE synthesis. A touch device has no mouse, but a huge class of carts read the mouse
 // (mouse_x/mouse_pressed/...). The PRIMARY finger (the first one down) drives the mouse API, exactly
 // as a browser/OS synthesizes mouse events from touch — so mouse-driven carts play on iOS, and the
@@ -48,6 +53,17 @@ Vector2 GetMousePosition(void) { Vector2 r = { de_mouse_x, de_mouse_y }; return 
 void de_input_endframe(void) {
     de_mouse_prev = de_mouse_down;
     for (int i = 0; i < DE_NKEY; i++) de_key_was[i] = de_key_now[i];
+    double now = GetTime();   // == de_host_time, the real host clock (synthetic 1/60 on the headless harness)
+    // GetFrameTime: the real per-frame delta (was a fixed-1/60 stub → delta-timed carts ignored drops).
+    // Deterministic on the synthetic clock (steps are exactly 1/60); clamp guards the first frame / hitches.
+    static double de_dt_last = 0;
+    if (de_dt_last > 0) { float dt = (float)(now - de_dt_last); if (dt > 0 && dt < 0.25f) de_host_dt = dt; }
+    de_dt_last = now;
+    // FPS: count frames per ≥0.5s window (raylib-style — holds at 60, sags under load).
+    if (de_fps_winstart == 0) de_fps_winstart = now;
+    de_fps_frames++;
+    double el = now - de_fps_winstart;
+    if (el >= 0.5) { de_fps = (int)(de_fps_frames / el + 0.5); de_fps_frames = 0; de_fps_winstart = now; }
 }
 float GetMouseWheelMove(void) { return 0; }
 // real: rnd()/rnd_float()/shake and procedural carts need varied values (a 0-stub
