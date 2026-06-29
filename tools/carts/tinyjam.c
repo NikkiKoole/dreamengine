@@ -1,37 +1,42 @@
 /* de:meta
 {
-  "title": "tinyjam — wordmark logo generator",
+  "title": "tinyjam — heart + notes logo",
   "status": "active",
   "created": "2026-06-29",
   "kind": ["tech-demo"],
   "teaches": ["software-rasterizer"],
-  "description": "Internal asset cart: draws the Tinyjam wordmark — 'tiny' (FONT_TINY) stacked over 'JAM' (FONT_NORMAL) inside an amber heart — for baking a small logo. Tweak the constants at the top and re-bake to generate variations."
+  "description": "Internal asset cart: draws the Tinyjam logo — a glossy amber heart cradling a smooth beamed eighth-note pair in berry-jam purple, all from engine primitives (no bitmap-font glyphs). Tweak the constants at the top and re-bake to generate variations."
 }
 de:meta */
-// tinyjam — the Tinyjam wordmark/logo, drawn for image generation.
+// tinyjam — the Tinyjam logo, drawn for image generation.
 //
-// Concept: "tiny" in the tiny font, stacked over "JAM" in the normal dos font,
-// inside an amber heart, ~64x64. This is a TOOL cart: edit the TWEAKABLES below
-// and re-bake to spit out a fresh logo image.
+// Concept: a glossy amber heart (rim-shadow + sheen) cradling a smooth beamed
+// eighth-note PAIR in berry-jam purple — every curve rasterised from engine
+// primitives, no CGA/CP437 glyph. This is a TOOL cart: edit the TWEAKABLES
+// below and re-bake to spit out a fresh logo image.
 //
-//   node tools/make-cart.js tools/carts/tinyjam.c /tmp/tinyjam.cart.png   # build
-//   node tools/make-cart.js --run /tmp/tinyjam.cart.png                   # screenshot
+//   node tools/make-cart.js tools/carts/tinyjam.c editor/public/carts/tinyjam.cart.png   # build
+//   node tools/make-cart.js --run editor/public/carts/tinyjam.cart.png                   # screenshot
 //   # → look at build/.bake/tinyjam/screenshot.png
 //
-// Screen size is set in tinyjam.cart.js (64x64). Deterministic (no rnd/time).
+// Screen size is set in tinyjam.cart.js (128x128). Deterministic (no rnd/time).
 #include "studio.h"
+#include <math.h>
 
 // ── TWEAKABLES ──────────────────────────────────────────────────────────────
-#define BG         0            // background (0 = black)
-#define HEART      CLR_ORANGE   // amber heart (palette 9)
-#define INK        0            // glyph colour (0 = black, reads on the amber)
-// CP437 glyphs: ♥ "\x03"  ♪ "\x0d"  ♫ "\x0e"  ☼ "\x0f". Pair them e.g. "\x0d\x0e".
-#define GLYPH      "\x0d"       // the mark inside the heart (single ♪ note)
-#define NOTE_SCALE 5            // glyph size multiplier
-#define HEART_R    58           // heart half-size in px
-#define HEART_CY   58           // heart centre Y (heart mass sits high, so above mid)
-#define NOTE_DY    (-20)        // glyph Y offset from heart centre (heart mass sits high)
-#define NOTE_DX    (3)          // glyph X nudge (♪ ink is left-biased in its 8px cell)
+#define BG          0               // background (0 = black)
+#define HEART       CLR_ORANGE      // amber heart body
+#define HEART_RIM   CLR_DARK_ORANGE // shadow rim under the heart (gives it volume)
+#define HEART_GLOSS CLR_LIGHT_PEACH // soft sheen on the upper-left lobe
+#define SPECULAR    CLR_WHITE       // tiny catch-light dot
+#define NOTE        CLR_WHITE       // note colour (cream). Try CLR_DARK_PURPLE for a berry-jam look.
+#define NOTE_SHADOW CLR_DARK_ORANGE // soft drop-shadow under the note (lift, not a hard outline)
+#define HEART_R     58              // heart half-size in px
+#define HEART_CX    64              // heart centre X (128-wide canvas)
+#define HEART_CY    60              // heart centre Y (heart mass sits high)
+#define NOTE_CX     64              // note-group centre X
+#define NOTE_CY     54              // note-group centre Y (up in the heart's mass)
+#define NOTE_U      10.0f           // note unit size (everything scales off this)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // One clean heart silhouette from the implicit curve (x^2+y^2-1)^3 - x^2*y^3 <= 0,
@@ -47,16 +52,56 @@ static void heartfill(int cx, int cy, int s, int color) {
   }
 }
 
+// A filled ellipse rotated by `ang` radians — the music-note head (a tilted oval,
+// which a circle or axis-aligned ovalfill can't give us).
+static void ellipse_rot_fill(int cx, int cy, float a, float b, float ang, int color) {
+  float c = cosf(ang), s = sinf(ang);
+  int R = (int)ceilf(a > b ? a : b) + 1;
+  for (int py = -R; py <= R; py++)
+    for (int px = -R; px <= R; px++) {
+      float lx =  c * px + s * py;                // rotate sample into the ellipse's own frame
+      float ly = -s * px + c * py;
+      if ((lx * lx) / (a * a) + (ly * ly) / (b * b) <= 1.0f) pset(cx + px, cy + py, color);
+    }
+}
+
+// A filled quad (two triangles) — the beam joining the two stems.
+static void beam_quad(int x0,int y0,int x1,int y1,int x2,int y2,int x3,int y3,int col){
+  trifill(x0,y0, x1,y1, x2,y2, col);
+  trifill(x0,y0, x2,y2, x3,y3, col);
+}
+
+// A beamed eighth-note pair, centred on (gx,gy), scaled by unit u, drawn in `col`.
+// Two tilted oval heads, two stems rising from their right shoulders, one slanted beam.
+static void beamed_pair(int gx, int gy, float u, int col) {
+  float a = 1.0f * u, b = 0.68f * u, ang = -0.38f;    // head oval + jaunty tilt
+  int sw = (int)(0.30f * u + 0.5f); if (sw < 2) sw = 2;  // stem thickness
+
+  int hAx = gx - (int)(1.5f * u), hAy = gy + (int)(1.0f * u);   // left head (lower)
+  int hBx = gx + (int)(1.1f * u), hBy = gy + (int)(0.2f * u);   // right head (higher)
+  int sAx = hAx + (int)(0.78f * u), sBx = hBx + (int)(0.78f * u);  // stems hug the right shoulder
+  int topA = gy - (int)(2.3f * u), topB = gy - (int)(2.7f * u);    // stem tops (beam slants down-left)
+  int bt = (int)(0.58f * u);                           // beam thickness (downward)
+
+  thickline(sAx, hAy, sAx, topA, sw, col);
+  thickline(sBx, hBy, sBx, topB, sw, col);
+  beam_quad(sAx - sw/2, topA, sBx + sw/2, topB, sBx + sw/2, topB + bt, sAx - sw/2, topA + bt, col);
+  ellipse_rot_fill(hAx, hAy, a, b, ang, col);
+  ellipse_rot_fill(hBx, hBy, a, b, ang, col);
+}
+
 void draw(void) {
   cls(BG);
 
-  const int cx = SCREEN_W / 2;
-  const int cy = HEART_CY;
+  const int cx = HEART_CX, cy = HEART_CY;
 
-  heartfill(cx, cy, HEART_R, HEART);
+  // Glossy heart: shadow rim (shifted down) → body (shifted up) → sheen → catch-light.
+  heartfill(cx, cy + 2, HEART_R,     HEART_RIM);
+  heartfill(cx, cy - 1, HEART_R - 3, HEART);
+  ovalfill(cx - 19, cy - 17, 10, 6, HEART_GLOSS);
+  circfill(cx - 21, cy - 18, 2, SPECULAR);
 
-  // The mark (CP437 glyph, e.g. ♪ char 13), centred in the heart's upper mass.
-  // The dos font renders control codes as glyphs (no newline handling).
-  font(FONT_NORMAL);
-  print_scaled(GLYPH, cx - (text_width(GLYPH) * NOTE_SCALE) / 2 + NOTE_DX, cy + NOTE_DY, INK, NOTE_SCALE);
+  // The beamed-note mark — soft drop-shadow first (offset down-right), then the note.
+  if (NOTE_SHADOW != HEART) beamed_pair(NOTE_CX + 2, NOTE_CY + 3, NOTE_U, NOTE_SHADOW);
+  beamed_pair(NOTE_CX, NOTE_CY, NOTE_U, NOTE);
 }
