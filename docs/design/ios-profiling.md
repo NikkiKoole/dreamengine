@@ -137,8 +137,12 @@ Only ~10% idle = the device was near-saturated (at the load ceiling, as expected
   **37.0 ms/frame vs 24.5 ms/frame** for the branchy original. It *lost*. Why: a 32×32 bunny is mostly
   transparent, so the branchy `continue` skips ~half the cell with no memory touch, while the blend
   read-modify-writes all 1024 px/bunny — the extra bandwidth costs more than the branch + SIMD saves.
-  **Lesson:** for *sparse* sprites the transparent-skip is already near-optimal on a scalar CPU; the
-  blend would only pay off for *dense/opaque* sprites. Not worth a per-sprite-density code split. The
-  20k-bunny ceiling looks like the honest CPU/bandwidth limit, not a fixable hotspot. (Hand-NEON with a
-  real masked store *might* help, but at the arch-specific + determinism-parity cost called out above —
-  not justified by the measured headroom.)
+  **Lesson — it's a trade, not a dead end** (kept at the `sw_blit` seam as a comment): which side wins
+  is sprite-density-dependent. *Sparse* sprites (bunnies, glyphs, most game art) → the transparent-skip
+  is already near-optimal on a scalar CPU (no memory touch for skipped pixels), so it stays. *Dense /
+  mostly-opaque* sprites (full tiles, backgrounds, fullscreen images) → the blend would likely win (few
+  skips → the wasted writes aren't wasted, and it vectorizes). So if a future workload turns out
+  opaque-blit-bound, revisit — but as a **per-blit choice keyed on opacity**, not a global swap. For the
+  current (sparse) workload the 20k-bunny ceiling is the honest CPU/bandwidth limit, not a fixable
+  hotspot. (Hand-NEON with a real masked store *might* squeeze the dense case further, at the
+  arch-specific + determinism-parity cost called out above — not justified by today's headroom.)
