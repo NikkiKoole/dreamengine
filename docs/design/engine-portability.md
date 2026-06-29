@@ -106,8 +106,10 @@ dormant on desktop/web.
   Raylib / NO frameworks**, matching the Raylib build. `sw_cbuf` is bottom-up — the blit must flip
   (the iOS CanvasView too).
 
-**Open follow-ups before iOS:** (1) minor right-edge text-metric diff vs Raylib (baked `advanceX`?);
-(2) the **stb_image** branch of `de_image_decode` (sprite-using carts; omnichord has none so it rendered);
+**Open follow-ups before iOS:** ~~(1) text-metric diff~~ FIXED — `MeasureTextEx` was a no-op stub
+returning {0}, so `text_width()`/centering/clip measured zero (dropped trailing label chars); real impl
+mirrors sw_print's advance → headless omnichord now matches Raylib exactly. Remaining: (2) the
+**stb_image** branch of `de_image_decode` (sprite-using carts; omnichord has none so it rendered);
 (3) audio: wire `de_audio_render` → `sound_callback`. Then the iOS shell (`project.yml -DDE_NO_RAYLIB`,
 CanvasView blit, CoreAudio) — the spike-1/2 work already proved that half.
 
