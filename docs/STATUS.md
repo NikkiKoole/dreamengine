@@ -1178,9 +1178,12 @@ value-vs-Perlin caveat in `studioDocs.js`, so the next author doesn't conclude "
     regenerates the cart via play.js (the "swap a cart" loop, extended to iOS); `CanvasView` flips the
     bottom-up `sw_cbuf` + maps touches to framebuffer px → `de_touch_*` (newly given bodies in
     `raylib_compat.c`); `AudioEngine` splits `de_audio_render`'s interleaved stereo. `tools/build-nr.sh`
-    is the desktop recipe. Open follow-ups: migrate the AUv3 extension off the stand-in arpeggio to the
-    real `de_audio_render`; on-device run + renderer FPS measurement (the ADR gate); `tritex`/3D stays
-    GPU-only. Full record: [`design/ios-plan.md`](design/ios-plan.md) → "Phase 2".
+    is the desktop recipe. **The AUv3 extension now hosts the real engine too** — its render block
+    sample-clocks `de_frame()` (sequencer) + pulls `de_audio_render()`; `AUHostTests` renders it offline
+    at peak 0.209, matching the desktop tb303 self-play (0.210) vs the old arpeggio (0.180). Open
+    follow-ups: host-MIDI → engine notes (interactive instrument racks); on-device run + renderer FPS
+    measurement (the ADR gate); `tritex`/3D stays GPU-only. Full record:
+    [`design/ios-plan.md`](design/ios-plan.md) → "Phase 2".
 
 ---
 

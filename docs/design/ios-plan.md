@@ -84,10 +84,21 @@ sees the C API. Gotcha learned: screenshot ~1.5s after launch or you catch the l
 >   `AudioEngine` (stereo `AVAudioSourceNode` splitting `de_audio_render`'s interleaved L/R).
 > - `tools/build-nr.sh`: the desktop DE_NO_RAYLIB build/run recipe (the reference the project.yml mirrors).
 >
-> **Open follow-ups:** (1) the AUv3 extension still uses the stand-in `audio.c` arpeggio — migrate it
-> to the real `de_audio_render` so a "Tinyjam rack" hosts the real mixer. (2) On-device run + the
-> renderer **FPS measurement** (the ADR gate; desktop half done). (3) `tritex`/3D carts stay GPU-only
-> (19ms on CPU) — off the initial iOS target list. (4) Confirm on a real iPhone (`device.sh`).
+> **The AUv3 now hosts the real engine too (2026-06-29).** `AU/TinyjamAU.swift` runs the same engine
+> as the app: `de_init()` → the render block **sample-clocks** `de_frame()` (one 60Hz tick per 735
+> rendered samples) to advance the sequencer, then pulls `de_audio_render()`. Sample-clocking, not a
+> wall-clock timer, keeps it correct under a host's offline/faster-than-real-time render, and running
+> both calls on the one audio thread sidesteps cross-thread races. The app and the AUv3 host DIFFERENT
+> carts, so `build.sh` stages each into its own dir (`gen/app` = omnichord, `gen/au` = **tb303** — a
+> self-playing cart, so the rack is audible with no MIDI yet). Verified: `AUHostTests` renders the
+> out-of-process AUv3 offline → **peak 0.209**, matching the desktop tb303 self-play (0.210), distinct
+> from the old stand-in arpeggio (0.180).
+>
+> **Open follow-ups:** (1) **host-MIDI → engine notes** — wire the AU's MIDI input to the cart's note
+> triggers so an *interactive* instrument rack (e.g. omnichord) plays from a keyboard, not just a
+> self-playing cart. (2) On-device run + the renderer **FPS measurement** (the ADR gate; desktop half
+> done). (3) `tritex`/3D carts stay GPU-only (19ms on CPU) — off the initial iOS target list. (4)
+> Confirm on a real iPhone (`device.sh`).
 
 Spikes 0–7 proved the iOS *shell* with stand-in `canvas.c`/`audio.c`. Phase 2 plugs the real
 `studio.c` + `sound.h` + a cart (`omnichord` is the target) into it. Scoping (2026-06-29):

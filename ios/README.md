@@ -108,6 +108,12 @@ SHOT=snap.png CART=tb303 ./build.sh # build a different cart's app + screenshot
 bottom-up) and feeds UIKit touches to `de_touch_*`; `AudioEngine` pulls the real mixer
 (`de_audio_render`). The desktop twin of this build is `../tools/build-nr.sh`.
 
+**The AUv3 extension hosts the real engine too** (a separate cart — `AU_CART`, default `tb303`, a
+self-playing one so the rack sounds with no MIDI). `AU/TinyjamAU.swift`'s render block sample-clocks
+`de_frame()` (one 60Hz sequencer tick per 735 rendered samples) then pulls `de_audio_render()` —
+so it's correct even under a host's offline render. Verified by `AUHostTests` (peak 0.209 ≈ desktop
+tb303's 0.210). Next: host-MIDI → engine notes for an interactive instrument rack.
+
 ## Status
 
 Spike 0 (toolchain) ✅ · 1 (software-canvas render + inverted loop) ✅ · 2 (audio → CoreAudio) ✅ ·
