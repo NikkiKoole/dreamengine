@@ -107,6 +107,18 @@ Findings:
 - The blit (flip + CGImage upload) is cheap everywhere (~0.6ms) — the CPU framebuffer path is not the
   bottleneck; the rasterization is.
 
+**Sprite throughput — `bunnymark` on the same iPhone SE 2nd-gen (2026-06-30):** held-at-60fps bunny
+count, each bunny one `sspr()` of a 32×32 sprite (a pure CPU-blit stress, no `pal()`):
+- **~8k** — Debug `-O0` build
+- **~20k** — Release build (the real number; ~2.5× — the `-O0` blit-loop penalty reclaimed)
+- ~200k — desktop, but that's the **GPU** (hardware sprite batcher), not a like-for-like: the phone has
+  no GPU path and rasterizes every sprite on the CPU by design. The fair desktop baseline is bunnymark
+  with rendering toggled to *software*, which sits far below 200k and much nearer the phone. So the
+  ~10× left after Release is GPU-vs-CPU, not phone-vs-Mac. **Takeaway:** 20k CPU sprites at 60fps is
+  enormous headroom for the iOS target (touch instruments + modest 2D); a real cart pushing hundreds of
+  sprites is nowhere near it. (And: build **Release** for any real device perf number — `CONFIG=Release
+  ios/device.sh`; the default Debug build understates by ~2.5× here.)
+
 **Settled.** Both halves measured (desktop + device), both agree. The decision is now an ADR:
 [ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md) — **software canvas is canonical
 for 2D (ANGLE-free iOS); `tritex`/3D is GPU-only and off the initial iOS target list.**
