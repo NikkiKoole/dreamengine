@@ -298,7 +298,7 @@ caveats:
   communities where sharing a free tool is genuinely welcome.
 - **Parked:** if Strumharpy lands well with this crowd, a dedicated original-named "cozy adventure"
   module (an omnichord-shimmer voice + chiptune + cozy folk) is a natural follow-up — a later *product*,
-  not a reason to touch the IP now.
+  not a reason to touch the IP now. Design seed: [`tinyjam-cozy-adventure.md`](tinyjam-cozy-adventure.md).
 
 ## 4. The cross-cutting channels (where *every* campaign also posts)
 
