@@ -239,10 +239,10 @@ tool + thickness it was drawn with. And the **boil** toggle makes a finished dra
 - [x] One brush, done well: the **ink** brush — stamp-spacing, speed→width, end-taper, seeded
       per-stamp noise. Get the squish *feeling* right before adding tools.
 - [x] 2-tone palette: ink + paper; a clear button.
-- [x] Tool palette UI — a top tool-bar (`ui.h`): a **tool dropdown** (ink / pen / fineliner /
-      marker / **sketch**), a thickness slider, a bevel toggle, a boil toggle, an undo button.
-      Drawing is gated below the bar; the dropdown is modal (tap-away dismisses). (Tool names are
-      text for now; code-drawn glyph sprites are the polish follow-up.)
+- [x] Tool palette UI — a top tool-bar (`ui.h`): a **tool dropdown** with **code-drawn icon glyphs**
+      (sprite-draw.js in `squishy.cart.js`, on paper-bg `ui_spr_button`s), a thickness slider, a
+      bevel toggle, a boil toggle, an undo button. Drawing is gated below the bar; the dropdown is
+      modal (tap-away dismisses). (Icon polish — ink/chalk/sketch — is the remaining nicety.)
 - [x] **Sketch brush** (à la Krita's Sketch engine) — a hairy web: a thin spine plus 1px threads
       from each point to a few seeded-random earlier points within reach. Topology keyed by the
       stroke seed (stable), positions jittered by the boil seed → the whole tangle wiggles.

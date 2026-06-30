@@ -15,7 +15,7 @@
     "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle), drag the thickness slider, toggle BVL (bevel) and BOIL (living wobble), tap UNDO. Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
   },
   "todo": [
-    "Swap the text tool-buttons for code-drawn glyph sprites (sprite-draw.js) per docs/design/squishy-lines.md.",
+    "Polish the tool-icon glyphs — ink/chalk/sketch read a bit muddy at 16px (sprite-draw.js in squishy.cart.js).",
     "Cache finished strokes + the boil frames to layer buffers instead of re-rendering every stroke every frame.",
     "The pixelsnap animated-icon export: boil frames → pixelsnap → an animated sprite strip.",
     "spec(): same-seed determinism + jitter-bounds."
@@ -275,30 +275,32 @@ static void draw_one(const Stroke *s, unsigned fseed, int jitter) {
 
 static void do_undo(void) { if (nstrokes > 0) nstrokes--; }
 
-#define DD_X   2
-#define DD_W   50
-#define DD_ITEM 16             // dropdown row height
+#define DD_X    2
+#define DD_W    22             // dropdown header / item width (icon button)
+#define DD_ITEM 20             // dropdown row height
 
-// the top tool-bar: a tool dropdown, thickness, bevel, boil, undo.
+// ink-on-paper tool buttons: paper bg so dark glyphs read; red frame = selected.
+// fields: { bg, bg_sel, frame, frame_hot, frame_sel, halo_sel }
+static const UiSprStyle TOOLBTN = { PAPER, CLR_LIGHT_PEACH, CLR_LIGHT_GREY, INK, ACCENT, -1 };
+
+// the top tool-bar: a tool dropdown (icon glyphs), thickness, bevel, boil, undo.
 static void draw_panel(void) {
     rectfill(0, 0, SCREEN_W, PANEL_H, PAPER);
     line(0, PANEL_H - 1, SCREEN_W, PANEL_H - 1, INK);
     ui_begin();
-    // tool dropdown header (name of the current tool + a down caret)
-    if (ui_button(DD_X, 3, DD_W, 16, str("%s v", BRUSHES[tool].name))) dd_open = !dd_open;
-    ui_slider(&thick01, 58, 4, 48, "thk");          // thickness 0.4×..2.0×
-    if (ui_button(110, 3, 30, 16, "bvl")) bevel = !bevel;
-    if (bevel) rectfill(110, 19, 30, 2, ACCENT);
-    if (ui_button(144, 3, 40, 16, "boil")) boil = !boil;
-    if (boil) rectfill(144, 19, 40, 2, ACCENT);
-    if (ui_button(188, 3, 40, 16, "undo")) do_undo();
-    // the open dropdown list, over the canvas
+    // tool dropdown header: the current tool's icon
+    if (ui_spr_button_styled(tool, DD_X, 2, DD_W, 20, dd_open, TOOLBTN)) dd_open = !dd_open;
+    ui_slider(&thick01, 30, 4, 46, "thk");          // thickness 0.4×..2.0×
+    if (ui_button(82, 3, 30, 16, "bvl")) bevel = !bevel;
+    if (bevel) rectfill(82, 19, 30, 2, ACCENT);
+    if (ui_button(116, 3, 40, 16, "boil")) boil = !boil;
+    if (boil) rectfill(116, 19, 40, 2, ACCENT);
+    if (ui_button(160, 3, 40, 16, "undo")) do_undo();
+    // the open dropdown list: a column of icon buttons over the canvas
     if (dd_open) {
-        for (int i = 0; i < NTOOLS; i++) {
-            int y = PANEL_H + i * DD_ITEM;
-            if (ui_button(DD_X, y, DD_W, DD_ITEM, BRUSHES[i].name)) { tool = i; dd_open = 0; }
-            if (i == tool) rectfill(DD_X, y, 2, DD_ITEM, ACCENT);   // mark the current tool
-        }
+        for (int i = 0; i < NTOOLS; i++)
+            if (ui_spr_button_styled(i, DD_X, PANEL_H + i * DD_ITEM, DD_W, DD_ITEM, i == tool, TOOLBTN))
+                { tool = i; dd_open = 0; }
     }
     ui_end();
 }
