@@ -1,5 +1,7 @@
 # AIR — the voices/effects I wanted but can't have yet
 
+STATUS: SHIPPED — effects wishlist for AIR; reverb/chorus/tape wired in air.c — only the vocoder remains.
+
 The blind-band brief for the **AIR** station (Moon Safari; an *artist* station, five song
 archetypes) named an ideal lineup *from the music*, before reading any cousin cart — the
 intent-first discipline in [`../guides/cart-authoring-prompt.md`](../guides/cart-authoring-prompt.md).

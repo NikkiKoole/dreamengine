@@ -1,5 +1,7 @@
 # roadnet — session handoff (2026-06-14 → 06-15)
 
+STATUS: SHIPPED — the roadnet cart lands the world map (street-level + graph) complete.
+
 Where the `roadnet` work stands, and how it maps to the original goal. Full design
 detail lives in [`roadnet.md`](roadnet.md) (L0–L2) and
 [`roadnet-streetlevel.md`](roadnet-streetlevel.md) (L3 + the road GRAPH — the most

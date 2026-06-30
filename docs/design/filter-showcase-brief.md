@@ -1,5 +1,7 @@
 # Build brief — the `filter()` showcase cart (DJ filter)
 
+STATUS: SHIPPED — build brief for the filter() showcase; djfilter.c ships the one-knob bipolar filter + DJ breakdown→drop.
+
 A handoff spec for a fresh context. The `filter()` master resonant filter shipped 2026-06-12
 (`FX_FILTER`, effects-bus insert — see STATUS / audio-notes §17 item 15 / effects-recipes
 "filter" section). Per the project flywheel, every effect gets one cart whose whole point is

@@ -1,5 +1,7 @@
 # Eno "Music for Airports" — the blind band brief
 
+STATUS: SHIPPED — phase-1 intent brief for the Eno radio station; the eno.c cart is built.
+
 > Phase-1 intent-first brief for a new radio station (`eno.c`), written from the
 > music before reading any cousin cart (the firewall). Companion to the runbook
 > [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md) and the

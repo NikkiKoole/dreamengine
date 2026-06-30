@@ -1,5 +1,7 @@
 # AIR radio — the blind band brief (Phase 1)
 
+STATUS: SHIPPED — phase-1 intent brief for the AIR radio station; the air.c cart is built.
+
 Written *before* opening any cousin cart (radio-station-howto.md firewall). AIR is an
 **artist station**, not a genre: the dial must play recognizably DIFFERENT *songs of
 theirs*, not one texture re-keyed. So this brief names actual tracks and what makes each

@@ -1,5 +1,7 @@
 # Vaporwave — the blind band brief
 
+STATUS: READY — phase-1 brief done and the cart exists; phase-3 effects-chain wiring not yet done.
+
 > Phase-1 intent-first brief for a new radio station (`vapor.c`), written from the music
 > before reading any cousin cart (the firewall). Companion to the runbook
 > [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md). A **genre** station

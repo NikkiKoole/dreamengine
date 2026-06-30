@@ -1,5 +1,7 @@
 # Napoleon radio — the voices I wanted but can't have yet (blocked on the effects bus)
 
+STATUS: EXPLORING — effects wishlist (gated reverb / plate / tape / chorus) blocked on the effects bus; napoleon ships workarounds.
+
 The blind-band brief for **Napoleon radio** ([`napoleon-blind-brief.md`](napoleon-blind-brief.md))
 named an ideal lineup *from the music* — the film's soundtrack + John Swihart's score — before
 reading any cousin cart (the [radio-station-howto](../guides/radio-station-howto.md) firewall).

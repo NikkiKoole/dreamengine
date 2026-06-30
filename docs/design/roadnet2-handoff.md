@@ -1,5 +1,7 @@
 # roadnet2 — session handoff (2026-06-15)
 
+STATUS: BUILDING — vector-native rebuild; metre base + two-camera harness done; driving (rung 4) + street generation pending.
+
 Orientation for picking up the **vector-native road rebuild**. The deep plan + the junction
 matrix live in [`roadnet2-plan.md`](roadnet2-plan.md); this is "where it stands, what's next,
 how to run it." (v1 — the original `roadnet` cart — is the reference/testbed; its docs are

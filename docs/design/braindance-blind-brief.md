@@ -1,5 +1,7 @@
 # braindance radio — the blind band brief (Phase 1)
 
+STATUS: SHIPPED — phase-1 intent brief for the braindance radio station; the braindance.c cart is built.
+
 Written *before* opening any cousin cart (radio-station-howto.md firewall). Working name:
 **`braindance`** (Rephlex's term for the aesthetic). This is **Path B** of the Aphex problem
 (see [`future-stations.md`](future-stations.md) → "Aphex Twin, decomposed"): Aphex is a *range*,

@@ -1,5 +1,7 @@
 # Squarepusher — the blind band brief
 
+STATUS: READY — phase-1 brief done and the cart exists; phase-2 voicing (bass brain + fusion chords) not yet wired.
+
 > Phase-1 intent-first brief for a candidate radio station (`squarepusher.c`), written
 > from the music before reading any cousin cart (the firewall). Companion to the runbook
 > [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md) and the candidate

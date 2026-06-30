@@ -1,5 +1,7 @@
 # Lo-fi jazzy hip-hop — the blind band brief
 
+STATUS: SHIPPED — the lofi.c radio station is built (drunk-pocket time feel, hazy jazz harmony).
+
 > Phase-1 intent-first brief for a new radio station (`lofi.c`), written from the music
 > before reading any cousin cart (the firewall). Companion to the runbook
 > [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md).

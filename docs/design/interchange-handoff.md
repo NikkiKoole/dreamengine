@@ -1,5 +1,7 @@
 # interchange — session handoff (2026-06-16)
 
+STATUS: BUILDING — junction-geometry sandbox under active work; trumpet loop tuned, inner loop in progress.
+
 Where the `interchange.c` junction-geometry sandbox stands after the **atom-decomposition** pass,
 and what's next. This is roadnet2's **part-B** (how roads cross/connect a highway); the bigger
 picture + the junction matrix live in [`roadnet2-plan.md`](roadnet2-plan.md) and

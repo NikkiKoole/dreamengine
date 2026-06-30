@@ -1,5 +1,7 @@
 # Modular Synth Cart — Design Spec
 
+STATUS: SHIPPED — shipped as the modrack.c patcher cart (13+ module types, FX modules, full cable editing).
+
 A Eurorack-style control-rate patcher cart. Tiny panels with knobs, buttons, and patch jacks. Curvy cables connect outputs to inputs. The synth engine (studio.h) does the audio; the modular layer is the brain.
 
 > **Engine prerequisite — SHIPPED.** The VOICE module needs *held notes* (`note_on`/`note_off`

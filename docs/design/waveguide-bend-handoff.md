@@ -1,5 +1,7 @@
 # Waveguide pitch-bend + brass character — handoff (2026-06-16)
 
+STATUS: SHIPPED — brass/reed/pipe/bowed pitch-bend-down fixed; minor tuning-refinement threads remain.
+
 Orientation for whoever picks up the delay-line sound engines next. One session did two
 interlocking things — **made BRASS brassier** and **made the waveguides bend pitch DOWN** — and left
 three concrete threads open. This is the map + the exact resume steps + the measurement workflow.

@@ -1,5 +1,7 @@
 # cityplan — the lotfill + interiors merge (a world you can lift the roof off)
 
+STATUS: SHIPPED — unified lotfill+interiors cart; stages A–D complete; multi-storey tenements are the open backlog.
+
 > **Built in `tools/carts/cityplan.c`.** The unification of the two sibling fill-language
 > workbenches: [`lotfill`](streetlevel-content.md) (the world BETWEEN buildings — terrain, forests,
 > farms, blocks, lots, streets) and [`interiors`](interiors-brief.md) (the floor-plan INSIDE one

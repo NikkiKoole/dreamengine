@@ -1,5 +1,7 @@
 # Plantasia — the blind band brief
 
+STATUS: SHIPPED — the plantasia.c radio station is built (melody-forward Moog, growing houseplants).
+
 > Phase-1 intent-first brief for a new radio station (`plantasia.c`), written from
 > the music before reading `moog.c` or any cousin cart (the firewall). Companion to
 > the runbook [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md)

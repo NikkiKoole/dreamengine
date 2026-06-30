@@ -1,5 +1,7 @@
 # Napoleon Dynamite radio — the blind band brief (Phase 1)
 
+STATUS: SHIPPED — the napoleon.c radio station is built (five song archetypes from the soundtrack).
+
 Written *before* opening any cousin cart (radio-station-howto.md firewall). This is an
 **artist station** — except the "artist" is the *film's musical world*: the 2004
 soundtrack (Jamiroquai, Alphaville, the White Stripes, Kip's wedding serenade) plus

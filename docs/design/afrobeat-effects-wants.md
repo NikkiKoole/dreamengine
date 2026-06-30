@@ -1,5 +1,7 @@
 # Afrobeat — the voices I wanted but can't have yet (blocked on the effects bus)
 
+STATUS: EXPLORING — wishlist of effects blocked on the effects bus (reverb/chorus already in; wah/tape/leslie/drive/compression still open).
+
 The blind-band brief for the **Afrobeat** station (Fela Kuti / Tony Allen) named an ideal
 lineup *from the genre*, before reading any cousin cart — the intent-first discipline in
 [`../guides/cart-authoring-prompt.md`](../guides/cart-authoring-prompt.md). Shopping that

@@ -1,5 +1,7 @@
 # boom — the destruction petri dish (living wishlist)
 
+STATUS: SHIPPED — the boom.c destruction petri-dish cart (six detonation tools, reactive props); wishlist for sloop integration.
+
 `boom` (`tools/carts/boom.c`) is a destruction sandbox for a criminal city: a
 **petri dish for blast effects** over two honest simulation layers. It's also a
 **prototyping ground** — it knocked out sloop's deferred per-tile demolition

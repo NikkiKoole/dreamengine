@@ -1,5 +1,7 @@
 # Boutique-pedal roadmap — squeezing the most out of the "$400 pedal" lists
 
+STATUS: BUILDING — pedal roadmap — shimmer + varispeed landed; pitch-shifter / modulation primitives still to build.
+
 Two crowd-sourced lists of "highest bang-for-buck boutique pedals to clone in C" landed
 (Shallow Water, Microcosm, MOOD, Generation Loss, Polymoon, Klon, Sun Face, Univibe,
 Shimmer, Red Panda Particle). This is the plan for harvesting them.

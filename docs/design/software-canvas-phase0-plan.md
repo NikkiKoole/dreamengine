@@ -1,5 +1,7 @@
 # Software-canvas Phase-0 mechanism probe — the executable plan
 
+STATUS: SHIPPED — phases 0a+0b implemented; byte-identity + perf gates pass; phases 1–2 are the next step.
+
 > **Genre: RAN — result GO (2026-06-24).** Phases 0a+0b are built behind `DE_SOFTWARE_CANVAS`
 > (env, off by default) in `studio.c`. **Byte-identity gate (0a):** the `swcanvas_test` cart
 > (`cls`/`pset`/`pset_rgb`) is **byte-identical** GPU vs `DE_SOFTWARE_CANVAS=on` (same shasum).

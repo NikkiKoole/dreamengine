@@ -52,10 +52,27 @@ const PHASES = [
   { key: "accepted",  label: "DECIDED (ADR)",      re: /\baccepted\b/i },
 ];
 
+// an explicit LEADING phase word is authoritative — a status that opens with a
+// known phase word means that phase, even if later prose mentions another
+// ("EXPLORING — reverb shipped, wah still open" is exploring, not shipped). This
+// is the recommended way to write a STATUS line: lead with the phase, then prose.
+const LEAD = {
+  shipped: "shipped", built: "shipped", done: "shipped", complete: "shipped", live: "shipped", landed: "shipped",
+  building: "building", wip: "building",
+  ready: "ready", designed: "ready", design: "ready", queued: "ready", approved: "ready",
+  exploring: "exploring", idea: "exploring", brainstorm: "exploring", exploration: "exploring",
+  proposal: "exploring", proposed: "exploring", scoping: "exploring", research: "exploring",
+  cut: "cut", rejected: "cut", superseded: "cut", deprecated: "cut",
+  accepted: "accepted",
+  reference: "other", living: "other",
+};
+
 // classify a status text → phase key, or "other" if it declares a status that
 // matches no phase (vocabulary drift — surfaced by design-board --lint).
 function classifyStatus(statusText) {
   if (!statusText) return null;                          // no status line at all → unmarked
+  const lead = statusText.trim().toLowerCase().match(/^[a-z]+/);
+  if (lead && LEAD[lead[0]]) return LEAD[lead[0]];       // leading phase word wins
   for (const p of PHASES) if (p.re.test(statusText)) return p.key;
   return "other";
 }

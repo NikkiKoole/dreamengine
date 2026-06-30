@@ -1,5 +1,7 @@
 # Groovebox — the blind band brief (Phase 1)
 
+STATUS: SHIPPED — phase-1 brief for the groovebox; groovebox.c is built and upgraded with real sidechain()/glue().
+
 Written *before* opening any cousin cart (radio-station-howto.md firewall). This is **not**
 a self-playing radio station and **not** a single-instrument-with-pedalboard. It's a
 **playable multi-track groovebox** — a few looping parts summed into one master bus — and

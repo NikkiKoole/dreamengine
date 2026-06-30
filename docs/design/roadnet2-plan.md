@@ -1,5 +1,7 @@
 # roadnet 2 — the vector-native rebuild (plan / sketch, 2026-06-15)
 
+STATUS: BUILDING — design sketch for the vector-native v2 rewrite; foundation in place; hierarchy + interchange ongoing.
+
 A clean restart of roadnet's street level, keeping the elegant L0 spline-highway core and
 fixing the one architectural mistake that made v1 messy. **This is a design sketch, not built
 yet.** Cart: [`tools/carts/roadnet2.c`](../../tools/carts/roadnet2.c) (currently = v1's clean

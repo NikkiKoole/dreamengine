@@ -1,5 +1,7 @@
 # Plaid — the blind band brief
 
+STATUS: SHIPPED — the plaid.c radio station is built (interlocking arpeggios in odd meters).
+
 > Phase-1 intent-first brief for a candidate radio station (`plaid.c`), written from the
 > music before reading any cousin cart (the firewall). Companion to the runbook
 > [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md) and the candidate

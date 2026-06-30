@@ -1,5 +1,7 @@
 # Road program — current state (2026-06-23)
 
+STATUS: BUILDING (2026-06-23) — live per-tier build status for the roads effort (sandboxes → world); the table below tracks each tier, with ~14 open items across tiers still to land.
+
 > One-screen snapshot of where the whole road/streets effort stands, tying the tier-specific
 > maps together. Detail lives in [`road-geometry-handoff.md`](road-geometry-handoff.md) (the
 > ★ interchange map) and [`road-hierarchy-notes.md`](road-hierarchy-notes.md) (the research +

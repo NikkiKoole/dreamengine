@@ -1,5 +1,7 @@
 # BRASS realism — handoff (2026-06-12; brightness fix landed 2026-06-16)
 
+STATUS: SHIPPED — brass-engine tuning handoff; asymmetric shaper + level-coupled brightness + output high-shelf fixes landed.
+
 > Session map for the whole waveguide-engine arc (down-bend + brass + the open tuning thread):
 > [`waveguide-bend-handoff.md`](waveguide-bend-handoff.md).
 
