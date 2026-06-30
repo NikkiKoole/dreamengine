@@ -27,6 +27,13 @@
 #include "map_data.h"
 #include "sound.h"
 #include "midi_input.h"
+#include "game_rect.h"   // window↔canvas placement transform (touch-controls Phase 1.5 chokepoint)
+
+// where the canvas sits in the window + the single window↔canvas transform (see game_rect.h).
+// Phase 1.5 pins it to the full window (origin 0,0; scale = SCALE) → identity, byte-identical to
+// the old bare /SCALE. Phase 2 placement just assigns a different value here and coords follow.
+// Declared up here because the input readers (inp_mouse_x/y, below) are the first to use it.
+static GameRect game_rect = { 0.0f, 0.0f, (float)SCALE };
 
 #ifdef PLATFORM_WEB
 #include <emscripten/emscripten.h>
@@ -424,11 +431,11 @@ static bool inp_released(int k) {
 }
 static int inp_mouse_x(void) {
     if (inject_input) return clampi(mouse_inj_x, 0, SCREEN_W - 1);
-    return clampi((int)(GetMousePosition().x / SCALE), 0, SCREEN_W - 1);
+    return clampi(gr_win_to_canvas_x(game_rect, GetMousePosition().x), 0, SCREEN_W - 1);
 }
 static int inp_mouse_y(void) {
     if (inject_input) return clampi(mouse_inj_y, 0, SCREEN_H - 1);
-    return clampi((int)(GetMousePosition().y / SCALE), 0, SCREEN_H - 1);
+    return clampi(gr_win_to_canvas_y(game_rect, GetMousePosition().y), 0, SCREEN_H - 1);
 }
 static bool inp_mouse_down(int button) {
     int b = mbtn_index(button);
@@ -459,12 +466,12 @@ static bool inp_down(int k)    { return IsKeyDown(k); }
 static bool inp_pressed(int k) { return IsKeyPressed(k); }
 static bool inp_released(int k){ return IsKeyReleased(k); }
 static int  inp_mouse_x(void)  {
-    if (web_tm_active) return clampi((int)(web_tm_pos.x / SCALE), 0, SCREEN_W - 1);
-    return clampi((int)(GetMousePosition().x / SCALE), 0, SCREEN_W - 1);
+    if (web_tm_active) return clampi(gr_win_to_canvas_x(game_rect, web_tm_pos.x), 0, SCREEN_W - 1);
+    return clampi(gr_win_to_canvas_x(game_rect, GetMousePosition().x), 0, SCREEN_W - 1);
 }
 static int  inp_mouse_y(void)  {
-    if (web_tm_active) return clampi((int)(web_tm_pos.y / SCALE), 0, SCREEN_H - 1);
-    return clampi((int)(GetMousePosition().y / SCALE), 0, SCREEN_H - 1);
+    if (web_tm_active) return clampi(gr_win_to_canvas_y(game_rect, web_tm_pos.y), 0, SCREEN_H - 1);
+    return clampi(gr_win_to_canvas_y(game_rect, GetMousePosition().y), 0, SCREEN_H - 1);
 }
 static bool inp_mouse_down(int b)     {
     if (web_tm_active) return mbtn_index(b) == 0 && web_tm_down;
@@ -1710,7 +1717,8 @@ static void loop_step(void) {
         DrawTexturePro(
             canvas.texture,
             (Rectangle){ 0, 0,  SCREEN_W, -SCREEN_H },
-            (Rectangle){ sox, soy,  SCREEN_W * SCALE, SCREEN_H * SCALE },
+            (Rectangle){ game_rect.x + sox, game_rect.y + soy,
+                         SCREEN_W * game_rect.scale, SCREEN_H * game_rect.scale },   // game_rect drives placement
             (Vector2){ 0, 0 },
             0.0f,
             WHITE
@@ -2290,11 +2298,11 @@ int touch_count(void) { return vt_count; }
 
 int touch_x(int i) {
     if (i < 0 || i >= vt_count) return -1;
-    return (int)(vt_pos[i].x / SCALE);
+    return gr_win_to_canvas_x(game_rect, vt_pos[i].x);
 }
 int touch_y(int i) {
     if (i < 0 || i >= vt_count) return -1;
-    return (int)(vt_pos[i].y / SCALE);
+    return gr_win_to_canvas_y(game_rect, vt_pos[i].y);
 }
 int touch_id(int i) {
     if (i < 0 || i >= vt_count) return -1;
@@ -2303,7 +2311,7 @@ int touch_id(int i) {
 
 bool tap(int x, int y, int w, int h) {
     for (int i = 0; i < vt_count; i++) {
-        int cx = (int)(vt_pos[i].x / SCALE), cy = (int)(vt_pos[i].y / SCALE);
+        int cx = gr_win_to_canvas_x(game_rect, vt_pos[i].x), cy = gr_win_to_canvas_y(game_rect, vt_pos[i].y);
         if (cx >= x && cx < x + w && cy >= y && cy < y + h) return true;
     }
     return false;
@@ -2312,7 +2320,7 @@ bool tap(int x, int y, int w, int h) {
 bool tapp(int x, int y, int w, int h) {
     for (int i = 0; i < vt_count; i++) {
         if (vt_was_down(vt_id[i])) continue;   // finger was already down last frame
-        int cx = (int)(vt_pos[i].x / SCALE), cy = (int)(vt_pos[i].y / SCALE);
+        int cx = gr_win_to_canvas_x(game_rect, vt_pos[i].x), cy = gr_win_to_canvas_y(game_rect, vt_pos[i].y);
         if (cx >= x && cx < x + w && cy >= y && cy < y + h) return true;
     }
     return false;
@@ -2326,16 +2334,16 @@ int touch_ended_id(int i) {
 }
 int touch_ended_x(int i) {
     if (i < 0 || i >= vt_ended_count) return -1;
-    return (int)(vt_ended_pos[i].x / SCALE);
+    return gr_win_to_canvas_x(game_rect, vt_ended_pos[i].x);
 }
 int touch_ended_y(int i) {
     if (i < 0 || i >= vt_ended_count) return -1;
-    return (int)(vt_ended_pos[i].y / SCALE);
+    return gr_win_to_canvas_y(game_rect, vt_ended_pos[i].y);
 }
 
 bool tapr(int x, int y, int w, int h) {
     for (int i = 0; i < vt_ended_count; i++) {
-        int cx = (int)(vt_ended_pos[i].x / SCALE), cy = (int)(vt_ended_pos[i].y / SCALE);
+        int cx = gr_win_to_canvas_x(game_rect, vt_ended_pos[i].x), cy = gr_win_to_canvas_y(game_rect, vt_ended_pos[i].y);
         if (cx >= x && cx < x + w && cy >= y && cy < y + h) return true;
     }
     return false;

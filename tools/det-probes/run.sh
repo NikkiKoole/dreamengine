@@ -36,4 +36,11 @@ for p in detstress stritex rotstroke rotfill rotline rotspr textrot; do
     echo "  ^ MISMATCH (expected: $exp)"; fail=1
   else echo "  ^ OK (bit-identical across targets)"; fi
 done
+
+# placetest is a different kind of oracle: a PURE correctness check (window↔canvas transform
+# round-trip, touch-controls Phase 1.5), not a cross-target pixel hash — so it runs on its own
+# exit code rather than the hash table above.
+echo "== placetest (window<->canvas round-trip) =="
+clang -O2 placetest.c -o /tmp/placetest 2>/dev/null && /tmp/placetest || fail=1
+
 exit $fail
