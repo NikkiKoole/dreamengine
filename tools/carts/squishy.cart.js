@@ -81,6 +81,9 @@ function ic_brs() {
   return flat(g)
 }
 
+// 8..11 — solid colour swatches for the palette picker (must match COLORS[] in squishy.c)
+const swatch = (c) => flat(blank(16, 16, c))
+
 module.exports = {
   screenW: 320,
   screenH: 320,
@@ -88,5 +91,6 @@ module.exports = {
   sprites: {
     0: ic_ink(), 1: ic_pen(), 2: ic_fin(), 3: ic_mrk(),
     4: ic_chk(), 5: ic_skt(), 6: ic_spr(), 7: ic_brs(),
+    8: swatch(16), 9: swatch(12), 10: swatch(8), 11: swatch(3),   // ink / blue / red / dk-green
   },
 }
