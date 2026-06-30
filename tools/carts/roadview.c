@@ -195,9 +195,10 @@ static void reset_pools(void) {
 //   magic[4] | int32 nfeat | int32 namelen | name bytes | float32 bbox[4]
 //   per feature: int32 kind | [RVB2: float32 height] | int32 sublen | sub bytes (ignored) | int32 npts | float32 pts[npts*2]
 // `kind` is the K_* index — MUST match KIND_IX in data-tools/roadview/osm-roads.js.
-// RVB2 adds a building-height float per feature; roadview is 2D so it just SKIPS it (citydrive reads it).
+// RVB2 adds a building-height float per feature; RVB3 also appends a terrain heightfield at the
+// end. roadview is 2D so it SKIPS the height float and ignores the trailing heightfield (citydrive reads both).
 static void load_bin(const char *buf, long len) {
-    int ver = buf[3];                                      // '1' or '2'
+    int ver = buf[3];                                      // '1', '2', or '3'
     const char *p = buf + 4, *end = buf + len;             // skip magic
     int nfeat, namelen;
     memcpy(&nfeat, p, 4);   p += 4;
@@ -209,7 +210,7 @@ static void load_bin(const char *buf, long len) {
     for (int f = 0; f < nfeat && npoly < MAXPOLY && p + 16 <= end; f++) {
         int kind, sublen, npts;
         memcpy(&kind, p, 4);   p += 4;
-        if (ver == '2') p += 4;                            // skip the height float (2D cart)
+        if (ver == '2' || ver == '3') p += 4;              // skip the height float (2D cart)
         memcpy(&sublen, p, 4); p += 4;
         const char *sub = p; p += sublen;                  // building type, or an OTHER_* defining tag
         memcpy(&npts, p, 4);   p += 4;
@@ -231,7 +232,7 @@ static void load_from(const char *path) {
     reset_pools();
     long len; char *js = json_slurp(path, &len);
     if (!js) { snprintf(err, sizeof err, "cannot read %s", path); return; }
-    if (len >= 4 && memcmp(js, "RVB", 3) == 0 && (js[3]=='1' || js[3]=='2')) {  // binary fast path (RVB1/RVB2)
+    if (len >= 4 && memcmp(js, "RVB", 3) == 0 && (js[3]>='1' && js[3]<='3')) {  // binary fast path (RVB1/2/3)
         load_bin(js, len);
         free(js);
         if (!npoly) { snprintf(err, sizeof err, "no features in %s", path); return; }

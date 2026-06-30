@@ -313,10 +313,20 @@ What it took (the three prerequisites, in order):
    bbox-balloon, which a plain centre would land in a gap of). Per frame it range-culls buildings to
    ~320 m of the camera then depth-sorts; roads draw as flat ground ribbons (world-space quads) beneath.
 
-Still flat / TODO in `citydrive`: water/green/zoning areas (roads-only ground for now), bridge/overpass
-**decks** (lift `bridge`/`layer` ways onto cityview's `Deck` machinery — OSM has no real elevation, so
-this is the only "road height" that applies; NL cities are flat), inner-ring holes, and the >64-vertex
-footprint clamp (`MAXBV`). Web/wasm file loading is shared with roadview (below).
+**Terrain (RVB3).** OSM carries no elevation, so the ground was flat. `osm-roads --dem` now fetches an
+SRTM heightfield (opentopodata API) over the bbox and stores a compact `GxG` grid (default 96) trailing
+the features — **RVB3** (magic-gated; RVB1/2 still load, roadview ignores it). citydrive bilinear-samples
+`ground_z(x,y)` from it and **drapes everything**: roads/footprint-bases sit at ground height, roofs at
++height, the car + camera ride the terrain (`camz`), and a shaded low-poly **mesh** of the grid cells
+near the camera is drawn as the base ground so hills actually read. Elevation is **vertically exaggerated**
+(`TERRAIN_EXAG`) because the parallel-oblique projection (no camera pitch) renders true relief subtly —
+it reads best in motion and in less-built areas; dense downtown hides it. Fetch e.g.
+`--bbox 37.791,-122.421,37.807,-122.404 --dem` for San Francisco's hills.
+
+Still flat / TODO in `citydrive`: bridge/overpass **decks** (lift `bridge`/`layer` ways onto cityview's
+`Deck` machinery — distinct from terrain; NL cities are flat so it only matters for overpasses), inner-ring
+holes, the >64-vertex footprint clamp (`MAXBV`), and the hashed `other_area` understory. Web/wasm file
+loading is shared with roadview (below).
 
 ### The binary form (`.rvb`) — same IR, packed
 
@@ -332,7 +342,12 @@ per feature:  int32 kind | float32 h | int32 sublen | sub bytes | int32 npts | f
 `h` is the **building height in metres** (0 = unknown / non-building), parsed from OSM
 `height` / `building:levels` (see "Building heights" above) — the pseudo-3D consumer
 (`citydrive`) extrudes it; `roadview` is 2D and skips it. **`RVB1` (no `h`) still loads** — the
-reader switches per-feature layout on the magic's version byte (`'1'` vs `'2'`).
+reader switches per-feature layout on the magic's version byte (`'1'` vs `'2'` vs `'3'`).
+
+**`RVB3`** is `RVB2` plus a trailing **terrain heightfield** (from `--dem`): after the features,
+`int32 G | float32 grid[G*G]` — a `GxG` elevation grid (metres, relative) mapped uniformly over the
+bbox, row 0 = south. citydrive drapes its geometry over it; `roadview` stops after the features and
+ignores it.
 
 `kind` is the numeric **`K_*` index** — `KIND_IX` in `osm-roads.js` and the `enum` in
 `roadview.c` are twins and **must stay in sync (append only, never reorder)**. The cart

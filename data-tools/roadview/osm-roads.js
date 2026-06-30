@@ -62,6 +62,54 @@ const KIND_IX = { highway: 0, arterial: 1, road: 2, track: 3, water: 4, canal: 5
                   other_area: 22, other_line: 23 };
 const SIMPLIFY = parseFloat(opt('--simplify', '8'));
 const NAME = opt('--name', null);
+const DEM = has('--dem') ? (parseInt(opt('--dem', '96'), 10) || 96) : 0;   // GxG terrain heightfield (opt-in)
+
+// ---- terrain elevation: sample a GxG heightfield over the bbox (opentopodata srtm30m) ----
+// citydrive drapes its flat geometry over this so a hilly city (SF, Lisbon…) renders 3D relief.
+// Stored compactly in the .rvb (RVB3): a grid of metres, not a z per point. Opt-in (--dem) — it's
+// slow (public API is 1 call/sec) so flat-city fetches stay fast. roadview is 2D and ignores it.
+async function fetchDEM(S, W, N, E, G) {
+  console.log(`fetching ${G}x${G} terrain grid over bbox (opentopodata srtm30m)…`);
+  const pts = [];
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++)          // row i = latitude S→N, col j = lon W→E
+    pts.push([S + (N - S) * i / (G - 1), W + (E - W) * j / (G - 1)]);
+  const z = new Array(G * G).fill(0);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let b = 0; b < pts.length; b += 100) {
+    const batch = pts.slice(b, b + 100);
+    const locs = batch.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join('|');
+    let ok = false;
+    for (let attempt = 0; attempt < 4 && !ok; attempt++) {
+      try {
+        const r = await fetch(`https://api.opentopodata.org/v1/srtm30m?locations=${locs}`);
+        if (!r.ok) { await sleep(2000); continue; }
+        const jj = await r.json();
+        if (jj.status !== 'OK' || !jj.results) { await sleep(2000); continue; }
+        jj.results.forEach((res, k) => { z[b + k] = res.elevation == null ? 0 : res.elevation; });
+        ok = true;
+      } catch (e) { await sleep(2000); }
+    }
+    if (!ok) throw new Error('opentopodata fetch failed');
+    process.stdout.write(`\r  terrain ${Math.min(b + 100, pts.length)}/${pts.length}`);
+    await sleep(1100);                                              // public API rate limit: ~1 call/sec
+  }
+  process.stdout.write('\n');
+  const min = Math.min(...z), max = Math.max(...z);
+  console.log(`  relief ${(max - min).toFixed(0)} m (${min.toFixed(0)}–${max.toFixed(0)} m)`);
+  return { g: G, z: z.map((v) => v - min) };                       // relative metres (lowest point = 0)
+}
+
+// a synthetic smooth-hills heightfield for the offline --demo (so the demo shows terrain too).
+function demoHeightfield(Wm, Hm, G) {
+  const z = [];
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) {
+    const x = j / (G - 1) * Wm, y = i / (G - 1) * Hm;
+    const h1 = 42 * Math.exp(-(((x - 0.36 * Wm) ** 2 + (y - 0.55 * Hm) ** 2) / (2 * 700 ** 2)));
+    const h2 = 30 * Math.exp(-(((x - 0.68 * Wm) ** 2 + (y - 0.40 * Hm) ** 2) / (2 * 520 ** 2)));
+    z.push(h1 + h2);
+  }
+  return { g: G, z };
+}
 
 // ---- web mercator: lon/lat (deg) → metres ----
 const R = 6378137;
@@ -211,11 +259,13 @@ const round = (v) => Math.round(v * 10) / 10;
 function writeBin(doc, outPath) {
   const nameBuf = Buffer.from(doc.name || '', 'utf8');
   const subBufs = doc.features.map(f => Buffer.from(f.sub || '', 'utf8'));
+  const hf = doc.heightfield;                                  // {g, z:[g*g]} or undefined
   let size = 4 + 4 + 4 + nameBuf.length + 16;
   doc.features.forEach((f, i) => { size += 4 + 4 + 4 + subBufs[i].length + 4 + f.pts.length * 4; });  // +4: float h
+  if (hf) size += 4 + hf.g * hf.g * 4;                         // trailing: int32 G + float32 grid[G*G]
   const buf = Buffer.alloc(size);
   let o = 0;
-  o += buf.write('RVB2', o, 'latin1');
+  o += buf.write(hf ? 'RVB3' : 'RVB2', o, 'latin1');
   buf.writeInt32LE(doc.features.length, o); o += 4;
   buf.writeInt32LE(nameBuf.length, o); o += 4;
   o += nameBuf.copy(buf, o);
@@ -228,6 +278,7 @@ function writeBin(doc, outPath) {
     buf.writeInt32LE(f.pts.length >> 1, o); o += 4;
     for (let k = 0; k < f.pts.length; k++) { buf.writeFloatLE(f.pts[k], o); o += 4; }
   });
+  if (hf) { buf.writeInt32LE(hf.g, o); o += 4; for (const v of hf.z) { buf.writeFloatLE(v, o); o += 4; } }
   fs.writeFileSync(outPath, buf);
 }
 
@@ -352,7 +403,9 @@ function demo() {
                   pts: [[ox, oy], [ox + w, oy], [ox + w, oy + h], [ox, oy + h], [ox, oy]] });
     }
   }
-  write(buildDoc('demo', NAME || 'demo', ways));     // → data/demo.json (the cart's default file)
+  const doc = buildDoc('demo', NAME || 'demo', ways);              // → data/demo.rvb (the cart's default file)
+  doc.heightfield = demoHeightfield(doc.bbox[2], doc.bbox[3], 64); // synthetic hills so the demo shows terrain too
+  write(doc);
 }
 
 // ---- Nominatim geocode a place name → [S,W,N,E] ----
@@ -462,7 +515,10 @@ async function overpass(S, W, N, E, name) {
   }
   if (relRings) console.log(`  assembled ${relRings} ring(s) from ${rels.length} multipolygon relation(s)`);
   if (!ways.length) throw new Error('no roads in that bbox');
-  write(buildDoc('overpass', name || `${S},${W},${N},${E}`, ways));
+  const doc = buildDoc('overpass', name || `${S},${W},${N},${E}`, ways);
+  if (DEM) { try { doc.heightfield = await fetchDEM(S, W, N, E, DEM); }
+             catch (e) { console.log(`  terrain skipped (${e.message}) — flat`); } }
+  write(doc);
 }
 
 (async () => {
