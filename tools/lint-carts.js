@@ -13,6 +13,8 @@
 //   - status (if present) from STATUSES; homage (if present) a non-empty string
 //   - teaches values from the controlled vocab (tools/teaches-vocab.js)
 //   - description is a string OR { summary?, detail?, controls? } with ≥1 string part
+//   - todo (if present) is a non-empty string[] — the per-cart polish punch-list; authoring-only,
+//     NOT emitted to index.json, read by cart-todos.js
 //   - every de:meta cart has a baked .cart.png; every .cart.png has a de:meta cart
 //   - editor/public/carts/index.json equals a fresh build-cart-index generate
 //
@@ -88,6 +90,15 @@ for (const f of fs.readdirSync(CARTS).sort()) {
   if ("homage" in m && (typeof m.homage !== "string" || !m.homage))
     errors.push(`${at}: homage must be a non-empty string`);
   if ("lineage" in m && typeof m.lineage !== "string") errors.push(`${at}: lineage must be a string`);
+
+  // todo[] — optional per-cart polish punch-list (NOT emitted to index.json; read by cart-todos.js).
+  // If present it must be a non-empty array of non-empty strings (drop the field when nothing's left).
+  if ("todo" in m) {
+    if (!Array.isArray(m.todo) || m.todo.length === 0)
+      errors.push(`${at}: todo must be a non-empty string[] (remove the field if there's nothing to do)`);
+    else for (const t of m.todo)
+      if (typeof t !== "string" || !t.trim()) errors.push(`${at}: todo entries must be non-empty strings`);
+  }
 
   if (!Array.isArray(m.teaches))
     errors.push(`${at}: missing teaches[] — use [] if nothing conceptually distinctive`);

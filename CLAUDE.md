@@ -148,6 +148,8 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
                              harmonic series) — for A/B-ing a render against navkit
              sprite-draw.js  reusable 2D pixel-canvas API for programmatic .cart.js sprites
              sprite-preview.js  render a .cart.js's sprites to one labelled PNG (no compile/run) — the tight loop for code-drawn sprites
+             pixelsnap.js    clean up "AI pixel art": snap soft/off-grid pixels onto a real grid + posterize
+                             to a small palette (median-cut, or --palette pico32); never overwrites the input
              font-bake.js    bake real-TTF text into sprite-draw canvases at build time
              gen-rom-font.js bake the "extra" bitmap fonts (ROM dumps + EPX) into the shared atlas
              build-cart-index.js  GENERATE editor/public/carts/index.json from each cart's de:meta block
@@ -157,6 +159,7 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              spec.js         run each cart's spec() — the gameplay-logic gate (twin of tune-check)
              cart-info.js    orient on ONE cart: screen/GW×GH, embedded de:source DRIFT vs the .c, registration
              cart-status.js  what's out of date (rebake / publish / stale / compendium)
+             cart-todos.js   the navigable view over every cart's de:meta.todo[] polish punch-list (--grep/--count/<name>)
              cart-analyze.js complexity + global-state report; ranks spec-worthiness
              cart-index.js   computed technique index ("what cart teaches X") + coverage
              cart-dupes.js   cross-cart duplication finder → refactor / drift candidates

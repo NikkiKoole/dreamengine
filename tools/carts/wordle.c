@@ -12,7 +12,10 @@
   "lineage": "Faithful port of the NYT Wordle mechanic; duplicate-letter scoring rule and per-letter keyboard state are the notable implementation challenges.",
   "genre": "word",
   "homage": "Wordle (2021)",
-  "description": "The daily word puzzle, distilled to its purest loop. A hidden five-letter word waits behind six empty rows; type a guess and watch the five tiles flip one-by-one — green for a letter in the right spot, orange for one that's in the word but misplaced, gray for absent — with the proper duplicate-letter rule so repeated letters score honestly. A live on-screen QWERTY keyboard repaints each key to the best news it has earned, an invalid or short guess buzzes and shakes the board, and a solve sets the winning row bouncing over a rising arpeggio while a loss reveals the answer. Your win streak persists between runs. Type A-Z to fill the row, BACKSPACE to delete, ENTER to submit (or click the on-screen keyboard, including its ENT and DEL pads); ENTER on the result screen plays a fresh word."
+  "description": "The daily word puzzle, distilled to its purest loop. A hidden five-letter word waits behind six empty rows; type a guess and watch the five tiles flip one-by-one — green for a letter in the right spot, orange for one that's in the word but misplaced, gray for absent — with the proper duplicate-letter rule so repeated letters score honestly. A live on-screen QWERTY keyboard repaints each key to the best news it has earned, an invalid or short guess buzzes and shakes the board, and a solve sets the winning row bouncing over a rising arpeggio while a loss reveals the answer. Your win streak persists between runs. Type A-Z to fill the row, BACKSPACE to delete, ENTER to submit (or click the on-screen keyboard, including its ENT and DEL pads); ENTER on the result screen plays a fresh word.",
+  "todo": [
+    "An unrecognized or too-short guess should still cost a row — right now you can retry indefinitely until the word is valid."
+  ]
 }
 de:meta */
 #include "studio.h"

@@ -65,6 +65,7 @@ is greppable in source (`grep -l adsr-envelope tools/carts/*.c`).
 | `orientation` | yes (derived) | `portrait` / `square` — **derived** by `build-cart-index.js` from the `.cart.png`'s `de:settings` screen dims at generate time, never hand-tagged (so it can't drift). Omitted for the default 320×200 landscape. Powers a gallery "📱 portrait" filter. |
 | `inputs` / `outputs` | not yet | RESERVED — the data-contract a cart consumes/produces (the "carts that take in AND emit data" direction). Generator ignores until a consumer exists; additive, no future migration. |
 | `see_also` / `notes` | not yet | RESERVED — man-page growth. |
+| `todo` | **no (authoring-only)** | optional `string[]` — the cart's own polish punch-list, one item per string. Deliberately NOT emitted to index.json (no gallery churn); validated by `lint-carts.js`, surfaced by `cart-todos.js`. The data form of `docs/cart-polish-punchlist.md` — clear an item by deleting it (drop the field when empty). |
 
 ### `description`: string or parts
 

@@ -34,6 +34,8 @@
 // flattened to one string for index.json (the gallery is unchanged) until a consumer
 // renders them directly. `file` is DERIVED (<name>.cart.png), never stored.
 // Reserved, ignored-until-a-consumer-exists: inputs, outputs, see_also, notes.
+// Authoring-only, deliberately NOT emitted (no gallery churn): todo[] — the per-cart polish
+// punch-list, validated by lint-carts.js and surfaced by cart-todos.js.
 
 const fs = require("fs");
 const path = require("path");
