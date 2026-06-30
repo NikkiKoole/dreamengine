@@ -13,7 +13,7 @@
   "lineage": "Inspired by FC Mobile / Football Manager lite; novel in combining a drag-to-arrange formation pitch, a procedurally refreshing transfer market, and a Poisson-ish strength-ratio match simulator feeding a league table.",
   "genre": "sports",
   "homage": "Football Manager (1982)",
-  "description": "An FC-Mobile-style manager mode: you run Feyenoord's starting XI on a drag-to-arrange formation pitch, with a bench of spares, switchable 4-4-2 / 4-3-3 shapes, and an out-of-position penalty that makes your shape matter. Wheel and deal in a transfer market stocked with real 2026-era European stars (Yamal, Mbappe, Pedri, Haaland…) against a cash budget — sign a face, sell the deadwood — then hit PLAY MATCH and the engine auto-sims a scoreline from your XI's strength versus the opponent's, ticking the goals up on a scoreboard before slamming home WIN/DRAW/DEFEAT. The other eleven clubs (Real Madrid, Man City, Bayern, Barcelona, Liverpool, Arsenal, PSG, Inter, Man Utd, Ajax, PSV) play their own fixtures and the 12-team league table re-sorts live on points and goal difference across a 10-round season; finish top to be champions. Player names are pooled by position and clubs/standings use the compact 4×6 font to fit the bigger roster. Drag players between the pitch and the bench, click 4-4-2 / 4-3-3 to switch shape, click a price to BUY or a value to SELL in the market, and click PLAY MATCH (TAB cycles SQUAD/MARKET/LEAGUE, ENTER plays)."
+  "description": "An FC-Mobile-style manager mode played as a three-season CLIMB: you take Feyenoord from the regional EERSTE DIVISIE up through the EREDIVISIE (the best Dutch clubs) and into the CHAMPIONS LEAGUE (the giants of Europe). Each tier is its own 12-club, 10-round league; finish 1st to be promoted, and win the Champions League to be crowned CHAMPION OF EUROPE. Miss out and you replay the tier — but your squad and cash carry over, so the transfer market (stocked with real 2026-era stars like Yamal, Mbappe, Pedri and Haaland) is how you bankroll the climb. Run your XI on a drag-to-arrange formation pitch with a bench of spares, switchable 4-4-2 / 4-3-3 shapes and an out-of-position penalty; hit PLAY MATCH and the engine auto-sims a scoreline from your strength versus the opponent's, ticking goals up on a scoreboard before slamming home WIN/DRAW/DEFEAT while the table re-sorts live on points and goal difference. Player names are pooled by position, and the HUD, market and standings use the compact 4×6 font to fit the bigger rosters. Drag players between pitch and bench, click 4-4-2 / 4-3-3 to switch shape, click a price to BUY or a value to SELL, and click PLAY MATCH (TAB cycles SQUAD/MARKET/LEAGUE, ENTER plays)."
 }
 de:meta */
 #include "studio.h"
@@ -26,7 +26,14 @@ de:meta */
 // and the bench to set your team, switch the shape (4-4-2 / 4-3-3), wheel and
 // deal in a TRANSFER MARKET against a cash budget, then hit PLAY MATCH — the
 // engine auto-sims a scoreline from your starting-XI strength vs the opponent's
-// and feeds the result into a small league table. Survive 10 rounds; finish top.
+// and feeds the result into a 12-club league table over a 10-round season.
+//
+// CAMPAIGN: a three-tier climb. Win your division (finish 1st) to be promoted —
+// EERSTE DIVISIE (regional Dutch clubs) -> EREDIVISIE (the best of Holland) ->
+// CHAMPIONS LEAGUE (the giants of Europe). Win the Champions League and you're
+// CHAMPION OF EUROPE. Miss out and you replay the tier next season — your squad
+// and cash carry over, so the transfer market is how you climb. Three good
+// seasons is the fast track to the top.
 //
 // It's a menu + table game, mouse-first. No real-time match, no training.
 //
@@ -93,7 +100,11 @@ static int state;
 static int cash;
 static int round_;                 // 1..NROUNDS
 #define NROUNDS 10
-static int best;
+static int division;               // current tier, D_EERSTE .. D_CL
+static int season;                 // total seasons played this campaign (1-based)
+static int end_pos;                // your finishing rank when a season ends
+static int end_outcome;            // 0 missed promotion · 1 promoted · 2 won the lot
+static int best;                   // career best: 0 none · 1 won Eerste · 2 won Ere · 3 European champion
 
 // match result animation
 static int   res_my, res_op;       // your goals / opp goals this match
@@ -136,10 +147,23 @@ static const int NAMEN[NPOS] = {
     (int)(sizeof NAME_MID / sizeof *NAME_MID),
     (int)(sizeof NAME_FWD / sizeof *NAME_FWD),
 };
-// you manage Feyenoord; rivals are the European giants, ordered strongest-first.
-static const char *CLUBNM[] = {
-    "FEYENOORD","REAL MADRID","MAN CITY","BAYERN","BARCELONA","LIVERPOOL",
-    "ARSENAL","PARIS SG","INTER","MAN UTD","AJAX","PSV"
+// CAMPAIGN: you manage Feyenoord on a three-season climb. Each division is its
+// own 12-club league (you = club[0] + 11 rivals). Win it (finish 1st) to go up.
+//   EERSTE DIVISIE   — regional Dutch clubs, weak: you should dominate
+//   EREDIVISIE       — the best Dutch clubs, mid-strength: a real fight
+//   CHAMPIONS LEAGUE — the giants of Europe: only an upgraded squad survives
+enum { D_EERSTE, D_ERE, D_CL, NDIV };
+static const char *DIVNM[NDIV] = { "EERSTE DIVISIE", "EREDIVISIE", "CHAMPIONS LEAGUE" };
+#define NRIVAL (NCLUB - 1)
+static const char *RIVALS[NDIV][NRIVAL] = {
+    { "WILLEM II","RODA JC","ADO","CAMBUUR","GRAAFSCHAP","FC EMMEN","VVV VENLO","MVV","EINDHOVEN","TOP OSS","DORDRECHT" },
+    { "AJAX","PSV","AZ ALKMAAR","TWENTE","UTRECHT","GO AHEAD","SPARTA","NEC","HEERENVEEN","FORTUNA","GRONINGEN" },
+    { "REAL MADRID","MAN CITY","BAYERN","BARCELONA","LIVERPOOL","ARSENAL","PARIS SG","INTER","ATLETICO","NAPOLI","DORTMUND" },
+};
+static const int RSTR[NDIV][NRIVAL] = {
+    { 760, 720, 700, 690, 680, 670, 660, 650, 640, 620, 600 },
+    { 840, 830, 800, 780, 770, 740, 730, 720, 715, 705, 700 },
+    { 920, 910, 895, 885, 870, 855, 845, 835, 820, 805, 790 },
 };
 
 // is this name already on the books? avoids two Mbappes on screen at once.
@@ -213,15 +237,28 @@ static void refresh_market(void) {
     }
 }
 
+// (re)seed the table for the CURRENT division: you (club[0]) + its 11 rivals,
+// all records zeroed. club[0].str is set from your squad each match.
 static void new_league(void) {
-    // club[0] (YOU) set from squad each match; rivals strongest-first to match CLUBNM
-    static const int STR[NCLUB] = { 0, 900, 890, 875, 860, 845, 835, 830, 820, 790, 760, 740 };
-    for (int c = 0; c < NCLUB; c++) {
-        int n = 0; const char *nm = CLUBNM[c];
-        while (nm[n] && n < 11) { club[c].name[n] = nm[n]; n++; } club[c].name[n] = 0;
-        club[c].str = STR[c];
-        club[c].W = club[c].D = club[c].L = club[c].GF = club[c].GA = club[c].pts = 0;
+    static const char *YOUNM = "FEYENOORD";
+    int n = 0; while (YOUNM[n] && n < 11) { club[0].name[n] = YOUNM[n]; n++; } club[0].name[n] = 0;
+    club[0].str = 0;
+    for (int c = 1; c < NCLUB; c++) {
+        const char *nm = RIVALS[division][c - 1];
+        int k = 0; while (nm[k] && k < 11) { club[c].name[k] = nm[k]; k++; } club[c].name[k] = 0;
+        club[c].str = RSTR[division][c - 1];
     }
+    for (int c = 0; c < NCLUB; c++)
+        club[c].W = club[c].D = club[c].L = club[c].GF = club[c].GA = club[c].pts = 0;
+}
+
+// start a fresh season in the current division (keeps your squad + cash).
+static void start_season(void) {
+    round_ = 1;
+    refresh_market();
+    new_league();
+    drag_from = drag_bench = -1;
+    res_t = 0;
 }
 
 static void new_game(void) {
@@ -247,11 +284,9 @@ static void new_game(void) {
     }
 
     cash = 4000;
-    round_ = 1;
-    refresh_market();
-    new_league();
-    drag_from = drag_bench = -1;
-    res_t = 0;
+    division = D_EERSTE;
+    season = 1;
+    start_season();
 }
 
 void init(void) {
@@ -369,7 +404,15 @@ void update(void) {
         return;
     }
     if (state == OVER) {
-        if (mouse_pressed(MOUSE_LEFT) || keyp(KEY_ENTER) || btnp(0, BTN_A)) { new_game(); state = TITLE; }
+        if (mouse_pressed(MOUSE_LEFT) || keyp(KEY_ENTER) || btnp(0, BTN_A)) {
+            if (end_outcome == 2) { new_game(); state = TITLE; }   // won it all → fresh campaign
+            else {                                                 // promoted or replay this tier
+                if (end_outcome == 1) division++;
+                season++;
+                start_season();
+                state = SQUAD;
+            }
+        }
         return;
     }
     if (state == RESULT) {
@@ -379,7 +422,17 @@ void update(void) {
         if (tm != res_shown_my) { res_shown_my = tm; note(72, INSTR_SQUARE, 4); }
         if (to != res_shown_op) { res_shown_op = to; note(60, INSTR_SAW, 3); }
         if (res_t >= 1.2f && (mouse_pressed(MOUSE_LEFT) || keyp(KEY_ENTER) || btnp(0, BTN_A))) {
-            if (round_ >= NROUNDS) { state = OVER; }
+            if (round_ >= NROUNDS) {                               // season's done — judge it
+                end_pos = league_pos();
+                // top 2 go up from the Dutch tiers; only the winner takes Europe
+                if (division == D_CL) end_outcome = (end_pos == 1) ? 2 : 0;
+                else                  end_outcome = (end_pos <= 2) ? 1 : 0;
+                if (end_outcome >= 1) {                            // record the career best
+                    int b = (end_outcome == 2) ? 3 : division + 1;
+                    if (b > best) { best = b; save(0, best); }
+                }
+                state = OVER;
+            }
             else { round_++; refresh_market(); state = TABLE; }
         }
         return;
@@ -487,7 +540,11 @@ void update(void) {
 static void draw_hud(void) {
     rectfill(0, 0, SCREEN_W, HUD_H, CLR_DARKER_BLUE);
     print(str("$%d", cash), 4, 2, CLR_YELLOW);
-    print_centered(str("ROUND %d/%d", round_, NROUNDS), SCREEN_W/2, 2, CLR_LIGHT_YELLOW);
+    // division + round in the small font so the long tier names fit between
+    // the cash (left) and strength (right) readouts
+    font(FONT_SMALL);
+    print_centered(str("%s  R%d/%d", DIVNM[division], round_, NROUNDS), SCREEN_W/2, 3, CLR_LIGHT_YELLOW);
+    font(FONT_NORMAL);
     print_right(str("STR %d", xi_strength()), 316, 2, CLR_LIME_GREEN);
 }
 
@@ -660,7 +717,7 @@ static void draw_market(void) {
 
 static void draw_table(void) {
     cls(CLR_DARKER_BLUE);
-    print_centered("LEAGUE TABLE", SCREEN_W/2, 14, CLR_LIGHT_YELLOW);
+    print_centered(str("%s  -  TABLE", DIVNM[division]), SCREEN_W/2, 14, CLR_LIGHT_YELLOW);
     // header — small font; the 12 clubs only fit when the rows are tight
     int y0 = 24;
     font(FONT_SMALL);
@@ -679,14 +736,16 @@ static void draw_table(void) {
                         (club[ord[b]].pts == club[ord[a]].pts && gb > ga);
             if (swap) { int t = ord[a]; ord[a] = ord[b]; ord[b] = t; }
         }
+    int promo = (division == D_CL) ? 1 : 2;     // promotion places this tier
     for (int i = 0; i < NCLUB; i++) {
         int c = ord[i], ry = y0 + 10 + i * 12;
-        bool me = c == YOU;
+        bool me = c == YOU, up = i < promo;
         if (me) rectfill(6, ry - 1, 306, 11, CLR_DARK_GREEN);
         else if (i & 1) rectfill(6, ry - 1, 306, 11, CLR_BLACK);   // zebra rows aid scanning
+        if (up) rectfill(6, ry - 1, 2, 11, CLR_LIME_GREEN);        // promotion-zone marker
         int gd = club[c].GF - club[c].GA;
         int col = me ? CLR_WHITE : CLR_LIGHT_GREY;
-        print(str("%d", i + 1), 10, ry, i == 0 ? CLR_YELLOW : col);
+        print(str("%d", i + 1), 10, ry, i == 0 ? CLR_YELLOW : up ? CLR_LIME_GREEN : col);
         print(club[c].name, 24, ry, col);
         print(str("%d", club[c].W + club[c].D + club[c].L), 140, ry, col);
         print(str("%d %d %d", club[c].W, club[c].D, club[c].L), 160, ry, col);
@@ -696,8 +755,13 @@ static void draw_table(void) {
     font(FONT_NORMAL);
 
     bool ready = xi_filled() == 11;
-    print_centered(ready ? "ENTER or the SQUAD tab to PLAY MATCH" : "set your XI first to play",
-                   SCREEN_W/2, 181, ready ? CLR_LIGHT_GREY : CLR_ORANGE);
+    if (!ready)
+        print_centered("set your XI first to play", SCREEN_W/2, 181, CLR_ORANGE);
+    else {
+        const char *goal = division == D_CL ? "WIN to be CHAMPION OF EUROPE"
+                                            : "TOP 2 PROMOTE - ENTER to play";
+        print_centered(goal, SCREEN_W/2, 181, CLR_LIME_GREEN);
+    }
 
     draw_hud();
     draw_tabs();
@@ -746,25 +810,35 @@ static void draw_title(void) {
     // baked Futura Condensed wordmarks, each on a big extruded shadow
     wordmark(0,  12, 18, 296, 74, CLR_WHITE,        CLR_LIGHT_GREY, CLR_DARKER_BLUE, 6);  // FOOTBALL
     wordmark(32, 64, 94, 192, 48, CLR_LIGHT_YELLOW, CLR_ORANGE,     CLR_DARK_BROWN,  5);  // MANAGER
-    print_centered("drag your XI - deal - PLAY MATCH", SCREEN_W/2, 150, CLR_LIGHT_GREY);
-    print_centered(str("best finish: %s", best == 0 ? "none yet" : (best == 1 ? "CHAMPIONS" : str("#%d", best))), SCREEN_W/2, 164, CLR_YELLOW);
+    print_centered("3 seasons: EERSTE DIVISIE - EREDIVISIE - EUROPE", SCREEN_W/2, 150, CLR_LIGHT_GREY);
+    const char *bl = best == 0 ? "none yet" : best == 1 ? "won the Eerste Divisie"
+                   : best == 2 ? "won the Eredivisie" : "CHAMPION OF EUROPE";
+    print_centered(str("career best: %s", bl), SCREEN_W/2, 164, CLR_YELLOW);
     print_centered("click / ENTER to kick off", SCREEN_W/2, 180, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_over(void) {
-    int pos = league_pos();
-    if (best == 0 || pos < best) { best = pos; save(0, best); }
     cls(CLR_DARKER_BLUE);
-    rectfill(40, 40, 240, 120, CLR_BLACK);
-    rect(40, 40, 240, 120, CLR_LIGHT_YELLOW);
-    print_centered("-- SEASON OVER --", SCREEN_W/2, 52, CLR_LIGHT_YELLOW);
-    const char *r = pos == 1 ? "CHAMPIONS!" : pos == 2 ? "RUNNERS-UP" : str("FINISHED #%d", pos);
-    int rc = pos == 1 ? CLR_GREEN : pos == 2 ? CLR_LIME_GREEN : CLR_ORANGE;
-    print_scaled(r, (SCREEN_W - text_width(r) * 2) / 2, 70, rc, 2);
-    print_centered(str("%dW %dD %dL", club[YOU].W, club[YOU].D, club[YOU].L), SCREEN_W/2, 98, CLR_WHITE);
-    print_centered(str("%d points  %+d GD", club[YOU].pts, club[YOU].GF - club[YOU].GA), SCREEN_W/2, 112, CLR_LIGHT_GREY);
-    print_centered(str("best finish: #%d", best), SCREEN_W/2, 128, CLR_YELLOW);
-    print_centered("click to manage a new season", SCREEN_W/2, 146, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
+    rectfill(34, 32, 252, 134, CLR_BLACK);
+    rect(34, 32, 252, 134, CLR_LIGHT_YELLOW);
+    print_centered(str("%s  -  SEASON %d", DIVNM[division], season), SCREEN_W/2, 42, CLR_LIGHT_GREY);
+
+    if (end_outcome == 2) {                                   // won the Champions League
+        print_scaled("CHAMPIONS", (SCREEN_W - text_width("CHAMPIONS") * 2) / 2, 56, CLR_GREEN, 2);
+        print_centered("OF EUROPE!", SCREEN_W/2, 80, CLR_LIME_GREEN);
+    } else if (end_outcome == 1) {                            // promoted
+        print_scaled("PROMOTED!", (SCREEN_W - text_width("PROMOTED!") * 2) / 2, 58, CLR_LIME_GREEN, 2);
+        print_centered(str("up to the %s", DIVNM[division + 1]), SCREEN_W/2, 82, CLR_LIGHT_YELLOW);
+    } else {                                                  // missed out — replay the tier
+        const char *f = str("FINISHED #%d", end_pos);
+        print_scaled(f, (SCREEN_W - text_width(f) * 2) / 2, 58, CLR_ORANGE, 2);
+        print_centered(str("another go at the %s", DIVNM[division]), SCREEN_W/2, 82, CLR_LIGHT_YELLOW);
+    }
+
+    print_centered(str("%dW %dD %dL", club[YOU].W, club[YOU].D, club[YOU].L), SCREEN_W/2, 102, CLR_WHITE);
+    print_centered(str("%d points    %+d GD", club[YOU].pts, club[YOU].GF - club[YOU].GA), SCREEN_W/2, 116, CLR_LIGHT_GREY);
+    print_centered(end_outcome == 2 ? "click for a new campaign" : "click to continue",
+                   SCREEN_W/2, 148, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
 }
 
 static void draw_flash(void) {
