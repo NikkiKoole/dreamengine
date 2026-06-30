@@ -227,6 +227,25 @@ foundation:
 item is mostly "read the physical pad and feed the *existing* synthesis layer" — a much smaller job
 than #7 looks in isolation. Worth a one-line note on STATUS #7 pointing here once touch ships.
 
+## Platform targeting — web vs native iOS
+
+**There is only one virtual gamepad.** The engine-drawn controls, the placement logic, and the
+`btn()`/`de_key_event` synthesis all live in `studio.c` and compile once — *identical on both
+platforms*. The only platform-specific surface is two thin boundaries: where touch contacts come
+from, and whether the render surface has been reshaped for a band yet.
+
+| | **Web (wasm)** | **Native iOS** |
+|---|---|---|
+| Touch source → engine | Already wired: `web_shell.html` mirrors contacts into `Module.deTouches`; `touch_ceiling()` via EM_JS. Engine reads from there — no new plumbing. | Swift shell delivers `UITouch`; raw-`key()` carts get input via the existing `de_key_event` seam (Phase 4). |
+| Render surface | One full-bleed `<canvas>` Raylib sizes to `SCREEN_W*SCALE × SCREEN_H*SCALE`. Reshaping it to fit a band is the **fragile** part (touch-mirror + GLFW bounding-rect mapping). | Software canvas → on-screen texture (`ios-plan.md`); we own the surface, so growing it for a band is straightforward. |
+| Typical placement | Portrait browser → **deck below** (PICO-8 layout). | Landscape action pose → **side-rails**. |
+| Controls drawn as | Engine primitives in the framebuffer — **not** DOM/HTML buttons (decided). | Same engine primitives, identical code. |
+| Band reshape order | **Deferred** — stays on the Phase-1 corner overlay until native proves the model (the canvas touch-mirror is what breaks on a real phone, not desktop). | **First** — deck/rails land here where the surface is ours. |
+
+So: same gamepad, two ~50-line input adapters, and web's deck deferred *behind* iOS's — not two
+parallel implementations. The one genuinely web-specific risk (canvas reshape vs the touch-mirror)
+is pushed last and de-risked by iOS first.
+
 ## Open questions / forks
 
 - **Draw hook.** Cleanest is a studio-owned pass: the cart draws into its `SCREEN_W×SCREEN_H`
@@ -252,12 +271,32 @@ than #7 looks in isolation. Worth a one-line note on STATUS #7 pointing here onc
   cart, or fields in its `.cart.js` metadata. Decide alongside Phase 3. Recommend the code call
   (carts already opt in via code, per the polish list — *not* settings).
 
+## Plan of attack (ordered)
+
+Each step is **independently shippable + verifiable + reversible** — commit between steps. Ordered
+so the one hard-to-fix risk (silent coord breakage) is retired *before* the feature it threatens,
+and the fragile web reshape lands *last*, after native proves the model.
+
+| # | Step | Size | What it de-risks / delivers | Gate before commit |
+|---|------|------|------------------------------|--------------------|
+| 1 | **Native-res look** — redraw the existing corner overlay with `circ`/`circfill`/`print` + `CLR_*`, sized from `SCALE`; delete the post-blit raw-Raylib call. No API/placement change. | S | "Looks like the console" half; improves the ~18 opt-in carts. No new risk. | `canvas-diff` on `vampire`; bake + eyeball (chunky, palette-correct). |
+| 2 | **Coordinate chokepoint (no-op)** — `game_rect` (origin+scale) as the one window↔canvas transform; route `touch_x/y()`/mouse/hit-tests through it at `game_rect = full window`. Add pure `place()` stub (always OVERLAY) + headless round-trip test. | S–M | **The big one** — converts the silent, library-wide coord bug into a tested, provable no-op. | `canvas-diff` **byte-identical** on a touch/mouse cart; round-trip test passes. |
+| 3 | **Responsive placement (native + iOS)** — fill in `place()` (deck/rails/overlay by letterbox); set `game_rect` from it, shrink the blit, draw the band. Coords follow for free. Web stays on the step-1 overlay. | M | The maker's core requirement. Blast radius bounded to opt-in carts. | Placement matrix (portrait/landscape/matched/desktop); `canvas-diff` each. |
+| 4 | **Generalize the widget** — `touch_layout(mode, n_buttons)` (analog / fixed / dpad4 / dpad8), N buttons + labels, feel tuning (dead zone/lerp/drag-past). 4-place API dance. | M | The per-cart scheme choice; the `btn()`-augment synthesis layer gamepad will reuse. | Prototype `columns`/`puyo` (d-pad) + a free-move cart (analog). |
+| 5 | **iOS shell wiring** — route synthesized input through `de_key_event` so raw `key()` carts work; landscape → rails automatically. | M | Phones can play `key()` carts, not just `btn()`. | Smoke `key()` + `btn()` carts on device. |
+| 6 | **Web deck/rails** — let the `web_shell.html` framebuffer exceed the game so a band fits (no DOM controls). | M | The deferred fragile bit, now de-risked by step 3. | On-device web: portrait deck, touch-mirror intact, `canvas-diff`. |
+| 7 | **Gamepad (STATUS #7), follow-on** — read the physical pad, feed the *existing* synthesis layer; add the focus ring for knob carts. | S–M | Closes #7 cheaply by reusing step 4. | Test one cart on a real controller. |
+
+Steps 1–2 are the safe, high-value foundation and can land now. Step 3 is the first change with real
+blast radius — but bounded to opt-in carts and resting on step 2's tested transform. Everything from
+4 on is additive.
+
 ## Implementation plan
 
 Read this before starting; line numbers drift, so **grep for the function names**, don't trust the
-~approx hints. Edits are in `runtime/studio.c` (+ `studio.h` for any new API), and Phase 2 touches
-`runtime/web_shell.html` — `studio.c` is a **hot shared file**: targeted `Edit`s only, never a full
-`Write`, re-Read the region first, and after committing confirm your change survived
+~approx hints. Edits are in `runtime/studio.c` (+ `studio.h` for any new API), and the web-deck step
+touches `runtime/web_shell.html` — `studio.c` is a **hot shared file**: targeted `Edit`s only, never
+a full `Write`, re-Read the region first, and after committing confirm your change survived
 (`git show HEAD:runtime/studio.c | grep '<sentinel>'`). See CLAUDE.md "Hot shared source files".
 
 ### The seam (where things live today)
