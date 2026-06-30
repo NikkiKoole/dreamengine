@@ -149,7 +149,8 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              sprite-draw.js  reusable 2D pixel-canvas API for programmatic .cart.js sprites
              sprite-preview.js  render a .cart.js's sprites to one labelled PNG (no compile/run) — the tight loop for code-drawn sprites
              pixelsnap.js    clean up "AI pixel art": snap soft/off-grid pixels onto a real grid + posterize
-                             to a small palette (median-cut, or --palette pico32); never overwrites the input
+                             to a small palette (median-cut / --palette pico32 / --two ink,paper), OKLab match,
+                             FS or ordered/diagonal dither, --clean despeckle; never overwrites the input
              font-bake.js    bake real-TTF text into sprite-draw canvases at build time
              gen-rom-font.js bake the "extra" bitmap fonts (ROM dumps + EPX) into the shared atlas
              build-cart-index.js  GENERATE editor/public/carts/index.json from each cart's de:meta block

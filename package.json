@@ -1,0 +1,9 @@
+{
+  "name": "dreamengine-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Repo-root CLI tools for dreamengine (plain node, CommonJS). See tools/ and CLAUDE.md.",
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}
