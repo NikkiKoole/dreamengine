@@ -39,7 +39,8 @@ de:meta */
 //   make the data:  node data-tools/roadview/osm-roads.js --place "Amersfoort, Netherlands"
 //   run it:         opens on data/demo.rvb; DRAG a town's .rvb/.json onto the window to swap.
 //
-//   ◄▲▼► / WASD  drive · M north/heading · V top-down map · T textures · R roads · [ ] zoom · drop a file → load
+//   ◄▲▼► / WASD  drive · mouse wheel / [ ] zoom · left-drag orbit the view · M north/heading
+//   V top-down map · T textures · R roads · drop a file → load
 
 #define HSCALE  1.0f        // metres of height → up-screen units (× zoom). taller = more dramatic 3D
                             // (a tall building's up-screen extrusion occludes the road BEHIND it — correct,
@@ -124,6 +125,8 @@ typedef struct {
   float camx, camy, rot, zoom;    // camera: eased pos + rotation(deg) + px-per-metre
   int   mode;
   bool  started, tex, roads_on, topdown;
+  float lookrot;                  // mouse-drag orbit offset on top of the heading; decays while driving
+  bool  dragging; int dragx;
 } State;
 static State S;
 static float g_hscale = HSCALE;   // 0 in top-down mode → buildings collapse to flat footprints (a 2D map to verify placement)
@@ -385,6 +388,13 @@ void update(void) {
   g_hscale = S.topdown ? 0.0f : HSCALE;
   if (key('[')) S.zoom = fmaxf(0.7f, S.zoom*0.97f);
   if (key(']')) S.zoom = fminf(8.0f, S.zoom*1.03f);
+  float wz = mouse_wheel();                                  // mouse wheel → zoom
+  if (wz != 0) S.zoom = fmaxf(0.7f, fminf(8.0f, S.zoom * (wz>0 ? 1.12f : 1.0f/1.12f)));
+
+  // left-drag → orbit the camera around the car (look from any side while parked)
+  if (mouse_pressed(MOUSE_LEFT) && mouse_y() >= 11){ S.dragging = true; S.dragx = mouse_x(); }
+  if (!mouse_down(MOUSE_LEFT)) S.dragging = false;
+  if (S.dragging){ S.lookrot += (mouse_x() - S.dragx) * 0.6f; S.dragx = mouse_x(); }
 
   float thr = (key(KEY_UP)||key('W')?1:0) - (key(KEY_DOWN)||key('S')?1:0);
   float steer = (key(KEY_RIGHT)||key('D')?1:0) - (key(KEY_LEFT)||key('A')?1:0);
@@ -396,7 +406,9 @@ void update(void) {
   S.camx += (S.px - S.camx)*0.18f;
   S.camy += (S.py - S.camy)*0.18f;
 
-  float target = (S.topdown || S.mode == M_NORTH) ? 0.0f : (-90.0f - S.ang);   // top-down locks north-up
+  if (fabsf(S.spd) > 0.02f) S.lookrot *= 0.90f;                                 // driving → ease the orbit back to heading-up
+  float base = (S.topdown || S.mode == M_NORTH) ? 0.0f : (-90.0f - S.ang);      // top-down locks north-up
+  float target = base + S.lookrot;
   float d = fmodf(target - S.rot + 540.0f, 360.0f) - 180.0f;
   S.rot += d * 0.16f;
 }
