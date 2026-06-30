@@ -10,47 +10,58 @@
 //   node tools/cart-todos.js --grep <term>   # only todos matching a substring (case-insensitive)
 //   node tools/cart-todos.js --count         # one line: N todos across M carts
 //
+// collectCartTodos() is exported so the ★ todo board (build-design-board.js) can show the
+// per-cart backlog beside the design docs — one place to see all pending work.
+//
 // To CLEAR an item: delete it from the cart's de:meta.todo[] (drop the whole field when empty).
 
 const fs = require("fs");
 const path = require("path");
 const { readMeta, CARTS } = require("./build-cart-index.js");
 
-const args = process.argv.slice(2);
-const has = (f) => args.includes(f);
-const valAfter = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : null; };
-const grep = valAfter("--grep");
-const only = args.find((a) => !a.startsWith("--") && a !== grep) || null;
-
-// gather { name, todos[] } for every cart whose de:meta carries a non-empty todo[]
-const carts = [];
-for (const f of fs.readdirSync(CARTS).sort()) {
-  if (!f.endsWith(".c")) continue;
-  const name = f.slice(0, -2);
-  if (only && name !== only) continue;
-  let m;
-  try { m = readMeta(fs.readFileSync(path.join(CARTS, f), "utf8"), name); }
-  catch { continue; } // malformed de:meta is lint-carts' job to report, not ours
-  if (!m || !Array.isArray(m.todo) || m.todo.length === 0) continue;
-  let todos = m.todo;
-  if (grep) todos = todos.filter((t) => t.toLowerCase().includes(grep.toLowerCase()));
-  if (todos.length) carts.push({ name, title: m.title || name, todos });
+// gather { name, title, todos[] } for every cart whose de:meta carries a non-empty todo[].
+// opts.grep filters todos by substring; opts.only restricts to one cart.
+function collectCartTodos({ grep = null, only = null } = {}) {
+  const carts = [];
+  for (const f of fs.readdirSync(CARTS).sort()) {
+    if (!f.endsWith(".c")) continue;
+    const name = f.slice(0, -2);
+    if (only && name !== only) continue;
+    let m;
+    try { m = readMeta(fs.readFileSync(path.join(CARTS, f), "utf8"), name); }
+    catch { continue; } // malformed de:meta is lint-carts' job to report, not ours
+    if (!m || !Array.isArray(m.todo) || m.todo.length === 0) continue;
+    let todos = m.todo;
+    if (grep) todos = todos.filter((t) => t.toLowerCase().includes(grep.toLowerCase()));
+    if (todos.length) carts.push({ name, title: m.title || name, todos });
+  }
+  return carts;
 }
 
-const total = carts.reduce((n, c) => n + c.todos.length, 0);
+module.exports = { collectCartTodos };
 
-if (has("--count")) {
-  console.log(`${total} open todo(s) across ${carts.length} cart(s)`);
-  process.exit(0);
-}
+// ---- CLI ----
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const has = (f) => args.includes(f);
+  const valAfter = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : null; };
+  const grep = valAfter("--grep");
+  const only = args.find((a) => !a.startsWith("--") && a !== grep) || null;
 
-if (only && !carts.length) {
-  console.log(`${only}: no open todos.`);
-  process.exit(0);
-}
+  const carts = collectCartTodos({ grep, only });
+  const total = carts.reduce((n, c) => n + c.todos.length, 0);
 
-for (const c of carts) {
-  console.log(`\n${c.name}  (${c.title})`);
-  for (const t of c.todos) console.log(`  • ${t}`);
+  if (has("--count")) {
+    console.log(`${total} open todo(s) across ${carts.length} cart(s)`);
+    process.exit(0);
+  }
+  if (only && !carts.length) {
+    console.log(`${only}: no open todos.`);
+    process.exit(0);
+  }
+  for (const c of carts) {
+    console.log(`\n${c.name}  (${c.title})`);
+    for (const t of c.todos) console.log(`  • ${t}`);
+  }
+  console.log(`\n${total} open todo(s) across ${carts.length} cart(s)${grep ? ` matching "${grep}"` : ""}.`);
 }
-console.log(`\n${total} open todo(s) across ${carts.length} cart(s)${grep ? ` matching "${grep}"` : ""}.`);
