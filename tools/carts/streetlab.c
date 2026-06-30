@@ -252,7 +252,8 @@ static void dashed(float x0,float y0,float x1,float y1,int col){       // a dash
 
 // ── LEG model (mirrors roadlab): a junction is a list of arms, each at a bearing. The two arms of a street
 //    are collinear (b and b+180). `crossing` marks the street that SKEWS; T drops the north arm. ──
-#define NLEG 4
+#define NLEG 6              // capacity: the collinear-pair model uses 4; OSM mode (independent arms) can fill up to 6
+#define NLEG_PAIR 4         // the normal at-grade model is exactly two crossing streets = 4 collinear legs
 typedef struct { float base; int crossing; } Leg;          // base bearing (deg); crossing = part of skewable street
 static Leg legs[NLEG] = {
     {   0, 0 },   // 0 East  (through street)
@@ -293,14 +294,15 @@ static int   field_roads = 0;
 //    hands you (incident ways' bearings) — bypassing the base±skew COLLINEAR-PAIR model. The gut-check:
 //    do real-world angles render with clean curb returns through the existing path, unchanged? 'o'
 //    cycles off → each sample → off. Every other treatment (curb radius, peds, lanes…) still composes.
-//    NLEG=4 caps it at 4 arms; Delft has a REAL 5-way (9,85,123,228,304) that needs NLEG raised + a
-//    present-count — the predicted next step. RUNG 2: these bearings are now REAL OSM, extracted from
-//    data/delft-centre.rvb by data-tools/roadview/osm-junction.js (node graph → incident-way bearings).
+//    NLEG=6 now holds up to 6 independent arms; the normal model stays capped at NLEG_PAIR=4 (leg_present).
+//    RUNG 2: these bearings are REAL OSM, extracted from data/delft-centre.rvb by
+//    data-tools/roadview/osm-junction.js (node graph → incident-way bearings). The 5-way is a real Delft node.
 typedef struct { const char *name; int n; float brg[NLEG]; } OsmJunc;
 static const OsmJunc osm_samples[] = {
     { "Delft 4-way (real OSM)",   4, {  26, 126, 198, 302 } },  // road/secondary x2 — a real skewed crossing
     { "Delft Y 3-way (real OSM)", 3, { 125, 237, 342 } },       // a real 3-leg junction, no straight-through
     { "Delft 4-way #2 (real OSM)",4, {  34, 127, 216, 307 } },  // another real crossing — different skew
+    { "Delft 5-way (real OSM)",   5, {   9,  85, 123, 228, 304 } },  // a REAL 5-arm node — tests N>4 on the field path
 };
 #define N_OSM ((int)(sizeof osm_samples / sizeof osm_samples[0]))
 static int osmMode = 0;   // 0 = off (normal leg model); 1..N_OSM = render sample (osmMode-1)
@@ -309,8 +311,8 @@ static float leg_bearing(int i){
     if (osmMode) return fmodf(osm_samples[osmMode-1].brg[i] + 3600, 360);   // RUNG 1: raw OSM bearing, no skew
     float b=legs[i].base + (legs[i].crossing?(float)skew:0.f); return fmodf(b+3600,360); }
 static int   leg_present(int i){
-    if (osmMode) return i < osm_samples[osmMode-1].n;                       // RUNG 1: arm count from the OSM node
-    return !(isT && i==3); }              // T drops North (leg 3)
+    if (osmMode) return i < osm_samples[osmMode-1].n;                       // OSM: arm count from the node (up to NLEG)
+    return i < NLEG_PAIR && !(isT && i==3); }   // normal model = the 4 collinear legs (cap so the extra OSM-capacity legs stay absent)
 
 // present legs, sorted by bearing 0..360; fills idx[]/brg[], returns n
 static int present_legs(int *idx, float *brg){
