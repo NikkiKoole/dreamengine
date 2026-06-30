@@ -1,8 +1,10 @@
 # Squishy lines — a velocity-brush drawing cart that animates for almost free
 
 STATUS: BUILDING (2026-06-30) — design settled (320×320, 2-tone first, boil is an opt-in mode).
-Shipped: the ink brush, the bevel toggle, and a top tool-bar (4 brush tools / thickness / bevel /
-undo) in `tools/carts/squishy.c`. Next: boil. v1 plan + progress is the checklist at the bottom.
+Shipped: ink brush, bevel toggle, the top tool-bar (ink/pen/fineliner/marker, thickness, bevel,
+boil, undo), and the **boil** living loop (`tools/carts/squishy.c`). The core is done; what's left is
+the pixelsnap animated-icon export, a richer palette, a `spec()`, and the boil-cache perf pass. v1
+plan + progress is the checklist at the bottom.
 
 > The shower idea: we'd been making cart icons by running an AI-generated image through a
 > `.cart.js` (sprite-draw + `pixelsnap`). The results are nice — but **frozen**. What if you could
@@ -151,6 +153,14 @@ stroke is added or edited. Finished strokes bake to a static layer; only the act
 needs live re-render while you're drawing. That holds 60fps regardless of canvas density. (The boil
 loop itself plays at ~6–8fps off the cached frames — cheap.)
 
+**As built (v1, 2026-06-30).** Boil ships as a *live re-render every frame* — no cache yet. The
+display frame (`frame()`) picks one of `BOIL_FRAMES` variant seeds (held `BOIL_PERIOD` frames each ≈
+7.5fps); each committed stroke renders with `stroke.seed ^ VARIANT[v]`, which re-rolls both the
+per-stamp width wobble *and* a small per-point positional offset (`BOIL_JIT` ≈ 1.2px, keyed per
+sample so the wobble is coherent, not fizzy). The bevel passes inherit the same jitter so the rim
+moves with the body. The stroke you're actively drawing doesn't boil. The cached-buffer version
+above is the open perf todo (matters once a drawing is dense); the look is already right.
+
 ## Resolution & the pipeline (why 320×320 *and* tiny icons both work)
 
 Brush dynamics need pixel room, but cart icons/sprites are tiny — these seem to conflict. They
@@ -214,7 +224,9 @@ fat, fast flicks thin, ends taper, seeded wobble keeps it hand-inked — plus th
 (`B`) that embosses strokes into faux-3D (a filled blob domes into a ball), and a **top tool-bar**
 (`ui.h`): 4 brush tools (ink / pen / fineliner / marker, each a recipe row in the `BRUSHES` table),
 a thickness slider, and bevel + undo buttons. Each stroke remembers the tool + thickness it was drawn
-with. Demo seeds in `tools/clips/squishy/`.
+with. And the **boil** toggle makes a finished drawing breathe (live demo:
+`editor/public/clips/squishy/06-boilface.webm` — a smiley drawn, then coming alive). Demo seeds in
+`tools/clips/squishy/`.
 
 - [x] Canvas + input: 320×320, capture a stroke as `Sample[]` with per-frame smoothed speed.
 - [x] Stroke store: the `Stroke` struct + a list; undo (drop last stroke).
@@ -227,7 +239,10 @@ with. Demo seeds in `tools/clips/squishy/`.
 - [x] **Bevel tool** — shipped as a 3-pass offset emboss (`B` toggles it): top-left HILITE rim +
       lower-right SHADOW rim, light from the top-left. See "As built (v1)" above for why emboss, not
       edge-detect. (A true silhouette-rim auto-bevel waits on fills + a 3-tone ramp.)
-- [ ] Boil toggle: N cached frames, re-render on stroke change, cycle at ~6–8fps.
+- [x] Boil toggle (`B`evel's neighbour, key `O`) — cycles `BOIL_FRAMES` jittered variants at
+      ~7.5fps (`BOIL_PERIOD` held frames each), driven by `frame()` + a `VARIANT[]` seed table.
+      Per-point coherent wobble (the line wiggles, doesn't fizz); the active stroke stays put.
+      Ships as a live re-render every frame — the N-cached-frames optimization is the open todo.
 - [ ] `spec()`: same-seed determinism + jitter-bounds assertions.
 - [ ] The icon pipeline: boil frames → `pixelsnap` → an animated sprite strip (the AI-route
       replacement); document the recipe.
