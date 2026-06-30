@@ -129,7 +129,7 @@ async function interactive(st) {
       console.log(`  [1]  publish smart set — ${st.smart.length} cart(s)  (not-published + stale)   ← recommended`)
       console.log(`  [2]  publish smart + engine-stale — ${st.smartEngine.length} cart(s)`)
       console.log(`  [3]  publish ALL — ${st.all.length} cart(s)  (rebuild only changed)`)
-      console.log(`  [3f] publish ALL, force-rebuild every cart`)
+      console.log(`  [4]  publish ALL, force-rebuild every cart`)
       console.log(`  [l]  list the smart set (no build)`)
       console.log(`  [g]  run the build-all compile gate first`)
       console.log(`  [q]  quit`)
@@ -141,8 +141,8 @@ async function interactive(st) {
       if (a === '1') { names = st.smart; reason = 'smart' }
       else if (a === '2') { names = st.smartEngine; reason = 'smart+engine' }
       else if (a === '3') { names = st.all; reason = 'all' }
-      else if (a === '3f') { names = st.all; reason = 'all-force'; force = true }
-      else { console.log('  ? pick 1 / 2 / 3 / 3f / l / g / q'); continue }
+      else if (a === '4') { names = st.all; reason = 'all-force'; force = true }
+      else { console.log('  ? pick 1 / 2 / 3 / 4 / l / g / q'); continue }
       if (names.length === 0) { console.log('  nothing to do there.'); continue }
       const ok = (await ask(rl, `\nthis builds ${names.length} cart(s) (can take many minutes) and PUSHES to the live site.\ncontinue? [y/N] `)).toLowerCase()
       if (ok === 'y' || ok === 'yes') { rl.close(); return buildAndPublish(names, { force, reason }) }
