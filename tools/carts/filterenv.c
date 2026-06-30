@@ -13,7 +13,7 @@
   "lineage": "Sibling of pitchenv — the same mod-envelope system pointed at filter cutoff; the canonical tuning rig for the resonant-lowpass sweep (the pluck 'pew').",
   "description": {
     "summary": "A Minimoog/Model-D-style bass rig: TWO detuned saws through the Moog ladder filter, with a FILTER contour, a cutoff LFO, a LOUDNESS ADSR, plus DETUNE + DRIVE + a sub octave for the fat low-end 'humpf'. Each control has its own slider and a live graph.",
-    "detail": "Subtractive-synth fattening, demonstrated. The voice is two sawtooths (instrument_tune detunes the second a few cents → they beat = thick) through FILTER_LADDER (the Moog 4-pole), warmed by instrument_drive in DRIVE_ASYM (even harmonics = round grit). Graph 1: the FILTER cutoff — the one-shot ENV snaps it open on the attack, the LFO wobbles it continuously. Graph 2: the AMP envelope — what decides how LONG you hear the note (low sustain plucks and dies, high sustain rings to note-off, the red line). Graph 3: a STILL wave-shape picture — one frozen cycle of the saw through a resonant filter (CUT rounds the corners, RES adds the resonant ring), clipped on one side by the DRIVE, plus the octave-down SUB when on. It's a diagram, not a moving scope: it redraws only when you change a SHAPE knob (CUT/RES/DRV/SUB). The envelope, LFO and sustain knobs shape the sound over TIME, which a single frozen cycle has no axis for — that's what a live scope shows. DETUNE/DRIVE and the SUB OSC -1 toggle are where the humpf lives.",
+    "detail": "Subtractive-synth fattening, demonstrated. The voice is two sawtooths (instrument_tune detunes the second a few cents → they beat = thick) through FILTER_LADDER (the Moog 4-pole), warmed by instrument_drive in DRIVE_ASYM (even harmonics = round grit). Graph 1: the FILTER cutoff — the one-shot ENV snaps it open on the attack, the LFO wobbles it continuously. Graph 2: the AMP envelope — what decides how LONG you hear the note (low sustain plucks and dies, high sustain rings to note-off, the red line). Row 3 is two views side by side. LEFT, SHAPE: a still idealized single cycle — a saw through a resonant filter (CUT rounds the corners, RES adds the ring), clipped on one side by DRIVE, plus the octave SUB; it redraws only when you change a SHAPE knob. RIGHT, SCOPE: the ACTUAL output via the scope_read engine API, zero-cross-triggered to hold still — the real signal, so the envelope sweep / LFO wobble / detune beating you DON'T see in the still shape all show up here, live. DETUNE/DRIVE and the SUB OSC -1 toggle are where the humpf lives.",
     "controls": "A-K play notes - SPACE toggles the auto-arp - SUB OSC button top-right - drag the FILTER / LFO / AMP / VOICE sliders"
   }
 }
@@ -264,49 +264,75 @@ void draw(void) {
         font(FONT_NORMAL);
     }
 
-    // ── strip 3: WAVE SHAPE — one frozen cycle (a STILL picture, not a live scope) ──
-    // the voice's resting timbre: a saw through a RESONANT filter — CUT rounds the corners,
-    // RES adds the resonant ring/overshoot — clipped on one side by the drive (DRV), plus the
-    // octave-down SUB when it's on. Pure single-cycle math, so it only redraws when you change
-    // those SHAPE knobs. The envelope / LFO / sustain knobs shape the sound over TIME, which a
-    // frozen cycle has no axis for — that's what the live scope (scope_read) would show.
+    // ── strip 3: two views of the wave, side by side ──────────────────────────
+    //   LEFT  SHAPE — a still, idealized single cycle (resonant filter rounds/rings via
+    //         CUT/RES, drive clips a side via DRV, SUB adds the octave). Redraws only on a
+    //         SHAPE knob; the envelope/LFO/sustain are TIME knobs a frozen cycle can't show.
+    //   RIGHT SCOPE — the ACTUAL output via scope_read(), zero-cross-triggered so it mostly
+    //         holds still. The real signal — envelope sweep, LFO wobble, beating and all.
     {
         int gy = 76, gh = 28, mid = gy + gh / 2;
-        rectfill(gx, gy, gw, gh, CLR_BROWNISH_BLACK);
-        rect(gx, gy, gw, gh, CLR_DARKER_GREY);
-        for (int x = gx + 2; x < gx + gw - 2; x += 6) pset(x, mid, CLR_DARK_GREY);   // zero line
+        int lw = 148, rx = gx + lw + 8, rw = gw - lw - 8;
+        float limy = (float)(gh / 2 - 2);
 
-        float bright = clamp((K[F_CUT].val - 80.f) / (2000.f - 80.f), 0.f, 1.f);
-        float fc = 0.03f + bright * 0.28f;                // SVF cutoff coef — open filter → sharper edges
-        float damp = 1.f - clamp(K[F_RES].val / 15.f, 0.f, 0.8f);   // RES: high → low damping → resonant ring
-        float drv = K[V_DRV].val / 100.f, g = 1.f + drv * 6.f, bias = drv * 0.8f;
-        int M = (gw - 2) / 2, N = M * 2;                  // two cycles across the panel
-        static float w[512];
-        float low = 0.f, band = 0.f, subph = 0.f;
-        for (int k = 0; k < 4 * M; k++) {                 // 2 warm-up cycles settle the filter, then keep 2
-            int c = k / M, i = k % M;
-            float saw = 2.f * (i / (float)M) - 1.f;       // rising saw
-            float in = sub_on ? saw * 0.7f + (2.f * subph - 1.f) * 0.3f : saw;   // + octave-down sub
-            subph += 0.5f / M; if (subph >= 1.f) subph -= 1.f;
-            low  += fc * band;                            // resonant SVF lowpass: rounds corners + RES ring
-            band += fc * (in - low - damp * band);
-            if (low > 3.f) low = 3.f; else if (low < -3.f) low = -3.f;   // stability guard
-            float s = tanhf(g * low + bias) - tanhf(bias);   // asymmetric drive = flatten one side
-            if (c >= 2) w[(c - 2) * M + i] = s;
+        // LEFT — still wave-shape diagram (predicted)
+        rectfill(gx, gy, lw, gh, CLR_BROWNISH_BLACK);
+        rect(gx, gy, lw, gh, CLR_DARKER_GREY);
+        for (int x = gx + 2; x < gx + lw - 2; x += 6) pset(x, mid, CLR_DARK_GREY);
+        {
+            float bright = clamp((K[F_CUT].val - 80.f) / (2000.f - 80.f), 0.f, 1.f);
+            float fc = 0.03f + bright * 0.28f;            // SVF cutoff — open filter → sharper edges
+            float damp = 1.f - clamp(K[F_RES].val / 15.f, 0.f, 0.8f);   // RES → resonant ring
+            float drv = K[V_DRV].val / 100.f, g = 1.f + drv * 6.f, bias = drv * 0.8f;
+            int M = (lw - 2) / 2, N = M * 2;
+            static float w[256];
+            float low = 0.f, band = 0.f, subph = 0.f;
+            for (int k = 0; k < 4 * M; k++) {             // 2 warm-up cycles, then keep 2
+                int c = k / M, i = k % M;
+                float saw = 2.f * (i / (float)M) - 1.f;
+                float in = sub_on ? saw * 0.7f + (2.f * subph - 1.f) * 0.3f : saw;   // + octave sub
+                subph += 0.5f / M; if (subph >= 1.f) subph -= 1.f;
+                low  += fc * band;                        // resonant SVF lowpass: rounds + rings
+                band += fc * (in - low - damp * band);
+                if (low > 3.f) low = 3.f; else if (low < -3.f) low = -3.f;   // stability guard
+                float s = tanhf(g * low + bias) - tanhf(bias);   // asym drive = flatten one side
+                if (c >= 2) w[(c - 2) * M + i] = s;
+            }
+            float pk = 0.001f;
+            for (int i = 0; i < N; i++) { float v = w[i] < 0 ? -w[i] : w[i]; if (v > pk) pk = v; }
+            float amp = (float)(gh / 2 - 3) / pk;
+            int px = -1, py = -1;
+            for (int i = 0; i < N; i++) {
+                int xx = gx + 1 + i, yy = mid - (int)(clamp(w[i] * amp, -limy, limy));
+                if (px >= 0) line(px, py, xx, yy, CLR_YELLOW);
+                px = xx; py = yy;
+            }
+            font(FONT_SMALL); print("SHAPE (still)", gx + 3, gy + 2, CLR_YELLOW); font(FONT_NORMAL);
         }
-        float pk = 0.001f;                                // normalize height so the SHAPE always reads
-        for (int i = 0; i < N; i++) { float v = w[i] < 0 ? -w[i] : w[i]; if (v > pk) pk = v; }
-        float lim = (float)(gh / 2 - 2), amp = (float)(gh / 2 - 3) / pk;
-        int px = -1, py = -1;
-        for (int i = 0; i < N; i++) {
-            int xx = gx + 1 + i;
-            int yy = mid - (int)(clamp(w[i] * amp, -lim, lim));
-            if (px >= 0) line(px, py, xx, yy, CLR_YELLOW);
-            px = xx; py = yy;
+
+        // RIGHT — live scope of the REAL output (the scope_read engine API)
+        rectfill(rx, gy, rw, gh, CLR_BROWNISH_BLACK);
+        rect(rx, gy, rw, gh, CLR_DARKER_GREY);
+        for (int x = rx + 2; x < rx + rw - 2; x += 6) pset(x, mid, CLR_DARK_GREY);
+        {
+            static float buf[512];
+            scope_read(buf, 512);
+            int start = 0;                                // trigger on a rising zero-crossing → holds still
+            for (int i = 1; i < 160; i++) if (buf[i - 1] <= 0.f && buf[i] > 0.f) { start = i; break; }
+            int win = 320;                                // ~7ms window (1–2 cycles of a bass note)
+            float pk = 0.001f;
+            for (int i = 0; i < win; i++) { float v = buf[start + i] < 0 ? -buf[start + i] : buf[start + i]; if (v > pk) pk = v; }
+            float amp = (float)(gh / 2 - 3) / pk;
+            if (amp > 120.f) amp = 120.f;                 // don't amplify near-silence to full screen
+            int px = -1, py = -1, cols = rw - 2;
+            for (int x = 0; x < cols; x++) {
+                int si = start + (int)((x / (float)cols) * win);
+                int xx = rx + 1 + x, yy = mid - (int)(clamp(buf[si] * amp, -limy, limy));
+                if (px >= 0) line(px, py, xx, yy, CLR_LIME_GREEN);
+                px = xx; py = yy;
+            }
+            font(FONT_SMALL); print("SCOPE (live)", rx + 3, gy + 2, CLR_LIME_GREEN); font(FONT_NORMAL);
         }
-        font(FONT_SMALL);
-        print("WAVE SHAPE  (CUT/RES filter - DRV drive - SUB)", gx + 3, gy + 2, CLR_YELLOW);
-        font(FONT_NORMAL);
     }
 
     // ── sliders: four groups (FILTER | LFO | AMP | VOICE) ──────────────────────
