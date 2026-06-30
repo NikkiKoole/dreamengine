@@ -1,8 +1,8 @@
 # Squishy lines — a velocity-brush drawing cart that animates for almost free
 
 STATUS: BUILDING (2026-06-30) — design settled (320×320, 2-tone first, boil is an opt-in mode).
-The ink brush + the bevel toggle shipped (`tools/carts/squishy.c`); next up the tool palette, then
-boil. v1 plan + progress is the checklist at the bottom.
+Shipped: the ink brush, the bevel toggle, and a top tool-bar (4 brush tools / thickness / bevel /
+undo) in `tools/carts/squishy.c`. Next: boil. v1 plan + progress is the checklist at the bottom.
 
 > The shower idea: we'd been making cart icons by running an AI-generated image through a
 > `.cart.js` (sprite-draw + `pixelsnap`). The results are nice — but **frozen**. What if you could
@@ -211,15 +211,19 @@ once v1 lands (not committed):
 
 Shipped the first cut (`tools/carts/squishy.c`, 2026-06-30): the ink brush feels right — slow swells
 fat, fast flicks thin, ends taper, seeded wobble keeps it hand-inked — plus the **bevel** toggle
-(`B`) that embosses strokes into faux-3D (a filled blob domes into a ball). Demo seeds in
-`tools/clips/squishy/`.
+(`B`) that embosses strokes into faux-3D (a filled blob domes into a ball), and a **top tool-bar**
+(`ui.h`): 4 brush tools (ink / pen / fineliner / marker, each a recipe row in the `BRUSHES` table),
+a thickness slider, and bevel + undo buttons. Each stroke remembers the tool + thickness it was drawn
+with. Demo seeds in `tools/clips/squishy/`.
 
 - [x] Canvas + input: 320×320, capture a stroke as `Sample[]` with per-frame smoothed speed.
 - [x] Stroke store: the `Stroke` struct + a list; undo (drop last stroke).
 - [x] One brush, done well: the **ink** brush — stamp-spacing, speed→width, end-taper, seeded
       per-stamp noise. Get the squish *feeling* right before adding tools.
 - [x] 2-tone palette: ink + paper; a clear button.
-- [ ] Tool palette UI (code-drawn glyphs), then add pencil + fineliner + marker.
+- [x] Tool palette UI — a top tool-bar (`ui.h`): tool buttons (ink / pen / fineliner / marker —
+      each a brush-recipe row), a thickness slider, a bevel toggle, an undo button. Drawing is gated
+      below the bar. (Buttons are text for now; code-drawn glyph sprites are the polish follow-up.)
 - [x] **Bevel tool** — shipped as a 3-pass offset emboss (`B` toggles it): top-left HILITE rim +
       lower-right SHADOW rim, light from the top-left. See "As built (v1)" above for why emboss, not
       edge-detect. (A true silhouette-rim auto-bevel waits on fills + a 3-tone ramp.)
