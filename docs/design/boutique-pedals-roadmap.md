@@ -1,6 +1,6 @@
 # Boutique-pedal roadmap — squeezing the most out of the "$400 pedal" lists
 
-STATUS: BUILDING — pedal roadmap — shimmer + varispeed landed; pitch-shifter / modulation primitives still to build.
+STATUS: BUILDING — pedal roadmap — shimmer, varispeed, the pitch-shifter, AND the modulation primitives (univibe / shallow water / generation-loss dropout / pitched grains / amp-noise + gate) all landed. Open tail: germanium "living" drift (Step 1.5) + a Klon/OD bus-insert cart slot (update log) — both small.
 
 Two crowd-sourced lists of "highest bang-for-buck boutique pedals to clone in C" landed
 (Shallow Water, Microcosm, MOOD, Generation Loss, Polymoon, Klon, Sun Face, Univibe,
@@ -64,9 +64,12 @@ pedal. The *only* missing spice is the **random tape-catch dropouts** (momentary
 drops), which is just the S&H source gating volume/pitch. Completes a $400 pedal with one small
 modulator. Fold into the LO-FI macro or ship a dedicated `vhs()` recipe.
 
-### Step 1.5 — germanium "living" bias drift (B-list #2)  · effort: XS
+### Step 1.5 — germanium "living" bias drift (B-list #2)  · effort: XS  ☐ OPEN
 A slow random-walk on the fuzz drive bias so it breathes over time. Tiny nicety on the existing
-FUZZ pedal — do it only if 1.1 is already in.
+FUZZ pedal — do it only if 1.1 is already in. **1.1 (the modulation kit) shipped, so this is now
+unblocked** — the last unbuilt small pedal from the building-blocks spec. Recipe: ride
+`mod_randwalk` on the fuzz `amount`/bias (signatures in
+[`building-blocks-spec.md`](building-blocks-spec.md) Block B).
 
 ---
 
@@ -161,7 +164,9 @@ still route. **This unblocks Shallow Water, the noise gate, and any future inser
 reorderable pedal.** `FX_ORDER_SLOTS` (16) caps one chain; bump it (needs `SoundReq` growth) only if
 a chain ever needs >16 pedals.
 
-### Overdrive / Klon as a reorderable BUS insert  ⭐ now buildable (was "do not rebuild")
+### Overdrive / Klon as a reorderable BUS insert  ⭐ engine done, cart slot OPEN  ⏳
+**STATUS: `drive_insert_inst` shipped (Increment F) — the engine work is done. What's left is purely
+cart + registry:** a distinct OVERDRIVE pedal in `pedalboard.c`. No more DSP.
 Per-voice drive covers the Klon *tone* but can't be a reorderable **stompbox** whose position vs the
 amp is audible. `drive_insert_inst` makes it real: an OD pedal = `FX_DRIVE` instance 1, placed
 before/after the amp's own drive — **"OD → amp" vs "amp → OD" now differ.** Add as a *distinct*

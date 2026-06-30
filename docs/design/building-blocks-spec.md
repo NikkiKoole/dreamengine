@@ -4,8 +4,26 @@ Companion to [`boutique-pedals-roadmap.md`](boutique-pedals-roadmap.md). The roa
 and WHY; this is the HOW — concrete signatures, DSP sketches, request layouts, and the four-place
 wiring — so the moment `sound.h` is clear, implementation is mechanical, not exploratory.
 
-**Status:** all of this is `sound.h` DSP, so it's queued behind the current `sound.h` agent(s).
-One writer at a time. Nothing here is started.
+STATUS: SHIPPED (2026-06-30) — Blocks A, B, and C all landed in `sound.h`/`studio.h`. This doc
+served its purpose as the build-time spec; kept as the record of *how* they were built and for the
+small tail of follow-on pedals still open (see "What shipped vs. what's left" below).
+
+### What shipped vs. what's left
+
+| spec item | state | API |
+|---|---|---|
+| **Block A** — pitched + reversed grains | ✅ shipped | `grains_pitch` / `instrument_grains_pitch` |
+| **Block B** — modulation kit | ✅ shipped | `mod_randwalk` / `mod_sh` / `mod_optical` (wired into `LFO_SHAPE_OPTICAL/SH/RANDOM`) |
+| Univibe (rides B) | ✅ shipped | `univibe` / `instrument_univibe` |
+| Shallow Water (rides B) | ✅ shipped | `shallow` / `instrument_shallow` |
+| Generation-Loss "FAILURE" (rides B) | ✅ shipped | `dropout` (showcase cart `genloss`) |
+| **Block C** — amp realism | ✅ shipped | `amp_noise` + `gate` |
+| Shimmer / bus pitch-shifter (Primitive 2) | — out of scope | its own spec; shimmer already landed per the roadmap |
+
+**The two open tail items live in the roadmap, not here** (single home): the **Klon/OD bus-insert
+cart slot** and **Germanium "living" drift** — see [`boutique-pedals-roadmap.md`](boutique-pedals-roadmap.md)
+(update log + Step 1.5). The DSP sketches and wiring notes below are preserved as the as-built
+record and as the recipe for that Germanium-drift pedal.
 
 Scope = the two **small** building blocks (the bus pitch-shifter / Shimmer is the *big* Primitive 2,
 specced separately when these land):
