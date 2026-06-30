@@ -11,7 +11,7 @@
     "road-network"
   ],
   "lineage": "Sibling of roadnet but DATA-DRIVEN rather than generative: instead of synthesising a network it loads a real OpenStreetMap export at runtime (de_data_path()/de_dropped_file() + runtime/json.h), then classes and draws the real ways. First cart to read an external data blob at runtime instead of baking geometry into source (cf. data-tools/fmltools/floorwalker).",
-  "description": "Drive around REAL road data, loaded at RUNTIME. The network is neither generated nor baked into the cart — it is an OpenStreetMap export (fetched by data-tools/roadview/osm-roads.js, or the synthetic --demo set) read from a JSON file when the cart starts, so the SAME cart shows any town: swap the file, see a different city. This is the data-driven-cart experiment that kills the floorwalker/seinelaan smell of regenerating a cart per dataset (docs/design/external-data-carts.md). Each way is classed HIGHWAY / ARTERIAL / ROAD / TRACK and drawn in its colour at a width sized in real metres (so roads fatten as you zoom in); canals are stroked, water areas filled in blue, parks and woods filled green, and building footprints + individual street trees revealed as LOD-gated detail once you zoom in close (B toggles footprints, T toggles trees) — all beneath the roads, with the bounding box auto-fitting to the screen. Opens on data/demo.json by default — then just DRAG any .json from the data folder onto the window to load that town, or click OPEN (top-right) to reveal the folder in Finder. Built on three tiny EXPERIMENTAL engine hooks: de_data_path() (--data <file> / $DE_DATA), de_dropped_file() (drag & drop) and de_open_path() (reveal folder); the JSON is parsed by runtime/json.h (vendored jsmn). Controls: arrows / WASD pan, left-drag grabs the map, mouse wheel zooms, 0 resets the view, B toggles building footprints, T toggles trees; drag a .json to load it, OPEN reveals the data folder."
+  "description": "Drive around REAL road data, loaded at RUNTIME. The network is neither generated nor baked into the cart — it is an OpenStreetMap export (fetched by data-tools/roadview/osm-roads.js, or the synthetic --demo set) read from a JSON file when the cart starts, so the SAME cart shows any town: swap the file, see a different city. This is the data-driven-cart experiment that kills the floorwalker/seinelaan smell of regenerating a cart per dataset (docs/design/external-data-carts.md). Roads are drawn as the FULL hierarchy — highway, arterial, secondary, tertiary, ordinary street, service, track, red bike path and dashed footpath — each its own colour at a width sized in real metres (so roads fatten as you zoom in). Nothing is dropped: the long tail of uncategorised OSM land (quarries, schools, stadiums, aeroways…) becomes a MUTED hashed dither understory, each category a stable colour+pattern from its tag. Canals are stroked, water areas filled in blue, parks and woods filled green, and building footprints + individual street trees revealed as LOD-gated detail once you zoom in close (B toggles footprints, T toggles trees) — all beneath the roads, with the bounding box auto-fitting to the screen. Opens on data/demo.json by default — then just DRAG any .json from the data folder onto the window to load that town, or click OPEN (top-right) to reveal the folder in Finder. Built on three tiny EXPERIMENTAL engine hooks: de_data_path() (--data <file> / $DE_DATA), de_dropped_file() (drag & drop) and de_open_path() (reveal folder); the JSON is parsed by runtime/json.h (vendored jsmn). Controls: arrows / WASD pan, left-drag grabs the map, mouse wheel zooms, 0 resets the view, B toggles building footprints, T toggles trees; drag a .json to load it, OPEN reveals the data folder."
 }
 de:meta */
 // ROADVIEW — drive around REAL road data, loaded at runtime.
@@ -19,20 +19,25 @@ de:meta */
 // A broad-strokes map of an actual place. The road network is NOT generated and NOT
 // baked into this cart — it's a JSON file fetched from OpenStreetMap (or the synthetic
 // --demo set) and loaded when the cart starts, via --data <file>. Swap the file, see a
-// different city; the cart never changes. Roads are classed HIGHWAY / ARTERIAL / ROAD /
-// TRACK (widths in real metres, so they fatten as you zoom in); rail is a dashed line.
-// Underneath sit SimCity-style zoning blocks — residential = green, commercial = blue,
-// industrial = yellow, farm = brown, parking = grey — plus parks, water and sand. Building
-// footprints get a thin outline so each one stays separable (the JSON also carries the OSM
-// building type in `sub`, for a downstream consumer that extrudes individual buildings).
+// different city; the cart never changes. Roads are drawn as the FULL hierarchy — highway,
+// arterial, secondary, tertiary, ordinary street, service, track, a red bike path and a
+// dashed footpath — each at a width in real metres (so they fatten as you zoom in); rail is
+// dashed. Underneath sit SimCity-style zoning blocks — residential = green, commercial =
+// blue, industrial = yellow, farm = brown, parking = grey — plus parks, water and sand.
+// Nothing else is dropped: every uncategorised OSM way (quarries, schools, stadiums,
+// aeroways, piers…) becomes a MUTED hashed dither — its defining tag ("amenity=school", in
+// `sub`) hashed into a stable colour + 4×4 fill pattern, a quiet textured understory that
+// stays distinct per category without burning a palette slot each. Building footprints get a
+// thin outline so each one stays separable (the JSON also carries the OSM building type in
+// `sub`, for a downstream consumer that extrudes individual buildings).
 // The experiment: data-driven carts that read a blob at runtime instead of regenerating
 // source per dataset (the floorwalker/seinelaan smell).
 //
 //   DESIGN + KNOWLEDGE → docs/design/external-data-carts.md   (the source of truth for this cart)
 //     · session handoff (what works, commits, quick-resume)   · the shared "vector features" schema
 //     · the .rvb binary format spec + why (JSON parse was the load bottleneck)
-//     · the road hierarchy (which OSM highway=* values map to which tier; what's collapsed/dropped)
-//     · open items: hover inspector panel · two-line legend · Breda bbox framing · more road tiers
+//     · the road hierarchy (which OSM highway=* values map to which painted class)
+//     · open items: hover inspector panel · Breda bbox framing
 //
 //   make the data:   node data-tools/roadview/osm-roads.js --demo            (writes data/demo.rvb)
 //                     node data-tools/roadview/osm-roads.js --place "Delft"   (writes data/delft-*.rvb)
@@ -52,7 +57,10 @@ de:meta */
 #include <stdlib.h>    // abs
 
 enum { K_HIGHWAY, K_ARTERIAL, K_ROAD, K_TRACK, K_WATER, K_CANAL, K_BUILDING, K_GREEN, K_TREE,
-       K_RESIDENTIAL, K_COMMERCIAL, K_INDUSTRIAL, K_FARM, K_PARKING, K_SAND, K_RAIL, K_COAST, K_N };
+       K_RESIDENTIAL, K_COMMERCIAL, K_INDUSTRIAL, K_FARM, K_PARKING, K_SAND, K_RAIL, K_COAST,
+       // APPEND ONLY — these indices must match KIND_IX in data-tools/roadview/osm-roads.js
+       // (the .rvb encodes each feature's kind as this number; reordering breaks every file).
+       K_SECONDARY, K_TERTIARY, K_SERVICE, K_CYCLEWAY, K_FOOTWAY, K_OTHER_AREA, K_OTHER_LINE, K_N };
 
 // per-class style: colour, casing/outline colour, and real-world half-width in metres.
 // Area fills (hw_m unused): WATER/BUILDING/GREEN/SAND + the zoning blocks RESIDENTIAL/
@@ -63,7 +71,7 @@ typedef struct { int col, casing; float hw_m; const char *label; } Style;
 static const Style ST[K_N] = {
     /* HIGHWAY     */ { CLR_ORANGE,       CLR_BROWN,        7.0f, "highway"     },
     /* ARTERIAL    */ { CLR_YELLOW,       CLR_BROWN,        5.0f, "arterial"    },
-    /* ROAD        */ { CLR_LIGHT_GREY,   CLR_DARK_GREY,    3.0f, "road"        },
+    /* ROAD        */ { CLR_LIGHT_GREY,   CLR_DARK_GREY,    3.0f, "street"      },  // residential/unclassified
     /* TRACK       */ { CLR_BROWN,        CLR_BROWN,        1.5f, "track"       },
     /* WATER       */ { CLR_BLUE,         CLR_BLUE,         0.0f, "water"       },
     /* CANAL       */ { CLR_BLUE,         CLR_BLUE,         4.0f, "canal"       },
@@ -78,6 +86,13 @@ static const Style ST[K_N] = {
     /* SAND        */ { CLR_LIGHT_PEACH,  CLR_LIGHT_PEACH,  0.0f, "sand"        },
     /* RAIL        */ { CLR_DARKER_GREY,  CLR_DARKER_GREY,  2.0f, "rail"        },  // dashed line
     /* COAST       */ { CLR_DARK_BLUE,    CLR_DARK_BLUE,    1.0f, "coast"       },
+    /* SECONDARY   */ { CLR_LIGHT_YELLOW, CLR_BROWN,        4.0f, "secondary"   },
+    /* TERTIARY    */ { CLR_PEACH,        CLR_BROWN,        3.0f, "tertiary"    },
+    /* SERVICE     */ { CLR_MEDIUM_GREY,  CLR_MEDIUM_GREY,  1.5f, "service"     },
+    /* CYCLEWAY    */ { CLR_DARK_RED,     CLR_DARK_RED,     1.2f, "bike path"   },  // Dutch red fietspad
+    /* FOOTWAY     */ { CLR_INDIGO,       CLR_INDIGO,       0.9f, "footpath"    },  // dashed
+    /* OTHER_AREA  */ { CLR_DARK_GREY,    CLR_DARKER_GREY,  0.0f, "other land"  },  // colour HASHED per-feature
+    /* OTHER_LINE  */ { CLR_INDIGO,       CLR_INDIGO,       1.0f, "other"       },  // colour HASHED per-feature
 };
 
 // footprints + tree dots are LOD-gated: only drawn once zoomed in enough that they are a
@@ -89,7 +104,7 @@ static const Style ST[K_N] = {
 #define MAXPOLY  650000                              // (mostly buildings). ~48MB of static pools — fine on desktop.
 #define BTN_W       40                               // "OPEN DATA" button width (top-right HUD)
 static float PX[MAXPTS], PY[MAXPTS];                 // shared point pool (local metres, Y north-up)
-static struct { int kind, start, count; } ways[MAXPOLY];
+static struct { int kind, start, count; unsigned hash; } ways[MAXPOLY];  // hash: K_OTHER_* only → colour+pattern
 static int npoly = 0, nps = 0;
 static int kcount[K_N];
 
@@ -134,12 +149,41 @@ static int kind_of(const char *js, const jsmntok_t *t) {
     if (json_eq(js, t, "sand"))        return K_SAND;
     if (json_eq(js, t, "rail"))        return K_RAIL;
     if (json_eq(js, t, "coast"))       return K_COAST;
+    if (json_eq(js, t, "secondary"))   return K_SECONDARY;
+    if (json_eq(js, t, "tertiary"))    return K_TERTIARY;
+    if (json_eq(js, t, "service"))     return K_SERVICE;
+    if (json_eq(js, t, "cycleway"))    return K_CYCLEWAY;
+    if (json_eq(js, t, "footway"))     return K_FOOTWAY;
+    if (json_eq(js, t, "other_area"))  return K_OTHER_AREA;
+    if (json_eq(js, t, "other_line"))  return K_OTHER_LINE;
     return K_ROAD;
 }
 
 // where the player's data files live. cwd is build/, so ../data == <project>/data.
 // The OPEN button reveals this; osm-roads.js writes here by default.
 #define DATA_DIR "../data"
+
+// Uncategorised land/lines (K_OTHER_*) have no dedicated colour — there are hundreds of OSM
+// categories and only 32 palette slots. So each feature's defining tag (e.g. "amenity=school",
+// packed into its `sub`) is HASHED into a stable, MUTED two-tone dither: a quiet textured
+// understory that stays distinct between categories without competing with the curated
+// roads/water/parks on top. Same tag → same look in every city.
+static unsigned fnv1a(const char *s, int n) {
+    unsigned h = 2166136261u;
+    for (int i = 0; i < n; i++) { h ^= (unsigned char)s[i]; h *= 16777619u; }
+    return h;
+}
+static const int MUTED[] = { CLR_DARK_PURPLE, CLR_INDIGO, CLR_BLUE_GREEN, CLR_DARK_BROWN,
+                             CLR_MAUVE, CLR_DARKER_PURPLE, CLR_DARK_GREY, CLR_BROWNISH_BLACK };
+static const int OPAT[]  = { FILL_DOTS, FILL_HLINES, FILL_VLINES, FILL_DIAG, FILL_GRID, FILL_CHECKER };
+#define NMUTED ((int)(sizeof MUTED / sizeof MUTED[0]))
+#define NOPAT  ((int)(sizeof OPAT  / sizeof OPAT[0]))
+// hash → fill colour + dither pattern. The pattern's 1-bits fall back to the background, so it
+// reads as a stipple of `col` over the map rather than two fighting colours.
+static void other_style(unsigned h, int *col, int *pat) {
+    *col = MUTED[h % NMUTED];
+    *pat = OPAT[(h / NMUTED) % NOPAT];
+}
 
 static void reset_pools(void) {
     npoly = 0; nps = 0; loaded_ok = 0; truncated = 0; dname[0] = 0; err[0] = 0;
@@ -164,16 +208,17 @@ static void load_bin(const char *buf, long len) {
         int kind, sublen, npts;
         memcpy(&kind, p, 4);   p += 4;
         memcpy(&sublen, p, 4); p += 4;
-        p += sublen;                                       // cart ignores the building-type `sub`
+        const char *sub = p; p += sublen;                  // building type, or an OTHER_* defining tag
         memcpy(&npts, p, 4);   p += 4;
         if (kind < 0 || kind >= K_N) kind = K_ROAD;
+        unsigned h = (kind == K_OTHER_AREA || kind == K_OTHER_LINE) ? fnv1a(sub, sublen) : 0;
         int start = nps, got = 0;
         for (int j = 0; j < npts && p + 8 <= end; j++) {
             if (nps < MAXPTS) { float xy[2]; memcpy(xy, p, 8); PX[nps] = xy[0]; PY[nps] = xy[1]; nps++; got++; }
             p += 8;                                        // advance even when the pool is full
         }
         if (got >= 2 || (kind == K_TREE && got >= 1)) {
-            ways[npoly].kind = kind; ways[npoly].start = start; ways[npoly].count = got;
+            ways[npoly].kind = kind; ways[npoly].start = start; ways[npoly].count = got; ways[npoly].hash = h;
             kcount[kind]++; npoly++;
         }
     }
@@ -210,6 +255,11 @@ static void load_from(const char *path) {
             int ki = json_get(js, tok, fi, "kind");
             int pi = json_get(js, tok, fi, "pts");
             int kind = (ki >= 0) ? kind_of(js, &tok[ki]) : K_ROAD;
+            unsigned h = 0;
+            if (kind == K_OTHER_AREA || kind == K_OTHER_LINE) {     // hash the defining tag for colour+pattern
+                int si = json_get(js, tok, fi, "sub");
+                if (si >= 0) { char sb[96]; json_str(sb, sizeof sb, js, &tok[si]); h = fnv1a(sb, (int)strlen(sb)); }
+            }
             if (pi >= 0 && tok[pi].type == JSMN_ARRAY) {
                 int cnt = tok[pi].size / 2, start = nps;
                 for (int j = 0; j < cnt && nps < MAXPTS; j++) {
@@ -219,7 +269,7 @@ static void load_from(const char *path) {
                 }
                 int cnt2 = nps - start;                       // trees are a single point; lines/areas need >=2
                 if (cnt2 >= 2 || (kind == K_TREE && cnt2 >= 1)) {
-                    ways[npoly].kind = kind; ways[npoly].start = start; ways[npoly].count = cnt2;
+                    ways[npoly].kind = kind; ways[npoly].start = start; ways[npoly].count = cnt2; ways[npoly].hash = h;
                     kcount[kind]++; npoly++;
                 }
             }
@@ -262,7 +312,7 @@ static void stroke(int start, int count, int r, int col) {
 
 // Filled-area kinds (water, buildings) are polygons, not strokes. Project each to a
 // scratch int buffer and polyfill (handles concave); cull any fully off-screen.
-#define MAXAREAPTS 4096
+#define MAXAREAPTS 16384            // big enough for an assembled multipolygon ring (a whole river/lake)
 static int sxy[MAXAREAPTS * 2];
 static void fill_areas(int kind) {
     int col = ST[kind].col;
@@ -336,20 +386,75 @@ static void draw_class(int kind, int phase) {
         if (ways[i].kind == kind) stroke(ways[i].start, ways[i].count, r, col);
 }
 
+// uncategorised land: each polygon filled with its own hashed muted colour + dither pattern.
+static void draw_other_areas(void) {
+    for (int i = 0; i < npoly; i++) {
+        if (ways[i].kind != K_OTHER_AREA) continue;
+        int c = ways[i].count; if (c < 3) continue; if (c > MAXAREAPTS) c = MAXAREAPTS;
+        int st = ways[i].start;
+        int minx = 1 << 28, miny = 1 << 28, maxx = -(1 << 28), maxy = -(1 << 28);
+        for (int j = 0; j < c; j++) {
+            int X = sx(PX[st + j]), Y = sy(PY[st + j]);
+            sxy[j * 2] = X; sxy[j * 2 + 1] = Y;
+            if (X < minx) minx = X; if (X > maxx) maxx = X;
+            if (Y < miny) miny = Y; if (Y > maxy) maxy = Y;
+        }
+        if (maxx < 0 || minx > SCREEN_W || maxy < 0 || miny > SCREEN_H) continue;
+        int col, pat; other_style(ways[i].hash, &col, &pat);
+        fillp(pat, CLR_DARKER_GREY);                         // 1-bits = background → quiet stipple
+        polyfill(sxy, c, col);
+        fillp_reset();
+    }
+}
+
+// uncategorised lines (piers, aeroways, walls…): a thin hashed muted stroke.
+static void draw_other_lines(void) {
+    for (int i = 0; i < npoly; i++) {
+        if (ways[i].kind != K_OTHER_LINE) continue;
+        int col, pat; other_style(ways[i].hash, &col, &pat); (void)pat;
+        stroke(ways[i].start, ways[i].count, 1, col);
+    }
+}
+
+// footways/paths: a thin DASHED line, so they read as non-car routes.
+static void draw_footway(void) {
+    int r = (int)(ST[K_FOOTWAY].hw_m * ppm + 0.5f); if (r < 1) r = 1; if (r > 2) r = 2;
+    for (int i = 0; i < npoly; i++)
+        if (ways[i].kind == K_FOOTWAY) stroke_dashed(ways[i].start, ways[i].count, r, ST[K_FOOTWAY].col);
+}
+
+// legend draw order — grouped so it READS as a key (the road ladder big→small, then rail,
+// then water, then land/zoning, then detail, then the hashed "other"), independent of the
+// append-only K_* enum numbering. Only classes actually present (and drawn at this zoom) show.
+static const int LEG_ORDER[] = {
+    K_HIGHWAY, K_ARTERIAL, K_SECONDARY, K_TERTIARY, K_ROAD, K_SERVICE, K_TRACK, K_CYCLEWAY, K_FOOTWAY,
+    K_RAIL, K_WATER, K_CANAL, K_COAST,
+    K_RESIDENTIAL, K_COMMERCIAL, K_INDUSTRIAL, K_FARM, K_PARKING, K_SAND, K_GREEN,
+    K_BUILDING, K_TREE, K_OTHER_AREA, K_OTHER_LINE,
+};
+// the bottom legend — a tiny-font key that wraps across up to 3 rows, since the full road
+// ladder + the "other" classes never fit one line.
 static void legend(void) {
-    font(FONT_SMALL);
-    rectfill(0, SCREEN_H - 9, SCREEN_W, 9, CLR_BLACK);
+    font(FONT_TINY);                                         // 3×5 glyphs → twice the labels per row
+    const int ROWS = 3, PITCH = 6, BARH = ROWS * PITCH + 1;
+    rectfill(0, SCREEN_H - BARH, SCREEN_W, BARH, CLR_BLACK);
     int build_shown = buildings_on && ppm >= BUILD_GATE_PPM;   // only list what's actually drawn
     int tree_shown  = trees_on && ppm >= TREE_GATE_PPM;
-    int x = 4;
-    for (int k = 0; k < K_N; k++) {
+    int x = 3, row = 0;
+    for (int i = 0; i < (int)(sizeof LEG_ORDER / sizeof LEG_ORDER[0]); i++) {
+        int k = LEG_ORDER[i];
         if (!kcount[k]) continue;
         if (k == K_BUILDING && !build_shown) continue;
         if (k == K_TREE && !tree_shown) continue;
-        if (x > SCREEN_W - 24) break;                        // don't run a long legend off-screen
-        rectfill(x, SCREEN_H - 7, 6, 5, ST[k].col);
-        print(ST[k].label, x + 8, SCREEN_H - 7, CLR_MEDIUM_GREY);
-        x += 8 + (int)strlen(ST[k].label) * 4 + 4;
+        int w = 7 + (int)strlen(ST[k].label) * 4 + 4;
+        if (x + w > SCREEN_W - 2) {                           // wrap to the next row
+            if (row + 1 >= ROWS) break;                       // out of rows → stop (rare)
+            row++; x = 3;
+        }
+        int y = SCREEN_H - BARH + 1 + row * PITCH;
+        rectfill(x, y, 5, 5, ST[k].col);
+        print(ST[k].label, x + 7, y, CLR_MEDIUM_GREY);
+        x += w;
     }
     font(FONT_NORMAL);
 }
@@ -418,9 +523,10 @@ void draw(void) {
         return;
     }
 
-    // painter's order: zoning blocks → green → water → footprints → rail → canals →
-    // coast → roads → tree dots on top.
-    fill_areas(K_FARM);                                      // zoning area fills (bottom ground layer)
+    // painter's order (bottom→top): uncategorised land → zoning blocks → green → water →
+    // footprints → minor paths → rail/canals → the road ladder (small under big) → trees.
+    draw_other_areas();                                      // hashed muted understory, beneath everything
+    fill_areas(K_FARM);                                      // zoning area fills (ground layer)
     fill_areas(K_RESIDENTIAL);
     fill_areas(K_COMMERCIAL);
     fill_areas(K_INDUSTRIAL);
@@ -429,13 +535,19 @@ void draw(void) {
     fill_areas(K_GREEN);                                     // parks/woods over the zoning tints
     fill_areas(K_WATER);
     if (buildings_on && ppm >= BUILD_GATE_PPM) fill_areas(K_BUILDING);
+    draw_other_lines();                                      // hashed misc lines (piers, aeroways…)
+    draw_footway();                                          // dashed footpaths
+    draw_class(K_CYCLEWAY, 1);                               // red bike paths
     draw_rail();                                             // dashed
     draw_class(K_CANAL, 1);
     draw_class(K_COAST, 1);
     draw_class(K_TRACK, 1);
-    draw_class(K_ROAD,  1);
-    draw_class(K_ARTERIAL, 0); draw_class(K_HIGHWAY, 0);      // casings
-    draw_class(K_ARTERIAL, 1); draw_class(K_HIGHWAY, 1);      // fills
+    draw_class(K_SERVICE, 1);
+    draw_class(K_ROAD,  1);                                  // ordinary streets
+    draw_class(K_TERTIARY,  0); draw_class(K_TERTIARY,  1);
+    draw_class(K_SECONDARY, 0); draw_class(K_SECONDARY, 1);
+    draw_class(K_ARTERIAL,  0); draw_class(K_HIGHWAY, 0);     // casings
+    draw_class(K_ARTERIAL,  1); draw_class(K_HIGHWAY, 1);     // fills
     if (trees_on && ppm >= TREE_GATE_PPM) draw_trees();       // finest detail, on top
 
     // HUD

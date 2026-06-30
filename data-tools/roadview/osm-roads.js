@@ -29,11 +29,14 @@
 //     "features": [ { "kind": <class>, "name": "...",
 //                     "sub": "...",                   // refining OSM tag (building=* type); omitted if none
 //                     "pts": [x0,y0, x1,y1, ...] } ] }  // pts in the same local-metre frame
-//   class ∈ line:  highway arterial road track canal coast rail
-//          area:  water building green sand residential commercial industrial farm parking
+//   class ∈ line:  highway arterial secondary tertiary road service cycleway footway track
+//                  canal coast rail other_line
+//          area:  water building green sand residential commercial industrial farm parking other_area
 //          point: tree
-//   "sub" lets a downstream consumer (e.g. one that extrudes individual buildings) keep the
-//   OSM building category without re-querying; the roadview cart ignores it.
+//   "sub" carries a refining tag: the OSM building category on buildings (for a downstream
+//   consumer that extrudes them), and the defining "key=value" on other_area/other_line —
+//   which the cart HASHES into a muted colour+dither so the uncategorised long tail stays
+//   visually distinct without a dedicated palette slot each.
 //
 // The cart fits bbox→screen and flips Y for the screen's downward axis. Coordinates are
 // already PROJECTED (web-mercator metres) so the cart needs no geo math.
@@ -52,7 +55,11 @@ const slug = (s) => String(s || 'roads').toLowerCase().replace(/[^a-z0-9]+/g, '-
 // tools/carts/roadview.c (kind_of there is the JSON twin). Append only; never reorder.
 const KIND_IX = { highway: 0, arterial: 1, road: 2, track: 3, water: 4, canal: 5, building: 6,
                   green: 7, tree: 8, residential: 9, commercial: 10, industrial: 11, farm: 12,
-                  parking: 13, sand: 14, rail: 15, coast: 16 };
+                  parking: 13, sand: 14, rail: 15, coast: 16,
+                  // appended — keep in lockstep with the K_* enum in roadview.c (APPEND ONLY,
+                  // never reorder: the .rvb encodes each feature's kind as this index).
+                  secondary: 17, tertiary: 18, service: 19, cycleway: 20, footway: 21,
+                  other_area: 22, other_line: 23 };
 const SIMPLIFY = parseFloat(opt('--simplify', '8'));
 const NAME = opt('--name', null);
 
@@ -91,12 +98,29 @@ function classifyWay(t) {
   if (t.natural === 'coastline') return 'coast';                            // line
   if (/^(rail|light_rail|tram|subway|narrow_gauge|monorail)$/.test(t.railway || '')) return 'rail';  // line, dashed
   if (/^(river|canal|stream|drain|ditch)$/.test(t.waterway || '')) return 'canal';  // line
+  // the FULL road ladder — every density gets its own painted class (not collapsed): big
+  // motorways down to bike paths and footpaths. Order = importance (first match wins).
   const hw = t.highway || '';
-  if (/^(motorway|trunk)(_link)?$/.test(hw)) return 'highway';
-  if (/^(primary|secondary)(_link)?$/.test(hw)) return 'arterial';
-  if (/^(tertiary|unclassified|residential|living_street|service|road)(_link)?$/.test(hw)) return 'road';
-  if (/^(track|path|footway|cycleway|bridleway|steps|pedestrian)$/.test(hw)) return 'track';
-  return null;
+  if (/^(motorway|trunk)(_link)?$/.test(hw))        return 'highway';
+  if (/^primary(_link)?$/.test(hw))                 return 'arterial';
+  if (/^secondary(_link)?$/.test(hw))               return 'secondary';
+  if (/^tertiary(_link)?$/.test(hw))                return 'tertiary';
+  if (/^(residential|unclassified|living_street|road)$/.test(hw)) return 'road';   // ordinary streets
+  if (hw === 'service')                             return 'service';
+  if (hw === 'cycleway')                            return 'cycleway';              // bike path
+  if (/^(footway|path|steps|bridleway|pedestrian|corridor)$/.test(hw)) return 'footway';
+  if (hw === 'track')                               return 'track';
+  return null;   // everything else → caller maps to other_area / other_line (the hashed understory)
+}
+
+// the single most salient key=value of an UNCATEGORISED way — what the cart hashes into a
+// muted textured fill so the long tail of OSM categories stays distinct without a dedicated
+// colour each. Priority picks the tag that best describes the patch of land.
+function definingTag(t) {
+  const keys = ['aeroway', 'landuse', 'leisure', 'amenity', 'man_made', 'natural',
+                'tourism', 'historic', 'military', 'power', 'barrier', 'waterway', 'railway'];
+  for (const k of keys) if (t[k]) return `${k}=${t[k]}`;
+  return 'other';
 }
 
 // radial-distance decimation: keep a point only if it's > eps metres from the last kept.
@@ -110,6 +134,34 @@ function simplify(pts, eps) {
   }
   out.push(pts[pts.length - 1]);
   return out;
+}
+
+// Assemble multipolygon member ways into closed rings. OSM members arrive unordered and in
+// either direction, so we greedily join segments that share an endpoint (matched on raw
+// lon/lat — shared OSM nodes have identical coords) until each ring closes. Returns an array
+// of point-rings. (Stage 1: callers pass only the `outer` members; inner-ring holes TODO.)
+function assembleRings(segments) {
+  const eq = (a, b) => a[0] === b[0] && a[1] === b[1];
+  const segs = segments.filter(s => s.length >= 2).map(s => s.slice());
+  const rings = [];
+  while (segs.length) {
+    let ring = segs.shift();
+    let joined = true;
+    while (joined && !eq(ring[0], ring[ring.length - 1])) {
+      joined = false;
+      for (let i = 0; i < segs.length; i++) {
+        const s = segs[i], head = ring[0], tail = ring[ring.length - 1];
+        if      (eq(tail, s[0]))              ring = ring.concat(s.slice(1));
+        else if (eq(tail, s[s.length - 1]))   ring = ring.concat(s.slice(0, -1).reverse());
+        else if (eq(head, s[s.length - 1]))   ring = s.slice(0, -1).concat(ring);
+        else if (eq(head, s[0]))              ring = s.slice(1).reverse().concat(ring);
+        else continue;
+        segs.splice(i, 1); joined = true; break;
+      }
+    }
+    rings.push(ring);                        // closed, or best-effort if the data has gaps
+  }
+  return rings;
 }
 
 // build the document from an array of {kind, name, pts:[[x,y],...]} in raw metres
@@ -223,6 +275,14 @@ function demo() {
   // a couple of tracks wandering off into the countryside
   ways.push({ kind: 'track', name: '', pts: wig(18, 300, 2600, -100, 2900, 200) });
   ways.push({ kind: 'track', name: '', pts: wig(18, W - 300, 500, W + 200, 200, 200) });
+  // the rest of the road ladder: secondary + tertiary feeders, service alleys, a red bike
+  // path and a footpath — so the demo exercises every painted road class offline.
+  ways.push({ kind: 'secondary', name: 'Stationsweg', pts: wig(16, 400, 1250, W - 400, 1450, 100) });
+  ways.push({ kind: 'tertiary',  name: 'Kerkstraat',  pts: wig(14, 1250, 650, 1650, H - 500, 90) });
+  ways.push({ kind: 'service',   name: '', pts: wig(8, 2300, 1150, 2300, 1700, 18) });
+  ways.push({ kind: 'service',   name: '', pts: wig(8, 2500, 1180, 2950, 1180, 18) });
+  ways.push({ kind: 'cycleway',  name: 'Fietspad', pts: wig(20, 200, 1550, W - 200, 1750, 120) });
+  ways.push({ kind: 'footway',   name: '', pts: wig(16, 3300, 700, 3300, 1340, 50) });
   // a canal cutting across town, and a lake in the south-west (closed ring = area)
   ways.push({ kind: 'canal', name: 'Singel', pts: wig(22, -100, 1100, W + 100, 1900, 200) });
   const lake = [];
@@ -256,6 +316,12 @@ function demo() {
   rect('farm',          80,  200, 1000, 700);    // brown field, SW corner
   rect('farm',        3300,  100,  900, 600);    // brown field, NE corner
   rect('parking',     2250, 1720,  220, 150);    // a lot beside the commercial zone
+  // uncategorised land → the muted hashed understory (a quarry, school grounds, a stadium),
+  // plus an "other" line (a pier) — each gets a stable colour+dither from its defining tag.
+  rect('other_area',   200, 2200,  700, 600, 'landuse=quarry');
+  rect('other_area',  2500,  280,  640, 520, 'amenity=school');
+  rect('other_area',  3450, 2050,  520, 520, 'leisure=stadium');
+  ways.push({ kind: 'other_line', name: '', sub: 'man_made=pier', pts: wig(6, 980, 720, 1500, 700, 12) });
   // a rail line cutting NW→SE across town (drawn dashed)
   ways.push({ kind: 'rail', name: 'Spoorlijn', pts: wig(20, -100, 2400, W + 100, 400, 120) });
   // a scatter of building footprints in the downtown blocks (closed rects = areas)
@@ -289,12 +355,23 @@ async function overpass(S, W, N, E, name) {
             `way["highway"]${bb};` +
             `way["railway"~"^(rail|light_rail|tram|subway|narrow_gauge|monorail)$"]${bb};` +
             `way["waterway"~"^(river|canal|stream|drain|ditch|riverbank)$"]${bb};` +
-            `way["natural"~"^(water|coastline|beach|sand)$"]${bb};` +
             `way["building"]${bb};` +
-            `way["natural"~"^(wood|scrub|grassland)$"]${bb};` +
-            `way["landuse"]${bb};` +                                  // all landuse → classifyWay keeps zoning/green, drops the rest
-            `way["leisure"~"^(park|garden|nature_reserve|pitch|golf_course|recreation_ground)$"]${bb};` +
-            `way["amenity"="parking"]${bb};` +
+            // the area families — fetched WHOLESALE now: classifyWay keeps the curated classes
+            // (water/green/sand/zoning/parking) and routes everything else to the hashed "other"
+            // understory, so nothing is silently dropped.
+            `way["natural"]${bb};` +              // water/coast/beach/sand/wood/scrub/grassland curated; rest → other
+            `way["landuse"]${bb};` +              // zoning/green/farm curated; quarry/military/religious/… → other
+            `way["leisure"]${bb};` +              // park/garden/pitch/… curated; stadium/marina/track/… → other
+            `way["amenity"]${bb};` +              // parking curated; school/hospital/university/… → other
+            `way["man_made"]${bb};` +             // works → industrial; pier/tower/bridge/… → other
+            `way["aeroway"]${bb};` +              // runways/taxiways/aprons → other
+            // multipolygon RELATIONS — big lakes/rivers/forests/parks are modelled as relations
+            // whose member ways are just boundary arcs; we assemble their outer rings below so
+            // they fill as proper areas (a thin way alone renders as a hollow sliver).
+            `relation["natural"]${bb};` +
+            `relation["landuse"]${bb};` +
+            `relation["leisure"]${bb};` +
+            `relation["waterway"="riverbank"]${bb};` +
             `node["natural"="tree"]${bb};` +
             `);out geom;`;
   console.log(`querying Overpass for bbox ${S},${W},${N},${E} …`);
@@ -319,21 +396,53 @@ async function overpass(S, W, N, E, name) {
     } catch (e) { lastErr = e.message; console.log(`  ${ep} → ${lastErr}, trying next…`); }
   }
   if (!j) throw new Error(`all Overpass mirrors failed (${lastErr})`);
+  const els = j.elements || [];
+  // multipolygon relations carry the area tag; their member ways are just boundary arcs (often
+  // untagged). Collect member way-ids so we skip them as standalone ways (a lone arc fills as a
+  // hollow sliver — the "grey middle" bug), then assemble the relations into proper rings below.
+  const rels = els.filter(e => e.type === 'relation' && (e.tags || {}).type === 'multipolygon');
+  const memberWayIds = new Set();
+  for (const r of rels) for (const m of r.members || []) if (m.type === 'way') memberWayIds.add(m.ref);
+
   const ways = [];
-  for (const el of j.elements || []) {
+  for (const el of els) {
     if (el.type === 'node') {                          // individual trees = point nodes
       if (el.tags?.natural === 'tree' && el.lat != null)
         ways.push({ kind: 'tree', name: '', pts: [merc(el.lon, el.lat)] });
       continue;
     }
     if (el.type !== 'way' || !el.geometry) continue;
+    if (memberWayIds.has(el.id)) continue;             // drawn as part of its relation instead
     const tags = el.tags || {};
-    const kind = classifyWay(tags);
-    if (!kind) continue;
-    ways.push({ kind, name: tags.name || '',
-                sub: kind === 'building' ? (tags.building !== 'yes' ? tags.building : '') : '',
-                pts: el.geometry.map(g => merc(g.lon, g.lat)) });
+    const g = el.geometry;
+    let kind = classifyWay(tags);
+    let sub = kind === 'building' ? (tags.building !== 'yes' ? tags.building : '') : '';
+    if (!kind) {                                       // uncategorised → the hashed "other" understory
+      const closed = g.length > 3 && g[0].lon === g[g.length - 1].lon && g[0].lat === g[g.length - 1].lat;
+      kind = closed ? 'other_area' : 'other_line';     // closed ring fills, open way strokes
+      sub = definingTag(tags);                          // cart hashes this → colour + dither pattern
+    }
+    ways.push({ kind, name: tags.name || '', sub, pts: g.map(p => merc(p.lon, p.lat)) });
   }
+
+  // assemble each multipolygon's OUTER rings into filled area features (Stage 1: outer only —
+  // inner-ring holes / islands are a later refinement). This is what fills big lakes/rivers.
+  let relRings = 0;
+  for (const r of rels) {
+    const tags = r.tags || {};
+    let kind = classifyWay(tags), sub = '';
+    if (!kind) { kind = 'other_area'; sub = definingTag(tags); }   // a multipolygon is always an area
+    const outers = (r.members || [])
+      .filter(m => m.type === 'way' && (m.role === 'outer' || m.role === '') && Array.isArray(m.geometry))
+      .map(m => m.geometry.map(p => [p.lon, p.lat]));
+    if (!outers.length) continue;
+    for (const ring of assembleRings(outers)) {
+      if (ring.length < 4) continue;
+      ways.push({ kind, name: tags.name || '', sub, pts: ring.map(([lon, lat]) => merc(lon, lat)) });
+      relRings++;
+    }
+  }
+  if (relRings) console.log(`  assembled ${relRings} ring(s) from ${rels.length} multipolygon relation(s)`);
   if (!ways.length) throw new Error('no roads in that bbox');
   write(buildDoc('overpass', name || `${S},${W},${N},${E}`, ways));
 }

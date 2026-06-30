@@ -53,48 +53,65 @@ DE_DATA="$(pwd)/data/delft-netherlands.rvb" node tools/play.js roadview run   # 
   a road, a water body) have one node in the query area but their full Overpass geometry runs to
   the corners — so the city renders as a small off-centre blob. Fix: clip way geometry to the
   query bbox in `osm-roads.js`, or fit the cart to a percentile/building extent.
-- **Two-line legend.** With the zoning classes added, the bottom legend overflows one row — it
-  currently hard-stops at the screen edge (`if (x > SCREEN_W - 24) break;` in `legend()`), so the
-  last classes (rail, sand, …) don't show. Wrap to a second row (bump the black bar to ~18px,
-  track an `x`/`y` cursor, wrap when `x` exceeds the width).
-- **More road tiers.** See "The road hierarchy" below — we collapse OSM's ~20 `highway=*` values
-  into 4 painted tiers. Cycleways (huge in NL) and service roads are the obvious teases-out; the
-  `primary`/`secondary` split is why a motorway can look like it has gaps (it continues as yellow
-  arterial). Adding a tier is a ~10-line pattern: classify in `osm-roads.js` → a `K_*` + style in
-  `roadview.c` → `fill_areas()` or `draw_class()` in the paint order.
 - Plus the three "to graduate" items below (editor `--data` wiring, web/wasm file loading,
   whether `fmltools` should retarget this schema).
 
-## The road hierarchy — what we show, collapse, and drop
+**Done (the "use ALL the data" pass):**
+- **Full road ladder + bike paths.** The 4-tier collapse is gone: `highway` / `arterial` /
+  `secondary` / `tertiary` / `road` (ordinary street) / `service` / `track` / `cycleway` (a red
+  Dutch fietspad) / `footway` (dashed) are each their own painted class. Appended to the `K_*`
+  enum / `KIND_IX` (append-only, so old `.rvb` files still load).
+- **Nothing dropped — the muted hashed understory.** `classifyWay` no longer returns `null`:
+  any uncategorised way becomes `other_area` (closed ring → filled) or `other_line` (open →
+  stroked), carrying its defining `key=value` (e.g. `amenity=school`) in `sub`. The cart FNV-hashes
+  that tag into a stable `(muted colour, 4×4 dither pattern)` so each category reads distinct
+  without a dedicated palette slot — a quiet textured layer *beneath* the curated roads/water/parks.
+  The Overpass query was widened to fetch all `natural`/`landuse`/`leisure`/`amenity` + `man_made` +
+  `aeroway` wholesale (was narrow subsets) so there's actually a long tail to draw.
+- **Two-row → three-row legend.** `legend()` now uses `FONT_TINY`, a grouped `LEG_ORDER`, and wraps
+  across up to 3 rows, so the full class list shows instead of hard-stopping at the screen edge.
+- **Multipolygon relations assembled (the "hollow water" fix).** Big lakes/rivers/forests are OSM
+  *relations*; fetching ways alone rendered them as hollow slivers (blue rim, grey middle).
+  `osm-roads.js` now fetches the relations too and stitches their outer rings into filled areas —
+  see "Relations" under "Data we could pull" below. (Inner-ring holes are Stage 2.)
 
-OSM's `highway=*` key is a ~20-value functional classification. `osm-roads.js` collapses it into
-**4 painted tiers** (colour + real-world half-width in metres, so they fatten as you zoom):
+## The road hierarchy — the full ladder
 
-| tier (cart) | colour | half-width | OSM `highway=*` values folded in |
+OSM's `highway=*` key is a ~20-value functional classification. `osm-roads.js` now paints **the
+full ladder** — every density its own class (colour + real-world half-width in metres, so they
+fatten as you zoom):
+
+| class (cart) | colour | half-width | OSM `highway=*` values |
 |---|---|---|---|
-| `highway`  | orange | 7 m | `motorway`, `trunk` (+ `_link` ramps) |
-| `arterial` | yellow | 5 m | `primary`, `secondary` (+ `_link`) |
-| `road`     | grey   | 3 m | `tertiary`, `unclassified`, `residential`, `living_street`, `service`, `road` (+ `_link`) |
-| `track`    | brown  | 1.5 m | `track`, `path`, `footway`, `cycleway`, `bridleway`, `steps`, `pedestrian` |
+| `highway`   | orange       | 7 m   | `motorway`, `trunk` (+ `_link` ramps) |
+| `arterial`  | yellow       | 5 m   | `primary` (+ `_link`) |
+| `secondary` | light yellow | 4 m   | `secondary` (+ `_link`) |
+| `tertiary`  | peach        | 3 m   | `tertiary` (+ `_link`) |
+| `road`      | grey         | 3 m   | `residential`, `unclassified`, `living_street`, `road` (ordinary streets) |
+| `service`   | mid grey     | 1.5 m | `service` (driveways, parking aisles, alleys) |
+| `cycleway`  | dark red     | 1.2 m | `cycleway` — the Dutch red fietspad |
+| `footway`   | indigo (dashed) | 0.9 m | `footway`, `path`, `steps`, `bridleway`, `pedestrian`, `corridor` |
+| `track`     | brown        | 1.5 m | `track` |
 
-Two consequences worth knowing:
-- **The `primary`/`secondary` → arterial split is why "the highway" can look broken.** Where a
-  `motorway`/`trunk` (orange) continues as a `primary` ring road (yellow), the orange visibly
-  stops — nothing is dropped, it's recoloured. (Breda: 391 highways vs **1015 arterials**.)
-- **Non-car ways are all one brown `track`.** `cycleway` / `footway` / `pedestrian` / `path` /
-  `steps` are merged — in cycling-dense places (NL) splitting out a CYCLEWAY tier would add a lot.
-  Service roads (driveways, parking aisles, alleys) are merged into `road` and add clutter.
+Splitting `secondary` off `arterial` fixes the old "the highway looks broken" artefact (orange
+`motorway` → yellow `primary` → lighter `secondary` now step down in shade instead of one jump).
+`cycleway` and `footway` are no longer merged into `track` — a big deal in cycling-dense NL.
 
-**Dropped entirely** (`classifyWay` returns `null`): the niche/non-routable `highway=*` values —
-`construction`, `proposed`, `raceway`, `escape`, `busway`/`bus_guideway`, `corridor`, `elevator`,
-`platform`, plus point-only tags (`crossing`, `traffic_signals`, `street_lamp`, `turning_circle`).
-Non-`highway` ways we *do* show as their own classes: `rail` (dashed), `canal`, `coast`.
+**Nothing is dropped any more.** What `classifyWay` doesn't recognise (niche `highway=*` like
+`construction`/`raceway`/`busway`, and every non-road tag) is no longer returned as `null` →
+discarded. Instead the caller routes it to `other_area` (closed ring) or `other_line` (open way)
+with its defining `key=value` in `sub`, and the cart hashes that into a muted colour+dither. Point-only
+tags (`crossing`, `traffic_signals`, `street_lamp`) still have no geometry to draw. Non-`highway`
+ways with dedicated classes: `rail` (dashed), `canal`, `coast`.
 
 ## Data we could pull (OSM has much more)
 
-We currently tap a slice of OSM. The rest, organized by how the cart would draw it — each add is
-the same ~10-line pattern (classify in `osm-roads.js` → a `K_*` + style in `roadview.c` →
-`fill_areas()`/`draw_class()` in the paint order), *except* the relation gap at the bottom.
+Since the "use ALL the data" pass, most of the area/line families below **already render** — as
+the muted hashed `other_area`/`other_line` understory (any `landuse`/`leisure`/`amenity`/`natural`/
+`man_made`/`aeroway` we don't curate). So this list is now about **promoting** the high-value ones
+from generic hash to a *dedicated* class (recognisable colour/glyph) — same ~10-line pattern
+(classify in `osm-roads.js` → a `K_*` + style in `roadview.c` → `fill_areas()`/`draw_class()`) —
+plus the genuinely-not-yet-fetched points/relations.
 
 **Area fills** (`fill_areas` path) — *have: water, green, building, sand, residential, commercial,
 industrial, farm, parking*
@@ -126,11 +143,15 @@ keeping in the schema, likely alongside `sub`)
   bridges with casing), `oneway`, `maxspeed`, `surface`, `lanes`.
 - `name` on waterways (river names), `addr:*` on buildings.
 
-**Structural gap — relations.** `osm-roads.js` reads only **ways + `node[natural=tree]`**, not
-**relations**. Big areas modelled as multipolygon relations (a forest with a clearing, a lake with
-an island, the city boundary itself) are **silently missed**, not just simplified. Assembling
-multipolygons (`out geom` on relations + ring-stitching) is the one non-trivial add here, and it's
-why some large green/water areas can look absent.
+**Relations — multipolygons (Stage 1 DONE).** Big lakes/rivers/forests are modelled as
+multipolygon *relations* whose member ways are just boundary arcs — so fetching ways alone gave a
+**hollow sliver** (a 46 km-perimeter ribbon enclosing 1.6 km² for the Nieuwe Maas → "blue rim, grey
+middle"). `osm-roads.js` now also queries `relation["natural"|"landuse"|"leisure"|"waterway"=riverbank]`,
+skips their member ways, and stitches the **outer** rings end-to-end (`assembleRings()`) into proper
+filled areas. The cart's `MAXAREAPTS` was bumped to 16384 to hold a whole assembled river ring.
+**Still TODO:** inner-ring **holes** (an island in a lake, a courtyard in a building) — Stage 1 fills
+the outer ring solid, so islands are currently painted over; needs the even-odd bridge trick or a
+multi-ring feature in the schema. Relations of `type=boundary` (the city outline) are still not read.
 
 **Rough priority for a broad-strokes map:** building heights (serves extrusion) → airports →
 transit stops + POI points (also make the hover panel rich) → place-name labels → city walls /
