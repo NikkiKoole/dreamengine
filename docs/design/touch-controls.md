@@ -1,19 +1,38 @@
 # Touch controls — a native-resolution on-screen joystick / d-pad / buttons
 
-STATUS: DESIGN — ready to pick up (2026-06-29). Research, a recommendation, AND a concrete
+STATUS: DESIGN — ready to pick up (rev. 2026-06-30). Research, a recommendation, AND a concrete
 implementation plan (see "Implementation plan" below); nothing rebuilt yet. The task is
 pulled from **two ends**: the iOS port ([`ios-plan.md`](ios-plan.md) — raw `key()`/`btn()` carts
 have no touch equivalent on a phone) and the cart-polish backlog
 ([`../../field-notes/cart-polish-punchlist.md`](../../field-notes/cart-polish-punchlist.md) — ~18
 carts ask for an on-screen joystick/d-pad). Companion: [`action-plan.md`](action-plan.md) (Tier 0
-"Touch movement affordance"), `runtime/studio.c` (the current overlay), `runtime/pointer.h` /
-`ui.h` / `gestures.h` (the input primitives).
+"Touch movement affordance"), `runtime/studio.c` (the current overlay), `runtime/web_shell.html`
+(the web canvas), `runtime/pointer.h` / `ui.h` / `gestures.h` (the input primitives).
 
 ## The core requirement (the maker's call)
 
-The controls must render at the **cart's native pixel resolution, drawn inside the engine** — so
-they look like part of the game, not a UI sticker on top. This is the one firm constraint, and it's
-the right one (see "the central tension" below).
+The controls get their **own real estate, placed where there's room** — they are **not** a sticker
+floating on top of the game. And they are **engine-drawn at the cart's native pixel resolution**, so
+they read as part of the console (chunky, palette-correct), never as a smooth device-res UI layer.
+
+Two halves, both firm:
+
+1. **Placement is responsive — "it depends, do the best for each case."** A cart is ~8:5
+   (320×200 = 1.6:1); a phone is ~19.5:9 (≈2.17:1). Where the *spare* space lands flips with
+   orientation, so the engine measures the letterbox at runtime and places the controls into it —
+   no per-platform `if (iOS)` branch, just a couple of geometry rules:
+   - **Portrait** (web or iOS): the game sits in the top third, a tall band is free **below** →
+     **deck below** (this is the PICO-8 portrait layout).
+   - **Landscape** (the common iOS-native action pose): the game fills the height, spare space is
+     on the **sides** → **side-rails** (stick on the left rail, buttons on the right).
+   - **Game fills the screen** (matched aspect, no letterbox) → **corner overlay** on top, hugging
+     the lower-third thumb arc (the only case where we draw over gameplay, as a fallback).
+2. **The cart declares *what*, the engine decides *where*.** The cart picks the *scheme* in code
+   (`touch_layout(mode, n_buttons)` — analog vs d-pad, how many buttons); the engine picks the
+   *placement* from the available space. Same cart call works on web portrait, iOS landscape, and a
+   desktop touchscreen.
+
+(See "the central tension" below for why native-res, and "the placement model" for the geometry.)
 
 ## What already exists — and why it's wrong for us
 
@@ -26,18 +45,46 @@ The engine **already ships** an on-screen control overlay (`runtime/studio.c`):
 - `btn(0, …)` already synthesizes from it: directions read `stick_x()/stick_y()` vs the dead zone,
   A/B hit-test the button circles. Falls through to keyboard/gamepad otherwise.
 
-**The problem is *how* it draws.** `draw_touch_overlay()` runs **after** the canvas render-texture is
-blitted to the window, using **raw Raylib `DrawCircle`/`DrawCircleLines`/`DrawTextEx` in window/device
-pixels and flat white RGB.** So it:
+**Two things are wrong: it's an overlay, and it draws at device res.** `draw_touch_overlay()` runs
+**after** the canvas render-texture is blitted to the window, using **raw Raylib
+`DrawCircle`/`DrawCircleLines`/`DrawTextEx` in window/device pixels and flat white RGB.** So it:
 
+- always sits **on top of gameplay** (no concept of placing into the letterbox);
 - renders at **device resolution**, not the native pixel grid — smooth circles on top of chunky
   pixels (the "different overlay");
 - **ignores the palette** (raw white, not a `CLR_*` index);
 - ignores `camera()`/`clip()` and any cart styling;
 - is player-0-only, exactly two buttons, analog-stick-only (no d-pad mode).
 
-So we're not building from zero — we're **moving the existing controls from a device-res Raylib
-overlay onto native-res engine primitives**, and generalizing stick→(stick | d-pad) + N buttons.
+So we're not building from zero — we're **moving the existing controls onto native-res engine
+primitives, giving them a responsive home (deck / rails / overlay), and generalizing
+stick→(stick | d-pad) + N buttons.**
+
+## The placement model (the new heart of the design)
+
+The engine knows the window/canvas size and the cart's `SCREEN_W×SCREEN_H`. From those it computes
+the letterbox once per frame (cheap) and chooses a home:
+
+```
+fit the SCREEN_W×SCREEN_H game into the window preserving aspect → game rect + leftover bands
+  band BELOW the game ≥ min deck height   → DECK   (game shrinks up, controls fill the band below)
+  bands on the SIDES ≥ min rail width      → RAILS  (stick → left band, buttons → right band)
+  neither (game fills the window)          → OVERLAY (corner thumb-arc, on top — the fallback)
+```
+
+Key consequences:
+
+- **Deck and rails are NOT overlays** — the game is scaled to leave them room, so nothing is ever
+  covered. Only the no-room fallback draws on top.
+- **The deck/rail is engine-drawn**, native-res, palette-correct — same `circ`/`circfill`/`print`
+  primitives as the game, just into a region outside the cart's drawable area. On web this means the
+  framebuffer/canvas is *taller (or wider) than the game* and the band is ours; it does **not** mean
+  DOM/HTML buttons (web-only, non-pixel — explicitly rejected, see forks).
+- **One code path, all platforms.** Web portrait → deck; iOS landscape → rails; desktop with no
+  touch → no controls at all (full window is game). The platform never appears in the logic; only
+  the measured geometry does.
+- **Desktop/no-touch shows nothing** — `touch_ceiling() == 0` ⇒ skip the whole pass, game uses the
+  full window as today.
 
 ## What the successful games do (external study)
 
@@ -49,127 +96,172 @@ overlay onto native-res engine primitives**, and generalizing stick→(stick | d
   sokoban, rogue, platformers). Floating analog wins for **free 8-way** (vampire-survivors,
   twin-stick). → the widget needs **both modes, chosen per cart** — which is exactly what the
   polish list asked for ("joystick for free movement, d-pad for grid games").
+- **PICO-8's web/mobile layout** is the deck model: the cart sits in a fixed pixel rect and the
+  controls live in the surrounding chrome, *below* in portrait — not floating over the game. That's
+  the layout we're adopting (generalized to rails in landscape).
 - **Feel.** Clamp + normalize output to −1..1; a **dead zone** so a resting thumb doesn't drift; let
   the thumb **drag past max radius**; ~1 cm travel = full tilt; **smooth knob lerp** to kill jitter.
 - **Ergonomics (hard numbers).** Min tap target **44 px (Apple) / 48 dp (Material)**, never below
   ~9 mm; ≥8 px spacing; controls live in the **lower-third reachable arc** (left = move, right =
   act).
-- **The mainstream "standard" is the anti-pattern for us.** RetroArch / Delta overlays are a
+- **The emulator "standard" is the anti-pattern for us.** RetroArch / Delta overlays are a
   semi-transparent PNG at **device resolution**, positioned by **normalized coordinates**, default
-  **0.75 opacity** — deliberately smooth and high-res, always a layer on top. That's the look we are
-  *rejecting*.
+  **0.75 opacity** — deliberately smooth, high-res, and always a layer on top. We reject *both* the
+  device-res look *and* the always-on-top placement.
 
 ## The central tension
 
-The most common, most "successful" approach (emulator-style device-res overlay) is the exact
-opposite of the maker's requirement. The honest resolution for *this* engine is to draw with the
-**normal `circ`/`circfill`/`rectfill`/`spr` primitives at native resolution** so the control is
-rasterized into the pixel grid and obeys the palette. The tradeoff: at low-res the control is
-**chunky**, so it must be **sized so that `native_px × SCALE` still clears the ~44 px physical
-thumb target** — the design has to reason in *both* native pixels and final on-screen size. (At
-320×200·4× a 44 px physical target ≈ 11 native px radius; bigger on smaller scales.)
+The most common, most "successful" approach (emulator-style device-res overlay-on-top) is the exact
+opposite of the maker's requirement on **both** axes. The honest resolution for *this* engine:
+
+1. **Placement** — give the controls the letterbox (deck/rails) instead of stealing gameplay space;
+   only overlay as a no-room fallback.
+2. **Look** — draw with the normal `circ`/`circfill`/`rectfill`/`spr` primitives at native
+   resolution so the control rasterizes into the pixel grid and obeys the palette.
+
+The tradeoff of (2): at low-res the control is **chunky**, so it must be **sized so that
+`native_px × SCALE` still clears the ~44 px physical thumb target** — the design reasons in *both*
+native pixels and final on-screen size. (At 320×200·4× a 44 px physical target ≈ 11 native px
+radius; bigger on smaller scales.) The deck/rails make this *easier* than an overlay: the controls
+have their own space, so they can be as large as the band allows without covering the game.
 
 ## Recommendation
 
-**Phase 1 — fix the render path (small, high-payoff).** Rewrite `draw_touch_overlay()` to draw with
-engine primitives into the **canvas render-texture at native resolution** (reset `camera()`/`clip()`
-first so it sits in screen space), using `CLR_*` palette indices instead of raw white. Same stick +
-A/B, same `btn()` wiring, same API — just *native-res and palette-correct*. This alone delivers the
-maker's requirement and instantly improves the ~18 carts that would enable it. Verify with
-`canvas-diff` (it now goes through the software canvas like everything else).
+**Phase 1 — fix the look (small, high-payoff, no placement change yet).** Rewrite the existing
+overlay to draw with engine primitives into the **canvas at native resolution** using `CLR_*`
+palette indices instead of raw white. Same stick + A/B, same `btn()` wiring, same API — just
+*native-res and palette-correct*, still a corner overlay for now. This alone delivers the "looks
+like part of the game" half and instantly improves the ~18 carts that would enable it. Verify with
+`canvas-diff`.
 
-**Phase 2 — generalize to a real widget.** Add what the study says is needed:
+**Phase 2 — responsive placement (the deck/rails model).** Add the letterbox measurement and the
+three homes (deck / rails / overlay fallback) from "the placement model" above. The game rect
+shrinks to leave room; the controls draw into the band. This is the change that fulfils the maker's
+core requirement.
+
+**Phase 3 — generalize to a real widget.** Add what the study says is needed:
 
 - a **mode**: `floating analog` | `fixed analog` | `4-way d-pad` | `8-way d-pad`, chosen **per cart
   in code** (not settings — the polish list is explicit);
 - **N action buttons** (not hard-wired to 2), with optional labels/icons (code-drawn glyphs via
   `sprite-draw.js` keep them pixel-native — see `flank`);
 - **feel**: normalized −1..1 + dead zone (keep ~0.35-of-radius), thumb-drag-past-radius, knob lerp;
-- **placement**: lower-third arc; floating zone on the left half, buttons bottom-right;
 - **auto-size** the control from `SCALE` + `touch_ceiling()` so it clears the physical target on
   phone vs tablet without per-cart fiddling.
 
-**Phase 3 — wire into the iOS shell.** Per `ios-plan.md`, route the synthesized inputs through the
+**Phase 4 — wire into the iOS shell.** Per `ios-plan.md`, route the synthesized inputs through the
 existing `de_key_event` seam so **raw `key()` carts** (WASD movement) also become playable, not just
-`btn()` carts.
+`btn()` carts. iOS landscape will naturally resolve to the **rails** placement.
 
 ## Open questions / forks
 
-- **Draw hook.** Cleanest is a studio-owned pass that runs *inside* `BeginTextureMode(canvas)` after
-  the cart's `draw()`, with camera/clip reset — so it's native-res but the cart never has to call it.
-  (Alternative: expose a `draw_touch_ui()` the cart calls itself — more control, more boilerplate.)
-  Recommend studio-owned.
-- **Opt-in vs auto.** Explicit `touch_controls(true)` / a `.cart.js` flag (per the polish list), or
-  auto-show when `touch_ceiling() > 0` and the cart reads `btn()`? Recommend explicit opt-in in code
-  first; auto-detect is a later convenience.
+- **Draw hook.** Cleanest is a studio-owned pass: the cart draws into its `SCREEN_W×SCREEN_H`
+  texture as always; the engine blits that into the computed game rect, then draws the controls into
+  the letterbox band — all native-res, the cart never has to call anything. (Alternative: expose a
+  `draw_touch_ui()` the cart calls itself — more control, more boilerplate.) Recommend studio-owned.
+- **Deck vs DOM on web (decided).** The deck/rails are **engine-drawn into a larger framebuffer**,
+  not HTML/CSS buttons in the page. DOM controls would be web-only and non-pixel; the engine-drawn
+  band is one code path for web + iOS + desktop and stays palette-correct. (`web_shell.html` today is
+  a single full-bleed canvas Raylib sizes to `SCREEN_W*SCALE × SCREEN_H*SCALE` — Phase 2 lets the
+  framebuffer exceed the game so the band exists.)
+- **Cart override of placement.** Default is space-driven. A game that wants the controls hugging the
+  action could request `prefer overlay` even when there's room for a deck — a later hint, not v1.
+- **Opt-in vs auto.** Explicit `touch_controls(true)` / `touch_layout(...)` (per the polish list),
+  or auto-show when `touch_ceiling() > 0` and the cart reads `btn()`? Recommend explicit opt-in in
+  code first; auto-detect is a later convenience.
 - **Sprites vs primitives for the art.** Primitives first (no asset dependency, trivially
-  palette-correct). A code-drawn pixel sprite set (`sprite-draw.js`) is a nice Phase-2 upgrade for a
+  palette-correct). A code-drawn pixel sprite set (`sprite-draw.js`) is a nice later upgrade for a
   more characterful d-pad/stick.
 - **Synthetic input.** `btn()` is read-only today (touch→stick→btn); nothing can *inject* button
   state. Not needed for touch, but worth noting for any future headless/AI/`spec` input path.
 - **Per-cart config home.** Where the mode + button set live — a `touch_layout(...)` call in the
-  cart, or fields in its `.cart.js` metadata. Decide alongside Phase 2.
+  cart, or fields in its `.cart.js` metadata. Decide alongside Phase 3. Recommend the code call
+  (carts already opt in via code, per the polish list — *not* settings).
 
 ## Implementation plan
 
 Read this before starting; line numbers drift, so **grep for the function names**, don't trust the
-~approx hints. All edits are in `runtime/studio.c` (+ `studio.h` for any new API) — a **hot shared
-file**: targeted `Edit`s only, never a full `Write`, re-Read the region first, and after committing
-confirm your change survived (`git show HEAD:runtime/studio.c | grep '<sentinel>'`). See CLAUDE.md
-"Hot shared source files".
+~approx hints. Edits are in `runtime/studio.c` (+ `studio.h` for any new API), and Phase 2 touches
+`runtime/web_shell.html` — `studio.c` is a **hot shared file**: targeted `Edit`s only, never a full
+`Write`, re-Read the region first, and after committing confirm your change survived
+(`git show HEAD:runtime/studio.c | grep '<sentinel>'`). See CLAUDE.md "Hot shared source files".
 
 ### The seam (where things live today)
 
 - `draw_touch_overlay()` (~`studio.c:912`) — draws stick + A/B with **raw Raylib** (`DrawCircle`/
   `DrawCircleLines`/`DrawTextEx`) in **window pixels**. Called at ~`:1692`, **after** the canvas
-  render-texture is blitted to the window. ← this placement is the whole problem.
+  render-texture is blitted to the window. ← this placement is half the problem.
 - The canvas is drawn into a `SCREEN_W×SCREEN_H` `RenderTexture2D` between `BeginTextureMode(canvas)`
-  / `EndTextureMode()` (~`:1648`–`:1689`), then blitted ×`SCALE`.
+  / `EndTextureMode()` (~`:1648`–`:1689`), then blitted ×`SCALE` to the window. ← the blit rect is
+  what Phase 2 shrinks to open a letterbox band.
 - `update_stick()` (~`:876`) — per-frame stick math; called ~`:1500`.
 - `btn(0,…)` (~`:2210`) — when `show_touch_ui`, directions read `stick_x()/stick_y()` (~`:2335`) vs
   `STICK_DEADZONE`; A/B `any_touch_in_circle()`. Else keyboard/gamepad.
 - Constants (~`:484`): `STICK_RADIUS 60`, `STICK_DEADZONE 0.35`, `BTN_RADIUS 44`.
-- `touch_x()/touch_y()` divide window pixels by `SCALE` → canvas space (~`:2257`).
+- `touch_x()/touch_y()` divide window pixels by `SCALE` → canvas space (~`:2257`). ← once the game
+  rect is offset/resized for a band, this mapping must account for the game-rect origin/scale, not a
+  bare `/SCALE`.
 
-### Phase 1 — native-res render path (no API change, do first)
+### Phase 1 — native-res look (no API change, no placement change, do first)
 
-Move the overlay drawing **inside** `BeginTextureMode(canvas)` (so it rasterizes at native res and
-scales up with the game), and redraw it with **engine primitives + palette indices**:
+Redraw the existing corner overlay with **engine primitives + palette indices**, into the canvas at
+native res:
 
 1. Add a studio-internal `draw_touch_overlay_native()` that runs **after the cart's `draw()` returns
    but before `EndTextureMode()`**. Reset transform first — `camera(0,0)` (or the internal
    equivalent) and clear any `clip()` — so the controls sit in fixed screen space regardless of what
    the cart left set.
-2. Replace every raw Raylib call with the engine equivalent drawing in **canvas coordinates**:
+2. Replace every raw Raylib call with the engine equivalent in **canvas coordinates**:
    `DrawCircle`→`circfill`, `DrawCircleLines`→`circ`, `DrawTextEx`→`print` (or a code-drawn glyph),
-   colours as `CLR_*` indices (pick a legible pair, e.g. `CLR_WHITE` ring on a `CLR_DARK_GREY`
-   translucent pad — see blend-tables for index-only translucency if wanted).
-3. Convert the geometry from window px to **native px**: divide the current `STICK_RADIUS`/
-   `BTN_RADIUS` constants by `SCALE` for the canvas-space sizes (see sizing math below). Hit-testing
-   already works in canvas space via `touch_x/y()`; keep `btn()`/`stick_x/y()` math unchanged.
+   colours as `CLR_*` indices (e.g. `CLR_WHITE` ring on a `CLR_DARK_GREY` pad — see blend-tables for
+   index-only translucency if wanted).
+3. Convert geometry from window px to **native px**: divide `STICK_RADIUS`/`BTN_RADIUS` by `SCALE`
+   (see sizing math). Hit-testing already works in canvas space via `touch_x/y()`; keep
+   `btn()`/`stick_x/y()` math unchanged.
 4. Delete the old post-blit `draw_touch_overlay()` call (~`:1692`).
-5. Verify (see below), prototype-bake on `vampire-survivors`, confirm the controls read as pixel art
-   (chunky, palette-correct), commit.
+5. Verify (below), prototype-bake on `vampire`, confirm controls read as chunky/palette-correct,
+   commit.
+
+### Phase 2 — responsive placement (deck / rails / overlay)
+
+This is the maker's core requirement. Add a letterbox measure and three homes:
+
+1. **Measure once per frame.** From window size and `SCREEN_W×SCREEN_H` compute the game rect
+   (aspect-fit) and the leftover bands. Pick: band-below ≥ min deck height → **DECK**; side bands ≥
+   min rail width → **RAILS**; else → **OVERLAY** (Phase 1's corner draw, the fallback).
+2. **Shrink the game rect** for deck/rails so the blit leaves the band free; draw the band
+   background + controls there with engine primitives (the band can live in the same render path —
+   either grow the canvas texture to game+band, or draw the band straight to the window in a second
+   native-res pass; prefer growing the canvas so `canvas-diff` still covers it).
+3. **Fix input mapping.** `touch_x/y()` must map window→canvas through the *game rect* (origin +
+   scale), and the controls hit-test in band space. This is the subtle bug surface — test stick +
+   buttons in all three placements.
+4. **Web.** `web_shell.html` currently pins one full-bleed canvas at `SCREEN_W*SCALE ×
+   SCREEN_H*SCALE`; let the framebuffer/canvas exceed the game so the band has somewhere to live
+   (portrait → taller canvas). No DOM controls.
+5. Verify: portrait device (deck), landscape device (rails), matched-aspect window (overlay),
+   desktop no-touch (nothing). `canvas-diff` on each.
 
 ### Sizing math (the one subtlety)
 
 A physical thumb target should be ≥ ~44 device px. Native size = `ceil(44 / SCALE)`. At 320×200·4×
 that's an **11 native-px radius**; at 2× it's 22. So derive control sizes from `SCALE` (and bump on
 phones via `touch_ceiling()`), don't hard-code native px. Keep ≥ a few native px of spacing between
-buttons so chunky pixels don't merge.
+buttons so chunky pixels don't merge. In a deck/rail the band height/width sets the ceiling — size
+the control to the band, clamped to ≥ the physical target.
 
-### Phase 2 — generalize to a real widget (after Phase 1 ships)
+### Phase 3 — generalize to a real widget (after placement ships)
 
 Proposed API (new — needs the 4-place dance in CLAUDE.md "Adding a new API function": declare in
 `studio.h` w/ one-liner, implement in `studio.c`, document in `studioDocs.js`, list in `shell.js`):
 
 ```c
-// modes
-#define TOUCH_NONE      0
-#define TOUCH_ANALOG    1   // floating analog stick (free 8-way) — default
-#define TOUCH_ANALOG_FIX 2  // fixed analog (base always shown)
-#define TOUCH_DPAD4     3   // 4-way d-pad (grid games)
-#define TOUCH_DPAD8     4   // 8-way d-pad
+// movement modes
+#define TOUCH_NONE       0
+#define TOUCH_ANALOG     1   // floating analog stick (free 8-way) — default
+#define TOUCH_ANALOG_FIX 2   // fixed analog (base always shown)
+#define TOUCH_DPAD4      3   // 4-way d-pad (grid games)
+#define TOUCH_DPAD8      4   // 8-way d-pad
 
 void touch_layout(int move_mode, int n_buttons);   // configure once (cart opt-in, in code)
 void touch_button_label(int i, const char *txt);    // optional per-button glyph/label
@@ -177,47 +269,54 @@ void touch_button_label(int i, const char *txt);    // optional per-button glyph
 
 - `move_mode` picks stick vs d-pad; `TOUCH_DPAD*` feeds `btn()` directions as booleans (no dead
   zone), analog modes keep the −1..1 + dead-zone path.
-- `n_buttons` generalizes the hard-wired 2; lay them out bottom-right in the reachable arc.
-- **Floating analog**: on first touch in the left zone, spawn the base at the touch point; let the
-  knob drag past `STICK_RADIUS` (clamp output, optionally re-center base on big drift); smooth-lerp
-  the drawn knob. Use `pointer.h` (`PTR_ACQUIRE`) to own the moving finger so a second finger on a
-  button doesn't steal it (this is also why raylib rgestures was rejected — see `gestures.h`).
-- Config home: a `touch_layout()` call in the cart's `update()`/init is most in-keeping (carts
-  already opt in via code, per the polish list — *not* settings). A `.cart.js` field is a possible
-  later convenience; decide then.
+- `n_buttons` generalizes the hard-wired 2; lay them out in the reachable arc (deck: bottom; rails:
+  right rail; overlay: bottom-right).
+- **Floating analog**: on first touch in the move zone, spawn the base at the touch point; let the
+  knob drag past the radius (clamp output, optionally re-center base on big drift); smooth-lerp the
+  drawn knob. Use `pointer.h` (`PTR_ACQUIRE`) to own the moving finger so a second finger on a
+  button doesn't steal it (also why raylib gestures was rejected — see `gestures.h`).
+- Config home: a `touch_layout()` call in the cart's `update()`/init is most in-keeping (carts opt
+  in via code, per the polish list — *not* settings). A `.cart.js` field is a possible later
+  convenience.
 
-### Phase 3 — iOS shell
+### Phase 4 — iOS shell
 
 Route the synthesized inputs through the existing `de_key_event` seam (`ios-plan.md` Phase 2) so raw
-`key()` carts (WASD movement) become playable, not just `btn()` carts. Mostly Swift-side wiring; the
-engine side is the same overlay reading touches.
+`key()` carts (WASD movement) become playable, not just `btn()` carts. Landscape resolves to rails
+placement automatically. Mostly Swift-side wiring; the engine side is the same controls reading
+touches.
 
 ### Verification
 
-- `node tools/canvas-diff.js <cart>` — the overlay now goes through the software canvas like every
+- `node tools/canvas-diff.js <cart>` — the controls now go through the software canvas like every
   other primitive; A/B GPU-vs-CPU must match (guards the native-res move).
 - Bake + eyeball: `node tools/make-cart.js <c> <png>` then `--run`; read the thumbnail — controls
   should be chunky/palette-correct, not smooth white.
 - `node tools/mobile-lint.js <cart>` — sanity on touch-playability.
-- Smoke a `btn()` cart under the harness to confirm directions/buttons still fire.
+- Placement matrix: portrait (deck), landscape (rails), matched-aspect (overlay), desktop no-touch
+  (nothing). Smoke a `btn()` cart in each to confirm directions/buttons still fire and the input
+  mapping survives the game-rect offset.
 
 ### Checklist
 
-- [ ] **P1** move overlay draw inside `BeginTextureMode`, reset camera/clip
-- [ ] **P1** swap raw Raylib calls → `circ`/`circfill`/`print` with `CLR_*`
-- [ ] **P1** size from `SCALE` (`ceil(44/SCALE)`), remove post-blit call
-- [ ] **P1** `canvas-diff` + bake on `vampire-survivors`, commit
-- [ ] **P2** `touch_layout(mode, n_buttons)` + d-pad modes (4-place API dance)
-- [ ] **P2** floating-analog base-spawn + `pointer.h` capture + knob lerp
-- [ ] **P2** N buttons + optional labels; per-cart opt-in in code
-- [ ] **P2** prototype `columns`/`puyo` (d-pad) and a free-move cart (analog)
-- [ ] **P3** wire `de_key_event` in the iOS shell for `key()` carts
+- [ ] **P1** redraw overlay with `circ`/`circfill`/`print` + `CLR_*`, native-res in the canvas
+- [ ] **P1** size from `SCALE` (`ceil(44/SCALE)`), remove post-blit raw-Raylib call
+- [ ] **P1** `canvas-diff` + bake on `vampire`, commit
+- [ ] **P2** letterbox measure → deck / rails / overlay decision
+- [ ] **P2** shrink game rect, draw band, fix `touch_x/y()` mapping through the game rect
+- [ ] **P2** web: framebuffer/canvas may exceed game so the band exists (no DOM controls)
+- [ ] **P2** placement matrix verified (portrait/landscape/matched/desktop)
+- [ ] **P3** `touch_layout(mode, n_buttons)` + d-pad modes (4-place API dance)
+- [ ] **P3** floating-analog base-spawn + `pointer.h` capture + knob lerp
+- [ ] **P3** N buttons + optional labels; per-cart opt-in in code
+- [ ] **P3** prototype `columns`/`puyo` (d-pad) and a free-move cart (analog)
+- [ ] **P4** wire `de_key_event` in the iOS shell for `key()` carts
 
 ### First move
 
-Phase 1, step 1 — relocate the overlay draw inside the render-texture pass and reset the transform.
-It's the smallest change that delivers the "same resolution" requirement, and everything else builds
-on it.
+Phase 1, step 1 — redraw the existing overlay native-res in the canvas. It's the smallest change
+that delivers the "looks like part of the game" half, and Phase 2's placement work builds on the
+same native-res draw.
 
 ---
 
