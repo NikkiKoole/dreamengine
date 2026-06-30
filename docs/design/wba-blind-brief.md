@@ -1,6 +1,6 @@
 # The Whitest Boy Alive — the blind band brief
 
-STATUS: READY — phase-1 brief done and the cart exists; phase-2 archetype voicing + pedalboard confirmation pending.
+STATUS: SHIPPED — the wba.c radio station is built; phase-2 archetype voicing + pedalboard are cart-level polish.
 
 > Phase-1 intent-first brief for an ARTIST radio station (`wba.c`), written from the music
 > before reading any cousin cart (the firewall). Companion to the runbook

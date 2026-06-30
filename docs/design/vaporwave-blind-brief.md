@@ -1,6 +1,6 @@
 # Vaporwave — the blind band brief
 
-STATUS: READY — phase-1 brief done and the cart exists; phase-3 effects-chain wiring not yet done.
+STATUS: SHIPPED — the vapor.c radio station is built; phase-3 effects-chain wiring is cart-level polish.
 
 > Phase-1 intent-first brief for a new radio station (`vapor.c`), written from the music
 > before reading any cousin cart (the firewall). Companion to the runbook

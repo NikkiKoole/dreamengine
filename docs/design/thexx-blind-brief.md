@@ -1,6 +1,6 @@
 # The xx — the blind band brief
 
-STATUS: READY — phase-1 brief done and the cart exists; phase-2 two-voice call-and-response brain not yet built.
+STATUS: SHIPPED — the thexx.c radio station is built; phase-2 two-voice call-and-response brain is cart-level polish.
 
 > Phase-1 intent-first brief for an ARTIST radio station (`thexx.c`), written from the
 > music before reading any cousin cart (the firewall). Companion to the runbook
