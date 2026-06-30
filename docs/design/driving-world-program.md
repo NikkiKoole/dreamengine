@@ -137,6 +137,12 @@ The honest read: **the sandboxes are done; the payoff now is integration, not mo
 
 The outcome either way: **one spine, one `road_at()`,** fed from a seed or from reality.
 
+**✅ P0 resolved (2026-07-01) — the spine = `roadnet2` (network) + `streetlab` (junctions) + `roadnet`'s recipes (content).** Re-read both carts cold (orient + drive):
+- **`roadnet`** (1130 loc) is the *fuller* stack — world + hierarchy + a road graph + an L2 street level (blocks/lots/zones) + a working `road_at()` (`RoadHit`) + magnifier loupes. It has everything sloop needs, **but carries the v1 flaw** (two diverging street representations, field + graph). Content proven; code tangled.
+- **`roadnet2`** (580 loc) is the *clean vector-native* restart — spline highway core + β-skeleton web + valley-aware bridges + a drive mode. The **right single-representation architecture, but only the highway tier** (no street/zone/building content yet).
+
+The call: **carry `roadnet2` forward as the network layer** (it's already the clean core with web+bridges+drive). **Supply junctions from `streetlab`'s grammar** (now N-arm-native — see the 5-way) via the `gen_network`→junction seam, so *one junction renderer serves both procedural nodes and OSM nodes* (the convergence). **Regenerate the street content (zones/blocks/lots) on roadnet2's clean graph, using `roadnet` as the reference recipe — not a wholesale port.** Build **`road_at()` on roadnet2's single graph** (roadnet's `RoadHit` shows which fields to expose). **`roadnet` → reference/petri-dish; `roadnet2` → the spine.** So the spine is assembled from pieces already built and proven, not a from-scratch rewrite.
+
 **P1 — Wire `road_at()` into sloop (seam 1).** *The single highest-leverage move in the whole program* — it's what makes "a procedural world you drive" literally true, and it's the convergence field note 004 named. sloop already streams a collidable world; swap its internal generator for the chosen spine's `road_at()`. The backlog lists this as "rung 4" and "the only real remaining work."
 
 **P2 — Land NPC traffic on the real world (seam 1, layer 7).** traffic-ai's behaviour is built in trackgen; only the followed line changes (`cl[]` → `road_at()`). Once P1 lands, this is mostly a provider swap and makes the world feel *alive*, not empty.
@@ -152,7 +158,7 @@ The outcome either way: **one spine, one `road_at()`,** fed from a seed or from 
 
 ## Decisions to make (open forks)
 
-1. **The world spine — what *is* it?** The P0 blocker, reframed (see §Convergence): the spine is most likely **the common centerline-network + junction-grammar model, seedable from OSM or procedurally** — not roadnet or roadnet2 as a whole. Open: settle that intermediate model (a), and decide which unique generation-over-terrain pieces of roadnet/roadnet2 graft onto it (b). Neither cart is crowned or discarded; both are mined for the part nothing else covers.
+1. **The world spine — what *is* it?** ✅ **Resolved 2026-07-01 (see P0):** the spine = **`roadnet2` (clean vector network: spline core + β-skeleton web + bridges + drive) + `streetlab`'s N-arm junction grammar + `roadnet`'s street-content recipes regenerated on roadnet2's graph**, exposing one `road_at()`. `roadnet2` carries forward; `roadnet` becomes a reference/petri-dish (its content is proven but its dual-representation code is not ported).
 2. **Is the abstraction "roads" or "networks"?** Field note 004's open question. If networks, the spine's `road_at()` generalizes to rivers/rails/paths — worth knowing *before* P0 locks the data model.
 3. **Player view: top-down (sloop today) or pseudo-3D (citydrive's adapter)?** Affects whether seam 3 is on the main path or a side quest.
 
