@@ -178,6 +178,10 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
                              discovery) without reading the ~500-entry studioDocs.js or an LSP round trip
              cart-info.js    orient on ONE cart: screen/GW×GH, embedded de:source DRIFT vs the .c, registration
              cart-status.js  what's out of date (rebake / publish / stale / compendium)
+             cart-commit.js  the per-cart COMMIT helper: re-embed + lint + regen views + SCOPE-CHECK
+                             (refuses to sweep a foreign cart out of index.json) + commit by a derived
+                             pathspec. Dry-run by default; `-m "…" --commit` to fire. Bakes the two
+                             commit hazards (missed file / foreign-registry sweep) in as guards
              cart-todos.js   the navigable view over every cart's de:meta.todo[] polish punch-list (--grep/--count/<name>)
              cart-analyze.js complexity + global-state report; ranks spec-worthiness
              cart-index.js   computed technique index ("what cart teaches X") + coverage
@@ -346,7 +350,9 @@ music cart, **imagine the ideal band from the genre BEFORE reading any existing 
 > **Verify a bake by reading the embedded thumbnail or `build/.bake/<name>/screenshot.png`, NEVER
 > `build/screenshot.png`** (that one belongs to the running editor and drifts).
 > **After editing carts:** `node tools/cart-status.js` reports what's out of date (`--quiet` exits
-> nonzero if pending). Got a good demo run? Park its input track at
+> nonzero if pending). **To ship the cart, `node tools/cart-commit.js <name>`** runs the whole
+> routine (re-embed → lint → regen views → scope-check → commit by derived pathspec) with the
+> parallel-agent guards built in — dry-run by default, `-m "…" --commit` to fire. Got a good demo run? Park its input track at
 > `tools/clips/<cart>/NN-label.{script,beats,rec}` — a committed, deterministic seed that mints a
 > webm/gif on demand (`make-gif.js … --recipe <NN-label>`); cheapest win in the repo.
 
