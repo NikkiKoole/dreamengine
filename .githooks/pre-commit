@@ -25,6 +25,20 @@ if echo "$staged" | grep -qE '^(editor/public/carts/index\.json|tools/carts/)'; 
   fi
 fi
 
+# ★ designs / TODO-LIST board: docs/design-board.html is generated from each design doc's
+# + ADR's STATUS line AND every cart's de:meta.todo[] backlog. So it goes stale when a cart
+# source (todo edit), a docs/design or docs/decisions doc (STATUS), or a top-level docs/*.md
+# status changes — and the regen is easy to forget (it bit: a citydrive todo edit shipped
+# without rebuilding the board, the count drifted 260→264). Same shape as the compendium
+# gate above; scoped to the feeding paths so an unrelated commit never blocks.
+if echo "$staged" | grep -qE '^(tools/carts/|docs/(design|decisions)/|docs/[^/]+\.md$)'; then
+  if ! node tools/build-design-board.js --check >/dev/null 2>&1; then
+    echo "[pre-commit] ✗ docs/design-board.html is STALE (a STATUS line or cart de:meta.todo[] changed)."
+    echo "             Fix: node tools/build-design-board.js && git add docs/design-board.html"
+    exit 1
+  fi
+fi
+
 # Cart source-embed drift: a .cart.png embeds its de:source (the C the EDITOR loads).
 # A thumbnail-only `--run` bake, or staging the .c without re-embedding, leaves that
 # chunk STALE — the editor then loads old code ("the cart ignores my changes"), and the
