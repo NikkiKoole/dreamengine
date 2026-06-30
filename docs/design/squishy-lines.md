@@ -3,9 +3,10 @@
 STATUS: BUILDING (2026-06-30) — design settled (320×320, 2-tone first, boil is an opt-in mode).
 Shipped: 8 brushes (ink/pen/fineliner/marker/chalk + Krita-style **sketch**/**spray**/**bristle**) in
 a **tool dropdown**, a thickness slider, the **bevel** emboss, the **boil** living loop, and a
-**4-colour pen** (black/blue/red/green) (`tools/carts/squishy.c`). The core is done; what's left:
-**fill + dpaint-style dithered fills** (with a persistent-layer refactor — see parking lot), the
-pixelsnap animated-icon export, a `spec()`, and the boil-cache perf pass. v1 plan + progress below.
+**4-colour pen**, and **dithered strokes** (dpaint dots/checker/grid filling the fat brushes via
+`fillp`) (`tools/carts/squishy.c`). The core is done; what's left: a real **flood-fill** (with a
+persistent-layer refactor — see parking lot), the pixelsnap animated-icon export, a `spec()`, and the
+boil-cache perf pass. v1 plan + progress below.
 
 > The shower idea: we'd been making cart icons by running an AI-generated image through a
 > `.cart.js` (sprite-draw + `pixelsnap`). The results are nice — but **frozen**. What if you could
@@ -209,15 +210,16 @@ beautiful instead of text labels.
 
 The maker has more drawing ideas queued; this cart is the home they slot into. Candidates to consider
 once v1 lands (not committed):
-- **Fill + dpaint-style dithered fills** (wanted) — a flood-fill tool, and `dpaint`'s lovely
-  **Bayer/`fillp` dither patterns + dithered gradient** as fill styles (steal the masks from
-  `dpaint.c`). Fill a beveled blob with a dither ramp = the tinyjam knob look. **Architecture note:**
-  flood-fill is a *raster* op on the rendered result, but this cart re-renders every stroke from data
-  each frame and `pget` reads *last* frame — so fill doesn't fit the pure-vector model cleanly. It
-  wants the **persistent layer buffer** (the same one the boil-cache perf todo needs): strokes/fills
-  composite into a layer; fill flood-fills *that*. So do fill + dither *with* the layer-buffer
-  refactor, not before — they're one chunk, and it also unlocks the boil cache. The dither *patterns*
-  themselves are cheap and could land first as a brush fill-style.
+- **Dithered strokes (shipped, 2026-06-30)** — the *intermediate* step before flood-fill (the maker's
+  idea): the fat stamp brushes can be filled with a dpaint-style dither pattern (`PATTERNS[]` =
+  dots/checker/grid via `fillp(pat, PAPER)`, set around the body pass only so bevel rims stay solid;
+  a cycle button in the bar). Per-stroke (stored), so it stays inside the pure-vector model — **no
+  layer buffer needed**. This is the cheap 80% of the dpaint-dither want.
+- **Flood-fill (still wanted)** — the *raster* other half: flood a bounded region, lay a dither/ramp
+  in it. This one genuinely needs the **persistent layer buffer** (flood-fill is a raster op; the cart
+  re-renders from data each frame and `pget` reads *last* frame). Do it *with* the layer-buffer
+  refactor (the same one the boil-cache perf todo needs) — one chunk that also unlocks the boil cache.
+  Filling a beveled blob with a dither ramp = the tinyjam-knob look.
 - pressure from dwell-time as well as speed; smoothing/stabiliser on the input path
 - symmetry/mirror modes (kaleidoscope ink) — `linesym` is adjacent
 - a "redraw" boil variant where the *whole path* re-flows (rougher, more animated)
