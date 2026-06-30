@@ -169,7 +169,7 @@ static void project(float wx, float wy, float wz, float *sx, float *sy) {
     // a real pitched PINHOLE camera, chasing from behind+above: perspective divide by depth →
     // foreshortening + a horizon + towering buildings (the thing the parallel-oblique modes can't do).
     // pitch = degrees the optical axis tilts BELOW horizontal (small = look ahead, 90 = straight down).
-    float F  = ry + S.setback;                  // forward distance ahead of the eye (eye sits setback behind the car)
+    float F  = S.setback - ry;                  // forward ahead of the eye (AHEAD is -ry in this heading-up frame)
     float Hh = (wz - S.camz) - S.eye;           // height relative to the eye
     float cd = cos_deg(S.pitch), sd = sin_deg(S.pitch);
     float depth = F*cd - Hh*sd;                 // along the optical axis (into screen)
@@ -388,7 +388,7 @@ static void draw_bldg_geo(Bldg *b, bool leanout) {
     // PERSPECTIVE: true back-face cull in plan view — a wall shows iff its outward normal faces the
     // eye (the oblique "opposite the roof shift" test assumes screen-up = up, which perspective breaks).
     float bcx=(b->x0+b->x1)*0.5f - S.camx, bcy=(b->y0+b->y1)*0.5f - S.camy;
-    float brx = bcx*c - bcy*s, bry = bcx*s + bcy*c + S.setback;   // building centre relative to the eye (yaw space)
+    float brx = bcx*c - bcy*s, bry = (bcx*s + bcy*c) - S.setback;  // building centre relative to the eye (yaw space; eye sits +setback behind)
     float bl = sqrtf(brx*brx+bry*bry)+1e-4f;
     for (int e=0;e<4;e++) {
       float nsx = nwx[e]*c - nwy[e]*s, nsy = nwx[e]*s + nwy[e]*c;
@@ -413,9 +413,16 @@ static void draw_bldg_geo(Bldg *b, bool leanout) {
   for (int i=0;i<n;i++) for (int j=i+1;j<n;j++)
     if (key_[j] < key_[i]) { float t=key_[i];key_[i]=key_[j];key_[j]=t; int o=order[i];order[i]=order[j];order[j]=o; }
 
+  // perspective draws the roof FIRST so the near (front) walls paint OVER it (street-level
+  // occlusion); the oblique modes draw it LAST so it caps the top. tritex is affine (wrong under
+  // perspective) and heavy on big close-up walls, so perspective uses flat-shaded walls.
+  bool persp = (S.mode == M_PERSP);
+  if (persp)
+    quadfill((int)rx[0],(int)ry[0],(int)rx[1],(int)ry[1],(int)rx[2],(int)ry[2],(int)rx[3],(int)ry[3], MAT[b->mat].roof);
+
   for (int k=0;k<n;k++) {
     int e = order[k]; int a=e, bb=(e+1)&3;
-    if (S.tex) {
+    if (S.tex && !persp) {
       float wlen = (e&1) ? (b->y1-b->y0) : (b->x1-b->x0);
       int rxN = clampi((int)(wlen/TILE_W + 0.5f), 1, MAXREP);
       int ryN = clampi((int)(b->h /TILE_W + 0.5f), 1, MAXREP);
@@ -428,9 +435,8 @@ static void draw_bldg_geo(Bldg *b, bool leanout) {
                (int)rx[bb],(int)ry[bb], (int)rx[a],(int)ry[a], col);
     }
   }
-  // roof cap
-  quadfill((int)rx[0],(int)ry[0],(int)rx[1],(int)ry[1],
-           (int)rx[2],(int)ry[2],(int)rx[3],(int)ry[3], MAT[b->mat].roof);
+  if (!persp)  // roof cap (oblique: on top)
+    quadfill((int)rx[0],(int)ry[0],(int)rx[1],(int)ry[1],(int)rx[2],(int)ry[2],(int)rx[3],(int)ry[3], MAT[b->mat].roof);
 }
 
 // mode 3: screen-aligned billboard card always facing the camera
