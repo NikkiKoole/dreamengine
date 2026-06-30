@@ -34,20 +34,22 @@ const PH = {
   building:  { glyph: "[~]", c: "var(--orange)", label: "IN PROGRESS",          mode: "row"  },
   other:     { glyph: "[?]", c: "var(--indigo)", label: "LIVING / UNCLASSIFIED", mode: "row" },
   exploring: { glyph: "( )", c: "var(--blue)",   label: "EXPLORING / IDEAS",    mode: "chip" },
-  shipped:   { glyph: "[x]", c: "var(--dim)",    label: "SHIPPED",              mode: "chip" },
+  shipped:   { glyph: "[x]", c: "var(--dim)",    label: "SHIPPED",              mode: "chip", collapsed: true },
   cut:       { glyph: "[/]", c: "var(--red)",    label: "CUT / SUPERSEDED",     mode: "chip" },
 };
 const RENDER_ORDER = ["ready", "building", "other", "exploring", "shipped", "cut"];
 
 const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const fmtDate = d => { if (!d) return ""; const [, m, day] = d.split("-"); return `${+day} ${MON[+m - 1] || ""}`; };
-const bar = (done, total) => { const n = 8, f = total ? Math.round(n * done / total) : 0; return "█".repeat(f) + "░".repeat(n - f); };
 
 const docRel = e => e.rel.replace(/^docs\//, "");
 
 function rowItem(e) {
   let meta = "";
-  if (e.plan) meta += `<span class="pb">${bar(e.plan.done, e.plan.total)}</span><span class="pn">${e.plan.done}/${e.plan.total}</span>`;
+  if (e.plan) {
+    const pct = e.plan.total ? Math.round(100 * e.plan.done / e.plan.total) : 0;
+    meta += `<span class="pb"><i style="width:${pct}%"></i></span><span class="pn">${e.plan.done}/${e.plan.total}</span>`;
+  }
   if (e.date) meta += `<span class="dt">${esc(fmtDate(e.date))}</span>`;
   const status = e.status ? ` title="${esc(e.status)}"` : "";
   return `<a class="row" data-doc="${esc(docRel(e))}" href="#"${status}><span class="ck">${PH[e.phase].glyph}</span><span class="ttl">${esc(e.title)}</span><span class="meta">${meta}</span></a>`;
@@ -64,8 +66,12 @@ function phaseBlock(k) {
   const body = ph.mode === "row"
     ? group.map(rowItem).join("")
     : `<div class="chips">${group.map(chipItem).join("")}</div>`;
+  const hd = `<span class="lead">▸</span>${esc(ph.label)} <span class="n">${group.length}</span>`;
+  if (ph.collapsed) return `<section class="ph" style="--c:${ph.c}">
+    <details><summary>${hd}</summary>${body}</details>
+  </section>`;
   return `<section class="ph" style="--c:${ph.c}">
-    <h2><span class="lead">▸</span>${esc(ph.label)} <span class="n">${group.length}</span></h2>
+    <h2>${hd}</h2>
     ${body}
   </section>`;
 }
@@ -132,13 +138,7 @@ function CSS() {
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.5}
-/* faint CRT scanline + vignette, non-interactive */
-body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
-  background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.16) 2px 3px);
-  mix-blend-mode:multiply;opacity:.5}
-body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:8;
-  background:radial-gradient(120% 90% at 50% 0%,transparent 60%,rgba(0,0,0,.45))}
-#root{max-width:880px;margin:0 auto;padding:34px 26px 120px;position:relative;z-index:1}
+#root{max-width:880px;margin:0 auto;padding:34px 26px 120px}
 
 header{border-bottom:1px solid #20242c;padding-bottom:18px;margin-bottom:8px}
 h1{font-size:30px;letter-spacing:4px;margin:0;color:var(--bright);font-weight:700;
@@ -153,6 +153,13 @@ section.ph h2{font-size:12px;letter-spacing:2px;color:var(--c);margin:0 0 8px;fo
   text-transform:uppercase;display:flex;align-items:center;gap:8px}
 section.ph h2 .lead{opacity:.7}
 section.ph h2 .n{color:var(--dim);font-weight:400;letter-spacing:0}
+/* collapsed phase (SHIPPED) — a closed accordion */
+section.ph details>summary{font-size:12px;letter-spacing:2px;color:var(--c);font-weight:700;text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;margin-bottom:8px}
+section.ph details>summary::-webkit-details-marker{display:none}
+section.ph summary .lead{display:inline-block;opacity:.7;transition:transform .12s}
+section.ph details[open]>summary .lead{transform:rotate(90deg)}
+section.ph summary .n{color:var(--dim);font-weight:400;letter-spacing:0}
 
 /* full rows — the actionable phases */
 a.row{display:flex;align-items:center;gap:10px;padding:4px 8px;text-decoration:none;color:var(--ink);
@@ -161,8 +168,9 @@ a.row:hover{background:var(--panel);border-left-color:var(--c)}
 a.row .ck{color:var(--c);flex:none;font-weight:700}
 a.row .ttl{color:var(--bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto}
 a.row .meta{flex:none;display:flex;align-items:center;gap:10px;color:var(--dim);font-size:11px;white-space:nowrap}
-a.row .pb{color:var(--c);letter-spacing:-1px}
-a.row .pn{color:var(--dim)}
+a.row .pb{display:inline-block;width:52px;height:4px;background:#222732;border:1px solid #2a3340;vertical-align:middle}
+a.row .pb i{display:block;height:100%;background:var(--c)}
+a.row .pn{color:var(--dim);font-variant-numeric:tabular-nums}
 a.row .dt{color:var(--dim);min-width:48px;text-align:right}
 
 /* chip rows — the long tails (exploring / shipped / cut / ADRs) */
@@ -174,6 +182,7 @@ section.ph[style*="--dim"] a.chip,.ph .chip{} /* shipped/ADR phases use --c=dim 
 a.chip.struck{text-decoration:line-through;color:var(--dim)}
 
 footer{margin-top:48px;padding-top:16px;border-top:1px solid #20242c;color:#3f4651;font-size:11px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 `;
 }
 
