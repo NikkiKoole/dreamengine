@@ -15,7 +15,7 @@ concepts:
 * agents
 * workflow
 
-## status: review
+## status: incorporated
 
 # Generated Cart Index
 
@@ -137,3 +137,9 @@ A generated `index.json` is not merely a convenience.
 It removes a synchronization problem that becomes increasingly expensive as more humans and AI agents work on the repository simultaneously.
 
 By allowing each cart to own its own metadata, DreamEngine becomes easier to scale, easier to automate and easier to evolve.
+
+---
+
+## Outcome (2026-06-30)
+
+Fully shipped as the note proposed: `tools/build-cart-index.js` GENERATES `editor/public/carts/index.json` from each cart's embedded `de:meta` block (the "metadata in cart.c" option), with `--check` gating staleness; the cart is the sole source of truth and appears in the index iff it has a `de:meta`. The multi-agent merge conflict that motivated the note is explicitly retired (CLAUDE.md hazard #2), and `tools/lint-carts.js` asserts the index stays in sync. Schema in `docs/design/cart-metadata.md`.

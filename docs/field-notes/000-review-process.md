@@ -5,7 +5,7 @@
 > Later notes may refine, extend or replace it.
 
 Status
-Observed
+Incorporated
 
 Confidence
 High
@@ -108,3 +108,9 @@ or
 023-knowledge-assembly.md
 
 Why?
+
+---
+
+## Outcome (2026-06-30)
+
+The core insight — that the review becomes an incremental, append-only journal of field notes rather than one final report, with notes promoted to ADRs/design docs over time — is realized. The journal lives in `docs/field-notes/` (15 numbered notes), is indexed by the generated `FIELD-NOTES.md` (`tools/build-field-notes.js`, `--check` gated), and is surfaced visually by `tools/build-reflections.js` → `docs/reflections.html` (the ★ reflections page). The append-only rule is codified in `README.md`.

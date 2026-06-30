@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Observed
+Incorporated
 
 **Date**
 2026-06-29
@@ -89,3 +89,9 @@ committed — only the distilled deltas.
 - 008-the-identity-of-dreamengine
 - 009-the-negative-space-of-dreamengine
 - 100-first-synthesis
+
+---
+
+## Outcome (2026-06-30)
+
+The core practice — distill an external-AI brainstorm into a credited, ground-truth-mapped *delta* doc rather than committing the transcript — is now an established workflow, generalized into the "blind brief" pattern: 13 `docs/design/*-blind-brief.md` intent-first briefs + the firewall guide `docs/guides/cart-authoring-prompt.md` + `*-followup.md` delta docs. Still open: the proposed ingest *tool* (brainstorm export → draft delta doc) was never built, and the transcript-archiving / delta-vs-note boundary questions remain unsettled.

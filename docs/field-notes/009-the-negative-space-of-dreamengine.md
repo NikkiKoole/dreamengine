@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Observed
+Incorporated
 
 **Date**
 2026-06-26
@@ -120,3 +120,9 @@ If so:
 * 006-the-evolution-of-the-workflow
 * 007-the-evolution-of-documentation
 * 008-the-identity-of-dreamengine
+
+---
+
+## Outcome (2026-06-30)
+
+The "reject premature complexity; postpone until evidence earns it" principle is materially recorded as a cluster of cut/defer ADRs — 0001 (coroutines), 0005 (tile-collision), 0008 (turtle graphics), 0013 (music API), 0014 (convenience helpers), 0019 (oscillator AA) — plus the library-carts-not-engine boundary (ADR-0006) and the API-lean stance. The negative-space framing is promoted into the curated history (`history-page.md` / `history.html`) and a section of `docs/reflections.html`. When to make reversible speculative leaps remains genuinely open.

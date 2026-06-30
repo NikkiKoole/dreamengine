@@ -7,7 +7,7 @@
 > Future observations may refine, extend or replace this working theory.
 
 **Status**
-Working Theory
+Incorporated
 
 **Date**
 2026-06-26
@@ -154,3 +154,9 @@ The software becomes one artifact produced by this process rather than the sole 
 * 007-the-evolution-of-documentation
 * 008-the-identity-of-dreamengine
 * 009-the-negative-space-of-dreamengine
+
+---
+
+## Outcome (2026-06-30)
+
+The thesis — that DreamEngine is organized around a Capture→Promotion knowledge loop and should be judged by its ability to capture/preserve/reuse understanding — has been operationalized in tooling built to serve those rungs: context assembly (`tools/build-context.js`, `orient.js`, `cart-outline.js`), cross-repo theme dossiers (`tools/topic-brief.js`), the design lifecycle/promotion board (`tools/design-board.js`), and the journal's own generated index (`tools/build-field-notes.js` → `FIELD-NOTES.md`) and visual view (`build-reflections.js`). The loop is no longer just an observation; its stages have dedicated generated-view tooling.

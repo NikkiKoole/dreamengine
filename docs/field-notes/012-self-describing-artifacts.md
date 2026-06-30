@@ -16,7 +16,7 @@ concepts:
 * tooling
 * repository
 
-## status: review
+## status: incorporated
 
 # Self-Describing Artifacts
 
@@ -145,3 +145,9 @@ If every artifact can answer:
 * How should I be used?
 
 then documentation, indexes, search systems and AI tooling become natural views over the repository rather than separate systems that must be maintained.
+
+---
+
+## Outcome (2026-06-30)
+
+This philosophy is load-bearing across the repo: carts carry `de:meta` blocks (~418 `.c` files, documented in `cart-metadata.md`), `.cart.png` embeds `de:source`/sprites/settings as zTXt and carts self-execute (`cart-as-script.md`), the API self-describes via `studioDocs.js`, tools via header contracts gated by `lint-docs.js`, and field notes via frontmatter consumed by `build-field-notes.js`. The "artifact is the source of truth, indexes are generated views" rule is realized by `build-cart-index.js` / `build-compendium.js` / `build-field-notes.js`.

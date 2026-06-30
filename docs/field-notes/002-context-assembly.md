@@ -3,7 +3,7 @@
 > This note captures a discovery made during the evolution of DreamEngine.
 
 **Status**
-Observed
+Incorporated
 
 **Date**
 2026-06-26
@@ -41,3 +41,9 @@ DreamEngine may eventually benefit from a context builder that assembles design 
 - 003-curation
 - 006-the-evolution-of-the-workflow
 - 007-the-evolution-of-documentation
+
+---
+
+## Outcome (2026-06-30)
+
+The "assemble the smallest relevant task-specific context automatically" idea is realized in tooling that cites this note: `tools/build-context.js` (one cart's de:meta + the prose docs that mention it), `tools/topic-brief.js` (the horizontal feature dossier), and `tools/orient.js` (the cold-start front door). The note's open questions about stale-doc detection and stronger-than-tag links are partly addressed by `tools/doc-status.js` + `tools/design-board.js` and `tools/lint-xrefs.js` (docs that should cross-link but don't).

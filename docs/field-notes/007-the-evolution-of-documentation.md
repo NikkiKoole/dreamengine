@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Observed
+Incorporated
 
 **Date**
 2026-06-26
@@ -131,3 +131,9 @@ The documentation becomes part of the engine's long-term memory.
 * 002-context-assembly
 * 005-evolution-through-inflection-points
 * 006-the-evolution-of-the-workflow
+
+---
+
+## Outcome (2026-06-30)
+
+The shift from "documentation of what exists" to "documentation of how decisions are made" is enacted: the `docs/decisions/` ADR series (0001–0024, incl. the governance ADR `0022-collaboration-is-the-north-star.md`) is the Governance stage this note predicts, and CLAUDE.md's "Making new things discoverable" rules codify the Observation→design-note→ADR→workflow promotion ladder. The note's open question — how field notes feed back — was answered by `tools/build-field-notes.js` + `FIELD-NOTES.md` and the public `docs/reflections.html` view.

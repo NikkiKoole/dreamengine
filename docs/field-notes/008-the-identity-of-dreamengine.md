@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Hypothesis
+Incorporated
 
 **Date**
 2026-06-26
@@ -119,3 +119,9 @@ The software becomes one expression of that process rather than its ultimate goa
 * 005-evolution-through-inflection-points
 * 006-the-evolution-of-the-workflow
 * 007-the-evolution-of-documentation
+
+---
+
+## Outcome (2026-06-30)
+
+The hypothesis "DreamEngine is an environment for exploring questions through construction" was adopted nearly verbatim as the project's stated identity in `docs/what-is-this.md` ("a personal environment for exploring ideas by building them… accumulating understanding"), consolidated 2026-06-29. It is the spine of `100-first-synthesis.md` and a section of `docs/reflections.html`, and ADR-0022 independently moves the project's measured goal away from engine/API/cart counts toward the collaboration-and-exploration process this note argues for.

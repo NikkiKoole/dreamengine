@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Observed
+Working Theory
 
 **Date**
 2026-06-26
@@ -90,3 +90,9 @@ Roads therefore represent more than graphics or gameplay—they represent connec
 * 002-context-assembly
 * 003-curation
 * 005-evolution-through-inflection-points
+
+---
+
+## Outcome (2026-06-30)
+
+Roads visibly became a convergence layer: real-world import landed via `data-tools/roadview/osm-roads.js` (OSM → runtime vector features), correctness is gated by `tools/road-check.js`, the layering was ratified in ADR-0021 (road geometry in the 2D sandbox; the pseudo-3D view is an adapter), and `docs/design/roadnet.md` frames roads as a streaming network over a POI node lattice — the "the real abstraction is networks" hunch this note raised. It stays partial because that network abstraction isn't yet generalized to other types (pedestrians / rivers / utilities).

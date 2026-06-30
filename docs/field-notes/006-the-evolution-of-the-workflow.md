@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Observed
+Incorporated
 
 **Date**
 2026-06-26
@@ -149,3 +149,9 @@ Everything else may gradually become part of the system.
 * 002-context-assembly
 * 004-roads-as-convergence-layer
 * 005-evolution-through-inflection-points
+
+---
+
+## Outcome (2026-06-30)
+
+The "promote recurring decisions into the system" thesis is now the explicit self-description in `docs/what-is-this.md` ("shifted from optimizing code to optimizing the production of code"). Its examples are all real: API promotion (the four-place rule in `CLAUDE.md`), verification gates (`tools/`), per-cart metadata + generated index (`tools/build-cart-index.js`), the generated compendium (`tools/build-compendium.js`), context assembly (`tools/build-context.js` / `orient.js`), and the field notes themselves (`tools/build-field-notes.js`). The capture→promotion cycle is restated as the canonical Knowledge Loop in `100-first-synthesis.md`.

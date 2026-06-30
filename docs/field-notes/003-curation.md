@@ -5,6 +5,11 @@
 > Later notes may refine, extend or replace it.
 
 003 — Curation over Classification
+
+**Status**
+Working Theory
+**Date**
+2026-06-30
 Observation
 
 As the number of carts grows, the problem is no longer creating metadata.
@@ -106,3 +111,9 @@ Confidence
 High.
 
 The need for curation naturally follows from the current size of the project.
+
+---
+
+## Outcome (2026-06-30)
+
+The lifecycle-status + curation-over-classification direction shipped at the metadata layer: `tools/lint-carts.js` defines and validates the exact vocabulary this note proposed (`active/showcase/retired/archive/hidden`) and `docs/design/cart-metadata.md` documents it; 418 carts now carry a `status`, and the "derive views from one source of truth" philosophy is realized broadly (generated `index.json`, compendium, design-board, reflections). Still open: the curation payoff — `replaces`/`successor` relationship fields and the generated curated collections (Showcase, Best-of, Related) — so this stays a working theory.

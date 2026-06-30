@@ -14,7 +14,7 @@ concepts:
 * documentation
 * agents
 
-## status: observed
+## status: working theory
 
 # Tool Discovery and Documentation
 
@@ -150,3 +150,9 @@ Existing tools do not need to be updated immediately.
 Whenever a tool is modified, its header can be added or improved.
 
 New tools should include the header from the start.
+
+---
+
+## Outcome (2026-06-30)
+
+The goal — making the growing `tools/` collection discoverable — shipped, but via a different mechanism than proposed: instead of `@tool`/`@summary` headers feeding a generated `docs/tools.md`, `tools/lint-docs.js` enforces a discoverability gate (every `tools/*.{js,sh}` must appear in the CLAUDE.md tools list, the always-in-context index), and each tool carries a free-form header contract as its source of truth. The principle is incorporated; the specific structured-header schema + generated index + MCP exposure are not, so it stays a working theory.

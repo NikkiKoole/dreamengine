@@ -6,7 +6,7 @@
 > Later notes may refine, extend or replace it.
 
 **Status**
-Observed
+Working Theory
 
 **Date**
 2026-06-26
@@ -104,3 +104,9 @@ it may be more useful to ask:
 
 * 003-curation
 * 004-roads-as-convergence-layer
+
+---
+
+## Outcome (2026-06-30)
+
+The inflection-points lens was carried into synthesis and curation rather than a tool: it is reframed as one stage of the knowledge loop in `100-first-synthesis.md`, surfaced as a section of `docs/reflections.html`, and echoed by the history page (`docs/guides/history-page.md`, `docs/history.html`, `tools/build-history.js`), which tells the project's story through turning points rather than a flat cart list. No artifact yet names specific inflection carts as a public story, so it remains an observation feeding curation.
