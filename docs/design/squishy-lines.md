@@ -3,10 +3,11 @@
 STATUS: BUILDING (2026-06-30) — design settled (320×320, 2-tone first, boil is an opt-in mode).
 Shipped: 8 brushes (ink/pen/fineliner/marker/chalk + Krita-style **sketch**/**spray**/**bristle**) in
 a **tool dropdown**, a thickness slider, the **bevel** emboss, the **boil** living loop, and a
-**4-colour pen**, and **dithered strokes** (dpaint dots/checker/grid filling the fat brushes via
-`fillp`) (`tools/carts/squishy.c`). The core is done; what's left: a real **flood-fill** (with a
-persistent-layer refactor — see parking lot), the pixelsnap animated-icon export, a `spec()`, and the
-boil-cache perf pass. v1 plan + progress below.
+**4-colour pen**, **dithered strokes** (Bayer density ramp via `fillp`), and **per-stroke bevel/boil**
+(stage 1 of the select tool) (`tools/carts/squishy.c`). The core is done; what's left: the **select
+tool** (stages 2–3 — hit-test + property panel), a real **flood-fill** (with a persistent-layer
+refactor — see parking lot), the pixelsnap animated-icon export, a `spec()`, and the boil-cache perf
+pass. v1 plan + progress below.
 
 > The shower idea: we'd been making cart icons by running an AI-generated image through a
 > `.cart.js` (sprite-draw + `pixelsnap`). The results are nice — but **frozen**. What if you could
@@ -214,15 +215,19 @@ once v1 lands (not committed):
 - **★ Select tool — per-stroke properties (the big one, maker's idea).** The whole drawing is already
   *vector data* (a list of strokes, each a path of nodes), so a SELECT tool is natural: click near a
   stroke → hit-test (point-to-polyline distance) → select it → a contextual property editor tweaks
-  *that one stroke*: colour, dither, **bevel (size / direction)**, **boil intensity**, thickness,
-  tool. **The key shift this forces:** bevel and boil are currently *global* toggles — to set them
-  per-stroke they must become **per-stroke properties** (captured from the current settings at draw
-  time, exactly like colour/tool/thickness/pattern already are). That's very doable (strokes are
-  structs) and turns the cart from a paint tool into a tiny **non-destructive vector editor** — some
-  strokes beveled big, some boiling hard, different colours, all editable after the fact. Biggest
-  single feature so far (selection + hit-test + per-stroke bevel/boil migration + a property panel),
-  but it's the natural endpoint of "it's all just nodes." Pairs beautifully with everything already
-  built.
+  *that one stroke*. Built in three stages:
+  - **Stage 1 — per-stroke bevel + boil (SHIPPED 2026-07-01).** Migrated `bevel` (bool) and `boil`
+    (intensity 0..1) from global toggles to per-stroke fields, captured at draw like
+    colour/tool/thickness/pattern. The toolbar toggles now set the **default for new strokes**
+    (non-retroactive — drawing a plain stroke then toggling bevel leaves it plain). `draw()` animates
+    each stroke by its own `boil` (still strokes use a stable seed; boiling ones cycle the variant).
+    Already expressive: some strokes beveled, some boiling, some still.
+  - **Stage 2 — select + hit-test (TODO):** a SELECT tool; click near a stroke, point-to-polyline
+    distance picks it, highlight its path; store the selected index.
+  - **Stage 3 — contextual property panel (TODO):** when a stroke is selected, show editors (swatch /
+    dither / bevel size+dir / boil intensity / thickness) that write back to it and re-render live.
+  Turns the cart into a tiny **non-destructive vector editor** — the natural endpoint of "it's all
+  just nodes." (Per-stroke bevel *size/direction* — beyond on/off — also lands with stage 3.)
 - **Dithered strokes (shipped, 2026-06-30)** — the *intermediate* step before flood-fill (the maker's
   idea): the fat stamp brushes can be filled with a dpaint-style **Bayer-ordered density ramp**
   (`PATTERNS[]` = 16-bit `fillp` masks computed from the 4×4 Bayer matrix, ~12/25/50/75/87% ink; set
