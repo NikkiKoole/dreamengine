@@ -41,6 +41,20 @@ de:meta */
 // click 4-4-2 / 4-3-3 to switch shape; in the MARKET click BUY on a listed
 // player or SELL on one of yours; click PLAY MATCH to sim the round; click
 // LEAGUE to see the table. Keys: TAB cycles SQUAD/MARKET/TABLE, ENTER plays.
+//
+// TODO — inspiration: SENSIBLE WORLD OF SOCCER (the touchstone for this cart).
+// Cool things SWOS did that we could steal:
+//   - PLAYABLE arcade matches: tiny top-down "blobby" players + after-touch
+//     (hold a direction after you shoot to curve the ball). The manager+play
+//     hybrid is the soul — right now we only auto-sim.
+//   - A whole-world DB with the full promotion/relegation pyramid (it had the
+//     entire football world). We have 3 tiers; the climb could be deeper.
+//   - A long CAREER (~20 seasons): get headhunted by bigger clubs when you do
+//     well; contracts; trophies cabinet.
+//   - Per-player SKILLS, not one rating (pace / tackling / shooting / heading),
+//     plus YOUTH players coming through the academy.
+//   - Match feedback as a GOALSCORER ticker / highlights reel, not just a score.
+//   - Tactics screen you drag (we have the formation pitch — extend it).
 
 // ---------------------------------------------------------------------------
 // positions
