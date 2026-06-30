@@ -81,6 +81,14 @@ function ic_brs() {
   return flat(g)
 }
 
+// 18 — the SELECT tool icon: a dashed marquee box (reads as "selection")
+function ic_select() {
+  const g = blank()
+  for (let x = 2; x < 14; x += 2) { pixel(g, x, 2, K); pixel(g, x, 13, K) }   // top + bottom
+  for (let y = 2; y < 14; y += 2) { pixel(g, 2, y, K); pixel(g, 13, y, K) }   // left + right
+  return flat(g)
+}
+
 // 8..11 — solid colour swatches for the palette picker (must match COLORS[] in squishy.c)
 const swatch = (c) => flat(blank(16, 16, c))
 
@@ -103,5 +111,6 @@ const sprites = {
   8: swatch(16), 9: swatch(12), 10: swatch(8), 11: swatch(3),     // ink / blue / red / dk-green
 }
 PAT_MASKS.forEach((m, i) => { sprites[12 + i] = patSwatch(m) })   // 12.. = the dither ramp
+sprites[18] = ic_select()                                          // 18 = select-tool icon
 
 module.exports = { screenW: 320, screenH: 320, scale: 3, sprites }

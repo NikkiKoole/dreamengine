@@ -11,8 +11,8 @@
   ],
   "description": {
     "summary": "Draw with a velocity-sensitive ink brush — lines swell when you go slow, thin out when you go fast, and taper to a point at each end. Pick a tool, thickness, and bevel in the top panel.",
-    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). BEVEL embosses a stroke into a faux-3D rim (light from the top-left); BOIL re-renders it through a few jittered seeds cycling ~7.5fps so it breathes (hand-drawn-animation style, almost free since rendering is a pure function of (stroke, seed)). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp) — the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
-    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle), drag the thickness slider, set BVL (bevel) and BOIL (living wobble) for new strokes, tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
+    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). BEVEL embosses a stroke into a faux-3D rim (light from the top-left); BOIL re-renders it through a few jittered seeds cycling ~7.5fps so it breathes (hand-drawn-animation style, almost free since rendering is a pure function of (stroke, seed)). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT tool (last in the dropdown) picks the nearest stroke by click and outlines it — the groundwork for editing a single stroke's properties (coming next). A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp) — the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
+    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle + SELECT), drag the thickness slider, set BVL (bevel) and BOIL (living wobble) for new strokes, tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
   },
   "todo": [
     "Polish the tool-icon glyphs — ink/chalk/sketch read a bit muddy at 16px (sprite-draw.js in squishy.cart.js).",
@@ -73,8 +73,8 @@ static const int PATTERNS[NPATTERNS] = { 0x0000, 0x7FDF, 0x5F5F, 0x5A5A, 0x0A0A,
 #define MIN_SPACING   1.6f         // px between captured path points
 #define STAMP_SPACING 0.7f         // px between stamps when rendering a segment (dense = solid)
 
-// how a tool draws its stored path:
-enum { K_STAMP, K_CHALK, K_SKETCH, K_SPRAY, K_BRISTLE };
+// how a tool draws its stored path (K_SELECT draws nothing — it picks strokes):
+enum { K_STAMP, K_CHALK, K_SKETCH, K_SPRAY, K_BRISTLE, K_SELECT };
 
 // a tool = a brush recipe. width swings between minw (full speed) and maxw
 // (standstill); speedref = px/frame where width bottoms out; noise = per-stamp
@@ -91,8 +91,11 @@ static const Brush BRUSHES[] = {
     { 2.0f, 2.0f, 12.0f, 0.00f, 1.0f, K_SKETCH,  "skt" },   // sketch: a hairy web of threads
     { 3.0f,13.0f, 11.0f, 0.00f, 3.0f, K_SPRAY,   "spr" },   // airbrush: scattered dots (maxw = cloud)
     { 4.0f, 9.0f, 10.0f, 0.10f, 4.0f, K_BRISTLE, "brs" },   // bristle: raked parallel hairs
+    { 0.0f, 0.0f,  0.0f, 0.00f, 0.0f, K_SELECT,  "sel" },   // SELECT: pick a stroke (draws nothing)
 };
 #define NTOOLS ((int)(sizeof(BRUSHES) / sizeof(BRUSHES[0])))
+// sprite slot per tool (icons 0..7 are 1:1; select borrows slot 18, past the swatch/pattern sprites)
+static const int TOOL_ICON[NTOOLS] = { 0, 1, 2, 3, 4, 5, 6, 7, 18 };
 #define SKETCH_R     22.0f     // px: a thread links to prior points within this reach (à la Krita Sketch)
 #define SKETCH_R2    (SKETCH_R * SKETCH_R)
 #define SKETCH_TRIES 5         // random prior points tried per sample → web density
@@ -100,7 +103,7 @@ static const Brush BRUSHES[] = {
 #define BRISTLE_HAIRS 5        // parallel hairs across the bristle width
 
 // readable names for the header label (BRUSHES[].name is the 3-char button id)
-static const char *TOOL_DISP[] = { "ink", "pencil", "liner", "marker", "chalk", "sketch", "spray", "bristle" };
+static const char *TOOL_DISP[] = { "ink", "pencil", "liner", "marker", "chalk", "sketch", "spray", "bristle", "select" };
 
 typedef struct { float x, y, speed; } Sample;
 typedef struct {
@@ -125,6 +128,7 @@ static int      bevel = 0;           // bevel DEFAULT for new strokes (each stro
 static int      boil = 0;            // boil DEFAULT for new strokes (captured as intensity 0/1)
 static int      cursor_panel = -1;   // tracks which cursor is shown (hand on bar / ring on canvas)
 static int      tool = 0;            // selected brush
+static int      selected = -1;       // index of the selected stroke (-1 = none), for the SELECT tool
 static int      colsel = 0;          // selected pen colour (index into COLORS)
 static int      patsel = 0;          // selected dither pattern (index into PATTERNS; 0 = solid)
 static int      dd_open = 0;         // tool dropdown open?
@@ -295,7 +299,33 @@ static void draw_one(const Stroke *s, unsigned fseed, float boilamt) {
     if (s->pattern) fillp_reset();
 }
 
-static void do_undo(void) { if (nstrokes > 0) nstrokes--; }
+static void do_undo(void) { if (nstrokes > 0) nstrokes--; if (selected >= nstrokes) selected = -1; }
+
+// distance² from point (px,py) to segment a-b
+static float seg_dist2(float px, float py, float ax, float ay, float bx, float by) {
+    float dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    float t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+    if (t < 0) t = 0; if (t > 1) t = 1;
+    float ex = px - (ax + t * dx), ey = py - (ay + t * dy);
+    return ex * ex + ey * ey;
+}
+
+// nearest stroke to (px,py) within a pick threshold (its half-width + slack) → index, or -1
+static int pick_stroke(float px, float py) {
+    int best = -1; float bestd = 1e9f;
+    for (int s = 0; s < nstrokes; s++) {
+        const Stroke *st = &strokes[s];
+        float pad = st->thick * BRUSHES[st->tool].maxw * 0.5f + 6.0f;
+        float mind = 1e9f;
+        if (st->n == 1) { float dx = px - st->pts[0].x, dy = py - st->pts[0].y; mind = dx * dx + dy * dy; }
+        for (int i = 0; i < st->n - 1; i++) {
+            float d = seg_dist2(px, py, st->pts[i].x, st->pts[i].y, st->pts[i+1].x, st->pts[i+1].y);
+            if (d < mind) mind = d;
+        }
+        if (mind < pad * pad && mind < bestd) { bestd = mind; best = s; }
+    }
+    return best;
+}
 
 #define DD_X    2
 #define DD_W    22             // dropdown header / item width (icon button)
@@ -311,7 +341,7 @@ static void draw_panel(void) {
     line(0, PANEL_H - 1, SCREEN_W, PANEL_H - 1, INK);
     ui_begin();
     // tool dropdown header: the current tool's icon
-    if (ui_spr_button_styled(tool, DD_X, 2, DD_W, 20, dd_open, TOOLBTN)) dd_open = !dd_open;
+    if (ui_spr_button_styled(TOOL_ICON[tool], DD_X, 2, DD_W, 20, dd_open, TOOLBTN)) dd_open = !dd_open;
     font(FONT_SMALL); print(TOOL_DISP[tool], 26, 9, INK); font(FONT_NORMAL);   // tool name beside the icon
     ui_slider(&thick01, 56, 4, 38, "thk");          // thickness 0.4×..2.0×
     if (ui_button(98, 3, 28, 16, "bvl")) bevel = !bevel;
@@ -327,7 +357,7 @@ static void draw_panel(void) {
     // the open dropdown list: a column of icon buttons over the canvas
     if (dd_open) {
         for (int i = 0; i < NTOOLS; i++)
-            if (ui_spr_button_styled(i, DD_X, PANEL_H + i * DD_ITEM, DD_W, DD_ITEM, i == tool, TOOLBTN))
+            if (ui_spr_button_styled(TOOL_ICON[i], DD_X, PANEL_H + i * DD_ITEM, DD_W, DD_ITEM, i == tool, TOOLBTN))
                 { tool = i; dd_open = 0; }
     }
     ui_end();
@@ -354,6 +384,16 @@ void update(void) {
             if (my >= PANEL_H && !in_list) dd_open = 0;     // tap-away dismiss
         }
         return;                                             // no drawing while open
+    }
+
+    // SELECT tool: a canvas press picks the nearest stroke (or deselects on empty), never draws
+    if (BRUSHES[tool].kind == K_SELECT) {
+        if (mouse_pressed(MOUSE_LEFT) && my >= PANEL_H) selected = pick_stroke(mx, my);
+        if (keyp('U') || mouse_pressed(MOUSE_RIGHT)) do_undo();
+        if (keyp('C')) { nstrokes = 0; selected = -1; }
+        if (keyp('B')) bevel = !bevel;
+        if (keyp('O')) boil = !boil;
+        return;
     }
 
     // a press that lands in the panel drives the panel, never the canvas
@@ -386,7 +426,7 @@ void update(void) {
 
     // NB: raylib letter keycodes are UPPERCASE — keyp('u') (lowercase, 117) never fires.
     if (keyp('U') || mouse_pressed(MOUSE_RIGHT)) do_undo();
-    if (keyp('C')) nstrokes = 0;
+    if (keyp('C')) { nstrokes = 0; selected = -1; }
     if (keyp('B')) bevel = !bevel;
     if (keyp('O')) boil = !boil;
 }
@@ -407,13 +447,29 @@ void draw(void) {
 
     // cursor: an OS hand over the tool-bar (so it's clearly clickable), our own
     // brush-size ring over the canvas. Only toggle on the transition (no flicker).
-    int on_panel = mouse_y() < PANEL_H || dd_open;   // dropdown is modal → keep the hand cursor
-    if (on_panel != cursor_panel) {
-        cursor_panel = on_panel;
-        if (on_panel) { mouse_cursor(CURSOR_HAND); mouse_show(); }
-        else mouse_hide();
+    // selection highlight (only in SELECT mode): an accent bounding box around the picked stroke
+    if (BRUSHES[tool].kind == K_SELECT && selected >= 0 && selected < nstrokes) {
+        const Stroke *st = &strokes[selected];
+        float minx = 1e9f, miny = 1e9f, maxx = -1e9f, maxy = -1e9f;
+        for (int i = 0; i < st->n; i++) {
+            float x = st->pts[i].x, y = st->pts[i].y;
+            if (x < minx) minx = x; if (y < miny) miny = y;
+            if (x > maxx) maxx = x; if (y > maxy) maxy = y;
+        }
+        int pad = (int)(st->thick * BRUSHES[st->tool].maxw * 0.5f + 4.0f);
+        rect((int)minx - pad, (int)miny - pad, (int)(maxx - minx) + 2 * pad, (int)(maxy - miny) + 2 * pad, ACCENT);
     }
-    if (!on_panel) {   // brush ring previews the reach (sketch) or live width (slow = big, fast = small)
+
+    // cursor: hand over the panel, arrow in SELECT mode, our brush ring while drawing.
+    int want = (mouse_y() < PANEL_H || dd_open) ? CURSOR_HAND
+             : (BRUSHES[tool].kind == K_SELECT) ? CURSOR_DEFAULT
+             : -1;   // -1 = hide OS cursor, draw the brush ring
+    if (want != cursor_panel) {
+        cursor_panel = want;
+        if (want < 0) mouse_hide();
+        else { mouse_cursor(want); mouse_show(); }
+    }
+    if (want < 0) {   // brush ring previews the reach (sketch) or live width (slow = big, fast = small)
         int r;
         if (BRUSHES[tool].kind == K_SKETCH) r = (int)SKETCH_R;
         else {
