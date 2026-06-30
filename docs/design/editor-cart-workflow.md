@@ -116,6 +116,76 @@ either/or, and gives a real round-trip: edit freely, see it persist, then
 consciously discard or bake it — with staleness resolved by fingerprint, not by
 hoping nobody regenerates.
 
+### Option D — schema sketch
+
+**Where it lives.** A sibling `tools/carts/<name>.sprites.patch.json` (the
+committed source of truth — deleting the file is "kill *all* patches", clean and
+obvious), mirrored into the `.cart.png` as a `de:spritepatch` zTXt chunk so the
+editor loads/saves it alongside `de:source`/`de:sprites`. The `.cart.js` stays a
+pure program; the patch is pure data.
+
+```jsonc
+{
+  "format": "de-sprite-patch/1",
+  "cart": "touchpad",
+  "sheet": "sha256:1f3a9c…",      // fingerprint of the WHOLE generator output (all
+                                  // non-empty slots) — the fast "did anything change?" gate
+  "slots": {
+    "5": {                        // slot index (0–63)
+      "base": "sha256:9f3c20…",   // fingerprint of the generator's slot-5 output this
+                                  // patch was diffed against — the staleness anchor
+                                  // ("empty" = the generator produced nothing here; a
+                                  //  pure human addition)
+      "pixels": [ /* 256 palette indices 0–31, row-major 16×16 — the hand-owned slot */ ],
+      "note": "knob highlight nudged up-left",   // optional, for the human + git history
+      "edited": "2026-06-30T10:21Z"
+    }
+    // … one entry per hand-touched slot
+  }
+}
+```
+
+**Fingerprint (define once, compute identically in editor + `make-cart`).** A
+slot's fingerprint = `sha256` of its 256 palette indices as a 256-byte buffer
+(indices are 0–31, one byte each), hex, truncated to 16 chars — enough; this
+isn't adversarial. `sheet` = the same hash over every non-empty generator slot
+concatenated in index order. Fingerprint the **generator's output, not the
+`.cart.js` source** — a comment-only or refactor edit that produces identical
+pixels must NOT nuke patches; only a pixel change should.
+
+**Bake algorithm** (`make-cart`, after running the generator → `gen[slot]`):
+1. No patch file → bake `gen` as today. Done.
+2. `patch.sheet == hash(gen)` → generator output is byte-identical → **apply
+   every patched slot verbatim** (fast path; nothing can be stale).
+3. Else, per patched slot `s`:
+   - `gen[s]` exists and `hash(gen[s]) == patch.slots[s].base` → **apply** the
+     patch pixels (human edit over an unchanged slot — persists).
+   - `base == "empty"` and `gen[s]` is empty → **apply** (pure human addition).
+   - otherwise → **STALE**: drop slot `s`, log
+     `patched slot 5 no longer matches the generator — discarded`, and prune it
+     from the file (loud, never silent). A wholesale regenerate misses on ~every
+     slot here → the file empties itself, which is the "kill the patches" rule
+     falling out for free.
+4. Composite surviving patches over `gen` → final sheet; rewrite `sheet` +
+   surviving `base`es so the next bake is a clean fast-path match.
+
+**Two operations on top of the file:**
+- **kill** — `rm <name>.sprites.patch.json` (all), or the bake's auto-prune of
+  stale slots (some). Editor "discard hand-edits" button = the same delete.
+- **promote / bake the work** — fold the blessed edits into source and remove the
+  overlay: for a few surgical fixes, write them into a generator-side
+  `COMIC_PATCHES`-style table; for a cart that's effectively gone hand-drawn, run
+  **Option A** (freeze the composited sheet to `{slot:[…]}`) and retire the
+  generator. Either way the patch file is deleted afterward — its content now
+  lives canonically, nothing left to go stale.
+
+**Worked example.** You nudge `touchpad`'s knob highlight (slot 5) in the editor.
+It writes `slots."5"` with your 256 pixels and `base = hash(generator's slot 5)`.
+Re-bake with `touchpad.cart.js` unchanged → `sheet` matches → your knob persists.
+Later you (or the agent) rewrite the stick art in the generator → slot-5 hash
+changes → `base` mismatches → the patch is discarded with a warning, because a
+hand-edit against the old knob is meaningless on the new one.
+
 **Lean: B as the cheap guard now; D as the real human-in-the-loop answer; A the
 freeze tool; C already half-done.** B is one field plus two checks and stops the
 silent-revert *today* — ship it first. D is the one that fits collaborative
