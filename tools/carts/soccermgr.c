@@ -13,11 +13,12 @@
   "lineage": "Inspired by FC Mobile / Football Manager lite; novel in combining a drag-to-arrange formation pitch, a procedurally refreshing transfer market, and a Poisson-ish strength-ratio match simulator feeding a league table.",
   "genre": "sports",
   "homage": "Football Manager (1982)",
-  "description": "An FC-Mobile-style manager mode: run a club's starting XI on a drag-to-arrange formation pitch, with a bench of spares, switchable 4-4-2 / 4-3-3 shapes, and an out-of-position penalty that makes your shape matter. Wheel and deal in a transfer market against a cash budget — sign a face, sell the deadwood — then hit PLAY MATCH and the engine auto-sims a scoreline from your XI's strength versus the opponent's, ticking the goals up on a scoreboard before slamming home WIN/DRAW/DEFEAT. Other clubs play their own fixtures and the 6-team league table re-sorts live on points and goal difference across a 10-round season; finish top to be champions. Drag players between the pitch and the bench, click 4-4-2 / 4-3-3 to switch shape, click a price to BUY or a value to SELL in the market, and click PLAY MATCH (TAB cycles SQUAD/MARKET/LEAGUE, ENTER plays)."
+  "description": "An FC-Mobile-style manager mode: you run Feyenoord's starting XI on a drag-to-arrange formation pitch, with a bench of spares, switchable 4-4-2 / 4-3-3 shapes, and an out-of-position penalty that makes your shape matter. Wheel and deal in a transfer market stocked with real 2026-era European stars (Yamal, Mbappe, Pedri, Haaland…) against a cash budget — sign a face, sell the deadwood — then hit PLAY MATCH and the engine auto-sims a scoreline from your XI's strength versus the opponent's, ticking the goals up on a scoreboard before slamming home WIN/DRAW/DEFEAT. The other eleven clubs (Real Madrid, Man City, Bayern, Barcelona, Liverpool, Arsenal, PSG, Inter, Man Utd, Ajax, PSV) play their own fixtures and the 12-team league table re-sorts live on points and goal difference across a 10-round season; finish top to be champions. Player names are pooled by position and clubs/standings use the compact 4×6 font to fit the bigger roster. Drag players between the pitch and the bench, click 4-4-2 / 4-3-3 to switch shape, click a price to BUY or a value to SELL in the market, and click PLAY MATCH (TAB cycles SQUAD/MARKET/LEAGUE, ENTER plays)."
 }
 de:meta */
 #include "studio.h"
 #include <stddef.h>
+#include <string.h>
 
 // SOCCERMGR — an FC-Mobile-style football manager mode.
 // You run a squad: a starting XI laid out on a formation pitch + a bench,
@@ -42,8 +43,8 @@ static const int   POSC[NPOS] = { CLR_ORANGE, CLR_BLUE, CLR_GREEN, CLR_RED };
 
 // ---------------------------------------------------------------------------
 // players — one pool. slots 0..10 = starting XI, 11.. = bench. -1 rating = empty.
-#define MAXP 18
-typedef struct { char name[12]; int pos; int rating; int kit; } Player;
+#define MAXP 22
+typedef struct { char name[16]; int pos; int rating; int kit; } Player;
 static Player squad[MAXP];     // your roster (filled 0..nplayers-1)
 static int    nplayers;
 
@@ -73,14 +74,14 @@ static int formation;
 
 // ---------------------------------------------------------------------------
 // transfer market — a refreshing shortlist of buyable players
-#define NMARKET 6
+#define NMARKET 10
 static Player market[NMARKET];
 static int    mprice[NMARKET];    // asking price
 static bool   msold[NMARKET];
 
 // ---------------------------------------------------------------------------
 // league — you + 5 AI clubs
-#define NCLUB 6
+#define NCLUB 12
 typedef struct { char name[12]; int str; int W,D,L,GF,GA,pts; } Club;
 static Club club[NCLUB];          // club[0] = YOU
 #define YOU 0
@@ -107,21 +108,59 @@ static int   drag_bench;           // bench player index being dragged, or -1
 static int   drag_dx, drag_dy;
 
 // ---------------------------------------------------------------------------
-// names
-static const char *FIRST[] = { "Rui","Kai","Tom","Leo","Max","Jon","Sam","Ade","Ivo","Bru","Dan","Eze","Nik","Pol","Yan","Oma" };
-static const char *LAST[]  = { "Vos","Berg","Cruz","Lima","Kane","Mane","Diaz","Sane","Roy","Cole","Park","Reus","Toni","Mbe","Foden","Saka" };
-#define NF (int)(sizeof FIRST / sizeof *FIRST)
-#define NL (int)(sizeof LAST / sizeof *LAST)
-static const char *CLUBNM[] = { "YOUR FC","REAL ROCK","INTER LUX","BAY VOLT","AC NOVA","OLD PORT","FK STORM","UTD IRON" };
+// names — real 2026-era European stars, pooled by position so a GK gets a GK name.
+// Surnames / recognizable short forms; kept to fit the 15-char name buffer.
+static const char *NAME_GK[] = {
+    "Courtois","Donnarumma","Maignan","Onana","Raya","Ederson","Alisson",
+    "TerStegen","Neuer","Sommer","Lunin","Sels","Verbruggen","Provedel","Kobel"
+};
+static const char *NAME_DEF[] = {
+    "VanDijk","Saliba","Hakimi","Marquinhos","Rudiger","Militao","Cubarsi",
+    "Araujo","Hancko","Hato","Bremer","Bastoni","Gvardiol","Kounde","Theo",
+    "Dumfries","Calafiori","Tah","Upamecano","Pavard","Geertruida","Smal"
+};
+static const char *NAME_MID[] = {
+    "Pedri","Gavi","Bellingham","Vitinha","Valverde","DeJong","Rice","Wirtz",
+    "Musiala","BrunoF.","Odegaard","Rodri","Kimmich","Veerman","Saibari",
+    "JoaoNeves","Zaire","Camavinga","Tchouameni","Modric","Fermin","Til"
+};
+static const char *NAME_FWD[] = {
+    "Yamal","Mbappe","Vinicius","Dembele","Raphinha","Lewandowski","Haaland",
+    "Salah","Saka","Foden","Kane","Leao","Osimhen","Lautaro","Kvara","Olmo",
+    "Brobbey","Pepi","Ueda","NicoWill.","Gyokeres","Isak","Rashford","Doue","Barcola"
+};
+static const char *const *NAMES[NPOS] = { NAME_GK, NAME_DEF, NAME_MID, NAME_FWD };
+static const int NAMEN[NPOS] = {
+    (int)(sizeof NAME_GK  / sizeof *NAME_GK),
+    (int)(sizeof NAME_DEF / sizeof *NAME_DEF),
+    (int)(sizeof NAME_MID / sizeof *NAME_MID),
+    (int)(sizeof NAME_FWD / sizeof *NAME_FWD),
+};
+// you manage Feyenoord; rivals are the European giants, ordered strongest-first.
+static const char *CLUBNM[] = {
+    "FEYENOORD","REAL MADRID","MAN CITY","BAYERN","BARCELONA","LIVERPOOL",
+    "ARSENAL","PARIS SG","INTER","MAN UTD","AJAX","PSV"
+};
 
-static void mk_name(char *out, int seed) {
-    const char *a = LAST[(seed * 7 + 3) % NL];
-    int n = 0; while (a[n] && n < 11) { out[n] = a[n]; n++; } out[n] = 0;
+// is this name already on the books? avoids two Mbappes on screen at once.
+// scans your squad + the market rows filled so far this refresh (0..upto).
+static bool name_used(const char *n, int upto) {
+    for (int i = 0; i < nplayers; i++) if (strcmp(squad[i].name, n) == 0) return true;
+    for (int i = 0; i < upto; i++)      if (strcmp(market[i].name, n) == 0) return true;
+    return false;
 }
 
-// random player of a position with a rating band
-static void gen_player(Player *p, int pos, int lo, int hi) {
-    mk_name(p->name, rnd(9999));
+static void pick_name(char *out, int pos, int upto) {
+    const char *const *pool = NAMES[pos]; int n = NAMEN[pos];
+    const char *cand = pool[rnd(n)];
+    for (int t = 0; t < 16 && name_used(cand, upto); t++) cand = pool[rnd(n)];
+    int k = 0; while (cand[k] && k < 15) { out[k] = cand[k]; k++; } out[k] = 0;
+}
+
+// random player of a position with a rating band; upto = market rows already
+// filled this pass (for de-duping the shortlist), 0 when generating your squad.
+static void gen_player(Player *p, int pos, int lo, int hi, int upto) {
+    pick_name(p->name, pos, upto);
     p->pos = pos;
     p->rating = rnd_between(lo, hi + 1);
     p->kit = 0;
@@ -166,7 +205,7 @@ static int bench_list(int *out) {
 static void refresh_market(void) {
     for (int i = 0; i < NMARKET; i++) {
         int pos = i == 0 ? POS_GK : 1 + rnd(NPOS - 1);
-        gen_player(&market[i], pos, 60, 89);
+        gen_player(&market[i], pos, 60, 89, i);
         // price scales steeply with rating
         int r = market[i].rating;
         mprice[i] = (r - 55) * (r - 55) * 4 + 200;
@@ -175,7 +214,8 @@ static void refresh_market(void) {
 }
 
 static void new_league(void) {
-    static const int STR[NCLUB] = { 0, 880, 840, 800, 770, 720 };  // club[0] set from squad
+    // club[0] (YOU) set from squad each match; rivals strongest-first to match CLUBNM
+    static const int STR[NCLUB] = { 0, 900, 890, 875, 860, 845, 835, 830, 820, 790, 760, 740 };
     for (int c = 0; c < NCLUB; c++) {
         int n = 0; const char *nm = CLUBNM[c];
         while (nm[n] && n < 11) { club[c].name[n] = nm[n]; n++; } club[c].name[n] = 0;
@@ -190,7 +230,7 @@ static void new_game(void) {
     int plan[][2] = { {POS_GK,1},{POS_DEF,5},{POS_MID,6},{POS_FWD,4} };
     for (int k = 0; k < 4; k++)
         for (int j = 0; j < plan[k][1] && nplayers < MAXP; j++)
-            gen_player(&squad[nplayers++], plan[k][0], 62, 78);
+            gen_player(&squad[nplayers++], plan[k][0], 62, 78, 0);
 
     formation = F_442;
     // auto-fill XI: best matching-position player per slot, then any
@@ -307,6 +347,17 @@ static int slot_py(int s) { return PY + 12 + FY[formation][s] * (PH - 24) / 100;
 // tab bar at very bottom
 #define TBY 190
 #define TBH 10
+// MARKET rows — small font lets us pack the longer shortlist. Single source of
+// truth for hit-test (update) AND draw, so the price buttons line up.
+#define MKT_Y0   28
+#define MKT_DY   15
+#define MKT_ROWY(i) (MKT_Y0 + (i) * MKT_DY)
+#define MKT_VIS  NMARKET           // buy rows shown
+#define MKT_SELL 9                 // sell rows shown (bench spares)
+// BENCH rows on the SQUAD screen — also small font, more subs reachable.
+#define BN_ROW0  (BNY + 16)
+#define BN_DY    13
+#define BN_VIS   9
 
 // ---------------------------------------------------------------------------
 void update(void) {
@@ -359,9 +410,9 @@ void update(void) {
                 }
             }
             if (drag_from < 0) {
-                for (int i = 0; i < nb && i < 7; i++) {
-                    int ry = BNY + 18 + i * 16;
-                    if (point_in_box(mouse_x(), mouse_y(), BNX, ry, BNW, 15)) { drag_bench = bench[i]; break; }
+                for (int i = 0; i < nb && i < BN_VIS; i++) {
+                    int ry = BN_ROW0 + i * BN_DY;
+                    if (point_in_box(mouse_x(), mouse_y(), BNX, ry, BNW, BN_DY)) { drag_bench = bench[i]; break; }
                 }
             }
         }
@@ -372,7 +423,7 @@ void update(void) {
             int target = -1;
             for (int s = 0; s < 11; s++)
                 if (point_in_box(mouse_x(), mouse_y(), slot_px(s) - 11, slot_py(s) - 11, 22, 22)) { target = s; break; }
-            bool over_bench = hover(BNX, BNY + 14, BNW, 7 * 16);
+            bool over_bench = hover(BNX, BNY + 14, BNW, 134 - 14);
 
             if (drag_from >= 0) {              // dragging an XI player
                 if (target >= 0 && target != drag_from) {       // swap two slots
@@ -395,18 +446,18 @@ void update(void) {
         int bench[MAXP]; int nb = bench_list(bench);
         // buy buttons (left column)
         for (int i = 0; i < NMARKET; i++) {
-            int ry = 30 + i * 18;
-            if (!msold[i] && clicked(112, ry + 1, 40, 14)) {
+            int ry = MKT_ROWY(i);
+            if (!msold[i] && clicked(112, ry, 42, MKT_DY - 1)) {
                 if (cash >= mprice[i] && nplayers < MAXP) {
                     cash -= mprice[i]; squad[nplayers++] = market[i]; msold[i] = true; coin();
                 } else nope();
             }
         }
         // sell list: bench players (can't sell from XI directly — must bench first)
-        for (int i = 0; i < nb && i < 7; i++) {
-            int ry = 30 + i * 18, pidx = bench[i];
+        for (int i = 0; i < nb && i < MKT_SELL; i++) {
+            int ry = MKT_ROWY(i), pidx = bench[i];
             int val = (squad[pidx].rating - 55) * (squad[pidx].rating - 55) * 3 + 150;
-            if (clicked(258, ry + 1, 40, 14)) {
+            if (clicked(258, ry, 42, MKT_DY - 1)) {
                 if (nplayers > 11) {
                     cash += val;
                     // remove pidx from squad, compact, fix XI indices
@@ -424,7 +475,7 @@ void update(void) {
     }
 
     if (state == TABLE) {
-        if (clicked(110, 175, 100, 14) && xi_filled() == 11) { play_match(); return; }
+        // standings only — play via ENTER or the SQUAD tab's PLAY MATCH button
         return;
     }
 }
@@ -498,18 +549,20 @@ static void draw_bench(void) {
     print("BENCH", BNX + 4, BNY + 3, CLR_LIGHT_YELLOW);
 
     int bench[MAXP]; int nb = bench_list(bench);
-    for (int i = 0; i < nb && i < 7; i++) {
+    font(FONT_SMALL);
+    for (int i = 0; i < nb && i < BN_VIS; i++) {
         int pidx = bench[i]; if (pidx == drag_bench) continue;
-        int ry = BNY + 18 + i * 16;
-        bool hv = hover(BNX, ry, BNW, 15);
-        rectfill(BNX + 2, ry, BNW - 4, 14, hv ? CLR_DARKER_GREY : CLR_BLACK);
-        rectfill(BNX + 4, ry + 2, 8, 10, POSC[squad[pidx].pos]);
-        print(POSL[squad[pidx].pos], BNX + 16, ry + 3, CLR_LIGHT_GREY);
-        print(squad[pidx].name, BNX + 38, ry + 3, CLR_WHITE);
+        int ry = BN_ROW0 + i * BN_DY;
+        bool hv = hover(BNX, ry, BNW, BN_DY);
+        rectfill(BNX + 2, ry, BNW - 4, BN_DY - 1, hv ? CLR_DARKER_GREY : CLR_BLACK);
+        rectfill(BNX + 4, ry + 2, 6, 8, POSC[squad[pidx].pos]);
+        print(POSL[squad[pidx].pos], BNX + 13, ry + 3, CLR_LIGHT_GREY);
+        print(squad[pidx].name, BNX + 32, ry + 3, CLR_WHITE);
         print_right(str("%d", squad[pidx].rating), BNX + BNW - 4, ry + 3, rating_col(squad[pidx].rating));
     }
-    if (nb == 0) print("(empty)", BNX + 6, BNY + 20, CLR_DARK_GREY);
-    if (nb > 7)  print(str("+%d more", nb - 7), BNX + 6, BNY + 18 + 7 * 16, CLR_DARK_GREY);
+    if (nb == 0) print("(empty)", BNX + 6, BN_ROW0 + 2, CLR_DARK_GREY);
+    if (nb > BN_VIS) print(str("+%d more", nb - BN_VIS), BNX + 6, BN_ROW0 + BN_VIS * BN_DY, CLR_DARK_GREY);
+    font(FONT_NORMAL);
 
     // formation buttons
     for (int f = 0; f < NFORM; f++) {
@@ -556,59 +609,65 @@ static void draw_market(void) {
 
     // BUY list (left column): kit chip | pos | name | rating | price-BUY button
     for (int i = 0; i < NMARKET; i++) {
-        int ry = 30 + i * 18;
+        int ry = MKT_ROWY(i);
         bool can = !msold[i] && cash >= mprice[i] && nplayers < MAXP;
-        rectfill(8, ry, 150, 16, msold[i] ? CLR_DARKER_GREY : CLR_BROWNISH_BLACK);
-        rectfill(10, ry + 2, 6, 12, POSC[market[i].pos]);
-        print(POSL[market[i].pos], 18, ry + 4, CLR_LIGHT_GREY);
-        print(market[i].name, 40, ry + 4, CLR_WHITE);
-        print_right(str("%d", market[i].rating), 108, ry + 4, rating_col(market[i].rating));
-        // buy button at x=112, w=40
+        rectfill(8, ry, 150, MKT_DY - 1, msold[i] ? CLR_DARKER_GREY : CLR_BROWNISH_BLACK);
+        rectfill(10, ry + 2, 6, MKT_DY - 5, POSC[market[i].pos]);
+        font(FONT_SMALL);
+        print(POSL[market[i].pos], 18, ry + 3, CLR_LIGHT_GREY);
+        print(market[i].name, 38, ry + 3, CLR_WHITE);
+        print_right(str("%d", market[i].rating), 108, ry + 3, rating_col(market[i].rating));
+        font(FONT_NORMAL);
+        // buy button at x=112, w=42
         if (msold[i]) {
-            print("SOLD", 124, ry + 4, CLR_DARK_GREY);
+            font(FONT_SMALL); print("SOLD", 124, ry + 3, CLR_DARK_GREY); font(FONT_NORMAL);
         } else {
-            bool hv = hover(112, ry + 1, 40, 14);
-            rectfill(112, ry + 1, 40, 14, can ? (hv ? CLR_LIME_GREEN : CLR_DARK_GREEN) : CLR_DARKER_GREY);
-            rect(112, ry + 1, 40, 14, can ? CLR_GREEN : CLR_DARK_GREY);
+            bool hv = hover(112, ry, 42, MKT_DY - 1);
+            rectfill(112, ry, 42, MKT_DY - 1, can ? (hv ? CLR_LIME_GREEN : CLR_DARK_GREEN) : CLR_DARKER_GREY);
+            rect(112, ry, 42, MKT_DY - 1, can ? CLR_GREEN : CLR_DARK_GREY);
             const char *pl = str("%d", mprice[i]);
-            print(pl, 112 + (40 - text_width(pl)) / 2, ry + 4, CLR_WHITE);
+            print(pl, 112 + (42 - text_width(pl)) / 2, ry + 4, CLR_WHITE);
         }
     }
 
     // SELL column (bench players)
     int bench[MAXP]; int nb = bench_list(bench);
-    for (int i = 0; i < nb && i < 7; i++) {
-        int ry = 30 + i * 18, pidx = bench[i];
+    for (int i = 0; i < nb && i < MKT_SELL; i++) {
+        int ry = MKT_ROWY(i), pidx = bench[i];
         int val = (squad[pidx].rating - 55) * (squad[pidx].rating - 55) * 3 + 150;
-        rectfill(166, ry, 146, 16, CLR_DARKER_PURPLE);
-        rectfill(168, ry + 2, 6, 12, POSC[squad[pidx].pos]);
-        print(squad[pidx].name, 178, ry + 4, CLR_WHITE);
-        print_right(str("%d", squad[pidx].rating), 252, ry + 4, rating_col(squad[pidx].rating));
-        // sell button at x=258, w=40
+        rectfill(166, ry, 146, MKT_DY - 1, CLR_DARKER_PURPLE);
+        rectfill(168, ry + 2, 6, MKT_DY - 5, POSC[squad[pidx].pos]);
+        font(FONT_SMALL);
+        print(squad[pidx].name, 178, ry + 3, CLR_WHITE);
+        print_right(str("%d", squad[pidx].rating), 252, ry + 3, rating_col(squad[pidx].rating));
+        font(FONT_NORMAL);
+        // sell button at x=258, w=42
         bool can = nplayers > 11;
-        bool hs = hover(258, ry + 1, 40, 14);
-        rectfill(258, ry + 1, 40, 14, can ? (hs ? CLR_DARK_RED : CLR_DARKER_GREY) : CLR_DARKER_GREY);
-        rect(258, ry + 1, 40, 14, can ? CLR_RED : CLR_DARK_GREY);
+        bool hs = hover(258, ry, 42, MKT_DY - 1);
+        rectfill(258, ry, 42, MKT_DY - 1, can ? (hs ? CLR_DARK_RED : CLR_DARKER_GREY) : CLR_DARKER_GREY);
+        rect(258, ry, 42, MKT_DY - 1, can ? CLR_RED : CLR_DARK_GREY);
         const char *sl = str("%d", val);
-        print(sl, 258 + (40 - text_width(sl)) / 2, ry + 4, CLR_WHITE);
+        print(sl, 258 + (42 - text_width(sl)) / 2, ry + 4, CLR_WHITE);
     }
-    if (nb == 0) print("(no spares to sell)", 168, 32, CLR_DARK_GREY);
+    if (nb == 0) print("(no spares to sell)", 168, MKT_Y0 + 2, CLR_DARK_GREY);
+    if (nb > MKT_SELL) { font(FONT_SMALL); print(str("+%d more on bench", nb - MKT_SELL), 168, MKT_ROWY(MKT_SELL) + 2, CLR_DARK_GREY); font(FONT_NORMAL); }
 
-    print("click a price to buy / sell", 10, 178, CLR_DARK_GREY);
+    print("click a price to buy / sell", 10, 181, CLR_DARK_GREY);
     draw_hud();
     draw_tabs();
 }
 
 static void draw_table(void) {
     cls(CLR_DARKER_BLUE);
-    print_centered("LEAGUE TABLE", SCREEN_W/2, 16, CLR_LIGHT_YELLOW);
-    // header
-    int y0 = 30;
-    print("# CLUB", 12, y0, CLR_DARK_GREY);
-    print("P", 150, y0, CLR_DARK_GREY);
-    print("W D L", 168, y0, CLR_DARK_GREY);
-    print("GD", 240, y0, CLR_DARK_GREY);
-    print("PTS", 280, y0, CLR_DARK_GREY);
+    print_centered("LEAGUE TABLE", SCREEN_W/2, 14, CLR_LIGHT_YELLOW);
+    // header — small font; the 12 clubs only fit when the rows are tight
+    int y0 = 24;
+    font(FONT_SMALL);
+    print("# CLUB", 10, y0, CLR_DARK_GREY);
+    print("P",   140, y0, CLR_DARK_GREY);
+    print("W D L", 160, y0, CLR_DARK_GREY);
+    print("GD",  236, y0, CLR_DARK_GREY);
+    print_right("PTS", 308, y0, CLR_DARK_GREY);
 
     // sort clubs by pts then GD (indices)
     int ord[NCLUB]; for (int i = 0; i < NCLUB; i++) ord[i] = i;
@@ -620,24 +679,24 @@ static void draw_table(void) {
             if (swap) { int t = ord[a]; ord[a] = ord[b]; ord[b] = t; }
         }
     for (int i = 0; i < NCLUB; i++) {
-        int c = ord[i], ry = y0 + 12 + i * 18;
+        int c = ord[i], ry = y0 + 10 + i * 12;
         bool me = c == YOU;
-        if (me) { rectfill(8, ry - 2, 304, 17, CLR_DARK_GREEN); }
+        if (me) rectfill(6, ry - 1, 306, 11, CLR_DARK_GREEN);
+        else if (i & 1) rectfill(6, ry - 1, 306, 11, CLR_BLACK);   // zebra rows aid scanning
         int gd = club[c].GF - club[c].GA;
         int col = me ? CLR_WHITE : CLR_LIGHT_GREY;
-        print(str("%d", i + 1), 12, ry + 2, i == 0 ? CLR_YELLOW : col);
-        print(club[c].name, 26, ry + 2, col);
-        print(str("%d", club[c].W + club[c].D + club[c].L), 150, ry + 2, col);
-        print(str("%d %d %d", club[c].W, club[c].D, club[c].L), 168, ry + 2, col);
-        print(str("%+d", gd), 240, ry + 2, gd >= 0 ? CLR_LIME_GREEN : CLR_ORANGE);
-        print_right(str("%d", club[c].pts), 308, ry + 2, me ? CLR_YELLOW : col);
+        print(str("%d", i + 1), 10, ry, i == 0 ? CLR_YELLOW : col);
+        print(club[c].name, 24, ry, col);
+        print(str("%d", club[c].W + club[c].D + club[c].L), 140, ry, col);
+        print(str("%d %d %d", club[c].W, club[c].D, club[c].L), 160, ry, col);
+        print(str("%+d", gd), 236, ry, gd >= 0 ? CLR_LIME_GREEN : CLR_ORANGE);
+        print_right(str("%d", club[c].pts), 308, ry, me ? CLR_YELLOW : col);
     }
+    font(FONT_NORMAL);
 
     bool ready = xi_filled() == 11;
-    bool hv = hover(110, 175, 100, 14);
-    rectfill(110, 175, 100, 14, ready ? (hv ? CLR_LIME_GREEN : CLR_DARK_GREEN) : CLR_DARKER_GREY);
-    rect(110, 175, 100, 14, CLR_GREEN);
-    print_centered(ready ? "PLAY MATCH >" : "set your XI first", SCREEN_W/2, 178, CLR_WHITE);
+    print_centered(ready ? "ENTER or the SQUAD tab to PLAY MATCH" : "set your XI first to play",
+                   SCREEN_W/2, 181, ready ? CLR_LIGHT_GREY : CLR_ORANGE);
 
     draw_hud();
     draw_tabs();
