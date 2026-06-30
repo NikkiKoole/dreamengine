@@ -92,6 +92,7 @@ static Stroke   cur;                 // the stroke being drawn right now
 static int      drawing = 0;
 static int      bevel = 0;           // bevel mode: emboss each stroke into a faux-3D rim
 static int      boil = 0;            // boil mode: cycle jittered variants → a living loop
+static int      cursor_panel = -1;   // tracks which cursor is shown (hand on bar / ring on canvas)
 static int      tool = 0;            // selected brush
 static float    thick01 = 0.375f;    // thickness slider (0..1) → ~1.0× by default
 static float    prevx, prevy;        // last frame's pointer (for per-frame speed)
@@ -256,8 +257,15 @@ void draw(void) {
     for (int i = 0; i < nstrokes; i++) draw_one(&strokes[i], strokes[i].seed ^ vseed, boil);
     if (drawing) draw_one(&cur, cur.seed, 0);
 
-    // brush-size ring = the cursor; previews the live width (slow = big, fast = small)
-    if (mouse_y() >= PANEL_H) {
+    // cursor: an OS hand over the tool-bar (so it's clearly clickable), our own
+    // brush-size ring over the canvas. Only toggle on the transition (no flicker).
+    int on_panel = mouse_y() < PANEL_H;
+    if (on_panel != cursor_panel) {
+        cursor_panel = on_panel;
+        if (on_panel) { mouse_cursor(CURSOR_HAND); mouse_show(); }
+        else mouse_hide();
+    }
+    if (!on_panel) {   // brush-size ring previews the live width (slow = big, fast = small)
         Brush b = BRUSHES[tool];
         float sp = ema / b.speedref; if (sp > 1) sp = 1;
         int r = (int)((b.maxw - (b.maxw - b.minw) * sp) * thickness() * 0.5f + 0.5f);
