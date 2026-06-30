@@ -591,6 +591,14 @@ static void draw_obstacles(void);
 static void world_reset(void);
 static int  zone_at(float x, float y);   // (defined below; gen_chunk needs it to place houses)
 
+// ── P1 SEAM (docs/design/driving-world-program.md, Rung A) — the world's FRONT DOOR. ─────────────
+// Today a STUB that reproduces sloop's own grid world (tarmac bands at ZONE_PITCH ± ZONE_LANE/2),
+// so behaviour is unchanged. The point: callers ask road_at() instead of inlining the grid math, so
+// Rung B can swap the BODY for OSM (real Delft .rvb) or roadnet2 with NO change here. `cls` is a coarse
+// hierarchy (the zone, for now). Fields mirror roadnet's RoadHit so the contract survives the swap.
+typedef struct { int on_road; int zone; int cls; } RoadHit;
+static RoadHit road_at(float x, float y);   // (defined below, beside zone_at)
+
 // ── rigid body state (sx,sy = the COM in world space; rotation pivots about it) ─
 static float sx, sy;              // world position of the COM
 static float vx, vy;              // world velocity
@@ -1770,6 +1778,7 @@ void update(void) {
 #ifdef DE_TRACE
     float fwx = cos_deg(ang), fwy = sin_deg(ang);
     watch("vf", "%.1f", vx * fwx + vy * fwy);
+    watch("on_road", "%d", road_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f).on_road);   // P1 seam — deterministic trace of road_at()
     watch("vl", "%.1f", vx * (-fwy) + vy * fwx);
     watch("ang", "%.0f", ang);
     watch("angvel", "%.0f", angVel);
@@ -2488,6 +2497,21 @@ static int zone_at(float x, float y) {
     return Z_SUPER;
 }
 
+// road_at() — the P1 seam (declared up top). STUB body: sloop's grid world. A point is ON a road if it
+// lies within ZONE_LANE/2 of a grid line at this zone's pitch (the same bands draw_course paints), so this
+// AGREES with the rendered roads by construction. Rung B replaces this body with an OSM/roadnet2 query.
+static RoadHit road_at(float x, float y) {
+    RoadHit r; r.zone = zone_at(x, y); r.cls = r.zone;       // coarse: zone == class for the stub
+    int p = ZONE_PITCH[r.zone]; float hw = ZONE_LANE[r.zone] * 0.5f;
+    float qx = x / p, qy = y / p;                            // nearest grid line in x / y (bands centred on k*p)
+    float dx = x - (float)((int)(qx >= 0 ? qx + 0.5f : qx - 0.5f)) * p;
+    float dy = y - (float)((int)(qy >= 0 ? qy + 0.5f : qy - 0.5f)) * p;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    r.on_road = (dx <= hw || dy <= hw);
+    return r;
+}
+
 // Houses are now SOLID obstacles (§9): generated per-chunk in gen_chunk (same ~5 m-facade tiling
 // the old draw_houses used) and drawn from the pool in draw_obstacles, so they can be crashed into
 // and (when smashed) stay demolished. draw_course only paints the flat road + fields under them.
@@ -2638,6 +2662,8 @@ static void hud(void) {
     print(DES_NAME[cur_des], 4, 4, CLR_DARK_GREY);
     print(ENG[eng_kind].name, 4, 12, ENG[eng_kind].col);   // the rig's engine kind (§1a)
     print_centered(ZONE_NAME[cur_zone], SCREEN_W / 2, 4, CLR_YELLOW);
+    { RoadHit rh = road_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f);   // P1 seam, live at the rig — proves road_at() is wired
+      print_centered(rh.on_road ? "ON ROAD" : "OFF-ROAD", SCREEN_W / 2, 12, rh.on_road ? CLR_GREEN : CLR_ORANGE); }
     if (nDrag > 0) {                         // scrape heat — shown only while it bites
         print("SCRAPE", SCREEN_W - 52, 4, hot_col());
         bar(SCREEN_W - 70, 13, 62, 4, heat, heat > 0.66f ? CLR_RED : CLR_ORANGE, CLR_DARKER_GREY);
