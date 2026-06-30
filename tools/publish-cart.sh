@@ -13,10 +13,19 @@ cd "$(dirname "$0")/.."
 
 # --no-build: site/<name>/ is already compiled (the editor's publish button
 # builds straight into it) — skip the build, just finish the git leg.
+# -m "msg": override the commit subject (publish-all.js uses this so a big
+# batch doesn't produce a thousand-cart subject line). Flags may come in any order.
 NOBUILD=0
-if [ "${1:-}" = "--no-build" ]; then NOBUILD=1; shift; fi
+MSG=""
+while :; do
+  case "${1:-}" in
+    --no-build) NOBUILD=1; shift ;;
+    -m) MSG="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
 
-[ $# -ge 1 ] || { echo "usage: tools/publish-cart.sh [--no-build] <cart> [<cart>...]"; exit 1; }
+[ $# -ge 1 ] || { echo "usage: tools/publish-cart.sh [--no-build] [-m msg] <cart> [<cart>...]"; exit 1; }
 
 [ $NOBUILD -eq 1 ] || node tools/build-site.js "$@"
 
@@ -41,7 +50,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-git commit -m "site: publish $*"
+git commit -m "${MSG:-site: publish $*}"
 git push
 echo "✓ pushed — deploy: https://github.com/NikkiKoole/dreamengine/actions"
 echo "  live in ~1 min: https://nikkikoole.github.io/dreamengine/"
