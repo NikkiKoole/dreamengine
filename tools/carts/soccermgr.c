@@ -256,6 +256,7 @@ static void new_game(void) {
 
 void init(void) {
     best = load(0);
+    colorkey(0);                  // baked title wordmarks: palette-0 padding = transparent
     instrument(5, INSTR_SAW, 6, 90, 4, 120); instrument_filter(5, FILTER_LOW, 1200, 4); // crowd-ish stab
     new_game();
     state = TITLE;
@@ -727,12 +728,24 @@ static void draw_result(void) {
     }
 }
 
+// draw a baked wordmark (sheet region 0,sy → 128×32) into a dest rect, fronted
+// by a long EXTRUDED drop shadow: the ink (and its AA edge) is pal()-recolored
+// to `sh` and stamped on a `depth`-step down-right diagonal, then the crisp
+// wordmark lands on top. Keep dw:dh ≈ 4:1 to preserve the 128×32 aspect.
+static void wordmark(int sy, int dx, int dy, int dw, int dh,
+                     int ink, int aa, int sh, int depth) {
+    pal(ink, sh); pal(aa, sh);
+    for (int k = depth; k >= 1; k--) sspr(0, sy, 128, 32, dx + k, dy + k, dw, dh);
+    pal_reset();
+    sspr(0, sy, 128, 32, dx, dy, dw, dh);
+}
+
 static void draw_title(void) {
     cls(CLR_DARK_GREEN);
     for (int i = 0; i < SCREEN_H; i += 16) rectfill(0, i, SCREEN_W, 8, CLR_MEDIUM_GREEN);
-    circ(SCREEN_W / 2, 70, 24, CLR_WHITE);
-    print_scaled("FOOTBALL", (SCREEN_W - text_width("FOOTBALL") * 3) / 2, 100, CLR_WHITE, 3);
-    print_scaled("MANAGER", (SCREEN_W - text_width("MANAGER") * 2) / 2, 124, CLR_LIGHT_YELLOW, 2);
+    // baked Futura Condensed wordmarks, each on a big extruded shadow
+    wordmark(0,  12, 18, 296, 74, CLR_WHITE,        CLR_LIGHT_GREY, CLR_DARKER_BLUE, 6);  // FOOTBALL
+    wordmark(32, 64, 94, 192, 48, CLR_LIGHT_YELLOW, CLR_ORANGE,     CLR_DARK_BROWN,  5);  // MANAGER
     print_centered("drag your XI - deal - PLAY MATCH", SCREEN_W/2, 150, CLR_LIGHT_GREY);
     print_centered(str("best finish: %s", best == 0 ? "none yet" : (best == 1 ? "CHAMPIONS" : str("#%d", best))), SCREEN_W/2, 164, CLR_YELLOW);
     print_centered("click / ENTER to kick off", SCREEN_W/2, 180, blink(22) ? CLR_WHITE : CLR_DARK_GREY);
