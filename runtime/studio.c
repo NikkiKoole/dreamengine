@@ -1531,6 +1531,11 @@ static void loop_step(void) {
 #ifdef DE_TCC
     cart_reload_if_changed();   // file-watch hot reload (cart re-JITs, state persists)
 #endif
+#ifndef DE_NO_RAYLIB
+    // place the game in the window each frame (handles DE_WINDOW / a resized or device window).
+    // At the default size (window == game) this is the identity rect → byte-identical to before.
+    game_rect = gr_place(GetScreenWidth(), GetScreenHeight(), SCREEN_W, SCREEN_H).game;
+#endif
     poll_virtual_touches();
     update_stick();
     if (inp_pressed(KEY_F1)) watch_show = !watch_show;
@@ -1706,6 +1711,7 @@ static void loop_step(void) {
     }
     if (!skip_render) {
     BeginDrawing();
+        ClearBackground(BLACK);   // letterbox bars when the window is larger than the game rect (no-op at default size — the blit covers everything)
         bool present_sharp = scale_shader_ok && (SCALE_FILTER >= 2);
         if (present_sharp) {
             float ts[2] = { (float)SCREEN_W, (float)SCREEN_H };
@@ -2037,7 +2043,17 @@ int main(int argc, char **argv) {
 #ifndef PLATFORM_WEB
     if (hide_window) SetWindowState(FLAG_WINDOW_HIDDEN);
 #endif
-    InitWindow(SCREEN_W * SCALE, SCREEN_H * SCALE, window_title);
+    // window defaults to the game's exact size — desktop is unchanged (no letterbox, identity
+    // placement). DE_WINDOW=WxH (opt-in, dev/preview only) forces a phone-shaped window so the
+    // deck/rails placement can be built + eyeballed on desktop without a device. On iOS/web the
+    // shell supplies the real device size; game_rect (set each frame from gr_place) maps the
+    // canvas into whatever size the window is, so any size letterboxes correctly.
+    int win_w = SCREEN_W * SCALE, win_h = SCREEN_H * SCALE;
+#ifndef PLATFORM_WEB
+    { const char *ws = getenv("DE_WINDOW"); int w, h;
+      if (ws && sscanf(ws, "%dx%d", &w, &h) == 2 && w > 0 && h > 0) { win_w = w; win_h = h; } }
+#endif
+    InitWindow(win_w, win_h, window_title);
 #ifndef PLATFORM_WEB
     if (det_mode) { SetRandomSeed(seed); srand(seed); }   // reproducible rnd()/rnd_float()/shake
 #endif
