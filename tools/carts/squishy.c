@@ -11,8 +11,8 @@
   ],
   "description": {
     "summary": "Draw with a velocity-sensitive ink brush — lines swell when you go slow, thin out when you go fast, and taper to a point at each end. Pick a tool, thickness, and bevel in the top panel.",
-    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). The bevel toggle embosses strokes into a faux-3D rim (light from the top-left). And because rendering is a pure function of (stroke, seed), the BOIL toggle re-renders through a few jittered seeds and cycles them ~7.5fps → the whole drawing breathes, hand-drawn-animation style, for almost free. A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp) — the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
-    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle), drag the thickness slider, toggle BVL (bevel) and BOIL (living wobble), tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
+    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). BEVEL embosses a stroke into a faux-3D rim (light from the top-left); BOIL re-renders it through a few jittered seeds cycling ~7.5fps so it breathes (hand-drawn-animation style, almost free since rendering is a pure function of (stroke, seed)). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp) — the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
+    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle), drag the thickness slider, set BVL (bevel) and BOIL (living wobble) for new strokes, tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
   },
   "todo": [
     "Polish the tool-icon glyphs — ink/chalk/sketch read a bit muddy at 16px (sprite-draw.js in squishy.cart.js).",
@@ -108,6 +108,8 @@ typedef struct {
     int      tool;          // which brush this stroke was drawn with
     int      color;         // palette colour this stroke was drawn in
     int      pattern;       // dither pattern index (0 = solid) — stamp brushes only
+    int      bevel;         // 1 = this stroke is embossed (per-stroke, captured at draw)
+    float    boil;          // boil intensity 0..1 (0 = still) — per-stroke, captured at draw
     float    thick;         // thickness multiplier this stroke was drawn with
     int      n;
     Sample   pts[MAX_SAMPLES];
@@ -119,8 +121,8 @@ static Stroke   strokes[MAX_STROKES];
 static int      nstrokes = 0;
 static Stroke   cur;                 // the stroke being drawn right now
 static int      drawing = 0;
-static int      bevel = 0;           // bevel mode: emboss each stroke into a faux-3D rim
-static int      boil = 0;            // boil mode: cycle jittered variants → a living loop
+static int      bevel = 0;           // bevel DEFAULT for new strokes (each stroke captures it)
+static int      boil = 0;            // boil DEFAULT for new strokes (captured as intensity 0/1)
 static int      cursor_panel = -1;   // tracks which cursor is shown (hand on bar / ring on canvas)
 static int      tool = 0;            // selected brush
 static int      colsel = 0;          // selected pen colour (index into COLORS)
@@ -176,21 +178,21 @@ static float boil_off(unsigned seed, int i, unsigned fseed, unsigned salt) {
 
 // render a stroke as a chain of overlapping round stamps, offset by (ox,oy) in
 // `color` — (ox,oy) is the bevel rim offset; `jitter` adds the boil wobble.
-static void render_stroke(const Stroke *s, unsigned fseed, float ox, float oy, int color, int jitter) {
+static void render_stroke(const Stroke *s, unsigned fseed, float ox, float oy, int color, float boilamt) {
     if (s->n == 0) return;
     int chalk = BRUSHES[s->tool].kind == K_CHALK;   // dry, broken: drop ~40% of stamps
     if (s->n == 1) {
-        float jx = jitter ? boil_off(s->seed, 0, fseed, 0x11) : 0;
-        float jy = jitter ? boil_off(s->seed, 0, fseed, 0x22) : 0;
+        float jx = boilamt > 0 ? boil_off(s->seed, 0, fseed, 0x11) * boilamt : 0;
+        float jy = boilamt > 0 ? boil_off(s->seed, 0, fseed, 0x22) * boilamt : 0;
         stamp(s->pts[0].x + ox + jx, s->pts[0].y + oy + jy, sample_width(s, 0, fseed), color);
         return;
     }
     for (int i = 0; i < s->n - 1; i++) {
         float x0 = s->pts[i].x,   y0 = s->pts[i].y;
         float x1 = s->pts[i+1].x, y1 = s->pts[i+1].y;
-        if (jitter) {
-            x0 += boil_off(s->seed, i,   fseed, 0x11); y0 += boil_off(s->seed, i,   fseed, 0x22);
-            x1 += boil_off(s->seed, i+1, fseed, 0x11); y1 += boil_off(s->seed, i+1, fseed, 0x22);
+        if (boilamt > 0) {
+            x0 += boil_off(s->seed, i,   fseed, 0x11) * boilamt; y0 += boil_off(s->seed, i,   fseed, 0x22) * boilamt;
+            x1 += boil_off(s->seed, i+1, fseed, 0x11) * boilamt; y1 += boil_off(s->seed, i+1, fseed, 0x22) * boilamt;
         }
         float w0 = sample_width(s, i, fseed), w1 = sample_width(s, i + 1, fseed);
         float dx = x1 - x0, dy = y1 - y0;
@@ -207,10 +209,10 @@ static void render_stroke(const Stroke *s, unsigned fseed, float ox, float oy, i
 
 // airbrush: scatter SPRAY_DOTS dots per path point inside a cloud whose radius
 // follows the speed curve (slow = wide, fast = tight). Density builds on overlap.
-static void render_spray(const Stroke *s, unsigned fseed, int jitter) {
+static void render_spray(const Stroke *s, unsigned fseed, float boilamt) {
     for (int i = 0; i < s->n; i++) {
         float x = s->pts[i].x, y = s->pts[i].y;
-        if (jitter) { x += boil_off(s->seed, i, fseed, 0x11); y += boil_off(s->seed, i, fseed, 0x22); }
+        if (boilamt > 0) { x += boil_off(s->seed, i, fseed, 0x11) * boilamt; y += boil_off(s->seed, i, fseed, 0x22) * boilamt; }
         float rad = sample_width(s, i, fseed) * 0.5f + 1.0f;
         for (int k = 0; k < SPRAY_DOTS; k++) {
             unsigned h = hashu(s->seed ^ (unsigned)(i * 2654435761u) ^ (unsigned)(k * 0x9E3779B1u));
@@ -223,13 +225,13 @@ static void render_spray(const Stroke *s, unsigned fseed, int jitter) {
 
 // bristle: BRISTLE_HAIRS thin lines raked across the brush width (perpendicular
 // to the stroke), each nudged a little so they're not mechanically parallel.
-static void render_bristle(const Stroke *s, unsigned fseed, int jitter) {
+static void render_bristle(const Stroke *s, unsigned fseed, float boilamt) {
     if (s->n < 2) return;
     for (int i = 0; i < s->n - 1; i++) {
         float x0 = s->pts[i].x, y0 = s->pts[i].y, x1 = s->pts[i+1].x, y1 = s->pts[i+1].y;
-        if (jitter) {
-            x0 += boil_off(s->seed, i,   fseed, 0x11); y0 += boil_off(s->seed, i,   fseed, 0x22);
-            x1 += boil_off(s->seed, i+1, fseed, 0x11); y1 += boil_off(s->seed, i+1, fseed, 0x22);
+        if (boilamt > 0) {
+            x0 += boil_off(s->seed, i,   fseed, 0x11) * boilamt; y0 += boil_off(s->seed, i,   fseed, 0x22) * boilamt;
+            x1 += boil_off(s->seed, i+1, fseed, 0x11) * boilamt; y1 += boil_off(s->seed, i+1, fseed, 0x22) * boilamt;
         }
         float dx = x1 - x0, dy = y1 - y0;
         float len = sqrtf(dx * dx + dy * dy);
@@ -250,21 +252,21 @@ static void render_bristle(const Stroke *s, unsigned fseed, int jitter) {
 // each point threads a 1px line to a few seeded-random prior points within reach.
 // The web topology is keyed by the stroke seed ONLY (stable), while boil jitters
 // the point positions (fseed) — so the whole tangle wiggles without re-wiring.
-static void render_sketch(const Stroke *s, unsigned fseed, int jitter) {
+static void render_sketch(const Stroke *s, unsigned fseed, float boilamt) {
     if (s->n < 2) return;
     for (int i = 1; i < s->n; i++) {
         float xi = s->pts[i].x, yi = s->pts[i].y;
         float xp = s->pts[i-1].x, yp = s->pts[i-1].y;
-        if (jitter) {
-            xi += boil_off(s->seed, i,   fseed, 0x11); yi += boil_off(s->seed, i,   fseed, 0x22);
-            xp += boil_off(s->seed, i-1, fseed, 0x11); yp += boil_off(s->seed, i-1, fseed, 0x22);
+        if (boilamt > 0) {
+            xi += boil_off(s->seed, i,   fseed, 0x11) * boilamt; yi += boil_off(s->seed, i,   fseed, 0x22) * boilamt;
+            xp += boil_off(s->seed, i-1, fseed, 0x11) * boilamt; yp += boil_off(s->seed, i-1, fseed, 0x22) * boilamt;
         }
         line((int)(xi + .5f), (int)(yi + .5f), (int)(xp + .5f), (int)(yp + .5f), s->color);  // spine
         for (int k = 0; k < SKETCH_TRIES; k++) {
             unsigned h = hashu(s->seed ^ (unsigned)(i * 2654435761u) ^ (unsigned)(k * 0x9E3779B1u));
             int j = (int)(h % (unsigned)i);                 // a prior point (topology = seed only)
             float xj = s->pts[j].x, yj = s->pts[j].y;
-            if (jitter) { xj += boil_off(s->seed, j, fseed, 0x11); yj += boil_off(s->seed, j, fseed, 0x22); }
+            if (boilamt > 0) { xj += boil_off(s->seed, j, fseed, 0x11) * boilamt; yj += boil_off(s->seed, j, fseed, 0x22) * boilamt; }
             float dx = xi - xj, dy = yi - yj;
             if (dx * dx + dy * dy < SKETCH_R2)
                 line((int)(xi + .5f), (int)(yi + .5f), (int)(xj + .5f), (int)(yj + .5f), s->color);
@@ -277,19 +279,19 @@ static void render_sketch(const Stroke *s, unsigned fseed, int jitter) {
 // the ink body leave a light rim on the upper-left, a dark rim on the lower-right.
 // Pure geometry, no canvas read-back → deterministic. `jitter` propagates the boil
 // wobble to all passes so the rim moves with the body.
-static void draw_one(const Stroke *s, unsigned fseed, int jitter) {
+static void draw_one(const Stroke *s, unsigned fseed, float boilamt) {
     switch (BRUSHES[s->tool].kind) {
-        case K_SKETCH:  render_sketch(s, fseed, jitter);  return;
-        case K_SPRAY:   render_spray(s, fseed, jitter);   return;
-        case K_BRISTLE: render_bristle(s, fseed, jitter); return;
+        case K_SKETCH:  render_sketch(s, fseed, boilamt);  return;
+        case K_SPRAY:   render_spray(s, fseed, boilamt);   return;
+        case K_BRISTLE: render_bristle(s, fseed, boilamt); return;
         default: break;   // K_STAMP / K_CHALK use the stamp chain below
     }
-    if (bevel) {
-        render_stroke(s, fseed,  BEVEL_OFF,  BEVEL_OFF, SHADOW, jitter);   // rims stay solid
-        render_stroke(s, fseed, -BEVEL_OFF, -BEVEL_OFF, HILITE, jitter);
+    if (s->bevel) {       // per-stroke bevel
+        render_stroke(s, fseed,  BEVEL_OFF,  BEVEL_OFF, SHADOW, boilamt);   // rims stay solid
+        render_stroke(s, fseed, -BEVEL_OFF, -BEVEL_OFF, HILITE, boilamt);
     }
     if (s->pattern) fillp(PATTERNS[s->pattern], PAPER);   // dpaint-style dither fills the body only
-    render_stroke(s, fseed, 0, 0, s->color, jitter);
+    render_stroke(s, fseed, 0, 0, s->color, boilamt);
     if (s->pattern) fillp_reset();
 }
 
@@ -361,6 +363,8 @@ void update(void) {
         cur.tool = tool;
         cur.color = COLORS[colsel];
         cur.pattern = patsel;
+        cur.bevel = bevel;                 // capture the current bevel/boil defaults
+        cur.boil = boil ? 1.0f : 0.0f;
         cur.thick = thickness();
         seedctr = seedctr * 1103515245u + 12345u;
         cur.seed = seedctr;
@@ -391,9 +395,15 @@ void draw(void) {
     cls(PAPER);
     // boil: pick this beat's jittered variant; committed strokes wobble, the
     // stroke you're actively drawing stays put.
-    unsigned vseed = boil ? VARIANT[(frame() / BOIL_PERIOD) % BOIL_FRAMES] : 0u;
-    for (int i = 0; i < nstrokes; i++) draw_one(&strokes[i], strokes[i].seed ^ vseed, boil);
-    if (drawing) draw_one(&cur, cur.seed, 0);
+    // boil is now PER-STROKE: each stroke animates by its own intensity. The variant
+    // (which jitter this beat) is global timing; a still stroke (boil 0) uses a stable seed.
+    unsigned vseed = VARIANT[(frame() / BOIL_PERIOD) % BOIL_FRAMES];
+    for (int i = 0; i < nstrokes; i++) {
+        float bamt = strokes[i].boil;
+        unsigned fs = (bamt > 0) ? (strokes[i].seed ^ vseed) : strokes[i].seed;
+        draw_one(&strokes[i], fs, bamt);
+    }
+    if (drawing) draw_one(&cur, cur.seed, 0.0f);   // the active stroke stays still
 
     // cursor: an OS hand over the tool-bar (so it's clearly clickable), our own
     // brush-size ring over the canvas. Only toggle on the transition (no flicker).
