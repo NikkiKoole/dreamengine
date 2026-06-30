@@ -159,10 +159,25 @@ for (const b of blocks) {
     if (nameM && !KW.has(nameM[1])) {
       const startLine = lineAt(b.openPos);
       const endLine = b.closePos >= 0 ? lineAt(b.closePos) : startLine;
-      funcs.push({ line: startLine, endLine, sig: head, name: nameM[1], role: leadingComment(startLine) });
+      const role = leadingComment(startLine) || trailingComment(startLine - 1);
+      funcs.push({ line: startLine, endLine, sig: head, name: nameM[1], role });
     }
   }
 }
+
+// the trailing `// …` (or inline `/* … */`) comment on a raw line, if any.
+// codeLines[i] is char-for-char the same length as rawLines[i] with comment
+// content blanked, so the code ends at its trimEnd() length — everything the
+// raw line has past there is the comment. It's already in the source: free.
+function commentStart(i) { return (codeLines[i] || "").replace(/\s+$/, "").length; }
+function trailingComment(i) {
+  const rest = (rawLines[i] || "").slice(commentStart(i));
+  const m = rest.match(/\/\/+\s?(.*)$/) || rest.match(/\/\*+\s?([\s\S]*?)\s*\*\/\s*$/);
+  return m ? m[1].trim() : "";
+}
+// the raw code on a line minus its trailing comment (string literals intact —
+// codeLines blanks string contents, so display from the raw text, cut at the comment).
+function codeOnly(i) { return (rawLines[i] || "").slice(0, commentStart(i)).trim(); }
 
 // contiguous // (or trailing */ block) comment lines immediately above a def
 function leadingComment(line) {
@@ -193,19 +208,19 @@ for (let i = 0; i < rawLines.length; i++) {
   if (/\)\s*\{?\s*$/.test(cl) && /\w\s*\(/.test(cl)) continue;
   // const/inline aren't mutable state
   if (/^static\s+(const|inline)\b/.test(cl)) continue;
-  let decl = rawLines[i].trim();
+  let decl = codeOnly(i);                                // raw code minus trailing comment
   // drop the initializer (we want the shape, not the data)
   const eq = decl.search(/\s=\s|\s=\{|=\s*\{|\s=$/);
   if (eq >= 0) decl = decl.slice(0, eq).replace(/[,{[(\s]+$/, "") + ";";
   decl = decl.replace(/\s*\{\s*$/, ";");                 // multiline array init head
-  globals.push({ line: ln, decl });
+  globals.push({ line: ln, decl, role: trailingComment(i) });
 }
 
 // ---- object/function-like #define at col 0 ----------------------------------
 const defines = [];
 for (let i = 0; i < rawLines.length; i++) {
   const m = rawLines[i].match(/^#\s*define\s+([A-Za-z_]\w*)(\([^)]*\))?/);
-  if (m) defines.push({ line: i + 1, name: m[1] + (m[2] || ""), text: rawLines[i].trim() });
+  if (m) defines.push({ line: i + 1, name: m[1] + (m[2] || ""), code: codeOnly(i), role: trailingComment(i) });
 }
 
 // ---- entry points -----------------------------------------------------------
@@ -253,27 +268,34 @@ for (const s of shapes) {
   if (body.length > SHAPE_CAP) o.push(dim(`    … +${body.length - SHAPE_CAP} more lines (read ${s.startLine}-${s.endLine})`));
 }
 
+// aligned `line · code · // role` rows — shared by globals, macros, functions.
+// the role is the line's own comment (trailing for vars/macros, leading for
+// fns), pulled into its own column so the code width never eats the comment.
+function rows(items, codeOf, capW) {
+  const w = Math.min(capW, Math.max(...items.map(it => codeOf(it).length), 0));
+  for (const it of items) {
+    const code = clip(codeOf(it), w);
+    o.push(dim(lpad(it.line, 6) + "  ") + rpad(code, w) + (it.role ? dim("  // " + clip(it.role, 52)) : ""));
+  }
+}
+
 // global state — one-line signatures
 if (globals.length) {
   o.push(head(`GLOBAL STATE  (${globals.length})`));
-  for (const g of globals) o.push(dim(lpad(g.line, 6) + "  ") + clip(g.decl, 86));
+  rows(globals, g => g.decl, 48);
 }
 
 // defines
 if (defines.length) {
   o.push(head(`MACROS  (${defines.length})`));
-  for (const d of defines) o.push(dim(lpad(d.line, 6) + "  ") + clip(d.text, 86));
+  rows(defines, d => d.code, 40);
 }
 
 // function index — line · signature · role
 o.push(head(`FUNCTIONS  (${funcs.length})`));
 if (!funcs.length) o.push(dim("  none found (macro-heavy cart? read it directly)."));
 funcs.sort((a, b) => a.line - b.line);
-const sigW = Math.min(54, Math.max(...funcs.map(f => f.sig.length), 0));
-for (const f of funcs) {
-  const sig = clip(f.sig, sigW);
-  o.push(dim(lpad(f.line, 6) + "  ") + rpad(sig, sigW) + (f.role ? dim("  // " + clip(f.role, 48)) : ""));
-}
+rows(funcs, f => f.sig, 54);
 
 // entry points
 if (entries.length) {
