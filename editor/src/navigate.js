@@ -1,8 +1,9 @@
 // navigate.js — read-only engine-source viewer (lives in the DOCS tab).
 //
 // The runtime's C files — studio.h, the cart-land library headers (ui.h,
-// gestures.h, pointer.h, improv.h, radio.h, keybed.h, solo.h, ampcab.h), sound.h,
-// studio.c — are readable in-editor
+// gestures.h, pointer.h, cursor.h, improv.h, radio.h, keybed.h, solo.h,
+// shadermath.h, cards.h, ampcab.h), spec.h (the gameplay-test harness API),
+// sound.h, studio.c — are readable in-editor
 // under the docs sidebar's "engine source" group. Cmd/ctrl-clicking the
 // filename of an `#include "ui.h"` in your cart does the same thing: it
 // switches to the docs tab with that file open (no overlay over your code —
@@ -29,10 +30,15 @@ import { flashField } from './main.js'
 // then the cart-land library headers, then engine internals
 export const ENGINE_SOURCES = [
   // studio.h first, then the cart-land library headers (the capabilities the engine
-  // deliberately doesn't own — ADR-0006), then sound.h + studio.c. Generated/data
-  // headers (font *_data.h, studio_tcc_symbols.h) and internal ones are left out.
+  // deliberately doesn't own — ADR-0006), then spec.h (the gameplay-test harness a
+  // cart writes spec() against), then sound.h + studio.c. Generated/data headers
+  // (font *_data.h, studio_tcc_symbols.h) and internal ones (platform.h, midi_input.h,
+  // raylib_compat, stb_image) are left out.
   'studio.h',
-  'ui.h', 'gestures.h', 'pointer.h', 'improv.h', 'radio.h', 'keybed.h', 'solo.h', 'ampcab.h',
+  'ui.h', 'gestures.h', 'pointer.h', 'cursor.h',
+  'improv.h', 'radio.h', 'keybed.h', 'solo.h',
+  'shadermath.h', 'cards.h', 'ampcab.h',
+  'spec.h',
   'sound.h', 'studio.c',
 ]
 
