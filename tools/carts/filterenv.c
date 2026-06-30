@@ -12,9 +12,9 @@
   ],
   "lineage": "Sibling of pitchenv — the same mod-envelope system pointed at filter cutoff; the canonical tuning rig for the resonant-lowpass sweep (the pluck 'pew').",
   "description": {
-    "summary": "A Model-D-style dual-envelope rig: a FILTER contour (instrument_env + ENV_CUTOFF) AND a LOUDNESS contour (the amp ADSR) on one saw voice, each with its own sliders and graph.",
-    "detail": "Two independent envelopes, like a Minimoog. The top graph is the FILTER sweep (cutoff snaps open on the attack, falls over the decay). The bottom graph is the AMP envelope (attack/decay/sustain/release) — what actually decides how LONG you hear the note: drop the sustain and the note plucks and dies inside the gate; raise it and the note rings until note-off (the red line). Drag the nine sliders and listen.",
-    "controls": "A-K play notes - SPACE toggles the auto-arp - drag the FILTER and AMP sliders"
+    "summary": "A Model-D-style filter rig: a FILTER contour (instrument_env + ENV_CUTOFF), an LFO on the cutoff (instrument_lfo + LFO_CUTOFF), AND a LOUDNESS contour (the amp ADSR) on one saw voice — each with its own sliders and a live graph.",
+    "detail": "Three modulators, like a Minimoog filter section. Top graph: the FILTER cutoff — the one-shot ENV snaps it open on the attack and it falls over the decay, while the LFO wobbles it continuously (our voice LFO resets to phase 0 on each note-on, so the wobble starts WITH the note). Bottom graph: the AMP envelope (attack/decay/sustain/release) — what decides how LONG you hear the note: low sustain plucks and dies inside the gate, high sustain rings until note-off (the red line). Drag the eleven sliders and listen.",
+    "controls": "A-K play notes - SPACE toggles the auto-arp - drag the FILTER / LFO / AMP sliders"
   }
 }
 de:meta */
@@ -34,7 +34,7 @@ de:meta */
 #define GATE_MS 450               // how long each note is gated (note-on → note-off)
 
 typedef struct { const char *name; float lo, hi, val; } Knob;
-enum { F_ATK, F_DEC, F_AMT, F_CUT, F_RES,   A_ATK, A_DEC, A_SUS, A_REL, NK };
+enum { F_ATK, F_DEC, F_AMT, F_CUT, F_RES,   L_RATE, L_DEPTH,   A_ATK, A_DEC, A_SUS, A_REL, NK };
 static Knob K[NK] = {
     // FILTER contour
     { "ATK",     0.f,  120.f,    0.f },   // filter-env attack (ms) — plucks want ~0
@@ -42,6 +42,9 @@ static Knob K[NK] = {
     { "AMT",-3500.f, 3500.f, 1800.f },    // env depth on cutoff (Hz). bipolar: + opens, - closes first
     { "CUT",   80.f, 2000.f,  320.f },    // base cutoff the env rides on top of (Hz)
     { "RES",    0.f,   15.f,    9.f },    // filter resonance — the squelch
+    // LFO on cutoff — the continuous wobble (per-voice: resets to phase 0 on each note-on)
+    { "RTE",    0.f,   12.f,    5.f },    // LFO rate (Hz) — wobble speed
+    { "DEP",    0.f, 3000.f,  600.f },    // LFO depth (Hz) — wobble amount on cutoff. 0 = off
     // LOUDNESS contour (amp ADSR)
     { "ATK",    0.f,  400.f,    2.f },    // amp attack (ms)
     { "DEC",    0.f,  600.f,  180.f },    // amp decay to sustain (ms)
@@ -51,28 +54,42 @@ static Knob K[NK] = {
 
 static int   active = -1;        // slider being dragged, or -1
 static bool  auto_on = true;
+static bool  sub_on = false;     // sub-oscillator: same wave one octave down
+static int   oct = 0;            // octave shift from Z/X (GarageBand-style)
 static float arp_t = 0.f;
 static int   arp_i = 0;
 static float last_note_t = -9.f;
 
-// slider layout: two groups (5 filter | 4 amp) in one row
-#define SX 8
-#define SW 26
-#define SP 32
-#define GAP 14
+// sub-osc toggle button (top-right)
+#define SUBX 252
+#define SUBY 3
+#define SUBW 60
+#define SUBH 11
+
+// slider layout: three groups (5 filter | 2 lfo | 4 amp) in one row
+#define SX 5
+#define SW 22
+#define SP 26
+#define GAP 8
 #define SY 116
 #define SH 42
 
-static int knob_x(int i) { return i < 5 ? SX + i * SP : SX + 5 * SP + GAP + (i - 5) * SP; }
+static int knob_x(int i) {
+    if (i < 5) return SX + i * SP;                          // filter group
+    if (i < 7) return SX + 5 * SP + GAP + (i - 5) * SP;     // lfo group
+    return SX + 7 * SP + 2 * GAP + (i - 7) * SP;            // amp group
+}
 
 static void apply(void) {
     instrument(SLOT, INSTR_SAW, (int)K[A_ATK].val, (int)K[A_DEC].val, (int)K[A_SUS].val, (int)K[A_REL].val);
     instrument_filter(SLOT, FILTER_LOW, (int)K[F_CUT].val, (int)K[F_RES].val);
     instrument_env(SLOT, 0, ENV_CUTOFF, (int)K[F_ATK].val, (int)K[F_DEC].val, K[F_AMT].val);
+    instrument_lfo(SLOT, 0, LFO_CUTOFF, K[L_RATE].val, K[L_DEPTH].val);   // wobble rides on top
 }
 
 static void play(int midi) {
     hit(midi, SLOT, 5, GATE_MS);
+    if (sub_on && midi - 12 >= 0) hit(midi - 12, SLOT, 4, GATE_MS);   // sub osc: same wave, 1 octave down
     last_note_t = now();
 }
 
@@ -82,6 +99,11 @@ void init(void) {
 }
 
 void update(void) {
+    // sub-osc toggle button (top-right) — separate region from the sliders
+    if (mouse_pressed(MOUSE_LEFT) && mouse_x() >= SUBX && mouse_x() < SUBX + SUBW
+        && mouse_y() >= SUBY && mouse_y() < SUBY + SUBH)
+        sub_on = !sub_on;
+
     // sliders (drag vertically)
     if (mouse_pressed(MOUSE_LEFT)) {
         active = -1;
@@ -98,20 +120,24 @@ void update(void) {
         apply();
     }
 
-    // keyboard A S D F G H J K → pentatonic degrees
-    const char keys[8] = { 'A','S','D','F','G','H','J','K' };
-    for (int i = 0; i < 8; i++)
-        if (keyp(keys[i])) play(degree(SCALE_PENTA, 3, i));
+    // GarageBand "musical typing" layout: A=C, W=C#, S=D, E=D#, D=E, F=F, T=F#, G=G,
+    // Y=G#, H=A, U=A#, J=B, K=C, O=C#, L=D, P=D# — a chromatic octave-and-a-bit. Z/X shift octave.
+    static const char gbk[16] = { 'A','W','S','E','D','F','T','G','Y','H','U','J','K','O','L','P' };
+    for (int i = 0; i < 16; i++)
+        if (keyp(gbk[i])) play(60 + oct * 12 + i);
+    if (keyp('Z') && oct > -3) oct--;
+    if (keyp('X') && oct <  3) oct++;
     if (keyp(KEY_SPACE)) auto_on = !auto_on;
 
-    // auto arp so there's always something to judge by ear
+    // auto arp so there's always something to judge by ear (follows the Z/X octave)
     if (auto_on) {
         arp_t += dt();
-        if (arp_t >= 0.30f) { arp_t = 0.f; play(degree(SCALE_PENTA, 3, arp_i)); arp_i = (arp_i + 1) % 8; }
+        if (arp_t >= 0.30f) { arp_t = 0.f; play(degree(SCALE_PENTA, 3 + oct, arp_i)); arp_i = (arp_i + 1) % 8; }
     }
 }
 
-// the cutoff the FILTER env produces `s` seconds into a note (mirrors sound_ad_env, one-shot AD)
+// the cutoff `s` seconds into a note: base + one-shot ENV (mirrors sound_ad_env) + the LFO wobble
+// (sine, phase 0 at note-on — matches our per-voice retrigger), all summed onto the cutoff
 static float env_cutoff_at(float s) {
     float a = K[F_ATK].val / 1000.f, d = K[F_DEC].val / 1000.f, lvl;
     if (a > 0.f && s < a) lvl = s / a;
@@ -119,7 +145,8 @@ static float env_cutoff_at(float s) {
         float sd = s - a;
         lvl = (d <= 0.f || sd >= d) ? 0.f : expf(-4.0f * sd / d);
     }
-    return K[F_CUT].val + lvl * K[F_AMT].val;
+    float lfo = sinf(6.2831853f * K[L_RATE].val * s) * K[L_DEPTH].val;
+    return K[F_CUT].val + lvl * K[F_AMT].val + lfo;
 }
 
 // the AMP loudness 0..1 `s` seconds into a note, gated at GATE_MS (ADSR)
@@ -137,7 +164,13 @@ static float amp_at(float s) {
 void draw(void) {
     cls(CLR_DARKER_BLUE);
     print("DUAL ENV", 8, 4, CLR_LIGHT_PEACH);
-    print_right("filter + loudness", 312, 4, CLR_MAUVE);
+
+    // sub-osc toggle (top-right): layers the same wave one octave down
+    rectfill(SUBX, SUBY, SUBW, SUBH, sub_on ? CLR_GREEN : CLR_BROWNISH_BLACK);
+    rect(SUBX, SUBY, SUBW, SUBH, CLR_DARKER_GREY);
+    font(FONT_SMALL);
+    print("SUB OSC -1", SUBX + 5, SUBY + 3, sub_on ? CLR_BROWNISH_BLACK : CLR_LIGHT_GREY);
+    font(FONT_NORMAL);
 
     // shared time axis: cover the whole note — gate + release tail (and at least the filter sweep)
     float gate = GATE_MS / 1000.f;
@@ -155,9 +188,9 @@ void draw(void) {
         rectfill(gx, gy, gw, gh, CLR_BROWNISH_BLACK);
         rect(gx, gy, gw, gh, CLR_DARKER_GREY);
 
-        float base = K[F_CUT].val, amt = K[F_AMT].val;
-        float lo_c = base + (amt < 0.f ? amt : 0.f);
-        float hi_c = base + (amt > 0.f ? amt : 0.f);
+        float base = K[F_CUT].val, amt = K[F_AMT].val, dep = K[L_DEPTH].val;
+        float lo_c = base + (amt < 0.f ? amt : 0.f) - dep;   // widen the range for the LFO swing
+        float hi_c = base + (amt > 0.f ? amt : 0.f) + dep;
         if (lo_c < 20.f) lo_c = 20.f;
         if (hi_c - lo_c < 50.f) hi_c = lo_c + 50.f;
         #define CY(c) (gy + gh - 1 - (int)((clamp((c), lo_c, hi_c) - lo_c) / (hi_c - lo_c) * (gh - 2)))
@@ -214,14 +247,15 @@ void draw(void) {
         font(FONT_NORMAL);
     }
 
-    // ── sliders: two groups (FILTER | AMP) ────────────────────────────────────
+    // ── sliders: three groups (FILTER | LFO | AMP) ────────────────────────────
     font(FONT_SMALL);
     print("FILTER ENV", knob_x(0) + 1, SY - 9, CLR_BLUE);
-    print("AMP ENV (loudness)", knob_x(5) + 1, SY - 9, CLR_LIME_GREEN);
+    print("LFO CUT", knob_x(5) + 1, SY - 9, CLR_MAUVE);
+    print("AMP ENV", knob_x(7) + 1, SY - 9, CLR_LIME_GREEN);
     font(FONT_NORMAL);
     for (int i = 0; i < NK; i++) {
         int cx = knob_x(i);
-        int col = active == i ? CLR_YELLOW : (i < 5 ? CLR_TRUE_BLUE : CLR_GREEN);
+        int col = active == i ? CLR_YELLOW : (i < 5 ? CLR_TRUE_BLUE : i < 7 ? CLR_MAUVE : CLR_GREEN);
         rect(cx, SY, SW, SH, CLR_DARKER_GREY);
         float t = (K[i].val - K[i].lo) / (K[i].hi - K[i].lo);
         int vy = SY + SH - 1 - (int)(t * (SH - 2));
@@ -241,6 +275,9 @@ void draw(void) {
         font(FONT_NORMAL);
     }
 
-    print(auto_on ? "auto-arp ON" : "auto-arp off", 8, SCREEN_H - 9, auto_on ? CLR_LIME_GREEN : CLR_DARK_GREY);
-    print_right("A-K play   SPACE arp", 312, SCREEN_H - 9, CLR_LIGHT_GREY);
+    font(FONT_SMALL);
+    print(auto_on ? "auto-arp ON" : "auto-arp off", 8, SCREEN_H - 7, auto_on ? CLR_LIME_GREEN : CLR_DARK_GREY);
+    print(str("oct %+d", oct), 72, SCREEN_H - 7, CLR_MAUVE);
+    print_right("GarageBand keys  Z/X oct  SPACE arp", 312, SCREEN_H - 7, CLR_LIGHT_GREY);
+    font(FONT_NORMAL);
 }
