@@ -210,11 +210,26 @@ beautiful instead of text labels.
 
 The maker has more drawing ideas queued; this cart is the home they slot into. Candidates to consider
 once v1 lands (not committed):
+
+- **★ Select tool — per-stroke properties (the big one, maker's idea).** The whole drawing is already
+  *vector data* (a list of strokes, each a path of nodes), so a SELECT tool is natural: click near a
+  stroke → hit-test (point-to-polyline distance) → select it → a contextual property editor tweaks
+  *that one stroke*: colour, dither, **bevel (size / direction)**, **boil intensity**, thickness,
+  tool. **The key shift this forces:** bevel and boil are currently *global* toggles — to set them
+  per-stroke they must become **per-stroke properties** (captured from the current settings at draw
+  time, exactly like colour/tool/thickness/pattern already are). That's very doable (strokes are
+  structs) and turns the cart from a paint tool into a tiny **non-destructive vector editor** — some
+  strokes beveled big, some boiling hard, different colours, all editable after the fact. Biggest
+  single feature so far (selection + hit-test + per-stroke bevel/boil migration + a property panel),
+  but it's the natural endpoint of "it's all just nodes." Pairs beautifully with everything already
+  built.
 - **Dithered strokes (shipped, 2026-06-30)** — the *intermediate* step before flood-fill (the maker's
-  idea): the fat stamp brushes can be filled with a dpaint-style dither pattern (`PATTERNS[]` =
-  dots/checker/grid via `fillp(pat, PAPER)`, set around the body pass only so bevel rims stay solid;
-  a cycle button in the bar). Per-stroke (stored), so it stays inside the pure-vector model — **no
-  layer buffer needed**. This is the cheap 80% of the dpaint-dither want.
+  idea): the fat stamp brushes can be filled with a dpaint-style **Bayer-ordered density ramp**
+  (`PATTERNS[]` = 16-bit `fillp` masks computed from the 4×4 Bayer matrix, ~12/25/50/75/87% ink; set
+  around the body pass only so bevel rims stay solid; a cycle button in the bar). The swatch sprites
+  decode the same masks so the button always shows the real fill. Per-stroke (stored), so it stays
+  inside the pure-vector model — **no layer buffer needed**. (Directional dithers — h/v-lines,
+  diagonal — deferred; the engine has them as `FILL_*` if wanted.)
 - **Flood-fill (still wanted)** — the *raster* other half: flood a bounded region, lay a dither/ramp
   in it. This one genuinely needs the **persistent layer buffer** (flood-fill is a raster op; the cart
   re-renders from data each frame and `pget` reads *last* frame). Do it *with* the layer-buffer
