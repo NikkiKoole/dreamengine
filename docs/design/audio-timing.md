@@ -4,7 +4,8 @@
 > playback "feels a bit drunk," with **occasional drift** on web that isn't audible
 > on native. This note traces the cause through the code and ranks the fixes.
 > The latency half of the web-audio question lives in
-> [`product-notes.md`](product-notes.md); **this note owns timing jitter/drift**.
+> [`product-notes.md`](product-notes.md), the wasm-vs-native engine parity in
+> [`web-audio-parity.md`](web-audio-parity.md); **this note owns timing jitter/drift**.
 >
 > **STATUS (2026-06-10): investigation closed; decision pending.** Cause fully
 > characterized and confirmed in the *shipped* artifact (web audio runs on the main

@@ -256,7 +256,7 @@ the tb303 fine-control style v1's *knob* already uses). The tension:
 
 ### 8c. `ui_surface` — the per-finger zone primitive
 
-sh101's keybed, handpan's drumhead, touchpiano, drum pads, and **the XY pad
+sh101's keybed ([`midi-and-keybed.md`](midi-and-keybed.md)), handpan's drumhead, touchpiano, drum pads, and **the XY pad
 in every tinyjam rack** ([`tinyjam-racks.md`](tinyjam-racks.md) "universal layout")
 are not widgets — they're *surfaces*: per-finger enter/leave/move over a
 zone map, where a moving finger **hands over between zones**

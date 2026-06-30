@@ -5,6 +5,7 @@
 > cadence / `renderEvery`) shipped 2026-06-11** — see below. `fps` cap and reactive
 > (`repaint`) are still designs. Mobile-display companion (resizable / scale-to-fit /
 > rotation) lives in [`mobile-web-notes.md`](mobile-web-notes.md) §4c — this doc owns **power**.
+> The audio-thread companion (frame-quantized triggers, web drift) is [`audio-timing.md`](audio-timing.md).
 
 ## The problem
 
