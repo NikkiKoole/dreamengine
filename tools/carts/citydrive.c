@@ -11,7 +11,7 @@
     "camera-follow"
   ],
   "lineage": "The data-driven successor to cityview. cityview is a procedural render BENCH (seeded axis-aligned boxes) for the pseudo-3D city look; citydrive keeps its proven projection/camera/driving machinery but extrudes ARBITRARY POLYGON footprints from a REAL OpenStreetMap export (roadview's .rvb data, loaded at runtime), so you drive an actual city in pseudo-3D. Building heights ride along in the RVB2 format (OSM height/building:levels, with a per-footprint fallback where untagged). Sibling of roadview (same data, 2D top-down) — swap the file, see a different city.",
-  "description": "Drive a REAL city in pseudo-3D. citydrive loads the SAME OpenStreetMap data as roadview (a .rvb fetched by data-tools/roadview/osm-roads.js) but instead of drawing it flat top-down, it EXTRUDES every building footprint straight up the screen — GTA1-meets-Zelda, the cityview look applied to real geometry. Footprints are arbitrary OSM polygons (not boxes), extruded with winding-based wall culling + polyfill roof caps; heights come from the RVB2 format (OSM height / building:levels tags, ~6% coverage, with a per-footprint fallback for the untagged majority). Roads draw as flat ground ribbons in the real road hierarchy, over a ground of flat area fills — blue water, green parks/woods, peach sand, and muted developed-land/zoning — so the city isn't bare between buildings. If the data carries a terrain heightfield (fetch with osm-roads --dem, e.g. San Francisco's hills), the whole city DRAPES over a shaded low-poly hillside — roads, footprints and the car all ride the real elevation (vertically exaggerated so the relief reads in the lo-fi oblique view). You spawn in the dense building mass (robust against the OSM bbox-balloon). V flattens the whole thing to a top-down 2D map (handy to check that footprints sit beside roads, not on them). Opens on data/demo.rvb; DRAG any .rvb/.json from the data folder onto the window to load that town, or OPEN reveals the folder. Arrows/WASD drive, M toggles north/heading-up camera, V top-down map, T textures, R toggles roads, [ ] zoom."
+  "description": "Drive a REAL city in pseudo-3D. citydrive loads the SAME OpenStreetMap data as roadview (a .rvb fetched by data-tools/roadview/osm-roads.js) but instead of drawing it flat top-down, it EXTRUDES every building footprint straight up the screen — GTA1-meets-Zelda, the cityview look applied to real geometry. Footprints are arbitrary OSM polygons (not boxes), extruded with winding-based wall culling + polyfill roof caps; heights come from the RVB2 format (OSM height / building:levels tags, ~6% coverage, with a per-footprint fallback for the untagged majority). Roads draw as flat ground ribbons in the real road hierarchy, over a ground of flat area fills — blue water, green parks/woods, peach sand, and muted developed-land/zoning — so the city isn't bare between buildings. If the data carries a terrain heightfield (fetch with osm-roads --dem, e.g. San Francisco's hills or a fjord/lake like Konigssee), the whole scene DRAPES over a shaded low-poly hillside — roads, footprints and the car all ride the real elevation (exaggeration auto-scales so 138 m city hills and 1200 m mountain walls both read). It needn't be a city: a nature bbox renders as water + forest + mountains (forest dithers so the shaded slopes show through), and you can zoom right out to take in a whole landscape. You spawn in the dense building mass (robust against the OSM bbox-balloon). V flattens the whole thing to a top-down 2D map (handy to check that footprints sit beside roads, not on them). Opens on data/demo.rvb; DRAG any .rvb/.json from the data folder onto the window to load that town, or OPEN reveals the folder. Arrows/WASD drive, M toggles north/heading-up camera, V top-down map, T textures, R toggles roads, [ ] zoom."
 }
 de:meta */
 #include "studio.h"
@@ -50,7 +50,8 @@ de:meta */
 #define QUARTER 0x7BDE      // ~25% black dither
 #define MAXREP  6
 #define MAXBV   64          // max footprint vertices we extrude (real OSM rings are mostly < 20)
-#define RANGE_M 320.0f      // only extrude buildings / draw roads within this radius of the camera
+#define RANGE_M 320.0f      // extrude buildings / draw roads within this radius of the camera
+#define TERR_RANGE 1700.0f  // terrain mesh + water/green areas draw FAR (so mountains & lakes read as landscape)
 #define MAXDRAW 2000        // hard cap on buildings extruded per frame (perf backstop)
 #define DATA_DIR "../data"
 
@@ -136,8 +137,11 @@ static float g_hscale = HSCALE;   // 0 in top-down mode → buildings collapse t
 
 // terrain ground height at a world point — bilinear sample of the heightfield grid over the bbox.
 // 0 when there's no DEM (flat city). Drives the drape: roads/bases sit at ground_z, roofs at +h.
-#define TERRAIN_EXAG 2.4f   // vertical exaggeration — real relief reads subtly in this lo-fi oblique view;
-                            // amplifying it makes hills legible (and separates terrain from building height)
+// ADAPTIVE vertical exaggeration: relief reads subtly in this lo-fi oblique view, so we scale the
+// elevation to a consistent on-screen drama (TARGET_RELIEF world-units) regardless of whether the
+// data is 138 m city hills or 1500 m fjord walls. Set per-dataset from the heightfield's max.
+#define TARGET_RELIEF 330.0f
+static float g_exag = 1.0f;
 static float ground_z(float wx, float wy) {
   if (!hf_g) return 0;
   float u = (wx-bbminx)/(bbmaxx-bbminx+1e-4f), v = (wy-bbminy)/(bbmaxy-bbminy+1e-4f);
@@ -146,7 +150,7 @@ static float ground_z(float wx, float wy) {
   int x0=(int)fx, y0=(int)fy, x1=x0<hf_g-1?x0+1:x0, y1=y0<hf_g-1?y0+1:y0;
   float tx=fx-x0, ty=fy-y0;
   float a=hf_z[y0*hf_g+x0], b=hf_z[y0*hf_g+x1], c=hf_z[y1*hf_g+x0], d=hf_z[y1*hf_g+x1];
-  return TERRAIN_EXAG * ((a*(1-tx)+b*tx)*(1-ty) + (c*(1-tx)+d*tx)*ty);
+  return g_exag * ((a*(1-tx)+b*tx)*(1-ty) + (c*(1-tx)+d*tx)*ty);
 }
 
 // ── projection (ADR 0021) — world (x,y,z metres) → screen, height straight up ─
@@ -171,7 +175,7 @@ static void pdisc(float cx,float cy,float r,int color){
 }
 
 // ── data loading (twin of roadview's loader; reads RVB2 heights) ─────────────
-static void reset_pools(void){ nps=0; nbld=0; nway=0; narea=0; hf_g=0; loaded_ok=0; truncated=0; dname[0]=0; err[0]=0; }
+static void reset_pools(void){ nps=0; nbld=0; nway=0; narea=0; hf_g=0; g_exag=1.0f; loaded_ok=0; truncated=0; dname[0]=0; err[0]=0; }
 
 static int bld_mat(int start){ unsigned h=(unsigned)start*2654435761u; h^=h>>13; return (h>>8)%NMAT; }
 
@@ -221,7 +225,11 @@ static void load_bin(const char *buf, long len){
   }
   if (ver=='3' && p+4<=end){                               // trailing terrain heightfield: int32 G + float32 grid[G*G]
     int g; memcpy(&g,p,4); p+=4;
-    if (g>0 && g<=256 && p + (long)g*g*4 <= end){ hf_g=g; memcpy(hf_z, p, (size_t)g*g*4); }
+    if (g>0 && g<=256 && p + (long)g*g*4 <= end){
+      hf_g=g; memcpy(hf_z, p, (size_t)g*g*4);
+      float mx=0; for(int i=0;i<g*g;i++) if(hf_z[i]>mx) mx=hf_z[i];   // adaptive exag: normalise relief on-screen
+      g_exag = mx>1 ? fmaxf(0.12f, fminf(3.0f, TARGET_RELIEF/mx)) : 1.0f;
+    }
   }
 }
 
@@ -286,7 +294,8 @@ static void spawn_in_mass(void){
   double sx=0, sy=0; int n=0;
   for (int i=0;i<nbld;i++){ sx+=blds[i].cx; sy+=blds[i].cy; n++; }
   if (!n){ for (int i=0;i<nway;i++){ sx+=PX[rways[i].start]; sy+=PY[rways[i].start]; n++; } }
-  float gx = n ? (float)(sx/n) : 0, gy = n ? (float)(sy/n) : 0;   // mass centroid
+  float gx = n ? (float)(sx/n) : (bbminx+bbmaxx)*0.5f;            // mass centroid, else bbox centre (pure nature)
+  float gy = n ? (float)(sy/n) : (bbminy+bbmaxy)*0.5f;
   // snap to the building NEAREST the centroid so we start AMONG buildings, not in a gap
   float best=1e30f; S.px=gx; S.py=gy;
   for (int i=0;i<nbld;i++){ float dx=blds[i].cx-gx, dy=blds[i].cy-gy, d=dx*dx+dy*dy;
@@ -393,11 +402,11 @@ static void draw_terrain(void){
   float gw=bbmaxx-bbminx, gh=bbmaxy-bbminy;
   float cw=gw/(hf_g-1), ch=gh/(hf_g-1);
   int cj=(int)((S.camx-bbminx)/gw*(hf_g-1)), ci=(int)((S.camy-bbminy)/gh*(hf_g-1));
-  int rad=(int)(RANGE_M/fmaxf(cw,ch))+2;
+  int rad=(int)(TERR_RANGE/fmaxf(cw,ch))+2;
   for (int i=ci-rad;i<ci+rad;i++){ if(i<0||i>=hf_g-1) continue;
     for (int j=cj-rad;j<cj+rad;j++){ if(j<0||j>=hf_g-1) continue;
-      float za=hf_z[i*hf_g+j]*TERRAIN_EXAG, zb=hf_z[i*hf_g+(j+1)]*TERRAIN_EXAG;
-      float zc=hf_z[(i+1)*hf_g+j]*TERRAIN_EXAG, zd=hf_z[(i+1)*hf_g+(j+1)]*TERRAIN_EXAG;
+      float za=hf_z[i*hf_g+j]*g_exag, zb=hf_z[i*hf_g+(j+1)]*g_exag;
+      float zc=hf_z[(i+1)*hf_g+j]*g_exag, zd=hf_z[(i+1)*hf_g+(j+1)]*g_exag;
       float nx=-(zb-za)*ch, ny=-(zc-za)*cw, nz=cw*ch;         // cell normal (world)
       float nl=sqrtf(nx*nx+ny*ny+nz*nz)+1e-4f;
       float L=(nx*-0.45f + ny*-0.30f + nz*0.84f)/nl;          // lambert vs an up-left sun (flat ground ≈ 0.84)
@@ -436,10 +445,10 @@ void update(void) {
   if (keyp('R')) S.roads_on = !S.roads_on;
   if (keyp('V')) S.topdown = !S.topdown;          // flat 2D map to verify footprint vs road placement
   g_hscale = S.topdown ? 0.0f : HSCALE;
-  if (key('[')) S.zoom = fmaxf(0.7f, S.zoom*0.97f);
+  if (key('[')) S.zoom = fmaxf(0.12f, S.zoom*0.97f);        // min low enough to pull back over a whole landscape
   if (key(']')) S.zoom = fminf(8.0f, S.zoom*1.03f);
   float wz = mouse_wheel();                                  // mouse wheel → zoom
-  if (wz != 0) S.zoom = fmaxf(0.7f, fminf(8.0f, S.zoom * (wz>0 ? 1.12f : 1.0f/1.12f)));
+  if (wz != 0) S.zoom = fmaxf(0.12f, fminf(8.0f, S.zoom * (wz>0 ? 1.12f : 1.0f/1.12f)));
 
   // left-drag → orbit the camera around the car (look from any side while parked)
   if (mouse_pressed(MOUSE_LEFT) && mouse_y() >= 11){ S.dragging = true; S.dragx = mouse_x(); }
@@ -478,13 +487,16 @@ void draw(void) {
   // areas are big, so cull generously by centroid; off-screen polys rasterise to nothing.
   {
     static const int LAYER[] = { K_FARM,K_RESIDENTIAL,K_COMMERCIAL,K_INDUSTRIAL,K_PARKING,K_SAND,K_GREEN,K_WATER };
-    float AR2 = (RANGE_M*2.0f)*(RANGE_M*2.0f);
+    float AR2 = TERR_RANGE*TERR_RANGE;
     for (int li=0; li<8; li++){ int L=LAYER[li], col=AREA_COL[L];
+      bool dith = hf_g && L!=K_WATER;        // on hilly maps, dither land-cover so the shaded terrain shows THROUGH
+      if (dith) fillp(0xA5A5, -1);           // (forest/zoning over a mountain then reads the slope, not a flat patch)
       for (int a=0;a<narea;a++){ if (areas[a].kind!=L) continue;
         float mx=areas[a].cx-S.camx, my=areas[a].cy-S.camy;
         if (mx*mx+my*my > AR2) continue;
         area_fill(areas[a].start, areas[a].count, col);
       }
+      if (dith) fillp_reset();
     }
   }
 

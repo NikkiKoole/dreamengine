@@ -68,11 +68,16 @@ const DEM = has('--dem') ? (parseInt(opt('--dem', '96'), 10) || 96) : 0;   // Gx
 // citydrive drapes its flat geometry over this so a hilly city (SF, Lisbon…) renders 3D relief.
 // Stored compactly in the .rvb (RVB3): a grid of metres, not a z per point. Opt-in (--dem) — it's
 // slow (public API is 1 call/sec) so flat-city fetches stay fast. roadview is 2D and ignores it.
-async function fetchDEM(S, W, N, E, G) {
-  console.log(`fetching ${G}x${G} terrain grid over bbox (opentopodata srtm30m)…`);
+// Sample over the FEATURE extent (doc-local metre frame: origin ox,oy, size Wm×Hm), inverse-
+// projecting each grid point to lon/lat. This makes the grid map 1:1 onto doc.bbox in the cart,
+// so it stays aligned even when the OSM feature bbox balloons past the query area.
+async function fetchDEM(ox, oy, Wm, Hm, G) {
+  console.log(`fetching ${G}x${G} terrain grid over the feature extent (opentopodata srtm30m)…`);
   const pts = [];
-  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++)          // row i = latitude S→N, col j = lon W→E
-    pts.push([S + (N - S) * i / (G - 1), W + (E - W) * j / (G - 1)]);
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) {        // row i = south→north, col j = west→east
+    const [lon, lat] = invmerc(ox + (Wm) * j / (G - 1), oy + (Hm) * i / (G - 1));
+    pts.push([lat, lon]);
+  }
   const z = new Array(G * G).fill(0);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let b = 0; b < pts.length; b += 100) {
@@ -111,11 +116,15 @@ function demoHeightfield(Wm, Hm, G) {
   return { g: G, z };
 }
 
-// ---- web mercator: lon/lat (deg) → metres ----
+// ---- web mercator: lon/lat (deg) → metres (and back) ----
 const R = 6378137;
 function merc(lon, lat) {
   return [R * lon * Math.PI / 180,
           R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))];
+}
+function invmerc(x, y) {                          // metres → lon/lat (deg)
+  return [x / R * 180 / Math.PI,
+          (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI];
 }
 
 // OSM tags → our broad classes (null = drop). Area kinds (filled): water, building,
@@ -246,6 +255,7 @@ function buildDoc(source, name, ways) {
   return {
     source, name,
     bbox: [0, 0, round(maxx - minx), round(maxy - miny)],
+    ox: minx, oy: miny,                          // mercator-metre origin of the local frame (for DEM alignment)
     features,
   };
 }
@@ -516,7 +526,7 @@ async function overpass(S, W, N, E, name) {
   if (relRings) console.log(`  assembled ${relRings} ring(s) from ${rels.length} multipolygon relation(s)`);
   if (!ways.length) throw new Error('no roads in that bbox');
   const doc = buildDoc('overpass', name || `${S},${W},${N},${E}`, ways);
-  if (DEM) { try { doc.heightfield = await fetchDEM(S, W, N, E, DEM); }
+  if (DEM) { try { doc.heightfield = await fetchDEM(doc.ox, doc.oy, doc.bbox[2], doc.bbox[3], DEM); }
              catch (e) { console.log(`  terrain skipped (${e.message}) — flat`); } }
   write(doc);
 }
