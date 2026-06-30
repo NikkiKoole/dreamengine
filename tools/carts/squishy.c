@@ -11,8 +11,8 @@
   ],
   "description": {
     "summary": "Draw with a velocity-sensitive ink brush — lines swell when you go slow, thin out when you go fast, and taper to a point at each end. Pick a tool, thickness, and bevel in the top panel.",
-    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). BEVEL embosses a stroke into a faux-3D rim (light from the top-left); BOIL re-renders it through a few jittered seeds cycling ~7.5fps so it breathes (hand-drawn-animation style, almost free since rendering is a pure function of (stroke, seed)). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT tool (last in the dropdown) picks the nearest stroke by click and outlines it — the groundwork for editing a single stroke's properties (coming next). A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp) — the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
-    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle + SELECT), drag the thickness slider, set BVL (bevel) and BOIL (living wobble) for new strokes, tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
+    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). BEVEL embosses a stroke into a faux-3D rim (light from the top-left); BOIL re-renders it through a few jittered seeds cycling ~7.5fps so it breathes (hand-drawn-animation style, almost free since rendering is a pure function of (stroke, seed)). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT tool (last in the dropdown) makes this a tiny NON-DESTRUCTIVE vector editor: click a stroke to pick it (accent box), and the bar's controls retarget to that stroke — recolour it, change its dither, toggle bevel/boil, drag its thickness, and a property strip adds bevel-SIZE + boil-INTENSITY sliders. Edit any stroke any time; nothing is baked. A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp) — the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
+    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle + SELECT), drag the thickness slider, set BVL (bevel) and BOIL (living wobble) for new strokes, tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. With SELECT: click a stroke, then edit it via the bar + the bevel-size/boil-amt sliders. Keys: B bevel, O boil, U undo, C clear."
   },
   "todo": [
     "Polish the tool-icon glyphs — ink/chalk/sketch read a bit muddy at 16px (sprite-draw.js in squishy.cart.js).",
@@ -46,7 +46,8 @@ de:meta */
 // upper-left edge, dark rim on the lower-right.
 #define HILITE    CLR_LIGHT_PEACH  // the lit (top-left) rim
 #define SHADOW    CLR_BLACK        // the shaded (bottom-right) rim, darker than ink
-#define BEVEL_OFF 1.0f             // px the rims peek out past the ink body
+#define BEVEL_OFF 1.0f             // default px the rims peek out past the ink body
+#define BEVEL_MAX 4.0f             // max bevel rim size (the select tool's size slider)
 
 // the pen palette — black / blue / red / green (swatch sprites 8..11 in the .cart.js).
 #define NCOLORS 4
@@ -60,6 +61,7 @@ static const int COLORS[NCOLORS] = { INK, CLR_BLUE, CLR_RED, CLR_DARK_GREEN };
 static const int PATTERNS[NPATTERNS] = { 0x0000, 0x7FDF, 0x5F5F, 0x5A5A, 0x0A0A, 0x0208 };
 
 #define PANEL_H   24               // top tool-bar height; the canvas is below it
+#define PROP_H    18               // contextual property strip (shown under the bar when editing a selection)
 
 // boil: the opt-in living loop. Re-render the committed strokes through a few
 // jittered variants and cycle them slowly — the classic hand-drawn wobble.
@@ -111,8 +113,8 @@ typedef struct {
     int      tool;          // which brush this stroke was drawn with
     int      color;         // palette colour this stroke was drawn in
     int      pattern;       // dither pattern index (0 = solid) — stamp brushes only
-    int      bevel;         // 1 = this stroke is embossed (per-stroke, captured at draw)
-    float    boil;          // boil intensity 0..1 (0 = still) — per-stroke, captured at draw
+    float    bevel;         // bevel rim size in px (0 = off) — per-stroke, captured/editable
+    float    boil;          // boil intensity 0..1 (0 = still) — per-stroke, captured/editable
     float    thick;         // thickness multiplier this stroke was drawn with
     int      n;
     Sample   pts[MAX_SAMPLES];
@@ -290,9 +292,9 @@ static void draw_one(const Stroke *s, unsigned fseed, float boilamt) {
         case K_BRISTLE: render_bristle(s, fseed, boilamt); return;
         default: break;   // K_STAMP / K_CHALK use the stamp chain below
     }
-    if (s->bevel) {       // per-stroke bevel
-        render_stroke(s, fseed,  BEVEL_OFF,  BEVEL_OFF, SHADOW, boilamt);   // rims stay solid
-        render_stroke(s, fseed, -BEVEL_OFF, -BEVEL_OFF, HILITE, boilamt);
+    if (s->bevel > 0) {   // per-stroke bevel, s->bevel = rim size in px
+        render_stroke(s, fseed,  s->bevel,  s->bevel, SHADOW, boilamt);   // rims stay solid
+        render_stroke(s, fseed, -s->bevel, -s->bevel, HILITE, boilamt);
     }
     if (s->pattern) fillp(PATTERNS[s->pattern], PAPER);   // dpaint-style dither fills the body only
     render_stroke(s, fseed, 0, 0, s->color, boilamt);
@@ -335,25 +337,61 @@ static int pick_stroke(float px, float py) {
 // fields: { bg, bg_sel, frame, frame_hot, frame_sel, halo_sel }
 static const UiSprStyle TOOLBTN = { PAPER, CLR_LIGHT_PEACH, CLR_LIGHT_GREY, INK, ACCENT, -1 };
 
-// the top tool-bar: a tool dropdown (icon glyphs), thickness, bevel, boil, undo.
+// the top tool-bar. When the SELECT tool has a stroke picked, the value controls
+// EDIT that stroke (and reflect its values) instead of setting new-stroke defaults,
+// and a contextual property strip (bevel size / boil intensity) drops under the bar.
 static void draw_panel(void) {
+    int editing = (BRUSHES[tool].kind == K_SELECT && selected >= 0 && selected < nstrokes);
+    Stroke *sel = editing ? &strokes[selected] : 0;
+
     rectfill(0, 0, SCREEN_W, PANEL_H, PAPER);
     line(0, PANEL_H - 1, SCREEN_W, PANEL_H - 1, INK);
     ui_begin();
-    // tool dropdown header: the current tool's icon
+    // tool dropdown header (always sets the active tool)
     if (ui_spr_button_styled(TOOL_ICON[tool], DD_X, 2, DD_W, 20, dd_open, TOOLBTN)) dd_open = !dd_open;
-    font(FONT_SMALL); print(TOOL_DISP[tool], 26, 9, INK); font(FONT_NORMAL);   // tool name beside the icon
-    ui_slider(&thick01, 56, 4, 38, "thk");          // thickness 0.4×..2.0×
-    if (ui_button(98, 3, 28, 16, "bvl")) bevel = !bevel;
-    if (bevel) rectfill(98, 19, 28, 2, ACCENT);
-    if (ui_button(130, 3, 36, 16, "boil")) boil = !boil;
-    if (boil) rectfill(130, 19, 36, 2, ACCENT);
+    font(FONT_SMALL); print(editing ? "edit" : TOOL_DISP[tool], 26, 9, INK); font(FONT_NORMAL);
+
+    // thickness — edits the selection's thickness, else the new-stroke default
+    if (sel) {
+        static float t; t = (sel->thick - 0.4f) / 1.6f;
+        if (ui_slider(&t, 56, 4, 38, "thk")) sel->thick = 0.4f + t * 1.6f;
+    } else ui_slider(&thick01, 56, 4, 38, "thk");
+
+    // bevel toggle (default size when on)
+    int bev_on = sel ? (sel->bevel > 0) : bevel;
+    if (ui_button(98, 3, 28, 16, "bvl")) { if (sel) sel->bevel = sel->bevel > 0 ? 0 : BEVEL_OFF; else bevel = !bevel; }
+    if (bev_on) rectfill(98, 19, 28, 2, ACCENT);
+
+    // boil toggle (default intensity 1 when on)
+    int boil_on = sel ? (sel->boil > 0) : boil;
+    if (ui_button(130, 3, 36, 16, "boil")) { if (sel) sel->boil = sel->boil > 0 ? 0 : 1.0f; else boil = !boil; }
+    if (boil_on) rectfill(130, 19, 36, 2, ACCENT);
+
     if (ui_button(170, 3, 38, 16, "undo")) do_undo();
-    // dither-pattern cycle (shows the current pattern; tap to cycle)
-    if (ui_spr_button_styled(12 + patsel, 212, 3, 16, 18, patsel != 0, TOOLBTN)) patsel = (patsel + 1) % NPATTERNS;
-    // colour swatches (black / blue / red / green)
-    for (int i = 0; i < NCOLORS; i++)
-        if (ui_spr_button_styled(8 + i, 234 + i * 18, 3, 16, 18, colsel == i, TOOLBTN)) colsel = i;
+
+    // dither — cycles the selection's pattern, else the default
+    int pat = sel ? sel->pattern : patsel;
+    if (ui_spr_button_styled(12 + pat, 212, 3, 16, 18, pat != 0, TOOLBTN)) {
+        if (sel) sel->pattern = (sel->pattern + 1) % NPATTERNS; else patsel = (patsel + 1) % NPATTERNS;
+    }
+    // colour swatches — set the selection's colour, else the default
+    for (int i = 0; i < NCOLORS; i++) {
+        int on = sel ? (sel->color == COLORS[i]) : (colsel == i);
+        if (ui_spr_button_styled(8 + i, 234 + i * 18, 3, 16, 18, on, TOOLBTN)) {
+            if (sel) sel->color = COLORS[i]; else colsel = i;
+        }
+    }
+
+    // contextual property strip: bevel SIZE + boil INTENSITY sliders for the selection
+    if (editing) {
+        rectfill(0, PANEL_H, SCREEN_W, PROP_H, PAPER);
+        line(0, PANEL_H + PROP_H - 1, SCREEN_W, PANEL_H + PROP_H - 1, INK);
+        static float bs; bs = sel->bevel / BEVEL_MAX; if (bs > 1) bs = 1;
+        if (ui_slider(&bs, 6, PANEL_H + 3, 140, "bevel size")) sel->bevel = bs * BEVEL_MAX;
+        static float bo; bo = sel->boil;
+        if (ui_slider(&bo, 160, PANEL_H + 3, 140, "boil amt")) sel->boil = bo;
+    }
+
     // the open dropdown list: a column of icon buttons over the canvas
     if (dd_open) {
         for (int i = 0; i < NTOOLS; i++)
@@ -386,9 +424,11 @@ void update(void) {
         return;                                             // no drawing while open
     }
 
-    // SELECT tool: a canvas press picks the nearest stroke (or deselects on empty), never draws
+    // SELECT tool: a canvas press picks the nearest stroke (or deselects on empty), never draws.
+    // While editing, clicks in the property strip drive its sliders — not a re-pick.
     if (BRUSHES[tool].kind == K_SELECT) {
-        if (mouse_pressed(MOUSE_LEFT) && my >= PANEL_H) selected = pick_stroke(mx, my);
+        int in_prop = (selected >= 0 && selected < nstrokes) && my < PANEL_H + PROP_H;
+        if (mouse_pressed(MOUSE_LEFT) && my >= PANEL_H && !in_prop) selected = pick_stroke(mx, my);
         if (keyp('U') || mouse_pressed(MOUSE_RIGHT)) do_undo();
         if (keyp('C')) { nstrokes = 0; selected = -1; }
         if (keyp('B')) bevel = !bevel;
@@ -403,7 +443,7 @@ void update(void) {
         cur.tool = tool;
         cur.color = COLORS[colsel];
         cur.pattern = patsel;
-        cur.bevel = bevel;                 // capture the current bevel/boil defaults
+        cur.bevel = bevel ? BEVEL_OFF : 0.0f;   // capture the current bevel/boil defaults
         cur.boil = boil ? 1.0f : 0.0f;
         cur.thick = thickness();
         seedctr = seedctr * 1103515245u + 12345u;
