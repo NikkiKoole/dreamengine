@@ -586,7 +586,10 @@
     "kind": [
       "game"
     ],
-    "teaches": [],
+    "teaches": [
+      "title-play-gameover-loop",
+      "save-load-persistence"
+    ],
     "genre": "word"
   },
   {
@@ -2181,7 +2184,10 @@
     "kind": [
       "instrument"
     ],
-    "teaches": []
+    "teaches": [
+      "additive-synth",
+      "chord-voicing"
+    ]
   },
   {
     "title": "Gnome Hide & Eek",
@@ -2383,7 +2389,10 @@
     "kind": [
       "instrument"
     ],
-    "teaches": []
+    "teaches": [
+      "subtractive-synth",
+      "analog-voice-modeling"
+    ]
   },
   {
     "title": "heroes of might & magic",
@@ -4876,7 +4885,9 @@
     "kind": [
       "game"
     ],
-    "teaches": [],
+    "teaches": [
+      "save-load-persistence"
+    ],
     "genre": "tabletop"
   },
   {

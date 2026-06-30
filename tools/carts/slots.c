@@ -6,7 +6,9 @@
   "kind": [
     "game"
   ],
-  "teaches": [],
+  "teaches": [
+    "save-load-persistence"
+  ],
   "genre": "tabletop",
   "description": "A slot machine, and a lesson in why you never win. Three reels land on random symbols; match three to get paid. It feels fair, but the RTP (return-to-player) readout drifts below 100% over many spins — that gap is the house edge, and the maths guarantees the machine wins long-term. Credits persist between runs via save/load. Z spins, X takes a loan when broke.",
   "todo": [
