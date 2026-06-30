@@ -11,8 +11,8 @@
   ],
   "description": {
     "summary": "Draw with a velocity-sensitive ink brush — lines swell when you go slow, thin out when you go fast, and taper to a point at each end. Pick a tool, thickness, and bevel in the top panel.",
-    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). The bevel toggle embosses strokes into a faux-3D rim (light from the top-left). And because rendering is a pure function of (stroke, seed), the BOIL toggle re-renders through a few jittered seeds and cycles them ~7.5fps → the whole drawing breathes, hand-drawn-animation style, for almost free. A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. A fill tool + dpaint-style dithered fills and the pixelsnap animated-icon export come next.",
-    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle), drag the thickness slider, toggle BVL (bevel) and BOIL (living wobble), tap UNDO, and pick a colour (black/blue/red/green swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
+    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Three brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), and BRISTLE (raked parallel hairs). The bevel toggle embosses strokes into a faux-3D rim (light from the top-left). And because rendering is a pure function of (stroke, seed), the BOIL toggle re-renders through a few jittered seeds and cycles them ~7.5fps → the whole drawing breathes, hand-drawn-animation style, for almost free. A 4-colour pen (black/blue/red/green) on cream paper — each stroke keeps the colour it was drawn in. The fat brushes can be filled with a dpaint-style dither pattern (dots/checker/grid via fillp), the step before a real flood-fill. A flood-fill tool + the pixelsnap animated-icon export come next.",
+    "controls": "Top panel: open the tool dropdown (ink/pen/fineliner/marker/chalk/sketch/spray/bristle), drag the thickness slider, toggle BVL (bevel) and BOIL (living wobble), tap UNDO, cycle the DITHER pattern, and pick a colour (swatches). Then drag on the canvas to draw. Keys: B bevel, O boil, U undo, C clear."
   },
   "todo": [
     "Polish the tool-icon glyphs — ink/chalk/sketch read a bit muddy at 16px (sprite-draw.js in squishy.cart.js).",
@@ -51,6 +51,12 @@ de:meta */
 // the pen palette — black / blue / red / green (swatch sprites 8..11 in the .cart.js).
 #define NCOLORS 4
 static const int COLORS[NCOLORS] = { INK, CLR_BLUE, CLR_RED, CLR_DARK_GREEN };
+
+// dither fill patterns for the fat stamp brushes (à la dpaint) — index 0 = solid
+// (no fillp). The holes show PAPER, so a stroke gets a screen-printed texture.
+// Swatch sprites 12..15 in the .cart.js mirror this order.
+#define NPATTERNS 4
+static const int PATTERNS[NPATTERNS] = { 0, FILL_DOTS, FILL_CHECKER, FILL_GRID };
 
 #define PANEL_H   24               // top tool-bar height; the canvas is below it
 
@@ -100,6 +106,7 @@ typedef struct {
     unsigned seed;          // per-stroke seed → deterministic wobble (boil reseeds this)
     int      tool;          // which brush this stroke was drawn with
     int      color;         // palette colour this stroke was drawn in
+    int      pattern;       // dither pattern index (0 = solid) — stamp brushes only
     float    thick;         // thickness multiplier this stroke was drawn with
     int      n;
     Sample   pts[MAX_SAMPLES];
@@ -116,6 +123,7 @@ static int      boil = 0;            // boil mode: cycle jittered variants → a
 static int      cursor_panel = -1;   // tracks which cursor is shown (hand on bar / ring on canvas)
 static int      tool = 0;            // selected brush
 static int      colsel = 0;          // selected pen colour (index into COLORS)
+static int      patsel = 0;          // selected dither pattern (index into PATTERNS; 0 = solid)
 static int      dd_open = 0;         // tool dropdown open?
 static float    thick01 = 0.375f;    // thickness slider (0..1) → ~1.0× by default
 static float    prevx, prevy;        // last frame's pointer (for per-frame speed)
@@ -276,10 +284,12 @@ static void draw_one(const Stroke *s, unsigned fseed, int jitter) {
         default: break;   // K_STAMP / K_CHALK use the stamp chain below
     }
     if (bevel) {
-        render_stroke(s, fseed,  BEVEL_OFF,  BEVEL_OFF, SHADOW, jitter);
+        render_stroke(s, fseed,  BEVEL_OFF,  BEVEL_OFF, SHADOW, jitter);   // rims stay solid
         render_stroke(s, fseed, -BEVEL_OFF, -BEVEL_OFF, HILITE, jitter);
     }
+    if (s->pattern) fillp(PATTERNS[s->pattern], PAPER);   // dpaint-style dither fills the body only
     render_stroke(s, fseed, 0, 0, s->color, jitter);
+    if (s->pattern) fillp_reset();
 }
 
 static void do_undo(void) { if (nstrokes > 0) nstrokes--; }
@@ -299,16 +309,18 @@ static void draw_panel(void) {
     ui_begin();
     // tool dropdown header: the current tool's icon
     if (ui_spr_button_styled(tool, DD_X, 2, DD_W, 20, dd_open, TOOLBTN)) dd_open = !dd_open;
-    font(FONT_SMALL); print(TOOL_DISP[tool], 27, 9, INK); font(FONT_NORMAL);   // tool name beside the icon
-    ui_slider(&thick01, 66, 4, 42, "thk");          // thickness 0.4×..2.0×
-    if (ui_button(112, 3, 28, 16, "bvl")) bevel = !bevel;
-    if (bevel) rectfill(112, 19, 28, 2, ACCENT);
-    if (ui_button(144, 3, 38, 16, "boil")) boil = !boil;
-    if (boil) rectfill(144, 19, 38, 2, ACCENT);
-    if (ui_button(186, 3, 40, 16, "undo")) do_undo();
+    font(FONT_SMALL); print(TOOL_DISP[tool], 26, 9, INK); font(FONT_NORMAL);   // tool name beside the icon
+    ui_slider(&thick01, 56, 4, 38, "thk");          // thickness 0.4×..2.0×
+    if (ui_button(98, 3, 28, 16, "bvl")) bevel = !bevel;
+    if (bevel) rectfill(98, 19, 28, 2, ACCENT);
+    if (ui_button(130, 3, 36, 16, "boil")) boil = !boil;
+    if (boil) rectfill(130, 19, 36, 2, ACCENT);
+    if (ui_button(170, 3, 38, 16, "undo")) do_undo();
+    // dither-pattern cycle (shows the current pattern; tap to cycle)
+    if (ui_spr_button_styled(12 + patsel, 212, 3, 16, 18, patsel != 0, TOOLBTN)) patsel = (patsel + 1) % NPATTERNS;
     // colour swatches (black / blue / red / green)
     for (int i = 0; i < NCOLORS; i++)
-        if (ui_spr_button_styled(8 + i, 230 + i * 18, 3, 16, 18, colsel == i, TOOLBTN)) colsel = i;
+        if (ui_spr_button_styled(8 + i, 234 + i * 18, 3, 16, 18, colsel == i, TOOLBTN)) colsel = i;
     // the open dropdown list: a column of icon buttons over the canvas
     if (dd_open) {
         for (int i = 0; i < NTOOLS; i++)
@@ -347,6 +359,7 @@ void update(void) {
         cur.n = 0;
         cur.tool = tool;
         cur.color = COLORS[colsel];
+        cur.pattern = patsel;
         cur.thick = thickness();
         seedctr = seedctr * 1103515245u + 12345u;
         cur.seed = seedctr;

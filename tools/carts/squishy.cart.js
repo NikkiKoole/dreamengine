@@ -84,6 +84,20 @@ function ic_brs() {
 // 8..11 — solid colour swatches for the palette picker (must match COLORS[] in squishy.c)
 const swatch = (c) => flat(blank(16, 16, c))
 
+// 12..15 — dither-pattern swatches (the cycle button's face; must match PATTERNS[] order:
+// solid / dots / checker / grid). Ink dots on transparent so they read on the paper button.
+function patSwatch(kind) {
+  const g = blank()
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const on = kind === 'solid'   ? true
+             : kind === 'dots'    ? (x % 4 === 1 && y % 4 === 1)
+             : kind === 'checker' ? ((x + y) % 2 === 0)
+             :                      (x % 4 === 0 || y % 4 === 0)   // grid
+    if (on) pixel(g, x, y, K)
+  }
+  return flat(g)
+}
+
 module.exports = {
   screenW: 320,
   screenH: 320,
@@ -92,5 +106,6 @@ module.exports = {
     0: ic_ink(), 1: ic_pen(), 2: ic_fin(), 3: ic_mrk(),
     4: ic_chk(), 5: ic_skt(), 6: ic_spr(), 7: ic_brs(),
     8: swatch(16), 9: swatch(12), 10: swatch(8), 11: swatch(3),   // ink / blue / red / dk-green
+    12: patSwatch('solid'), 13: patSwatch('dots'), 14: patSwatch('checker'), 15: patSwatch('grid'),
   },
 }
