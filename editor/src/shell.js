@@ -582,11 +582,11 @@ function renderDocsSearch(query, results) {
 }
 
 // open a result and land on the matching text: render the doc, then reuse the
-// find machinery to highlight every query word and scroll to the chosen hit
+// find machinery to highlight every query word and scroll to the chosen hit.
+// We do NOT open the Cmd+F bar here — the highlights/scroll work on their own;
+// popping the find panel on every result click is noise (the search box is the UI).
 async function openSearchHit(path, query, occ) {
   const land = () => {
-    findBar.classList.add('open')
-    findInput.value = query
     runFind(query)
     if (findMatches.length) { findIndex = Math.min(occ || 0, findMatches.length - 1); highlightCurrent(true) }
   }
