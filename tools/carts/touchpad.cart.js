@@ -58,13 +58,15 @@ function dpad8(pressedDir /* null | 'ne' */) {
 }
 
 // ── analog stick: base ring + knob ─────────────────────────────────────────────
+// base + knob carry NO black outline — the area around them stays transparent
+// (index 0) so they sit cleanly on the game, not in a black ring.
 function stickBase() {
   const g = blank()
   ring(g, 5.2, 7, DGREY)
   disc(g, 5.2, DKGREY)
   rectfill(g, 7, 1, 8, 1, LGREY); rectfill(g, 7, 14, 8, 14, LGREY)
   rectfill(g, 1, 7, 1, 8, LGREY); rectfill(g, 14, 7, 14, 8, LGREY)
-  return flat(outlined(g))
+  return flat(g)
 }
 function stickKnob(off /* [dx,dy] */) {
   const g = blank()
@@ -72,17 +74,18 @@ function stickKnob(off /* [dx,dy] */) {
   sym(g, (dx, dy) => (dx-ox)*(dx-ox) + (dy-oy)*(dy-oy) <= 5*5, FACE)
   sym(g, (dx, dy) => (dx-ox+2)*(dx-ox+2) + (dy-oy+2)*(dy-oy+2) <= 2*2, HI)
   sym(g, (dx, dy) => (dx-ox-2)*(dx-ox-2) + (dy-oy-2)*(dy-oy-2) <= 1.2*1.2, SH)
-  return flat(outlined(g))
+  return flat(g)
 }
 
 // ── round action button: symmetric disc + corner gloss + baked label ───────────
+// pressed = the face darkens (pushed in) + gloss removed; the LABEL stays put so
+// the letter never appears to jump/change — only the button body reacts.
 function button(face, shadow, lab, pressed) {
   const g = blank()
-  const cy = pressed ? C : C - 1
   disc(g, 7, shadow)
-  sym(g, (dx, dy) => dx*dx + (dy + (pressed ? 0 : 1))*(dy + (pressed ? 0 : 1)) <= 7*7, face)
+  sym(g, (dx, dy) => dx*dx + (dy+1)*(dy+1) <= 7*7, pressed ? shadow : face)
   if (!pressed) { pixel(g, 4, 4, WHITE); pixel(g, 5, 4, WHITE); pixel(g, 4, 5, WHITE) }
-  if (lab) labelOn(g, lab, cy)
+  if (lab) labelOn(g, lab, C - 1)
   return flat(outlined(g))
 }
 function fire(face, shadow) {

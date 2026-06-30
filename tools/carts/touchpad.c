@@ -71,7 +71,8 @@ void draw(void) {
     int bx = 36;
     spr2(4, bx, ly);
     int dx = (r ? 1 : 0) - (l ? 1 : 0), dy = (d ? 1 : 0) - (u ? 1 : 0);
-    spr2(5, bx + 8 + dx * 8, ly + 8 + dy * 8);
+    // knob shares the base's top-left → centred at rest; slides by the axes
+    spr2(5, bx + dx * 8, ly + dy * 8);
     tinyc("STICK", bx, ly + 34);
 
     // d-pad — idle, or the pressed-up art rotated toward the held direction
