@@ -11,8 +11,8 @@
   ],
   "description": {
     "summary": "Draw with a velocity-sensitive ink brush — lines swell when you go slow, thin out when you go fast, and taper to a point at each end. Pick a tool, thickness, and bevel in the top panel.",
-    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Six brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), BRISTLE (raked parallel hairs), PAINT (a wide wet brush whose paint runs DOWN in drips from every exposed bottom edge of the stroke — so a serpentine drips off each of its bands, not just the lowest; a run stops when it meets paint below, so inner bands make short runs into the gaps and only the open bottom edge falls long. Run length ∝ the band's thickness. Still a pure function of path+seed, no simulation), and NIB (a flat calligraphy nib held at a fixed angle: width comes from the ANGLE between the stroke and the nib, not speed — a hairline when you move along the nib, full width across it, so you get true broad-nib thick/thins. Rotate the nib angle with [ and ]; each stroke keeps the angle it was drawn at), and OIL (thick impasto paint faked for the limited palette: an auto-bevel rim gives the raised, light-catching edge and raked highlight/shadow streaks along the drag read as the ridges and grooves of paint pushed by a knife). OUTLINE draws a fatter silhouette in its own colour UNDER the fill — a black rim + coloured fill is the chunky bubble-lettering look (draw with the fat ink brush, add bevel for a highlight, and you're at the Tiny-Jam logo). BEVEL embosses a stroke into a faux-3D rim (light from the top-left); BOIL brings a stroke alive in one of two styles (the boil button cycles off → wobble → pulse): WOBBLE = per-point hand-drawn jitter cycling ~7.5fps; PULSE = a subtle smooth grow/shrink breath about the stroke's centre. Almost free since rendering is a pure function of (stroke, seed). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT toggle on the bar (or the S key) makes this a tiny NON-DESTRUCTIVE vector editor: click a stroke to pick it (accent box), and the bar's controls retarget to that stroke — recolour it, change its dither, toggle bevel/boil, drag its thickness — while a property strip adds bevel-SIZE + boil-INTENSITY sliders and bring-to-FRONT / send-to-BACK ordering. Edit any stroke any time; nothing is baked. A 7-colour pen — black/blue/red/green/cyan/magenta/yellow (cyan is a dark teal; pico32 has no true cyan) — picked from an always-visible palette strip (the seven swatches show their real colours; the active one wears an accent tab); each stroke keeps its colour. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp), likewise shown as an always-visible swatch strip — the step before a real flood-fill. The whole toolbar is ink-on-paper: white buttons, black glyphs; the brush dropdown opens a 2-column icon+name grid. A flood-fill tool + the pixelsnap animated-icon export come next.",
-    "controls": "Top panel (ink-on-paper): a brush dropdown that opens a 2-column icon+name grid (ink/pencil/liner/marker/chalk/sketch/spray/bristle/paint/nib/oil), thickness slider, a BVL toggle, a BOIL cycle (off/wobble/pulse), UNDO, an OUT(line) toggle + an outline-colour ring chip, an always-visible dither-pattern strip, an always-visible 7-colour palette strip, and a SELECT (marquee) toggle — active swatches/toggles wear an accent tab. Drag to draw. Turn SELECT on (button or S key), click a stroke, then edit it via the bar + the bevel-size/boil-amt sliders and the FRONT/BACK ordering buttons. Keys: B bevel, O boil, S select, U undo, C clear, [ / ] rotate the calligraphy nib angle."
+    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Six brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), BRISTLE (raked parallel hairs), PAINT (a wide wet brush whose paint runs DOWN in drips from every exposed bottom edge of the stroke — so a serpentine drips off each of its bands, not just the lowest; a run stops when it meets paint below, so inner bands make short runs into the gaps and only the open bottom edge falls long. Run length ∝ the band's thickness. Still a pure function of path+seed, no simulation), and NIB (a flat calligraphy nib held at a fixed angle: width comes from the ANGLE between the stroke and the nib, not speed — a hairline when you move along the nib, full width across it, so you get true broad-nib thick/thins. Rotate the nib angle with [ and ]; each stroke keeps the angle it was drawn at), and OIL (thick impasto paint faked for the limited palette: an auto-bevel rim gives the raised, light-catching edge and raked highlight/shadow streaks along the drag read as the ridges and grooves of paint pushed by a knife). OUTLINE draws a fatter silhouette in its own colour UNDER the fill — a black rim + coloured fill is the chunky bubble-lettering look (draw with the fat ink brush, add bevel for a highlight, and you're at the Tiny-Jam logo). BEVEL embosses a stroke into a faux-3D rim; the light direction is a GLOBAL 'sun' you rotate with , and . — every beveled stroke (and the oil-paint rim) relights together, so you can sweep the sun across the whole drawing; BOIL brings a stroke alive in one of two styles (the boil button cycles off → wobble → pulse): WOBBLE = per-point hand-drawn jitter cycling ~7.5fps; PULSE = a subtle smooth grow/shrink breath about the stroke's centre. Almost free since rendering is a pure function of (stroke, seed). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT toggle on the bar (or the S key) makes this a tiny NON-DESTRUCTIVE vector editor: click a stroke to pick it (accent box), and the bar's controls retarget to that stroke — recolour it, change its dither, toggle bevel/boil, drag its thickness — while a property strip adds bevel-SIZE + boil-INTENSITY + outline-WIDTH sliders and bring-to-FRONT / send-to-BACK ordering. Edit any stroke any time; nothing is baked. A 7-colour pen — black/blue/red/green/cyan/magenta/yellow (cyan is a dark teal; pico32 has no true cyan) — picked from an always-visible palette strip (the seven swatches show their real colours; the active one wears an accent tab); each stroke keeps its colour. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp), likewise shown as an always-visible swatch strip — the step before a real flood-fill. The whole toolbar is ink-on-paper: white buttons, black glyphs; the brush dropdown opens a 2-column icon+name grid. A flood-fill tool + the pixelsnap animated-icon export come next.",
+    "controls": "Top panel (ink-on-paper): a brush dropdown that opens a 2-column icon+name grid (ink/pencil/liner/marker/chalk/sketch/spray/bristle/paint/nib/oil), thickness slider, a BVL toggle, a BOIL cycle (off/wobble/pulse), UNDO, an OUT(line) toggle + an outline-colour ring chip, an always-visible dither-pattern strip, an always-visible 7-colour palette strip, and a SELECT (marquee) toggle — active swatches/toggles wear an accent tab. Drag to draw. Turn SELECT on (button or S key), click a stroke, then edit it via the bar + the bevel-size/boil-amt/outline-width sliders and the FRONT/BACK ordering buttons. Keys: B bevel, O boil, S select, U undo, C clear, [ / ] rotate the calligraphy nib angle, , / . rotate the bevel light (the sun)."
   },
   "todo": [
     "Polish the ink/chalk tool-icon glyphs — still read a bit muddy at 16px (sprite-draw.js in squishy.cart.js). Sketch now reads since black is keyed out (colorkey).",
@@ -137,6 +137,7 @@ static const char *TOOL_DISP[] = { "ink", "pencil", "liner", "marker", "chalk", 
 #define IMPASTO_RIM     2.0f   // oil/impasto auto-bevel rim size (px) — the raised paint edge
 #define IMPASTO_STREAKS 4      // raked ridge/groove streaks across the width (knife texture)
 #define OUTLINE_PX      2.0f   // outline rim thickness (px) when the outline toggle is on
+#define OUTLINE_MAX     6.0f   // max outline rim (the select tool's outline-width slider)
 
 typedef struct { float x, y, speed; } Sample;
 typedef struct {
@@ -167,6 +168,8 @@ static int      boil_style = BOIL_WOBBLE;   // boil style DEFAULT for new stroke
 static float    nib_angle = NIB_ANGLE_DEF;  // calligraphy nib angle DEFAULT (deg); [ / ] rotate it
 static int      outline = 0;         // outline DEFAULT for new strokes (on/off toggle)
 static int      outsel = 0;          // outline colour DEFAULT (index into COLORS; 0 = INK)
+static float    bevel_angle = 225.0f;// GLOBAL bevel light direction (deg, the "sun"); , / . rotate it.
+                                     // Shared by every beveled stroke so rotating it relights the scene.
 static int      cursor_panel = -1;   // tracks which cursor is shown (hand on bar / ring on canvas)
 static int      tool = 0;            // selected brush
 static int      selmode = 0;         // SELECT mode (a top-bar toggle): clicks pick/edit, not draw
@@ -437,8 +440,9 @@ static void render_nib(const Stroke *s, const Boil *b) {
 // raised, light-catching edge; then raked HILITE/SHADOW streaks along the drag read as
 // the ridges + grooves of paint dragged by a stiff brush or knife. Pure f(path, seed).
 static void render_impasto(const Stroke *s, const Boil *b) {
-    render_stroke(s,  IMPASTO_RIM,  IMPASTO_RIM, SHADOW, b, 0);   // raised rim: dark lower-right,
-    render_stroke(s, -IMPASTO_RIM, -IMPASTO_RIM, HILITE, b, 0);   // light upper-left
+    float hx = cos_deg(bevel_angle) * IMPASTO_RIM, hy = sin_deg(bevel_angle) * IMPASTO_RIM;
+    render_stroke(s, -hx, -hy, SHADOW, b, 0);                     // raised rim follows the global sun:
+    render_stroke(s,  hx,  hy, HILITE, b, 0);                     // hilite toward the light, shadow away
     render_stroke(s, 0, 0, s->color, b, 0);                       // the fat paint body on top
     if (s->n < 2) return;
     for (int i = 0; i < s->n - 1; i++) {                       // raked knife streaks over the body
@@ -476,9 +480,10 @@ static void draw_one(const Stroke *s, const Boil *b) {
     }
     if (s->outline > 0)   // outline: a fatter silhouette in outline_color, UNDER everything (bubble-letter rim)
         render_stroke(s, 0, 0, s->outline_color, b, s->outline * 2);
-    if (s->bevel > 0) {   // per-stroke bevel, s->bevel = rim size in px
-        render_stroke(s,  s->bevel,  s->bevel, SHADOW, b, 0);   // rims stay solid
-        render_stroke(s, -s->bevel, -s->bevel, HILITE, b, 0);
+    if (s->bevel > 0) {   // per-stroke SIZE, GLOBAL light angle (the "sun") — hilite toward it, shadow away
+        float hx = cos_deg(bevel_angle) * s->bevel, hy = sin_deg(bevel_angle) * s->bevel;
+        render_stroke(s, -hx, -hy, SHADOW, b, 0);
+        render_stroke(s,  hx,  hy, HILITE, b, 0);
     }
     if (s->pattern) fillp(PATTERNS[s->pattern], PAPER);   // dpaint-style dither fills the body only
     render_stroke(s, 0, 0, s->color, b, 0);
@@ -640,18 +645,21 @@ static void draw_panel(void) {
     dashed_rect(302, 6, 12, 10, selmode ? ACCENT : PAPER);
     if (selmode) rectfill(300, 19, 16, 2, ACCENT);
 
-    // contextual property strip: bevel SIZE + boil INTENSITY sliders + z-order, for the selection
+    // contextual property strip: bevel SIZE + boil + OUTLINE width sliders + z-order, for the selection
     if (editing) {
         rectfill(0, PANEL_H, SCREEN_W, PROP_H, PAPER);
         line(0, PANEL_H + PROP_H - 1, SCREEN_W, PANEL_H + PROP_H - 1, INK);
         static float bs; bs = sel->bevel / BEVEL_MAX; if (bs > 1) bs = 1;
-        if (ui_slider(&bs, 6, PANEL_H + 3, 92, "bevel")) sel->bevel = bs * BEVEL_MAX;
-        rect(6, PANEL_H + 4, 92, 6, CLR_LIGHT_GREY);
+        if (ui_slider(&bs, 6, PANEL_H + 3, 58, "bvl")) sel->bevel = bs * BEVEL_MAX;
+        rect(6, PANEL_H + 4, 58, 6, CLR_LIGHT_GREY);
         static float bo; bo = sel->boil;
-        if (ui_slider(&bo, 104, PANEL_H + 3, 92, "boil")) sel->boil = bo;
-        rect(104, PANEL_H + 4, 92, 6, CLR_LIGHT_GREY);
-        if (ui_button(202, PANEL_H + 2, 34, 14, "back"))  to_back();
-        if (ui_button(240, PANEL_H + 2, 44, 14, "front")) to_front();
+        if (ui_slider(&bo, 68, PANEL_H + 3, 58, "boil")) sel->boil = bo;
+        rect(68, PANEL_H + 4, 58, 6, CLR_LIGHT_GREY);
+        static float os; os = sel->outline / OUTLINE_MAX; if (os > 1) os = 1;
+        if (ui_slider(&os, 130, PANEL_H + 3, 58, "out")) sel->outline = os * OUTLINE_MAX;   // 0 = off
+        rect(130, PANEL_H + 4, 58, 6, CLR_LIGHT_GREY);
+        if (ui_button(192, PANEL_H + 2, 28, 14, "back"))  to_back();
+        if (ui_button(224, PANEL_H + 2, 32, 14, "frnt")) to_front();
     }
 
     // the open dropdown list: a 2-column grid of brush icon + name cells over the canvas
@@ -710,6 +718,7 @@ void update(void) {
         if (keyp('C')) { nstrokes = 0; selected = -1; }
         if ((keyp('[') || keyp(']')) && selected >= 0 && selected < nstrokes)
             strokes[selected].nib_angle += keyp(']') ? 15.0f : -15.0f;   // rotate the picked nib
+        if (keyp(',') || keyp('.')) bevel_angle += keyp('.') ? 15.0f : -15.0f;   // rotate the bevel sun
         return;
     }
 
@@ -751,6 +760,7 @@ void update(void) {
     if (keyp('B')) bevel = !bevel;
     if (keyp('O')) boil = !boil;
     if (keyp('[') || keyp(']')) nib_angle += keyp(']') ? 15.0f : -15.0f;   // rotate the nib default
+    if (keyp(',') || keyp('.')) bevel_angle += keyp('.') ? 15.0f : -15.0f; // rotate the bevel "sun"
 }
 
 void draw(void) {
