@@ -519,7 +519,10 @@ static int btn_b_cx, btn_b_cy;
 static int  dpad_touch_id = -1;
 static bool dpad_up = false, dpad_down = false, dpad_left = false, dpad_right = false;
 static int  dpad_sector = -1;   // 0..7 compass sector (0=up, clockwise by 45°), -1 = no direction held
-#define DPAD_DEADZONE   (STICK_RADIUS * 0.3f)
+#define DPAD_DEADZONE     (STICK_RADIUS * 0.3f)
+#define DPAD_GRAB_RADIUS  (STICK_RADIUS * 1.4f)   // a d-pad is a fixed LOCAL widget (unlike the
+                                                    // stick's whole-zone grab) — only a tap near its
+                                                    // own graphic should acquire it
 
 // virtual touch pool — merges raylib touches with mouse-as-touch on desktop.
 // the mouse LMB is exposed as a synthetic touch with id MOUSE_TOUCH_ID.
@@ -1002,7 +1005,9 @@ static void update_dpad(void) {
     if (dpad_touch_id == -1) {
         for (int i = 0; i < vt_count; i++) {
             Vector2 p = vt_pos[i];
-            if (p.x < sgz_x || p.x >= sgz_x + sgz_w || p.y < sgz_y || p.y >= sgz_y + sgz_h) continue;  // outside the move zone
+            // local grab zone around the pad's own graphic — NOT the stick's whole-zone sgz;
+            // a fixed d-pad shouldn't fire from a tap on the far side of the screen.
+            if (!point_in_circle(p.x, p.y, stick_home_x, stick_home_y, DPAD_GRAB_RADIUS)) continue;
             if (point_in_circle(p.x, p.y, btn_a_cx, btn_a_cy, BTN_RADIUS)) continue;
             if (point_in_circle(p.x, p.y, btn_b_cx, btn_b_cy, BTN_RADIUS)) continue;
             dpad_touch_id = vt_id[i];
@@ -1055,13 +1060,16 @@ static void draw_touch_overlay_window(void) {
     // which used to light a diagonal's two cardinals AND the diagonal node all at once).
     if (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8) {
         DrawCircleLines((int)stick_home_x, (int)stick_home_y, STICK_RADIUS, hint);
-        int n    = (touch_move_mode == TOUCH_DPAD8) ? 8 : 4;
-        int step = 8 / n;   // 8 canonical compass positions; DPAD4 samples every other one (the cardinals)
+        int   n        = (touch_move_mode == TOUCH_DPAD8) ? 8 : 4;
+        int   step     = 8 / n;              // 8 canonical compass positions; DPAD4 samples every other (the cardinals)
+        float ring_r   = STICK_RADIUS * 0.7f;
+        float node_r   = (n <= 4) ? 18.0f : 13.0f;   // 8 nodes on the same ring need a smaller dot
+                                                       // or adjacent ones touch (chord < 2×18 at n=8)
         for (int i = 0; i < n; i++) {
             float deg = i * (360.0f / n) - 90.0f;   // 0 = up, clockwise
-            float nx = stick_home_x + cosf(deg * DEG2RAD) * STICK_RADIUS * 0.7f;
-            float ny = stick_home_y + sinf(deg * DEG2RAD) * STICK_RADIUS * 0.7f;
-            DrawCircleV((Vector2){ nx, ny }, 18, (dpad_sector == i * step) ? press : ring);
+            float nx = stick_home_x + cosf(deg * DEG2RAD) * ring_r;
+            float ny = stick_home_y + sinf(deg * DEG2RAD) * ring_r;
+            DrawCircleV((Vector2){ nx, ny }, node_r, (dpad_sector == i * step) ? press : ring);
         }
     } else if (stick_touch_id != -1) {
         DrawCircleLines((int)stick_base_x, (int)stick_base_y, STICK_RADIUS, ring);
