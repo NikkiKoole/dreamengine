@@ -9,7 +9,7 @@
   "teaches": [],
   "description": "Add an enemy that chases you. Collision, game over, and restart.",
   "todo": [
-    "Touch: onscreen joystick, and a way to get past the intro page on touch."
+    "Touch: a way to get past the intro page on touch (unrelated to onscreen joystick, which is done — this is about the editor/tutorial launcher's own intro screen, not this cart's code)."
   ]
 }
 de:meta */
@@ -26,7 +26,7 @@ void reset() {
     score = 0; dead = 0;
 }
 
-void init() { reset(); }
+void init() { reset(); touch_layout(TOUCH_ANALOG, 1); }
 
 void update() {
     if (dead) {
