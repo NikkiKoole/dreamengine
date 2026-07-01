@@ -99,7 +99,9 @@ bool tapr(int x, int y, int w, int h);   // did a touch END inside this rect thi
 void touch_controls(bool on);            // show/hide on-screen stick + A/B (overrides default)
 #define TOUCH_ANALOG      0              // floating stick: base spawns where the thumb lands — great for frantic free movement
 #define TOUCH_ANALOG_FIX  1              // fixed stick: base stays put at a home spot — steadier for precise play
-void touch_layout(int move_mode, int n_buttons); // opt in to the on-screen controls AND pick the stick style (TOUCH_ANALOG / TOUCH_ANALOG_FIX) + button count
+#define TOUCH_DPAD4       2              // 4-way d-pad: up/down/left/right only — grid & precise games (sokoban, puzzle)
+#define TOUCH_DPAD8       3              // 8-way d-pad: diagonals too — fighters, 8-way action
+void touch_layout(int move_mode, int n_buttons); // opt in to the on-screen controls AND pick the move style (TOUCH_ANALOG / TOUCH_ANALOG_FIX / TOUCH_DPAD4 / TOUCH_DPAD8) + button count
 int  touch_ceiling(void);                // max fingers this device tracks: 5 iPhone, 10 iPad, 0 desktop/unknown — one MORE than this cancels ALL touches on iOS
 
 // analog stick (only nonzero while a finger is on the on-screen stick)

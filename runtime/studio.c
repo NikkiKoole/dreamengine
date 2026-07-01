@@ -513,6 +513,13 @@ static int   sgz_x = 0, sgz_y = 0, sgz_w = 0, sgz_h = 0;   // stick grab zone (w
 static int btn_a_cx, btn_a_cy;
 static int btn_b_cx, btn_b_cy;
 
+// d-pad move mode: same grab-zone as the stick, but resolves to direction booleans instead
+// of a knob position. dpad_touch_id tracks the held finger; dpad_up/down/left/right are this
+// frame's result, read by btn() and painted by the draw skin.
+static int  dpad_touch_id = -1;
+static bool dpad_up = false, dpad_down = false, dpad_left = false, dpad_right = false;
+#define DPAD_DEADZONE   (STICK_RADIUS * 0.3f)
+
 // virtual touch pool — merges raylib touches with mouse-as-touch on desktop.
 // the mouse LMB is exposed as a synthetic touch with id MOUSE_TOUCH_ID.
 #define MOUSE_TOUCH_ID  (-2)
@@ -964,6 +971,58 @@ static void update_stick(void) {
     }
 }
 
+// d-pad variant of update_stick(): identical grab-zone/finger-tracking, but resolves the held
+// finger to direction booleans (angle-bucketed from the home centre) instead of a knob position.
+// DPAD4 buckets exclusively by dominant axis (no diagonals); DPAD8 thresholds each axis
+// independently, so adjacent bits can both be set (a diagonal).
+static void update_dpad(void) {
+    if (!show_touch_ui) {
+        dpad_touch_id = -1;
+        dpad_up = dpad_down = dpad_left = dpad_right = false;
+        return;
+    }
+
+    bool  still_active = false;
+    float dx = 0, dy = 0;
+    if (dpad_touch_id != -1) {
+        for (int i = 0; i < vt_count; i++) {
+            if (vt_id[i] == dpad_touch_id) {
+                dx = vt_pos[i].x - stick_home_x; dy = vt_pos[i].y - stick_home_y;
+                still_active = true;
+                break;
+            }
+        }
+    }
+    if (!still_active) dpad_touch_id = -1;
+
+    if (dpad_touch_id == -1) {
+        for (int i = 0; i < vt_count; i++) {
+            Vector2 p = vt_pos[i];
+            if (p.x < sgz_x || p.x >= sgz_x + sgz_w || p.y < sgz_y || p.y >= sgz_y + sgz_h) continue;  // outside the move zone
+            if (point_in_circle(p.x, p.y, btn_a_cx, btn_a_cy, BTN_RADIUS)) continue;
+            if (point_in_circle(p.x, p.y, btn_b_cx, btn_b_cy, BTN_RADIUS)) continue;
+            dpad_touch_id = vt_id[i];
+            dx = p.x - stick_home_x; dy = p.y - stick_home_y;
+            break;
+        }
+    }
+
+    dpad_up = dpad_down = dpad_left = dpad_right = false;
+    if (dpad_touch_id == -1) return;
+
+    if (touch_move_mode == TOUCH_DPAD8) {                     // independent axes → diagonals allowed
+        if (dx < -DPAD_DEADZONE) dpad_left  = true;
+        if (dx >  DPAD_DEADZONE) dpad_right = true;
+        if (dy < -DPAD_DEADZONE) dpad_up    = true;
+        if (dy >  DPAD_DEADZONE) dpad_down  = true;
+    } else {                                                   // DPAD4 → exclusive, dominant axis wins
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len < DPAD_DEADZONE) return;
+        if (fabsf(dx) > fabsf(dy)) { if (dx < 0) dpad_left = true; else dpad_right = true; }
+        else                       { if (dy < 0) dpad_up   = true; else dpad_down  = true; }
+    }
+}
+
 // touch overlay — the desktop DRAW SKIN. Per the touch-controls architecture pivot the
 // engine owns geometry (layout_touch_controls), hit-testing, and the btn()/stick synthesis;
 // this just PAINTS smooth circles at those window-px positions, AFTER the blit. Controls are
@@ -976,8 +1035,25 @@ static void draw_touch_overlay_window(void) {
     DeColor press = (DeColor){ 255, 255, 255, 110 };
     DeColor hint  = (DeColor){ 255, 255, 255,  40 };
 
-    // movement stick: live base + knob while held; otherwise the resting home, faint
-    if (stick_touch_id != -1) {
+    // movement control: analog stick (live base+knob while held) or d-pad (compass nodes
+    // that light up per held direction), by move mode.
+    if (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8) {
+        DrawCircleLines((int)stick_home_x, (int)stick_home_y, STICK_RADIUS, hint);
+        // 8 canonical compass positions (up, up-right, right, ... up-left); DPAD4 samples
+        // every other one (the cardinals) so the same table drives both widths.
+        bool dirs8[8] = {
+            dpad_up,                  dpad_up   && dpad_right, dpad_right,               dpad_down && dpad_right,
+            dpad_down,                dpad_down && dpad_left,  dpad_left,                dpad_up   && dpad_left,
+        };
+        int n    = (touch_move_mode == TOUCH_DPAD8) ? 8 : 4;
+        int step = 8 / n;
+        for (int i = 0; i < n; i++) {
+            float deg = i * (360.0f / n) - 90.0f;   // 0 = up, clockwise
+            float nx = stick_home_x + cosf(deg * DEG2RAD) * STICK_RADIUS * 0.7f;
+            float ny = stick_home_y + sinf(deg * DEG2RAD) * STICK_RADIUS * 0.7f;
+            DrawCircleV((Vector2){ nx, ny }, 18, dirs8[i * step] ? press : ring);
+        }
+    } else if (stick_touch_id != -1) {
         DrawCircleLines((int)stick_base_x, (int)stick_base_y, STICK_RADIUS, ring);
         DrawCircleV((Vector2){ stick_knob_x, stick_knob_y }, STICK_RADIUS * 0.45f, knob);
     } else {
@@ -1565,7 +1641,7 @@ static void loop_step(void) {
       game_rect = pl.game; layout_touch_controls(pl); }
 #endif
     poll_virtual_touches();
-    update_stick();
+    if (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8) update_dpad(); else update_stick();
     if (inp_pressed(KEY_F1)) watch_show = !watch_show;
 
     // pause overlay — PAUSE_KEY or ENTER toggles; when open ESC resumes instead
@@ -2290,12 +2366,13 @@ int main(int argc, char **argv) {
 bool btn(int player, int button) {
     if (player == 0) {
         if (show_touch_ui) {
-            float sx = stick_x(), sy = stick_y();
+            bool dpad = (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8);
+            float sx = dpad ? 0 : stick_x(), sy = dpad ? 0 : stick_y();
             switch (button) {
-                case BTN_UP:    if (sy < -STICK_DEADZONE) return true; break;
-                case BTN_DOWN:  if (sy >  STICK_DEADZONE) return true; break;
-                case BTN_LEFT:  if (sx < -STICK_DEADZONE) return true; break;
-                case BTN_RIGHT: if (sx >  STICK_DEADZONE) return true; break;
+                case BTN_UP:    if (dpad ? dpad_up    : (sy < -STICK_DEADZONE)) return true; break;
+                case BTN_DOWN:  if (dpad ? dpad_down  : (sy >  STICK_DEADZONE)) return true; break;
+                case BTN_LEFT:  if (dpad ? dpad_left  : (sx < -STICK_DEADZONE)) return true; break;
+                case BTN_RIGHT: if (dpad ? dpad_right : (sx >  STICK_DEADZONE)) return true; break;
                 case BTN_A:     if (any_touch_in_circle(btn_a_cx, btn_a_cy, BTN_RADIUS)) return true; break;
                 case BTN_B:     if (any_touch_in_circle(btn_b_cx, btn_b_cy, BTN_RADIUS)) return true; break;
             }
@@ -2396,7 +2473,7 @@ void touch_controls(bool on) { show_touch_ui = on; }
 
 void touch_layout(int move_mode, int n_buttons) {
     show_touch_ui   = true;                                   // declaring a layout opts the controls in
-    touch_move_mode = (move_mode == TOUCH_ANALOG_FIX) ? TOUCH_ANALOG_FIX : TOUCH_ANALOG;
+    touch_move_mode = (move_mode >= TOUCH_ANALOG && move_mode <= TOUCH_DPAD8) ? move_mode : TOUCH_ANALOG;
     touch_n_buttons = n_buttons < 0 ? 0 : (n_buttons > 4 ? 4 : n_buttons);
 }
 
