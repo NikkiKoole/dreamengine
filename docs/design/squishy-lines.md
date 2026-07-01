@@ -27,6 +27,27 @@ pass. v1 plan + progress below.
 > (every brush × every feature, each cell one reference stroke with that feature on) and pixel-diffs
 > each cell against its baseline, failing on any disagreement with a declared support matrix.
 
+> **Update (2026-07-02) — per-stroke gradient fill (the dpaint dithered-gradient, scoped to a brushstroke).**
+> A stroke's body can now dither from the pen colour to a second colour across the stroke — the same
+> Bayer-threshold trick as dpaint's gradient tool (`cgrad`), but bounded to the stroke's coverage
+> instead of a dragged box. Controls: on/off, the far colour, an **angle**, and a **spread** — the
+> blend-band width, which is the parameter people can't name: small spread = solid ends with a narrow
+> blend (`aaaaa→bfy→zzzzz`), spread 1 = an even ramp end-to-end (`abc…xyz`). Implemented as
+> `render_gradient()` (rasterise coverage into `drip_cov`, project each covered pixel onto the ramp
+> axis → t, stretch by spread, Bayer-threshold picks from/to). Wired for the stamp brushes and the
+> wet-paint body (drips run in the from-colour); the nib ribbon is a listed follow-up. The
+> `SQUISHY_MATRIX` coverage grid + `squishy-features.js` gained a `grad` column so the fill is guarded
+> like the rest. This is the "B" fork of the two considered — a per-stroke fade, not the area-fill
+> gradient (which still wants the flood-fill / persistent-layer refactor).
+>
+> The gradient's controls live in a popover reached from an **on-screen button** (a ramp glyph) *or*
+> the `G` key. Fitting it forced the toolbar to **two rows** — row 1 = brush + effects, row 2 = colour
+> + fill (palette · dither · gradient · select) — the honest fix once a single row was full (cramming/
+> shrinking had already bitten the drop-shadow). Two rendering fixes shipped alongside: the brush-ring
+> **cursor** now shows the brush's nominal caliber (was pulsing with pointer speed as you moved — it
+> read as constant resizing), and the gradient body rasterises its coverage **stepped along each
+> segment** like `render_stroke` (was one disk per sample → visible blobs on the thin tapered start).
+
 > The shower idea: we'd been making cart icons by running an AI-generated image through a
 > `.cart.js` (sprite-draw + `pixelsnap`). The results are nice — but **frozen**. What if you could
 > *draw* in that loose, hand-inked style from the start, and get a living, breathing version
