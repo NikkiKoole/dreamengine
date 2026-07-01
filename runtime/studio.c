@@ -509,7 +509,8 @@ static int  touch_n_buttons = 2;              // how many action buttons the car
 // 1.0 = full size (overlay, or plenty of room). eff_stick_r()/eff_btn_r() are what every
 // hit-test and draw call actually uses — never the bare STICK_RADIUS/BTN_RADIUS constants —
 // so the visible size and the tappable size never drift apart.
-static float ctrl_scale = 1.0f;
+static float ctrl_scale = 1.0f;      // the STICK's scale (also reused for buttons in DECK/OVERLAY, where a fixed margin already keeps them safely on-screen)
+static float ctrl_scale_btn = 1.0f;  // the BUTTON diamond's own scale — RAILS sizes this from the button rail's width, since it's a wider footprint than the stick and the two rails aren't always the same size
 #define CTRL_SCALE_MIN  0.6f
 
 // last computed placement (set once a frame alongside game_rect, below) — read back by
@@ -519,7 +520,7 @@ static int  band_x = 0, band_y = 0, band_w = 0, band_h = 0;
 static bool touch_debug_on = false;
 
 static inline float eff_stick_r(void) { return STICK_RADIUS * ctrl_scale; }
-static inline float eff_btn_r(void)   { return BTN_RADIUS   * ctrl_scale; }
+static inline float eff_btn_r(void)   { return BTN_RADIUS   * ctrl_scale_btn; }
 
 static int   stick_touch_id = -1;
 static float stick_base_x = 0, stick_base_y = 0;
@@ -793,20 +794,28 @@ static bool  pget_snapshot_valid = false;
 static bool  pget_enabled = false;
 static bool  pget_warned  = false;
 
-// how much to shrink the controls (0..1) so a ring of the reference STICK_RADIUS fits inside a
+// how much to shrink a control (0..1) so a ring of the given reference diameter fits inside a
 // band of the given size — floored at CTRL_SCALE_MIN so it never shrinks below a tappable size,
-// ceilinged at 1 so a roomy band doesn't blow the controls up past their normal size.
-static float band_ctrl_scale(int span) {
-    float s = (float)span / (2.0f * STICK_RADIUS);
+// ceilinged at 1 so a roomy band doesn't blow the control up past its normal size.
+static float scale_to_fit(int span, float ref_diameter) {
+    float s = (float)span / ref_diameter;
     return s < CTRL_SCALE_MIN ? CTRL_SCALE_MIN : (s > 1.0f ? 1.0f : s);
 }
+static float band_ctrl_scale(int span) { return scale_to_fit(span, 2.0f * STICK_RADIUS); }
+
+// the button cluster's own footprint: BTN_CLUSTER_SPREAD is how far (× eff_btn_r()) each
+// button's CENTRE sits from the shared anchor; the full diamond's bounding diameter (e.g. X's
+// left edge to B's right edge, the worst case if all 4 are shown) is 2×(spread+1) button radii —
+// much wider than a single stick, so it needs its own fit check against whichever side it's on.
+#define BTN_CLUSTER_SPREAD 1.6f
+#define BTN_CLUSTER_DIAM   (BTN_RADIUS * 2.0f * (BTN_CLUSTER_SPREAD + 1.0f))
 
 // lay out up to 4 action buttons (btn_cx/cy[0..3] = A/B/X/Y) in a diamond around an anchor point
 // — A bottom, B right, X left, Y top, the classic face-button arrangement. Reads naturally at
 // 1-4 buttons without an ever-growing horizontal strip. Radius scales with the button's own
-// effective size (see eff_btn_r()) so the cluster never overlaps itself at any ctrl_scale.
+// effective size (see eff_btn_r()) so the cluster never overlaps itself at any ctrl_scale_btn.
 static void layout_action_buttons(int ax, int ay) {
-    int rad = (int)(eff_btn_r() * 1.6f);
+    int rad = (int)(eff_btn_r() * BTN_CLUSTER_SPREAD);
     btn_cx[0] = ax;       btn_cy[0] = ay + rad;   // A: bottom
     btn_cx[1] = ax + rad; btn_cy[1] = ay;         // B: right
     btn_cx[2] = ax - rad; btn_cy[2] = ay;         // X: left
@@ -822,19 +831,24 @@ static void layout_touch_controls(Placement p) {
     int gw = (int)(SCREEN_W * p.game.scale), gh = (int)(SCREEN_H * p.game.scale);
     if (p.mode == PLACE_DECK) {
         int bw = p.band_w, by = p.band_y, bh = p.band_h, cy = by + bh / 2;
-        ctrl_scale = band_ctrl_scale(bh);                                  // band HEIGHT is the tight dimension
+        ctrl_scale = ctrl_scale_btn = band_ctrl_scale(bh);                 // band HEIGHT is the tight dimension for both — safe: the 145px anchor margin below always clears the button footprint at scale<=1
         stick_home_x = bw * 0.20f;  stick_home_y = (float)cy;
         layout_action_buttons(bw - 145, cy);
         sgz_x = 0; sgz_y = by; sgz_w = bw / 2; sgz_h = bh;                 // left half of the band
     } else if (p.mode == PLACE_RAILS) {
         int ww = p.band_w, wh = p.band_h, rl = gx, rr0 = gx + gw, ry = (int)(wh * 0.62f);
-        ctrl_scale = band_ctrl_scale(rl);                                  // rail WIDTH is the tight dimension
+        int rr = ww - rr0;                                                 // right-rail WIDTH — its own tight dimension, NOT rl (the stick's rail can be a different size)
+        ctrl_scale     = band_ctrl_scale(rl);
+        ctrl_scale_btn = scale_to_fit(rr, BTN_CLUSTER_DIAM);                // buttons need a much wider footprint than the stick, so they get their own fit
         stick_home_x = rl / 2.0f;   stick_home_y = (float)ry;
-        int rc = rr0 + (ww - rr0) / 2;                                     // right-rail centre
-        layout_action_buttons(rc - 15, ry);
+        int bx = rr0 + rr / 2;                                             // right-rail centre
+        int half = (int)(eff_btn_r() * (BTN_CLUSTER_SPREAD + 1.0f));       // half the (now correctly-scaled) cluster's footprint
+        if (bx - half < rr0) bx = rr0 + half;                              // belt-and-suspenders: keep the cluster inside the rail even
+        if (bx + half > ww)  bx = ww  - half;                              // if CTRL_SCALE_MIN still doesn't quite fit an extreme-narrow rail
+        layout_action_buttons(bx, ry);
         sgz_x = 0; sgz_y = 0; sgz_w = rl; sgz_h = wh;                      // the whole left rail
     } else {  // OVERLAY — hug the corners of the game rect; always full size, no band to shrink to
-        ctrl_scale = 1.0f;
+        ctrl_scale = ctrl_scale_btn = 1.0f;
         stick_home_x = gx + 80;   stick_home_y = gy + gh - 80;
         layout_action_buttons(gx + gw - 130, gy + gh - 100);
         sgz_x = gx; sgz_y = gy; sgz_w = (int)(gw * 0.55f); sgz_h = gh;     // left 55% of the game
@@ -1149,8 +1163,8 @@ static void draw_touch_overlay_window(void) {
         else      DrawRectangleLines(sgz_x, sgz_y, sgz_w, sgz_h, zone_col);
 
         const char *mode_name = place_mode == PLACE_DECK ? "DECK" : place_mode == PLACE_RAILS ? "RAILS" : "OVERLAY";
-        char dbg[64];
-        snprintf(dbg, sizeof dbg, "touch_debug: %s  ctrl_scale=%.2f", mode_name, ctrl_scale);
+        char dbg[80];
+        snprintf(dbg, sizeof dbg, "touch_debug: %s  ctrl_scale=%.2f  btn=%.2f", mode_name, ctrl_scale, ctrl_scale_btn);
         DrawTextEx(game_font, dbg, (Vector2){ 6, 6 }, 4 * SCALE, 0, (DeColor){ 0, 255, 255, 255 });
     }
 }
@@ -1410,6 +1424,8 @@ static void harness_input(int fno) {
             unsigned char d = IsMouseButtonDown(raylib_mouse_button(BTNS[b])) ? 1 : 0;
             if (d != mbtn_rec_prev[b]) { fprintf(rec_file, "%d b %d %d\n", fno, b, d); mbtn_rec_prev[b] = d; }
         }
+        float wm = inp_mouse_wheel();                    // wheel is transient — log the frames it moves
+        if (wm != 0.0f) fprintf(rec_file, "%d w %d 0\n", fno, (int)wm);
         fflush(rec_file);                                // per-frame flush so a live tail sees it
     }
 }
@@ -1997,6 +2013,7 @@ static int ev_cmp(const void *a, const void *b) {
 //   <frame> k <keycode> <down>     key
 //   <frame> m <x> <y>              mouse move (canvas space)
 //   <frame> b <button 0|1|2> <down>   mouse button (L/R/M)
+//   <frame> w <delta> 0            mouse wheel (+up / -down), transient on that frame
 static void load_replay(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) { fprintf(stderr, "harness: cannot open replay %s\n", path); return; }
@@ -2007,6 +2024,7 @@ static void load_replay(const char *path) {
         if      (tag == 'k') ev_push(frame, 0, x, y);
         else if (tag == 'm') ev_push(frame, 1, x, y);
         else if (tag == 'b') ev_push(frame, 2, x, y);
+        else if (tag == 'w') ev_push(frame, 3, x, y);
     }
     fclose(f);
     qsort(replay_ev, replay_n, sizeof(InputEvent), ev_cmp);
