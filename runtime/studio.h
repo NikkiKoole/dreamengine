@@ -103,6 +103,12 @@ void touch_controls(bool on);            // show/hide on-screen stick + A/B (ove
 #define TOUCH_DPAD8       3              // 8-way d-pad: diagonals too — fighters, 8-way action
 void touch_layout(int move_mode, int n_buttons); // opt in to the on-screen controls AND pick the move style (TOUCH_ANALOG / TOUCH_ANALOG_FIX / TOUCH_DPAD4 / TOUCH_DPAD8) + button count
 int  touch_ceiling(void);                // max fingers this device tracks: 5 iPhone, 10 iPad, 0 desktop/unknown — one MORE than this cancels ALL touches on iOS
+#define TOUCH_LAYOUT_OVERLAY  0          // controls hug a game-rect corner, on top (no spare letterbox to place them into)
+#define TOUCH_LAYOUT_DECK     1          // controls live in a band below the game (portrait)
+#define TOUCH_LAYOUT_RAILS    2          // controls live in bands beside the game (landscape)
+int   touch_layout_mode(void);           // which placement the engine picked this frame — one of TOUCH_LAYOUT_*
+float touch_ctrl_scale(void);            // 0..1 — how much the on-screen controls are shrunk to fit a tight band (1 = full size)
+void  touch_debug(bool on);              // draw the control band + grab-zone outlines (a dev aid — leave off in shipped carts)
 
 // analog stick (only nonzero while a finger is on the on-screen stick)
 float stick_x(void);   // -1.0 .. 1.0

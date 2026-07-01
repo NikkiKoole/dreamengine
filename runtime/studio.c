@@ -511,6 +511,13 @@ static int  touch_n_buttons = 2;              // how many action buttons the car
 // so the visible size and the tappable size never drift apart.
 static float ctrl_scale = 1.0f;
 #define CTRL_SCALE_MIN  0.6f
+
+// last computed placement (set once a frame alongside game_rect, below) — read back by
+// touch_layout_mode()/touch_ctrl_scale() and the touch_debug() overlay.
+static int  place_mode = PLACE_OVERLAY;
+static int  band_x = 0, band_y = 0, band_w = 0, band_h = 0;
+static bool touch_debug_on = false;
+
 static inline float eff_stick_r(void) { return STICK_RADIUS * ctrl_scale; }
 static inline float eff_btn_r(void)   { return BTN_RADIUS   * ctrl_scale; }
 
@@ -1117,6 +1124,23 @@ static void draw_touch_overlay_window(void) {
         DrawCircleLines(btn_b_cx, btn_b_cy, btn_r, knob);
         DrawTextEx(game_font, "B", (Vector2){ btn_b_cx - fs/2, btn_b_cy - fs/2 }, fs, 0, WHITE);
     }
+
+    // dev aid (touch_debug(true)): the control BAND (deck/rail extent) and the current move
+    // mode's GRAB ZONE — the stick's rectangular sgz, or the d-pad's local circular radius —
+    // so placement/sizing/grab-zone work can be eyeballed without guessing at invisible rects.
+    if (touch_debug_on) {
+        DeColor band_col = (DeColor){   0, 255, 255, 160 };
+        DeColor zone_col = (DeColor){ 255,   0, 255, 160 };
+        if (place_mode != PLACE_OVERLAY) DrawRectangleLines(band_x, band_y, band_w, band_h, band_col);
+        bool dpad = (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8);
+        if (dpad) DrawCircleLines((int)stick_home_x, (int)stick_home_y, DPAD_GRAB_RADIUS, zone_col);
+        else      DrawRectangleLines(sgz_x, sgz_y, sgz_w, sgz_h, zone_col);
+
+        const char *mode_name = place_mode == PLACE_DECK ? "DECK" : place_mode == PLACE_RAILS ? "RAILS" : "OVERLAY";
+        char dbg[64];
+        snprintf(dbg, sizeof dbg, "touch_debug: %s  ctrl_scale=%.2f", mode_name, ctrl_scale);
+        DrawTextEx(game_font, dbg, (Vector2){ 6, 6 }, 4 * SCALE, 0, (DeColor){ 0, 255, 255, 255 });
+    }
 }
 
 // ------------------------------------------------------------
@@ -1680,7 +1704,8 @@ static void loop_step(void) {
     // lay the controls into the resulting band. At the default size (window == game) the placement
     // is the identity overlay → game_rect + control positions are byte-identical to before.
     { Placement pl = gr_place(GetScreenWidth(), GetScreenHeight(), SCREEN_W, SCREEN_H);
-      game_rect = pl.game; layout_touch_controls(pl); }
+      game_rect = pl.game; layout_touch_controls(pl);
+      place_mode = pl.mode; band_x = pl.band_x; band_y = pl.band_y; band_w = pl.band_w; band_h = pl.band_h; }
 #endif
     poll_virtual_touches();
     if (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8) update_dpad(); else update_stick();
@@ -2518,6 +2543,10 @@ void touch_layout(int move_mode, int n_buttons) {
     touch_move_mode = (move_mode >= TOUCH_ANALOG && move_mode <= TOUCH_DPAD8) ? move_mode : TOUCH_ANALOG;
     touch_n_buttons = n_buttons < 0 ? 0 : (n_buttons > 4 ? 4 : n_buttons);
 }
+
+int   touch_layout_mode(void) { return place_mode; }   // PlaceMode and TOUCH_LAYOUT_* share 0/1/2 numbering
+float touch_ctrl_scale(void)  { return ctrl_scale; }
+void  touch_debug(bool on)    { touch_debug_on = on; }
 
 #ifdef PLATFORM_WEB
 // computed once at boot by web_shell.html (Module.deTouchCeiling) — see the
