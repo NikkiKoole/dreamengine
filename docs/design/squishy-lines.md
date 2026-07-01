@@ -324,6 +324,14 @@ once v1 lands (not committed):
   `bevel_angle` by `SUN_SPIN_SPEED` (0.8°/frame, ~7.5s/turn) every frame in any mode, so the light
   slowly circles and every bevel/oil rim shimmers on its own — a cheap living-scene effect, purely a
   render-time read (no per-stroke state). The `boil` loop already lives; now the *lighting* can too.
+- **Sun popover UI (shipped, 2026-07-01).** All the sun tweaks got on-screen controls (they were
+  keyboard-only): a **SUN** button in the bar (its glyph shows the live sun colour; tabs when open or
+  spinning) opens a small popover — a **light dial** you drag to aim the sun (`atan2` of the pointer
+  vs the dial centre → `bevel_angle`), the four **sun-colour** swatches, and a **spin** toggle. Modal
+  like the tool dropdown (blocks canvas drawing, taps-away to dismiss). The keys (`, . / \`) still work.
+  Freeing bar space meant dropping the always-on tool-name label — the dropdown icon identifies the
+  tool and an ACCENT ring on the header now flags edit mode (the property strip + selection box already
+  signalled it).
 - **Flood-fill (still wanted)** — the *raster* other half: flood a bounded region, lay a dither/ramp
   in it. This one genuinely needs the **persistent layer buffer** (flood-fill is a raster op; the cart
   re-renders from data each frame and `pget` reads *last* frame). Do it *with* the layer-buffer
