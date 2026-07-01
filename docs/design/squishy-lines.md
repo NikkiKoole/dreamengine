@@ -198,9 +198,10 @@ So there are two outputs, same engine:
 
 1. **2-tone (shipped):** ink + paper. The soul of it.
 2. **Limited palette (shipped):** a **7-colour pen** — black / blue / red / green / cyan / magenta /
-   yellow (`COLORS[]` + swatch sprites 8–14; cursor ring shows the live colour). Picked via a **cycle
-   button** (7 don't fit the bar as swatches; cycle keeps the square canvas). pico32 has no true cyan,
-   so cyan ≈ `CLR_BLUE_GREEN` (dark teal). Each stroke stores its colour (non-destructive).
+   yellow (`COLORS[]`; cursor ring shows the live colour). Picked from an **always-visible palette
+   strip** — all seven swatches drawn with their real colour (via `rectfill`, not sprites), the active
+   one wearing an accent tab under it (the same on-state language as the bvl/boil toggles). pico32 has
+   no true cyan, so cyan ≈ `CLR_BLUE_GREEN` (dark teal). Each stroke stores its colour (non-destructive).
 3. **24-bit (later, opt-in):** the painterly tools (`paint`, watercolour) via `pset_rgb` /
    `rectfill_rgb` (raw `0xRRGGBB`, palette-bypass). **Caveat to remember:** `pset_rgb` pixels bypass
    `pal()` recolouring and don't read back through `pget` (use `pget_rgb`), so true-colour and
@@ -236,24 +237,53 @@ once v1 lands (not committed):
     stroke's half-width + slack); the nearest hit becomes `selected` with an accent **bounding box**;
     empty deselects. Undo/clear keep `selected` valid; cursor is an arrow in select mode.
   - **Stage 3 — contextual property editing (SHIPPED 2026-07-01):** when the SELECT tool has a stroke
-    picked, the bar's value controls **retarget to that stroke** and reflect its values — colour
-    swatches, dither cycle, bevel/boil toggles, and the thickness slider all read/write
+    picked, the bar's value controls **retarget to that stroke** and reflect its values — the colour
+    palette strip, the dither strip, bevel/boil toggles, and the thickness slider all read/write
     `strokes[selected]` (live re-render); the header reads "edit". A **property strip** drops under the
     bar with **bevel-size** (0..`BEVEL_MAX`) and **boil-intensity** (0..1) sliders, plus **z-order**
     buttons (`to_front`/`to_back` reorder the `strokes[]` array — later = on top). Bevel went from a
     bool to a float *size*. Reflected sliders use stable static `float`s (ui capture is address-keyed).
     Clicks in the strip don't re-pick. → a tiny **non-destructive vector editor**. (Bevel *direction*
     — light angle — is the one deferred bit; everything else from the ask landed.)
-  - **Palette:** grew to a **7-colour pen** (black/blue/red/green + cyan/magenta/yellow) via a colour
-    **cycle** button (7 swatches don't fit the bar; cycle keeps the square canvas). pico32 has no true
-    cyan → cyan ≈ `CLR_BLUE_GREEN` (dark teal).
+  - **Palette:** grew to a **7-colour pen** (black/blue/red/green + cyan/magenta/yellow), shown as an
+    **always-visible swatch strip** (see the palette growth path above). pico32 has no true cyan →
+    cyan ≈ `CLR_BLUE_GREEN` (dark teal).
+  - **Toolbar UI polish (2026-07-01):** the picker chrome caught up with the vector model. The **colour
+    cycle → a 7-swatch strip** and the **dither cycle → a 6-swatch strip** (both always visible, active
+    one tabbed; drawn directly — colours via `rectfill`, dither via `fillp`, so the old swatch sprites
+    8–20 are now unused). The **brush dropdown opens a 2-column icon+name grid** (rows grow from
+    `NTOOLS`, so new tools just slot in). SELECT became a **black button with a white marquee box**.
+    Whole bar reskinned **ink-on-paper** (`#define UI_COL_*` before `ui.h` → white buttons, black text,
+    grey chip borders; sliders get an outline since `ui_slider` draws none). Icon sprites use black
+    (idx 0) as their background, so `colorkey(CLR_BLACK)` in `init()` finally lets the glyphs read on
+    the paper cell — fixing the near-invisible **sketch** icon.
 - **Dithered strokes (shipped, 2026-06-30)** — the *intermediate* step before flood-fill (the maker's
   idea): the fat stamp brushes can be filled with a dpaint-style **Bayer-ordered density ramp**
   (`PATTERNS[]` = 16-bit `fillp` masks computed from the 4×4 Bayer matrix, ~12/25/50/75/87% ink; set
-  around the body pass only so bevel rims stay solid; a cycle button in the bar). The swatch sprites
-  decode the same masks so the button always shows the real fill. Per-stroke (stored), so it stays
+  around the body pass only so bevel rims stay solid; an always-visible swatch strip in the bar, each
+  cell drawn live with its own `fillp` mask so it always shows the real fill). Per-stroke (stored), so it stays
   inside the pure-vector model — **no layer buffer needed**. (Directional dithers — h/v-lines,
   diagonal — deferred; the engine has them as `FILL_*` if wanted.)
+- **Drip paint (shipped, 2026-07-01 — the maker's walk idea).** A `K_DRIP` "paint" brush: a wide wet
+  body, then runs that drip DOWN from **every exposed bottom edge** of the paint. `render_drip`
+  rasterises the body into a coverage grid (`drip_cov`, a disk per sample within the stroke's bbox),
+  then per column walks top→bottom and treats each paint→paper transition as a band bottom that can
+  run. **A run stops when it meets paint again below** (`drip_cov` hit) — so a serpentine stroke drips
+  off *each* of its bands: inner bands make short runs into the gaps and merge into the band below,
+  while only the truly-open bottom edge falls long. Run length ∝ the band's thickness there × seeded
+  jitter, capped at `DRIP_MAX_LEN`; each run is a thin tapering streak with a heavy **bead** where it
+  ends, plus the odd spatter dot. Still a **pure function of (path, seed)** — no simulation, no
+  persistent layer — so it re-renders identically and inherits undo / recolour / select-edit / z-order
+  for free. Tunables: `DRIP_STEP`, `DRIP_MIN_THK`, `DRIP_CHANCE`, `DRIP_LEN_SCALE`, `DRIP_MAX_LEN`.
+  - *First cut* collapsed to one lowest edge per column, so a serpentine only dripped off its lowest
+    pass (upper bands' drips vanished as you painted down — the maker caught this immediately). The
+    coverage-grid rewrite fixed it. *v1 is static* (runs reach final length the instant the stroke
+    commits). **Next:** a "wet" run-DOWN animation — ease each run 0→final over ~1s via the boil/age
+    timing, then settle. And *cross-stroke* pooling (a run stopping on a *different* stroke's paint, and
+    paint building up where strokes overlap) — `drip_cov` only holds the current stroke; a shared layer
+    would unlock it (same persistent-buffer refactor flood-fill + the boil cache want).
+  - **Perf note:** the coverage raster + clear is O(bbox area) per drip stroke per frame — fine for a
+    few, but it's another customer for the layer-buffer cache in the boil-perf todo.
 - **Flood-fill (still wanted)** — the *raster* other half: flood a bounded region, lay a dither/ramp
   in it. This one genuinely needs the **persistent layer buffer** (flood-fill is a raster op; the cart
   re-renders from data each frame and `pget` reads *last* frame). Do it *with* the layer-buffer
