@@ -570,12 +570,17 @@ void draw(void) {
   // rail draw last in their own colour (separate networks). (docs/design/roadkit.md — connectivity Phase 0.)
   if (S.roads_on){
     const float CASE_M = 1.2f;                                   // kerb/casing width beyond the carriageway (m)
-    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // pass 1: casing — one dark outline surface
+    // canals FIRST — linear WATER. Every road then draws OVER them, so a crossing reads as a (flat) bridge
+    // instead of water painted over the road. We don't yet carry OSM bridge/layer, so road-over-water is
+    // the sane default; raised decks are the bridge TODO (docs/design/external-data-carts.md · roadkit.md).
+    for (int w=0; w<nway; w++) if (rways[w].kind==K_CANAL)
+      paint_way(w, fmaxf(ROAD[K_CANAL].hw_m,1.0f), ROAD[K_CANAL].col, R2);
+    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // motor casing — one dark outline surface
       paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.5f)+CASE_M, CLR_BROWNISH_BLACK, R2);
-    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // pass 2: asphalt — one grey connected surface
+    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // motor asphalt — one grey connected surface
       paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.5f), CLR_DARK_GREY, R2);
-    for (int w=0; w<nway; w++) if (!is_motor_road(rways[w].kind))// pass 3: bike/foot/canal/rail — own colour
-      paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.0f), ROAD[rways[w].kind].col, R2);
+    for (int w=0; w<nway; w++){ int k=rways[w].kind;             // bike/foot/rail — own colour (canal done above)
+      if (!is_motor_road(k) && k!=K_CANAL) paint_way(w, fmaxf(ROAD[k].hw_m,1.0f), ROAD[k].col, R2); }
   }
 
   // collect near + on-screen buildings, depth-sort back-to-front, extrude
