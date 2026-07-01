@@ -15,8 +15,7 @@
   "genre": "arcade",
   "description": "A whole cave of live falling-sand: dig tunnels and the sand above pours down to refill them — grab every gem and reach the exit before a collapsing column buries you. A/D or arrows walk + dig sideways, W/up climb + dig up, S/down dig straight down, Z/X/R restart.",
   "todo": [
-    "Bug: the character sometimes suddenly pops back on top of the sand.",
-    "Touch: add steering support (maybe an onscreen joystick)."
+    "Bug: the character sometimes suddenly pops back on top of the sand."
   ]
 }
 de:meta */
@@ -211,7 +210,7 @@ static void build(void) {
     for (int i = 0; i < 60; i++) settle();
 }
 
-void init(void) { build(); }
+void init(void) { build(); touch_layout(TOUCH_DPAD4, 1); }
 
 // ── update ───────────────────────────────────────────────────────────
 void update(void) {
