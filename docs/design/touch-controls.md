@@ -23,6 +23,16 @@ recenters under your finger) — a fixed d-pad shouldn't fire from a tap on the 
 screen, so it now has its own small local grab radius. The 8-way compass dots were drawn at a
 radius too small to fit 8 without touching — shrunk the dot size so they clear.
 
+Also shipped: **N action buttons (0-4)** — the draw skin and `btn()` hit-testing only ever wired
+up 2, so this first required growing the core input vocabulary itself with `BTN_X`/`BTN_Y`
+(numbered to append, not insert — room for shoulder/trigger/stick-click buttons later, see
+STATUS #7). Named to match the real Xbox/PlayStation/Switch A/B/X/Y face-button vocabulary, not
+an arbitrary C/D — the direction going forward is real-controller support, not just PICO-8's
+2-button model (the maker's call, prompted by generalizing this exact touch work). Up to 4
+buttons diamond-lay around one anchor per placement (A bottom, B right, X left, Y top); a
+`touch_debug()` introspection API (`touch_layout_mode()`/`touch_ctrl_scale()`/`touch_debug(bool)`)
+also shipped alongside, for eyeballing band/grab-zone/placement without guessing.
+
 > **ARCHITECTURE PIVOT (2026-06-30) — supersedes the "grow the framebuffer" plan below.** The
 > band rendering hit two walls: `sw_cbuf` is a fixed `SCREEN_W*SCREEN_H` array (growing it =
 > surgery on the fragile software rasterizer), and the controls can't be eyeballed by the
@@ -385,6 +395,24 @@ metadata; the runtime can still call `touch_layout()` for carts that change sche
 
 ## Open questions / forks
 
+- **Twin-stick (e.g. `robotron`) — needs a second move zone.** Today's model assumes ONE move
+  control (stick or d-pad) + a button cluster; a twin-stick game needs TWO simultaneous sticks
+  (move + aim) both live-drawn and hit-tested at once. Already flagged in "Layout vocabulary" as
+  unimplemented; noted here explicitly with a concrete motivating cart so it isn't lost. Real
+  layout-thought needed: where does a second stick go in DECK (both hands need reachable space
+  below?) vs RAILS (one stick per rail, naturally) vs OVERLAY (two corners, tighter fit)? RAILS
+  is probably the easy case; DECK and OVERLAY need actual design work, not just "add a slot."
+  **Deliberately not building this now** — leaving the seam (this note + the vocabulary table
+  row) for whoever picks it up.
+- **Two-player touch layout — currently doesn't exist at all.** `show_touch_ui`/`touch_layout()`
+  are wired to player 0 only; player 1 has no touch path whatsoever (keyboard/gamepad only, see
+  `btn()`'s `player == 1` branch). Supporting local 2-player on one touchscreen means splitting
+  DECK/RAILS/OVERLAY real estate between two players' controls — genuinely tight on a phone,
+  especially combined with the twin-stick case above (a 2-player twin-stick game would want 4
+  sticks + up to 8 buttons live on one screen at once). This needs dedicated layout thoughtwork
+  (halves? corners? a fundamentally different mode for 2P?), not a quick extension of the current
+  one-anchor-per-control-type model. **Deliberately not building this now** — flagging the gap so
+  it's a known, intentional scope boundary rather than a silent omission discovered later.
 - **Draw hook.** Cleanest is a studio-owned pass: the cart draws into its `SCREEN_W×SCREEN_H`
   texture as always; the engine blits that into the computed game rect, then draws the controls into
   the letterbox band — all native-res, the cart never has to call anything. (Alternative: expose a
@@ -586,6 +614,14 @@ void touch_layout(int move_mode, int n_buttons);   // shipped — configure once
 void touch_button_label(int i, const char *txt);    // NOT YET shipped — optional per-button glyph/label
 ```
 
+Also shipped, in the CORE input vocabulary (`studio.h`, not just touch — every backend reads
+these): `BTN_X` (6) / `BTN_Y` (7), alongside the existing `BTN_A`/`BTN_B`. Named to match the real
+Xbox/PlayStation/Switch A/B/X/Y face-button set, not an arbitrary C/D — the direction going
+forward is real-controller support (STATUS #7's gamepad item), not just PICO-8's 2-button model.
+Numbered to *append*, not insert, so shoulder/trigger/stick-click buttons can be added later
+without renumbering anything. Default keyboard: P0 continues Z/X into C/V, P1 continues J/K into
+L/`;` — both remappable in the editor's settings → controls panel like A/B always were.
+
 (No `TOUCH_NONE` — there's no "buttons-only, no stick/d-pad" mode yet, see "Layout vocabulary.")
 
 - `move_mode` picks stick vs d-pad; both d-pad modes feed `btn()` directions as booleans by
@@ -593,9 +629,12 @@ void touch_button_label(int i, const char *txt);    // NOT YET shipped — optio
   sectors (dominant axis, no diagonals), DPAD8 to 8 (adjacent cardinals combine into one diagonal
   sector, never three directions at once). Analog modes keep the −1..1 + dead-zone path via
   `stick_x()/stick_y()`.
-- `n_buttons` is stored (clamped 0..4) but the draw skin still hard-caps at 2 — **generalizing to
-  N is still open**; lay them out in the reachable arc (deck: bottom; rails: right rail; overlay:
-  bottom-right).
+- `n_buttons` (0-4: A/B/X/Y) is shipped — `layout_action_buttons()` diamond-lays them around one
+  anchor point per placement (A bottom, B right, X left, Y top — the classic face-button
+  arrangement), radius scaled by `eff_btn_r()` so the cluster can't overlap itself at any
+  `ctrl_scale`. The stick/d-pad grab-zone exclusion and the button hit-test both loop over
+  `touch_n_buttons` via one `touching_action_button()` helper, so drawn size, hit-test size, and
+  active-button count can't drift apart from each other.
 - **Floating analog** (shipped): on first touch in the move zone, spawn the base at the touch
   point; the knob clamps to `eff_stick_r()` (not the raw constant — see "Sizing math"). Knob
   smooth-lerp and `pointer.h` (`PTR_ACQUIRE`) finger-ownership are still open (a second finger on
@@ -638,20 +677,20 @@ touches.
 - [x] **P2** placement matrix verified — `det-probes/placetest.c`: matched→overlay (exact identity), portrait→deck, landscape→rails, tiny-band→overlay; computed rects round-trip
 - [x] **P3** `touch_layout(mode, n_buttons)` shipped (4-place dance) with `TOUCH_ANALOG` (floating) / `TOUCH_ANALOG_FIX` (fixed); verified fixed-vs-floating via trace.
 - [x] **P3** floating + fixed analog base behaviour (fixed pins base to home, floating spawns under finger). `pointer.h` capture + knob lerp still TODO.
-- [x] **band-aware layout + desktop smooth-circle draw skin** (was NEXT above) — `layout_touch_controls()` places the stick/d-pad + buttons into the actual DECK/RAILS/OVERLAY geometry each frame; the desktop skin paints smooth window-space circles after the blit (live stick knob, or compass-node d-pad). `n_buttons` still only draws up to 2 (see open item below).
+- [x] **band-aware layout + desktop smooth-circle draw skin** (was NEXT above) — `layout_touch_controls()` places the stick/d-pad + buttons into the actual DECK/RAILS/OVERLAY geometry each frame; the desktop skin paints smooth window-space circles after the blit (live stick knob, or compass-node d-pad).
 - [x] **P3** `TOUCH_DPAD4` / `TOUCH_DPAD8` d-pad move modes — resolve to one 45°-wide angle sector per touch (DPAD4: 4 sectors, dominant axis; DPAD8: 8 sectors, diagonals combine two adjacent cardinals, never three at once); a small local grab radius around the d-pad's own home (not the stick's whole-zone `sgz`); 8-way node draw sized to clear (no visual overlap). Verified headless via mouse-as-touch traces (exclusive bucketing, a clean diagonal, out-of-zone rejection).
 - [x] **P3** control sizing scales to fit a tight deck/rail band — `ctrl_scale` (floored/ceilinged), `eff_stick_r()`/`eff_btn_r()` used everywhere so hit-test and draw stay in sync. Verified via `DE_WINDOW` (forces a phone-shaped window so DECK/RAILS trigger) that a shrunk button's tap radius shrinks with its visual, and a huge band clamps to 1.0 rather than growing unbounded.
-- [ ] **P3** N buttons beyond the hard-wired 2 + optional labels; per-cart opt-in in code
+- [x] **debug introspection** — `touch_layout_mode()` / `touch_ctrl_scale()` / `touch_debug(bool)` (band + grab-zone outlines, placement/scale text), for eyeballing placement work without guessing. Backs the permanent `dpaddemo` test-bench cart.
+- [x] **P3** N action buttons (0-4: A/B/X/Y, diamond-laid) — required first adding `BTN_X`/`BTN_Y` to the CORE input vocabulary (not just touch — `btn()`/`btnp()`/`btnr()`, keyboard defaults, the editor's remap panel), since only A/B existed before. Verified headless: all 4 diamond positions hit exclusively; unused slots (e.g. `n_buttons=2`) correctly fire nothing even when tapped.
 - [ ] **P3** prototype `columns`/`puyo` (d-pad) and a free-move cart (analog) — also the reference-image source for "Layout vocabulary"
 - [ ] **P4b** editor settings rework — cart-reflective readout (reads the cart's declared layout) + force-show-on-desktop override (see "The editor setting" section)
 - [ ] **P4** wire `de_key_event` in the iOS shell for `key()` carts
 
 ### First move (updated 2026-07-01 — everything below "Checklist" is now open, not this)
 
-Generalize N buttons beyond the hard-wired 2 (`touch_n_buttons` is already stored and clamped
-0..4, only the draw skin needs the loop generalized + the layout arc extended past 2 slots).
-It's the smallest remaining Phase-3 gap and unblocks the vocabulary prototype cart (`d-pad8 + N`
-needs 3–4 buttons to actually demo).
+Build the vocabulary prototype cart(s) — `columns`/`puyo`-style for d-pad, a free-move cart for
+analog — now that N buttons (needed for `d-pad8 + N`) is shipped. Doubles as the reference-image
+source "Layout vocabulary" has been waiting on.
 
 ---
 
