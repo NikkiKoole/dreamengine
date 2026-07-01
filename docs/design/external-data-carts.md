@@ -329,17 +329,23 @@ road render** (the close pseudo-3D view where that grammar is visible, unlike sl
 markings → pavements/kerbs → curb-return junctions on its projected ground plane, via `roadkit.h`. Decision
 + plan: [`roadkit.md`](roadkit.md).
 
-**Bridges — the two-phase plan.** *Flat bridges are handled* (2026-07-01): motor roads draw over canals
-(`K_CANAL`) and water areas, so a road-over-water crossing reads as a flat bridge instead of blue-on-road.
-**Raised/3D bridges** (visible decks, road-over-road overpasses) need two things neither of which exists in
-citydrive yet: **(1) data** — `osm-roads.js` must carry `bridge`/`tunnel`/`layer` per way into the `.rvb`
-(a new field / format bump; it currently flattens them — same signal roadlab/streetlab want for grade
-dispatch, so it pays off twice); **(2) render** — port **cityview's** existing deck machinery (`DECKW`/
-`DECKT`, running surface + fascia + pillars + ground shadow + z-node ramps + "drive UNDER high decks", all
-on the shared `project()`/`pdisc`/`pproj_poly` vocabulary) so a `bridge` way lifts onto a deck; tunnels →
-dashed/hidden. Proven render code, a port not new research. **Payoff is modest for flat NL** (few overpasses)
-and large for hilly/motorway cities. Other flat/TODO: inner-ring holes, the >64-vertex footprint clamp
-(`MAXBV`), and the hashed `other_area` understory. Web/wasm file loading is shared with roadview (below).
+**Bridges & tunnels — DONE (2026-07-01).** Three parts, all shipped:
+- *Flat bridges* — motor roads draw over canals (`K_CANAL`) and water, so a road-over-water crossing reads
+  as a flat bridge instead of blue-on-road.
+- *Data* — **`osm-roads.js` now carries bridge/tunnel/layer** for line roads in the per-feature `sub`
+  string (`"B<layer>"`/`"T<layer>"`, absent = at grade). No format bump — the field already existed and
+  readers skip it. Verified against real Delft (79 bridges/tunnels; the named canal *bruggen*). This is
+  also the grade-dispatch signal roadlab/streetlab want, so it pays off twice.
+- *Render (citydrive)* — a `bridge` way (`deck>0`) draws as a **raised deck** (running surface + fascia +
+  ground shadow, ramped up at both ends, subdivided so 2-node spans hump smoothly); `DECK_H` lift/layer is
+  a one-line tune (Delft's low canal bridges = 3 m). A `tunnel` way (`deck<0`) draws as a **faint dashed
+  strip** ("goes underground here"). Height extrudes up-screen via `project()`'s z — reads in the 3D
+  camera modes, flat in top-down.
+
+*Refinements left:* tunnel **portals** (dark mouths at the ends), **pillars** under long spans, and larger
+lift for motorway/hilly cities (Delft is the gentle case). Other citydrive flat/TODO: inner-ring holes,
+the >64-vertex footprint clamp (`MAXBV`), and the hashed `other_area` understory. Web/wasm file loading is
+shared with roadview (below).
 
 ### The binary form (`.rvb`) — same IR, packed
 
