@@ -719,8 +719,12 @@ static void draw_panel(void) {
             if (ui_button(x, y, 12, 12, 0)) light_sel = i;
             rectfill(x, y, 12, 12, LIGHTS[i]); rect(x, y, 12, 12, i == light_sel ? ACCENT : INK);
         }
-        if (ui_button(SUN_PX + 60, SUN_PY + 36, 40, 16, sun_spin ? "spin*" : "spin")) sun_spin = !sun_spin;
-        if (sun_spin) rect(SUN_PX + 60, SUN_PY + 36, 40, 16, ACCENT);
+        // spin toggle — clear on/off; when ON it fills accent + a ↻ mark so it's unmistakable
+        int spx = SUN_PX + 58, spy = SUN_PY + 36, spw = 48, sph = 16;
+        if (ui_button(spx, spy, spw, sph, 0)) sun_spin = !sun_spin;
+        rectfill(spx, spy, spw, sph, sun_spin ? ACCENT : PAPER);
+        rect(spx, spy, spw, sph, INK);
+        print(sun_spin ? "spin on" : "spin off", spx + 4, spy + 5, sun_spin ? PAPER : INK);
     }
 
     font(FONT_NORMAL);   // restore (the whole bar drew in FONT_SMALL)
