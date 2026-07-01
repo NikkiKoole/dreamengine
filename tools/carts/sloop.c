@@ -435,7 +435,12 @@ enum { TR_SINGLE, TR_AUTO, TR_MANUAL };
                                   // exceeds it → wheels spin. Worst in 1st, hooks up as you upshift; a
                                   // heavy/cargo'd or few-drive-wheel rig spins more. Tune by feel.
 #define SPIN_SQUEAL   0.12f       // wheelspin amount above which tyres squeal + lay burnout marks + smoke
-#define GROUND_GRIP   1.0f        // road: plenty (sand/mud come in rung 3)
+#define GROUND_GRIP   1.0f        // road: plenty. Off-road is now the OSM surface (Rung B step 5): the
+                                  // GROUND_GRIP term is scaled per-frame by surf_grip below.
+#define OFFROAD_GRIP  0.55f       // OSM off-road: grip drops → slides wide, understeers, longer to stop
+#define OFFROAD_DRAG  0.4f        // OSM off-road: extra rolling drag per wheel → rough ground bleeds
+                                  // top speed to ~half (top = thrust/drag). Tune by feel with OFFROAD_GRIP.
+static float surf_grip = 1.0f;    // per-frame surface grip (1 = on road, OFFROAD_GRIP = off). OSM-only.
 #define KMH           0.72f       // px/s → km/h for the readout (top ~166 px/s ≈ 120 km/h,
                                   // so the SPEED number lines up with the zone limit signs)
 #define DRIFT_GRIP_MULT 0.13f     // handbrake: REAR axle's grip limit drops to this fraction → tail out
@@ -1279,6 +1284,13 @@ static void smoke_puff(float x, float y) {
 
 // ── physics: the honest core ──────────────────────────────────────────────────
 static void update_drive(float dt_) {
+    // Rung B step 5: the OSM road SURFACE drives handling. On a real road → full grip; off it → the
+    // tyres let go (slide/understeer) and rough ground adds drag. OSM-only (surf_grip stays 1 with no
+    // .rvb) so the default cart's uniform-grip feel is unchanged. gg = the surface-scaled ground grip
+    // fed through every friction term (traction cap, braking, the friction circle, lateral bleed).
+    surf_grip = osm_loaded ? (road_at(sx, sy).on_road ? 1.0f : OFFROAD_GRIP) : 1.0f;
+    float gg = GROUND_GRIP * surf_grip;
+
     float fwx = cos_deg(ang), fwy = sin_deg(ang);   // forward unit vector
     float ltx = -fwy, lty = fwx;                    // lateral (left) unit vector
 
@@ -1445,7 +1457,7 @@ static void update_drive(float dt_) {
     float driveLoad = 0;
     for (int i = 0; i < nWheelP; i++)
         if (nDrive == 0 || wheelPD[i]) driveLoad += wheelLoad[i];       // nDrive==0 = AWD (all wheels)
-    float tract = MU_TRACTION * GROUND_GRIP * driveLoad;
+    float tract = MU_TRACTION * gg * driveLoad;
     // wheelspin: engine force that EXCEEDS what the tyres can lay down is wasted as spin (no extra
     // accel, but it squeals + smokes + lays burnout marks). Worst in low gear (high thrust). Eased.
     float spinNow = (tract > 0 && af(thrust) > tract) ? clamp((af(thrust) - tract) / tract, 0, 1.5f) : 0;
@@ -1459,13 +1471,14 @@ static void update_drive(float dt_) {
     // --- linear: net force / mass. Drag is a FORCE (base + per-wheel rolling
     //     resistance + frontal-profile aero), so top speed = thrust/drag is
     //     mass-INDEPENDENT — mass only governs how fast you reach it. -----------
-    float drag = DRAG_BASE + DRAG_WHEEL * nWheels + DRAG_AERO * frontalCells + scrape_drag;
+    float drag = DRAG_BASE + DRAG_WHEEL * nWheels + DRAG_AERO * frontalCells + scrape_drag
+               + (surf_grip < 1.0f ? OFFROAD_DRAG * nWheels : 0.0f);   // OSM off-road: rough ground drag
     vf += ((thrust - drag * vf) / M) * dt_;
     // braking: PURE deceleration, both directions (reverse is a gear now, not the brake).
     // Strong, but capped by what the tyres can grip — a well-wheeled rig stops hard.
     float brakeAccel = 0;
     if (brake_pos > 0.001f && af(vf) > 0.5f) {      // analog: brake force ∝ brake_pos (feathered / trail-brake)
-        brakeAccel = clamp(GRIP_TO_FORCE * wheelGrip * GROUND_GRIP / M, 0, BRAKE) * brake_pos;
+        brakeAccel = clamp(GRIP_TO_FORCE * wheelGrip * gg / M, 0, BRAKE) * brake_pos;
         float d = brakeAccel * dt_;
         if (vf > 0) { vf -= d; if (vf < 0) vf = 0; }
         else        { vf += d; if (vf > 0) vf = 0; }
@@ -1514,13 +1527,13 @@ static void update_drive(float dt_) {
             // friction circle: the longitudinal force (drive + brake) this wheel carries eats into its
             // LATERAL budget. latFactor = √(1−(Fx/Fmax)²): flooring a drive wheel → it lets go laterally
             // (power-oversteer); braking an unloaded rear → it steps out (trail-braking). All emergent.
-            float Fmax = MU_TRACTION * GROUND_GRIP * wheelLoad[i] + 1.0f;
+            float Fmax = MU_TRACTION * gg * wheelLoad[i] + 1.0f;
             float fx = fxBrake + ((wheelPD[i] || nDrive == 0) ? fxDrive : 0);
             float u = clamp(fx / Fmax, 0, 1);
             cap *= fsqrt(1.0f - u * u);
             if (wheelPX[i] < 0) cap *= (1.0f - DRIFT_RECOVER * drift_loose);       // hysteresis: rear hangs loose on exit
             float cl = clamp(vlat, -cap, cap);
-            float acc = cl * (g * GROUND_GRIP / M) * LAT_GRIP;  // peak force ∝ cap ∝ load
+            float acc = cl * (g * gg / M) * LAT_GRIP;  // peak force ∝ cap ∝ load
             sumLat += acc;
             sumYaw += acc * wheelPX[i];
             float sat = af(vlat) - cap;
@@ -1542,7 +1555,7 @@ static void update_drive(float dt_) {
     } else {                                          // single-track (bike): whole-body grip bleed
         drift_loose = 0;
         float lat_mult = (in_hand ? DRIFT_GRIP_MULT : 1.0f) * tipMul;
-        float grip = clamp((wheelGrip * GROUND_GRIP / M) * LAT_GRIP * lat_mult, 0, 1.0f / dt_);
+        float grip = clamp((wheelGrip * gg / M) * LAT_GRIP * lat_mult, 0, 1.0f / dt_);
         vl -= vl * grip * dt_;
     }
     if (scraping)                                    // a dragging belly also anchors sideways
@@ -1781,8 +1794,9 @@ void update(void) {
 #ifdef DE_TRACE
     float fwx = cos_deg(ang), fwy = sin_deg(ang);
     watch("vf", "%.1f", vx * fwx + vy * fwy);
-    { RoadHit _rh = road_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f);   // P1 seam — deterministic trace of road_at()
+    { RoadHit _rh = road_at(sx, sy);   // P1 seam — deterministic trace of road_at() AT THE RIG (drives handling)
       watch("on_road", "%d", _rh.on_road);
+      watch("surf_grip", "%.2f", surf_grip);
       watch("road_cls", "%d", _rh.cls);
       watch("osm", "%d", osm_loaded); }
     watch("vl", "%.1f", vx * (-fwy) + vy * fwx);
@@ -2872,7 +2886,7 @@ static void hud(void) {
     print(DES_NAME[cur_des], 4, 4, CLR_DARK_GREY);
     print(ENG[eng_kind].name, 4, 12, ENG[eng_kind].col);   // the rig's engine kind (§1a)
     print_centered(ZONE_NAME[cur_zone], SCREEN_W / 2, 4, CLR_YELLOW);
-    { RoadHit rh = road_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f);   // P1 seam, live at the rig — proves road_at() is wired
+    { RoadHit rh = road_at(sx, sy);   // P1 seam, live AT THE RIG COM — matches the surface driving handling
       print_centered(rh.on_road ? "ON ROAD" : "OFF-ROAD", SCREEN_W / 2, 12, rh.on_road ? CLR_GREEN : CLR_ORANGE); }
     if (nDrag > 0) {                         // scrape heat — shown only while it bites
         print("SCRAPE", SCREEN_W - 52, 4, hot_col());
