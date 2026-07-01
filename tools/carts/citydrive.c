@@ -502,7 +502,7 @@ static void paint_way(int w, float rhw, int col, float r2){
 // ramped up from grade at both ends over RAMP metres, subdivided so even a 2-node span humps smoothly.
 // Height extrudes up-screen (project's z), so it reads as elevated in the 3D camera modes (flat in top-down).
 // osm-roads carries the bridge tag; citydrive lifts it. (docs/design/external-data-carts.md — bridges Phase 2.)
-#define DECK_H 4.0f     // lift per OSM layer (m) — tune to taste
+#define DECK_H 3.0f     // lift per OSM layer (m). Delft's canal bridges are LOW — kept understated on purpose
 #define DECK_T 1.2f     // deck slab thickness (fascia depth, m)
 static void deck_quad(float ax,float ay,float za,float bx,float by,float zb,float hw,int col){
   float dx=bx-ax,dy=by-ay,L=sqrtf(dx*dx+dy*dy)+1e-4f; float px=-dy/L*hw,py=dx/L*hw;
