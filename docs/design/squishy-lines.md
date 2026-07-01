@@ -302,6 +302,14 @@ once v1 lands (not committed):
   colours) so the paint looks pushed by a stiff brush or knife. Pure `f(path, seed)`. It's a
   characterful *fake*, not physical impasto — good enough for the lo-fi surface; a 24-bit paint layer
   would let it mix real light/dark of the paint colour later.
+- **Outline (shipped, 2026-07-01 — from the Tiny Jam icon study).** A per-stroke **OUT** toggle +
+  its own colour: `render_stroke` gained a `grow` param, so the outline is just a fatter silhouette
+  of the stroke drawn in `outline_color` UNDER the fill (and under any bevel). A black rim + coloured
+  fill with the fat **ink** brush *is* the chunky bubble-lettering of the Tiny Jam logo; add **bevel**
+  for the highlight and it's startlingly close. Captured per stroke (`outline` px + `outline_color`),
+  editable in select mode. The toolbar chip is drawn as a **ring** (not a solid swatch) so it reads as
+  "outline colour" rather than another fill swatch. Pure `f(path, seed)`. Next: an outline-**width**
+  slider in the property strip; maybe an inner-highlight pass for the full logo look.
 - **Flood-fill (still wanted)** — the *raster* other half: flood a bounded region, lay a dither/ramp
   in it. This one genuinely needs the **persistent layer buffer** (flood-fill is a raster op; the cart
   re-renders from data each frame and `pget` reads *last* frame). Do it *with* the layer-buffer
