@@ -13,10 +13,7 @@
   "lineage": "Defender (1981) demake on a wrapping 3× world; the novel teaching is the three-state lander FSM (hunt → carry → mutate) with a minimap scanner strip that reads the full ring-world in 16px.",
   "genre": "shooter",
   "homage": "Defender (1981)",
-  "description": "Skim a fast little ship over a wrapping mountain world far wider than the screen, while alien Landers drift down to snatch the humanoids walking the ground and haul them skyward — let one reach the top and it MUTATES into a fast, swarming red killer. Blast a carrying lander and its human plummets: dive, catch it midair, and lower it home for big points. A scanner strip across the top maps the whole ring-shaped level — ship, aliens and humans as blips — so you always know where the danger is. Clear every alien to advance the wave; lose all your humanoids and the planet is lost. Arrows fly and thrust (left/right faces + scrolls the world), Z fires forward; press Z to start and to play again.",
-  "todo": [
-    "Touch: needs an onscreen joystick."
-  ]
+  "description": "Skim a fast little ship over a wrapping mountain world far wider than the screen, while alien Landers drift down to snatch the humanoids walking the ground and haul them skyward — let one reach the top and it MUTATES into a fast, swarming red killer. Blast a carrying lander and its human plummets: dive, catch it midair, and lower it home for big points. A scanner strip across the top maps the whole ring-shaped level — ship, aliens and humans as blips — so you always know where the danger is. Clear every alien to advance the wave; lose all your humanoids and the planet is lost. Arrows fly and thrust (left/right faces + scrolls the world), Z fires forward; press Z to start and to play again."
 }
 de:meta */
 #include "studio.h"
@@ -183,6 +180,7 @@ void init(void) {
     gstate = TITLE;
     reset_game();
     gstate = TITLE;
+    touch_layout(TOUCH_ANALOG, 1);
 }
 
 static Human *find_free_human(float fromx) {
