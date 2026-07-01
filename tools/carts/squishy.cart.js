@@ -1,5 +1,5 @@
-// squishy — 320×320 square canvas at 3× (960×960 window), plus 10 little
-// tool-icon sprites (slots 0..9, matching the BRUSHES table order) drawn with
+// squishy — 320×320 square canvas at 3× (960×960 window), plus 11 little
+// tool-icon sprites (slots 0..10, matching the BRUSHES table order) drawn with
 // sprite-draw.js. They're ink-on-paper glyphs: the cart keys out black (idx 0) so
 // the shapes read on the paper cell. pico32 indices: 4 brown · 5 dk-grey
 // · 6 lt-grey · 7 white · 8 red · 9 orange · 10 yellow · 12 blue · 14 pink ·
@@ -99,13 +99,24 @@ function ic_nib() {
   line(g, 2, 15, 4, 13, K); line(g, 2, 14, 5, 13, K); line(g, 3, 15, 5, 14, K)
   return flat(g)
 }
+// 10 — oil / impasto: a palette knife smearing a thick beveled blob of paint
+function ic_oil() {
+  const g = blank()
+  line(g, 14, 2, 8, 8, 6); line(g, 13, 2, 7, 8, 5)     // knife handle
+  trifill(g, 4, 8, 9, 8, 6, 12, 6)                      // the flat blade
+  // a thick paint smear with a lit top edge (HILITE) + shadow底 (impasto ridge)
+  rrectfill(g, 2, 11, 12, 15, 1, 9)                     // orange paint body
+  line(g, 2, 11, 12, 11, 10)                            // lit ridge (light yellow)
+  line(g, 3, 15, 13, 15, K)                             // shadow groove (impasto edge)
+  return flat(g)
+}
 
 // Slots 0..8 are the brush icons (one per BRUSHES[] entry, matching order). The colour /
 // dither / select-tool graphics are now drawn procedurally in squishy.c (rectfill / fillp /
 // a dashed marquee box), so their old sprites (8..21) are gone — nothing loads them.
 const sprites = {
-  0: ic_ink(), 1: ic_pen(), 2: ic_fin(), 3: ic_mrk(), 4: ic_chk(),
-  5: ic_skt(), 6: ic_spr(), 7: ic_brs(), 8: ic_paint(), 9: ic_nib(),
+  0: ic_ink(), 1: ic_pen(),  2: ic_fin(), 3: ic_mrk(),   4: ic_chk(),  5: ic_skt(),
+  6: ic_spr(), 7: ic_brs(),  8: ic_paint(), 9: ic_nib(), 10: ic_oil(),
 }
 
 module.exports = { screenW: 320, screenH: 320, scale: 3, sprites }
