@@ -518,6 +518,7 @@ static int btn_b_cx, btn_b_cy;
 // frame's result, read by btn() and painted by the draw skin.
 static int  dpad_touch_id = -1;
 static bool dpad_up = false, dpad_down = false, dpad_left = false, dpad_right = false;
+static int  dpad_sector = -1;   // 0..7 compass sector (0=up, clockwise by 45°), -1 = no direction held
 #define DPAD_DEADZONE   (STICK_RADIUS * 0.3f)
 
 // virtual touch pool — merges raylib touches with mouse-as-touch on desktop.
@@ -973,11 +974,14 @@ static void update_stick(void) {
 
 // d-pad variant of update_stick(): identical grab-zone/finger-tracking, but resolves the held
 // finger to direction booleans (angle-bucketed from the home centre) instead of a knob position.
-// DPAD4 buckets exclusively by dominant axis (no diagonals); DPAD8 thresholds each axis
-// independently, so adjacent bits can both be set (a diagonal).
+// Both modes resolve to exactly ONE sector from the angle (never independent per-axis
+// thresholds — that let almost any off-axis touch trip two unrelated directions at once).
+// DPAD4 snaps to 4 sectors (dominant axis, no diagonals); DPAD8 snaps to 8 (adjacent cardinals
+// combine into ONE diagonal sector, not a separate 3rd state layered on top of both cardinals).
 static void update_dpad(void) {
     if (!show_touch_ui) {
         dpad_touch_id = -1;
+        dpad_sector = -1;
         dpad_up = dpad_down = dpad_left = dpad_right = false;
         return;
     }
@@ -1008,18 +1012,29 @@ static void update_dpad(void) {
     }
 
     dpad_up = dpad_down = dpad_left = dpad_right = false;
+    dpad_sector = -1;
     if (dpad_touch_id == -1) return;
 
-    if (touch_move_mode == TOUCH_DPAD8) {                     // independent axes → diagonals allowed
-        if (dx < -DPAD_DEADZONE) dpad_left  = true;
-        if (dx >  DPAD_DEADZONE) dpad_right = true;
-        if (dy < -DPAD_DEADZONE) dpad_up    = true;
-        if (dy >  DPAD_DEADZONE) dpad_down  = true;
-    } else {                                                   // DPAD4 → exclusive, dominant axis wins
-        float len = sqrtf(dx*dx + dy*dy);
-        if (len < DPAD_DEADZONE) return;
-        if (fabsf(dx) > fabsf(dy)) { if (dx < 0) dpad_left = true; else dpad_right = true; }
-        else                       { if (dy < 0) dpad_up   = true; else dpad_down  = true; }
+    float len = sqrtf(dx*dx + dy*dy);
+    if (len < DPAD_DEADZONE) return;
+
+    if (touch_move_mode == TOUCH_DPAD8) {
+        // one sector out of 8 (45° wide, centred on each compass point) — matches the draw
+        // skin's node layout 1:1, so exactly one node lights per touch.
+        float deg = atan2f(dy, dx) * RAD2DEG;                    // 0=right, 90=down (screen y-down)
+        int sector = ((int)lroundf((deg + 90.0f) / 45.0f)) & 7;  // 0=up, clockwise; & 7 wraps negatives correctly
+        static const bool SEC_UP[8]    = { 1,1,0,0,0,0,0,1 };
+        static const bool SEC_RIGHT[8] = { 0,1,1,1,0,0,0,0 };
+        static const bool SEC_DOWN[8]  = { 0,0,0,1,1,1,0,0 };
+        static const bool SEC_LEFT[8]  = { 0,0,0,0,0,1,1,1 };
+        dpad_sector = sector;
+        dpad_up    = SEC_UP[sector];
+        dpad_right = SEC_RIGHT[sector];
+        dpad_down  = SEC_DOWN[sector];
+        dpad_left  = SEC_LEFT[sector];
+    } else {                                                    // DPAD4 → 4 sectors, dominant axis wins
+        if (fabsf(dx) > fabsf(dy)) { if (dx < 0) { dpad_left = true; dpad_sector = 6; } else { dpad_right = true; dpad_sector = 2; } }
+        else                       { if (dy < 0) { dpad_up   = true; dpad_sector = 0; } else { dpad_down  = true; dpad_sector = 4; } }
     }
 }
 
@@ -1035,23 +1050,18 @@ static void draw_touch_overlay_window(void) {
     DeColor press = (DeColor){ 255, 255, 255, 110 };
     DeColor hint  = (DeColor){ 255, 255, 255,  40 };
 
-    // movement control: analog stick (live base+knob while held) or d-pad (compass nodes
-    // that light up per held direction), by move mode.
+    // movement control: analog stick (live base+knob while held) or d-pad (compass nodes;
+    // exactly ONE lights, keyed off the resolved sector — never an AND-combo of booleans,
+    // which used to light a diagonal's two cardinals AND the diagonal node all at once).
     if (touch_move_mode == TOUCH_DPAD4 || touch_move_mode == TOUCH_DPAD8) {
         DrawCircleLines((int)stick_home_x, (int)stick_home_y, STICK_RADIUS, hint);
-        // 8 canonical compass positions (up, up-right, right, ... up-left); DPAD4 samples
-        // every other one (the cardinals) so the same table drives both widths.
-        bool dirs8[8] = {
-            dpad_up,                  dpad_up   && dpad_right, dpad_right,               dpad_down && dpad_right,
-            dpad_down,                dpad_down && dpad_left,  dpad_left,                dpad_up   && dpad_left,
-        };
         int n    = (touch_move_mode == TOUCH_DPAD8) ? 8 : 4;
-        int step = 8 / n;
+        int step = 8 / n;   // 8 canonical compass positions; DPAD4 samples every other one (the cardinals)
         for (int i = 0; i < n; i++) {
             float deg = i * (360.0f / n) - 90.0f;   // 0 = up, clockwise
             float nx = stick_home_x + cosf(deg * DEG2RAD) * STICK_RADIUS * 0.7f;
             float ny = stick_home_y + sinf(deg * DEG2RAD) * STICK_RADIUS * 0.7f;
-            DrawCircleV((Vector2){ nx, ny }, 18, dirs8[i * step] ? press : ring);
+            DrawCircleV((Vector2){ nx, ny }, 18, (dpad_sector == i * step) ? press : ring);
         }
     } else if (stick_touch_id != -1) {
         DrawCircleLines((int)stick_base_x, (int)stick_base_y, STICK_RADIUS, ring);
