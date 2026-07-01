@@ -164,7 +164,8 @@ static struct { int kind, start, count; float cx, cy; } areas[MAXAREA]; static i
 #define J_RAWARM  12          // raw incident directions accumulated per node before dedup
 #define MAXARM    8           // arms kept per junction after dedup
 #define MAXJUNC   60000       // junction capacity (near-field detail; truncates gracefully)
-typedef struct { float x, y; unsigned char narm; float brg[MAXARM]; unsigned char cls[MAXARM]; } Junc;
+typedef struct { float x, y; unsigned char narm; float brg[MAXARM]; unsigned char cls[MAXARM];
+                 unsigned char yield, realctl; } Junc;   // yield = per-arm bitmask that must give way; realctl = a real OSM give-way/stop node set it
 static Junc junc[MAXJUNC]; static int njunc;
 static void build_junctions(void);    // defined below (after the road painters it reuses)
 
@@ -675,9 +676,22 @@ static void build_junctions(void){
     if(nd>1 && fabsf((db[0]+360.0f)-db[nd-1])<DEDUP) nd--;   // first & last wrap onto the same approach
     if(nd<3) continue;
     Junc*j=&junc[njunc++]; j->x=n->x; j->y=n->y; j->narm=(unsigned char)(nd>MAXARM?MAXARM:nd);
+    j->yield=0; j->realctl=0;
     for(int a=0;a<j->narm;a++){ j->brg[a]=db[a]; j->cls[a]=dk[a]; }
   }
   free(g_jn); free(g_jhash); g_jn=NULL; g_jhash=NULL;
+  // attach REAL give-way/stop nodes to the arm they sit on — this arm yields. Overrides the class-priority
+  // inference for that junction (a give-way node is ground truth about which approach must give way).
+  for(int p=0;p<npnode;p++){ if(pnode[p].kind!=K_GIVEWAY && pnode[p].kind!=K_STOP) continue;
+    int bj=-1; float bd=35.0f*35.0f;                                   // nearest junction within ~35 m
+    for(int i=0;i<njunc;i++){ float dx=junc[i].x-pnode[p].x, dy=junc[i].y-pnode[p].y, d=dx*dx+dy*dy; if(d<bd){bd=d;bj=i;} }
+    if(bj<0) continue;
+    Junc*j=&junc[bj];
+    float vx=pnode[p].x-j->x, vy=pnode[p].y-j->y, vl=sqrtf(vx*vx+vy*vy)+1e-4f; vx/=vl; vy/=vl;
+    int ba=-1; float bdot=0.6f;                                        // the arm pointing most toward the node
+    for(int a=0;a<j->narm;a++){ float dot=cos_deg(j->brg[a])*vx + sin_deg(j->brg[a])*vy; if(dot>bdot){bdot=dot;ba=a;} }
+    if(ba>=0){ j->yield |= (unsigned char)(1<<ba); j->realctl=1; }
+  }
 }
 
 // road priority rank — LOWER = bigger road = has voorrang. The Dutch "de grotere weg gaat voor":
@@ -701,14 +715,22 @@ static void ground_tri(float x0,float y0,float x1,float y1,float x2,float y2,int
 // is the same class (rechts-voor-links / roundabout) → we paint nothing there. (roadkit.md Phase 2.)
 static void draw_giveway(const Junc*j){
   float mx=j->x-S.camx, my=j->y-S.camy; if(mx*mx+my*my > RANGE_M*RANGE_M) return;
-  int best=99, ntop=0; float maxhw=0;
-  for(int a=0;a<j->narm;a++){ int r=road_rank(j->cls[a]); if(r<best) best=r;
-    float h=ROAD[j->cls[a]].hw_m; if(h>maxhw) maxhw=h; }
-  for(int a=0;a<j->narm;a++) if(road_rank(j->cls[a])==best) ntop++;
-  if(ntop==j->narm) return;                            // all arms equal class → no clear voorrang, skip
+  float maxhw=0; for(int a=0;a<j->narm;a++){ float h=ROAD[j->cls[a]].hw_m; if(h>maxhw) maxhw=h; }
+  // which arms yield? REAL OSM give-way/stop nodes if this junction has any, else class-priority inference.
+  int yieldmask;
+  if (j->realctl){
+    yieldmask = j->yield;                              // ground truth: exactly the arms with a give-way/stop node
+  } else {
+    int best=99, ntop=0;
+    for(int a=0;a<j->narm;a++){ int r=road_rank(j->cls[a]); if(r<best) best=r; }
+    for(int a=0;a<j->narm;a++) if(road_rank(j->cls[a])==best) ntop++;
+    if(ntop==j->narm) return;                          // all arms equal class → no clear voorrang, skip
+    yieldmask=0; for(int a=0;a<j->narm;a++) if(road_rank(j->cls[a])!=best) yieldmask |= (1<<a);
+  }
+  if(!yieldmask) return;
   const float TH=1.1f, HB=0.35f, PITCH=1.1f;           // tooth height (along road) / half-base / spacing across (m)
   for(int a=0;a<j->narm;a++){ int k=j->cls[a];
-    if(road_rank(k)==best) continue;                   // priority road → no teeth
+    if(!((yieldmask>>a)&1)) continue;                  // only the yielding arms get teeth
     float b=j->brg[a], cb=cos_deg(b), sb=sin_deg(b);   // along = out along this arm
     float ax=-sb, ay=cb;                               // across the carriageway
     float off=maxhw + 1.0f;                            // give-way line, just outside the junction blob
@@ -976,6 +998,7 @@ void draw(void) {
   watch("nbld","%d",nbld); watch("nd","%d",nd);   // buildings loaded / extruded this frame
   watch("njunc","%d",njunc);                       // intersections detected in the road graph
   watch("npnode","%d",npnode);                     // node-level control points (crossing/give_way/stop/signals/calming)
+  { int rc=0; for(int i=0;i<njunc;i++) if(junc[i].realctl) rc++; watch("realctl","%d",rc); }   // junctions with a real give-way/stop node
   { int npri=0; for(int i=0;i<njunc;i++){ int best=99,ntop=0;                 // junctions with a clear voorrang (get teeth)
       for(int a=0;a<junc[i].narm;a++){ int r=road_rank(junc[i].cls[a]); if(r<best) best=r; }
       for(int a=0;a<junc[i].narm;a++) if(road_rank(junc[i].cls[a])==best) ntop++;

@@ -133,8 +133,9 @@ calming (0 stop — NL uses give-way). The *real* versions of things we used to 
 - `highway=crossing` (`K_CROSSING`) — ✅ **citydrive renders a real zebra** at the node, oriented across the
   nearest carriageway (`draw_zebra` + `nearest_motor_dir`). Placed from data, not guessed per junction-arm
   (why the earlier blanket per-arm zebra was pulled).
-- `highway=give_way`/`stop` (`K_GIVEWAY`/`K_STOP`) — captured; **next:** feed the haaientanden (real priority
-  per approach, replacing the class-inferred voorrang where a give-way node says which arm actually yields).
+- `highway=give_way`/`stop` (`K_GIVEWAY`/`K_STOP`) — ✅ **feed the haaientanden**: each node attaches to its
+  junction arm (`build_junctions` → per-arm `yield` bitmask), so teeth mark exactly the arms OSM says yield
+  (real per-approach voorrang), class-inference only where no node exists. 21/─ Delft junctions real-driven.
 - `highway=traffic_signals` (`K_SIGNALS`), `traffic_calming` (`K_CALMING`) — captured (`pnode[]`); not drawn yet.
 - roadview loads none of them visually (its loader drops non-tree single-point features) — safe, just ignored.
 

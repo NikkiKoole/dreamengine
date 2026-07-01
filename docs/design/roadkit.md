@@ -198,9 +198,13 @@ roadkit's renderer. Extracting now designs the interface from **citydrive as the
    kinds (24–28, appended to `KIND_IX` + the `K_*` enums in citydrive **and** roadview). citydrive stores them
    in `pnode[]` and **renders real crossings** as a zebra at the OSM node, oriented across the nearest
    carriageway (`draw_zebra`/`nearest_motor_dir`) — the marked-crossing render done from data, replacing the
-   pulled per-arm guess. Delft centre: 43 crossings / 92 signals / 43 give-way / 57 calming. **Next:** wire the
-   give-way/stop nodes into the haaientanden (real per-approach priority instead of the class heuristic), and
-   a traffic-signals marker.
+   pulled per-arm guess. Delft centre: 43 crossings / 92 signals / 43 give-way / 57 calming.
+
+   **Give-way/stop → haaientanden (2026-07-02).** `build_junctions()` now attaches each real give-way/stop
+   node to the junction arm it sits on (nearest junction ≤35 m, best-aligned arm), setting a per-arm `yield`
+   bitmask + `realctl` flag. `draw_giveway` uses that ground truth where present (teeth on exactly the arms
+   with a give-way node, priority road bare) and falls back to the class-priority inference elsewhere — 21 of
+   Delft centre's junctions are now real-data-driven, the rest inferred. **Next:** a traffic-signals marker.
    needs new kind indices (enum surgery in `citydrive.c` + `roadview.c`), so it's the next importer chunk.
 3. **Pure-geometry extract (safe first roadkit step).** Move the pure fns (`curb_return`, the leg model,
    `cross_hw`, corner counts) into `roadkit.h`; `streetlab` `#include`s it and calls them unchanged.
