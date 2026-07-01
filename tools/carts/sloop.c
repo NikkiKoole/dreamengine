@@ -21,6 +21,8 @@ de:meta */
 #include "studio.h"
 #include "ui.h"
 #include <stdio.h>
+#include <stdlib.h>   // malloc/calloc/free — the OSM spatial index (Rung B)
+#include <string.h>   // memcpy/memcmp — .rvb binary read (Rung B)
 #include <math.h>
 
 // ============================================================================
@@ -598,6 +600,7 @@ static int  zone_at(float x, float y);   // (defined below; gen_chunk needs it t
 // hierarchy (the zone, for now). Fields mirror roadnet's RoadHit so the contract survives the swap.
 typedef struct { int on_road; int zone; int cls; } RoadHit;
 static RoadHit road_at(float x, float y);   // (defined below, beside zone_at)
+static int osm_loaded;                       // Rung B: 1 once a .rvb is loaded (defined with the OSM block below)
 
 // ── rigid body state (sx,sy = the COM in world space; rotation pivots about it) ─
 static float sx, sy;              // world position of the COM
@@ -1778,7 +1781,10 @@ void update(void) {
 #ifdef DE_TRACE
     float fwx = cos_deg(ang), fwy = sin_deg(ang);
     watch("vf", "%.1f", vx * fwx + vy * fwy);
-    watch("on_road", "%d", road_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f).on_road);   // P1 seam — deterministic trace of road_at()
+    { RoadHit _rh = road_at(cam_x + SCREEN_W / 2.0f, cam_y + SCREEN_H / 2.0f);   // P1 seam — deterministic trace of road_at()
+      watch("on_road", "%d", _rh.on_road);
+      watch("road_cls", "%d", _rh.cls);
+      watch("osm", "%d", osm_loaded); }
     watch("vl", "%.1f", vx * (-fwy) + vy * fwx);
     watch("ang", "%.0f", ang);
     watch("angvel", "%.0f", angVel);
@@ -2497,11 +2503,164 @@ static int zone_at(float x, float y) {
     return Z_SUPER;
 }
 
-// road_at() — the P1 seam (declared up top). STUB body: sloop's grid world. A point is ON a road if it
-// lies within ZONE_LANE/2 of a grid line at this zone's pitch (the same bands draw_course paints), so this
-// AGREES with the rendered roads by construction. Rung B replaces this body with an OSM/roadnet2 query.
+// ══ Rung B (OSM) — drive the REAL world (docs/design/driving-world-program.md, P1 Rung B-OSM) ══
+// OPT-IN: run with `--data data/delft-centre.rvb` (or $DE_DATA). With no data the cart is UNCHANGED —
+// road_at() falls back to the stub grid world below. When a .rvb IS loaded, road_at() answers from a
+// nearest-edge query over real OSM road polylines, indexed by a uniform grid so each lookup touches
+// O(few) segments — the "deterministic, per-frame-fast spatial index" P1 calls the crux. STEP 1–3:
+// only the HUD/watch read the new answer; the screen still paints the stub grid (draw_course routes
+// through road_at in a later step). Points in a .rvb are LOCAL METRES, Y NORTH-UP (roadview.c); sloop's
+// world is PIXELS, Y DOWN — bridged by OSM_PPM + a Y flip, rig origin (0,0) = the data's bbox centre.
+#define OSM_PPM    4.0f     // pixels per real metre (a 6 m street ≈ 24 px ≈ sloop's city lane width)
+#define OSM_CELL   32.0f    // index cell size, metres (> max road half-width ⇒ a 3×3 cell scan suffices)
+#define OSM_MAXSEG 80000    // delft-centre ≈ 2.8k · delft-netherlands ≈ 57k road segments
+
+static struct { float ax, ay, bx, by, hw; int cls; } oseg[OSM_MAXSEG];  // metres, y north-up
+static int    n_oseg = 0;                  // osm_loaded is forward-declared up by the road_at() seam
+static float  osm_cx, osm_cy;              // data bbox centre (metres) — maps to sloop world (0,0)
+static float  gminx, gminy;                // index origin (metres)
+static int    gcol = 1, grow = 1;          // index dims (cells)
+static int   *ocell_start = NULL, *oidx = NULL;   // CSR: per-cell [start..start+1) into oidx (seg ids)
+
+// real-world road half-width per OSM kind (K_* from roadview.c; matches ST[].hw_m). <0 ⇒ not a road.
+static float osm_road_hw(int kind) {
+    switch (kind) {
+        case 0:  return 7.0f;   // highway      case 1: arterial 5, etc.
+        case 1:  return 5.0f;
+        case 2:  return 3.0f;   // road / residential
+        case 3:  return 1.5f;   // track
+        case 17: return 4.0f;   // secondary
+        case 18: return 3.0f;   // tertiary
+        case 19: return 1.5f;   // service
+        case 20: return 1.2f;   // cycleway
+        case 21: return 0.9f;   // footway
+        default: return -1.0f;  // not a drivable road way → skip
+    }
+}
+
+static int osm_cellcol(float mx) { int c = (int)((mx - gminx) / OSM_CELL); return c < 0 ? 0 : (c >= gcol ? gcol - 1 : c); }
+static int osm_cellrow(float my) { int r = (int)((my - gminy) / OSM_CELL); return r < 0 ? 0 : (r >= grow ? grow - 1 : r); }
+
+static char *osm_slurp(const char *path, long *outlen) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    if (n <= 0) { fclose(f); return NULL; }
+    char *b = (char *)malloc((size_t)n);
+    if (!b) { fclose(f); return NULL; }
+    long got = (long)fread(b, 1, (size_t)n, f); fclose(f);
+    if (got != n) { free(b); return NULL; }
+    if (outlen) *outlen = n;
+    return b;
+}
+
+// load a .rvb: flatten road polylines → segments, then build the uniform-grid index. Sets osm_loaded.
+static void osm_load(const char *path) {
+    long len; char *buf = osm_slurp(path, &len);
+    if (!buf) return;
+    if (len < 24 || memcmp(buf, "RVB", 3) != 0 || buf[3] < '1' || buf[3] > '3') { free(buf); return; }
+    int ver = buf[3];
+    const char *p = buf + 4, *end = buf + len;
+    int nfeat, namelen;
+    memcpy(&nfeat, p, 4);   p += 4;
+    memcpy(&namelen, p, 4); p += 4;
+    if (namelen < 0) namelen = 0;
+    p += namelen;
+    float bb[4]; memcpy(bb, p, 16); p += 16;
+    gminx = bb[0]; gminy = bb[1];
+    float gmaxx = bb[2], gmaxy = bb[3];
+    osm_cx = (gminx + gmaxx) * 0.5f; osm_cy = (gminy + gmaxy) * 0.5f;
+
+    n_oseg = 0;
+    for (int f = 0; f < nfeat && p + 12 <= end; f++) {
+        int kind, sublen, npts;
+        memcpy(&kind, p, 4);   p += 4;
+        if (ver == '2' || ver == '3') p += 4;   // skip the per-feature height float (RVB2+)
+        memcpy(&sublen, p, 4); p += 4; p += sublen;
+        memcpy(&npts, p, 4);   p += 4;
+        float hw = osm_road_hw(kind);
+        if (hw < 0) { p += (long)npts * 8; continue; }   // not a road → skip its points wholesale
+        float px = 0, py = 0; int have = 0;
+        for (int j = 0; j < npts && p + 8 <= end; j++) {
+            float xy[2]; memcpy(xy, p, 8); p += 8;
+            if (have && n_oseg < OSM_MAXSEG) {
+                oseg[n_oseg].ax = px; oseg[n_oseg].ay = py;
+                oseg[n_oseg].bx = xy[0]; oseg[n_oseg].by = xy[1];
+                oseg[n_oseg].hw = hw; oseg[n_oseg].cls = kind; n_oseg++;
+            }
+            px = xy[0]; py = xy[1]; have = 1;
+        }
+    }
+    free(buf);
+    if (n_oseg == 0) return;
+
+    // uniform-grid index (CSR). Each segment is bucketed into every cell its bounding box covers;
+    // with hw < OSM_CELL, a 3×3 scan around the query point then catches every nearby segment.
+    gcol = (int)((gmaxx - gminx) / OSM_CELL) + 1; if (gcol < 1) gcol = 1;
+    grow = (int)((gmaxy - gminy) / OSM_CELL) + 1; if (grow < 1) grow = 1;
+    int ncell = gcol * grow;
+    ocell_start = (int *)calloc((size_t)ncell + 1, sizeof(int));
+    if (!ocell_start) return;
+    for (int s = 0; s < n_oseg; s++) {                                   // pass 1: count per cell
+        int c0 = osm_cellcol(oseg[s].ax < oseg[s].bx ? oseg[s].ax : oseg[s].bx);
+        int c1 = osm_cellcol(oseg[s].ax > oseg[s].bx ? oseg[s].ax : oseg[s].bx);
+        int r0 = osm_cellrow(oseg[s].ay < oseg[s].by ? oseg[s].ay : oseg[s].by);
+        int r1 = osm_cellrow(oseg[s].ay > oseg[s].by ? oseg[s].ay : oseg[s].by);
+        for (int cc = c0; cc <= c1; cc++) for (int rr = r0; rr <= r1; rr++) ocell_start[rr * gcol + cc + 1]++;
+    }
+    for (int i = 0; i < ncell; i++) ocell_start[i + 1] += ocell_start[i]; // prefix sum → cell starts
+    int total = ocell_start[ncell];
+    oidx = (int *)malloc((size_t)(total > 0 ? total : 1) * sizeof(int));
+    int *cur = (int *)malloc((size_t)ncell * sizeof(int));
+    if (!oidx || !cur) { free(oidx); free(cur); free(ocell_start); oidx = ocell_start = NULL; return; }
+    for (int i = 0; i < ncell; i++) cur[i] = ocell_start[i];
+    for (int s = 0; s < n_oseg; s++) {                                   // pass 2: fill
+        int c0 = osm_cellcol(oseg[s].ax < oseg[s].bx ? oseg[s].ax : oseg[s].bx);
+        int c1 = osm_cellcol(oseg[s].ax > oseg[s].bx ? oseg[s].ax : oseg[s].bx);
+        int r0 = osm_cellrow(oseg[s].ay < oseg[s].by ? oseg[s].ay : oseg[s].by);
+        int r1 = osm_cellrow(oseg[s].ay > oseg[s].by ? oseg[s].ay : oseg[s].by);
+        for (int cc = c0; cc <= c1; cc++) for (int rr = r0; rr <= r1; rr++) oidx[cur[rr * gcol + cc]++] = s;
+    }
+    free(cur);
+    osm_loaded = 1;
+}
+
+// squared distance from point to segment (classic clamped projection). Metres².
+static float osm_pt_seg_d2(float px, float py, float ax, float ay, float bx, float by) {
+    float vx = bx - ax, vy = by - ay, wx = px - ax, wy = py - ay;
+    float c1 = vx * wx + vy * wy;
+    if (c1 <= 0) return wx * wx + wy * wy;
+    float c2 = vx * vx + vy * vy;
+    if (c2 <= c1) { float dx = px - bx, dy = py - by; return dx * dx + dy * dy; }
+    float t = c1 / c2, dx = px - (ax + t * vx), dy = py - (ay + t * vy);
+    return dx * dx + dy * dy;
+}
+
+// road_at() — the P1 seam (declared up top). With an OSM .rvb loaded, a nearest-edge query over real
+// roads; otherwise the STUB grid world (a point is ON a road within ZONE_LANE/2 of a grid line at the
+// zone pitch — AGREES with the bands draw_course paints by construction). Rung B swapped in the OSM body.
 static RoadHit road_at(float x, float y) {
-    RoadHit r; r.zone = zone_at(x, y); r.cls = r.zone;       // coarse: zone == class for the stub
+    RoadHit r; r.zone = zone_at(x, y); r.cls = r.zone; r.on_road = 0;
+
+    if (osm_loaded) {                                        // ── OSM: real Delft roads ──
+        float mx = osm_cx + x / OSM_PPM;                     // pixels → metres, rig origin = bbox centre
+        float my = osm_cy - y / OSM_PPM;                     // Y flip (north-up metres vs y-down pixels)
+        int col = osm_cellcol(mx), row = osm_cellrow(my);
+        float best = 1e30f;
+        for (int cc = col - 1; cc <= col + 1; cc++)
+            for (int rr = row - 1; rr <= row + 1; rr++) {
+                if (cc < 0 || rr < 0 || cc >= gcol || rr >= grow) continue;
+                int cell = rr * gcol + cc;
+                for (int k = ocell_start[cell]; k < ocell_start[cell + 1]; k++) {
+                    int s = oidx[k];
+                    float d2 = osm_pt_seg_d2(mx, my, oseg[s].ax, oseg[s].ay, oseg[s].bx, oseg[s].by);
+                    if (d2 <= oseg[s].hw * oseg[s].hw && d2 < best) { best = d2; r.on_road = 1; r.cls = oseg[s].cls; }
+                }
+            }
+        return r;
+    }
+
+    r.cls = r.zone;                                          // ── STUB: sloop's own grid world ──
     int p = ZONE_PITCH[r.zone]; float hw = ZONE_LANE[r.zone] * 0.5f;
     float qx = x / p, qy = y / p;                            // nearest grid line in x / y (bands centred on k*p)
     float dx = x - (float)((int)(qx >= 0 ? qx + 0.5f : qx - 0.5f)) * p;
@@ -2961,6 +3120,10 @@ void draw(void) {
 }
 
 void init(void) {
+    // Rung B (OSM): if run with --data <file>.rvb (or $DE_DATA), load real roads + build the index.
+    // No data → osm_loaded stays 0 and road_at() uses the stub grid world (cart unchanged by default).
+    { const char *dp = de_data_path(); if (dp) osm_load(dp); }
+
     // part vocabulary (ordered by enum — no designated inits, libtcc-safe)
     //                            mass  power         grip  roll  drive colour           name
     KIND[P_NONE]   = (PartKind){ 0,    0,            0,    0,    0,    0,               "." };
