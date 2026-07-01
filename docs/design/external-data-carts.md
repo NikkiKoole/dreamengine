@@ -327,10 +327,19 @@ Still flat / TODO in `citydrive`: **the roads themselves** — today flat class-
 no markings/pavements/curb returns. **`citydrive` is now the promoted first home for the geometry-first
 road render** (the close pseudo-3D view where that grammar is visible, unlike sloop's fast top-down drive):
 markings → pavements/kerbs → curb-return junctions on its projected ground plane, via `roadkit.h`. Decision
-+ plan: [`roadkit.md`](roadkit.md). Also flat/TODO: bridge/overpass **decks** (lift `bridge`/`layer` ways
-onto cityview's `Deck` machinery — distinct from terrain; NL cities are flat so it only matters for
-overpasses), inner-ring holes, the >64-vertex footprint clamp (`MAXBV`), and the hashed `other_area`
-understory. Web/wasm file loading is shared with roadview (below).
++ plan: [`roadkit.md`](roadkit.md).
+
+**Bridges — the two-phase plan.** *Flat bridges are handled* (2026-07-01): motor roads draw over canals
+(`K_CANAL`) and water areas, so a road-over-water crossing reads as a flat bridge instead of blue-on-road.
+**Raised/3D bridges** (visible decks, road-over-road overpasses) need two things neither of which exists in
+citydrive yet: **(1) data** — `osm-roads.js` must carry `bridge`/`tunnel`/`layer` per way into the `.rvb`
+(a new field / format bump; it currently flattens them — same signal roadlab/streetlab want for grade
+dispatch, so it pays off twice); **(2) render** — port **cityview's** existing deck machinery (`DECKW`/
+`DECKT`, running surface + fascia + pillars + ground shadow + z-node ramps + "drive UNDER high decks", all
+on the shared `project()`/`pdisc`/`pproj_poly` vocabulary) so a `bridge` way lifts onto a deck; tunnels →
+dashed/hidden. Proven render code, a port not new research. **Payoff is modest for flat NL** (few overpasses)
+and large for hilly/motorway cities. Other flat/TODO: inner-ring holes, the >64-vertex footprint clamp
+(`MAXBV`), and the hashed `other_area` understory. Web/wasm file loading is shared with roadview (below).
 
 ### The binary form (`.rvb`) — same IR, packed
 
