@@ -11,10 +11,7 @@
   ],
   "lineage": "Classic tower defense loop; creeps follow a fixed zigzag waypoint path (wp index tracks progress), towers target the furthest-along creep in range — a textbook waypoint-walking enemy pattern.",
   "genre": "strategy",
-  "description": "Creeps march along the path from left to right — build towers on the grass to stop them before they leak out the far side. Three tower types: GUN (cheap, fast), FROST (slows what it hits), and CANNON (slow but heavy splash). Kills earn gold to build more or upgrade existing towers (3 levels each). Twelve escalating waves with normal, fast, and tank creeps; survive them all to win. Move the cursor with arrows/WASD, A builds or upgrades, B switches tower type.",
-  "todo": [
-    "Touch: an onscreen joystick, or maybe just a cute pixel button to select the tool (probably enough)."
-  ]
+  "description": "Creeps march along the path from left to right — build towers on the grass to stop them before they leak out the far side. Three tower types: GUN (cheap, fast), FROST (slows what it hits), and CANNON (slow but heavy splash). Kills earn gold to build more or upgrade existing towers (3 levels each). Twelve escalating waves with normal, fast, and tank creeps; survive them all to win. Move the cursor with arrows/WASD, A builds or upgrades, B switches tower type."
 }
 de:meta */
 #include "studio.h"
@@ -98,7 +95,7 @@ static void start_game() {
     spawn_left = 0; cursor = idx(3, 5); sel = T_GUN;
 }
 
-void init() { hiwave = load(0); start_game(); }
+void init() { hiwave = load(0); start_game(); touch_layout(TOUCH_DPAD4, 2); }
 
 // ---- waves ----
 static void begin_wave() {
