@@ -126,8 +126,8 @@ static const Brush BRUSHES[] = {
 #define DRIP_STEP      4       // column stride between drip candidates (px)
 #define DRIP_MIN_THK   6       // min band thickness (px) at a column before it can run
 #define DRIP_CHANCE    0.5f    // fraction of candidate edges that actually run
-#define DRIP_LEN_SCALE 2.6f    // run length per px of band thickness
-#define DRIP_MAX_LEN   90.0f   // cap so a free-falling run can't go forever
+#define DRIP_LEN_SCALE 1.8f    // run length per px of band thickness (before the random factor)
+#define DRIP_MAX_LEN   140.0f  // cap so a free-falling run can't go forever
 
 // readable names for the header label (BRUSHES[].name is the 3-char button id)
 static const char *TOOL_DISP[] = { "ink", "pencil", "liner", "marker", "chalk", "sketch", "spray", "bristle", "paint" };
@@ -323,7 +323,10 @@ static void emit_drip(int x, int yedge, int thk, int y1, const Stroke *s) {
     if (thk < DRIP_MIN_THK) return;
     unsigned h = hashu(s->seed ^ (unsigned)(x * 2654435761u) ^ (unsigned)(yedge * 40503u));
     if (hashf(h) > DRIP_CHANCE) return;                       // not every edge runs
-    float len = thk * DRIP_LEN_SCALE * (0.4f + hashf(h ^ 0x55u) * 0.9f);
+    // long-tailed length: u*u biases toward short stubs with the odd long runner,
+    // so drips don't all bottom out at the same depth.
+    float u = hashf(h ^ 0x55u);
+    float len = thk * DRIP_LEN_SCALE * (0.15f + u * u * 2.4f);
     if (len > DRIP_MAX_LEN) len = DRIP_MAX_LEN;
     int d;
     for (d = 1; d < (int)len; d++) {
