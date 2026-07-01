@@ -14,7 +14,6 @@
   "genre": "sandbox",
   "description": "Katamari x boids: roll a growing ball through a panicking flock that bolts harder the closer you get, swallowing any critter smaller than you to snowball toward the size goal before time runs out. WASD/arrows to roll, Z to replay.",
   "todo": [
-    "Touch: needs an onscreen joystick.",
     "Feels a bit random — vary enemy speed to help."
   ]
 }
@@ -151,6 +150,7 @@ void init(void) {
     instrument(5, INSTR_TRI, 200, 150, 3, 400);
     instrument_filter(5, FILTER_LOW, 700, 5);
     bpm(112);
+    touch_layout(TOUCH_ANALOG, 1);
 }
 
 void update(void) {
