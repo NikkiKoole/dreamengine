@@ -57,6 +57,7 @@ This page is only the routing layer.
 | You changed… | Run |
 |---|---|
 | game logic in a cart with a `spec()` | **`spec.js [cart] --quiet`** (the gameplay-logic gate) |
+| a squishy brush or a rim/fill feature (does every brush still apply the features it should?) | **`squishy-features.js`** (renders the `SQUISHY_MATRIX` grid + pixel-diffs each brush×feature cell vs baseline against a declared support matrix — catches a feature that silently no-ops for one brush) |
 | `index.json` (tags / registration) | **`lint-carts.js`** |
 | anything under `docs/` | **`lint-docs.js`** (links resolve / §-refs / tool-index) |
 | reorganized docs, want gaps not breaks | **`lint-xrefs.js [topic]`** (docs that should cross-link but don't) |

@@ -10,6 +10,23 @@ cart is now a tiny vector editor. What's left: a real **flood-fill** (with a per
 refactor — see parking lot), the pixelsnap animated-icon export, a `spec()`, and the boil-cache perf
 pass. v1 plan + progress below.
 
+> **Update (2026-07-01) — rotation brushes, live width, drop shadow, and a coverage gate.**
+> The brush table is now pure data (a `Brush` carries a width recipe + an **angle recipe** + an icon
+> slot), which turned the calligraphy nib into a FAMILY of four sharing one renderer: **nib** (fixed
+> angle), **brushpen** (angle + a speed swell), **reed** (per-point seeded angle chatter — a dry pen
+> that still boils), **twist** (angle winds along the stroke). Width is now **live on the mouse
+> wheel**, captured *per point* into the `Sample` (alongside speed) so scrolling mid-stroke tapers/
+> swells the line where you did it — real pressure, not a uniform rescale (the harness `.rec`/record
+> paths gained a `w` wheel tag to make this replayable — `runtime/studio.c`). Added a per-stroke
+> **drop shadow** (the whole silhouette re-rendered dark, offset away from the *same* sun as the
+> bevel — toggle in the SUN popover). While wiring these we found rim/fill features were applied
+> inconsistently per render path (drip ignored dither, the nib family ignored outline/shadow/bevel);
+> fixed by routing the nib rim features through a parameterised ribbon and wrapping drip's body in
+> `fillp`. That whole bug class — **a feature that silently no-ops for one brush** — is now guarded
+> by **`node tools/squishy-features.js`**: it renders the cart's built-in `SQUISHY_MATRIX` grid
+> (every brush × every feature, each cell one reference stroke with that feature on) and pixel-diffs
+> each cell against its baseline, failing on any disagreement with a declared support matrix.
+
 > The shower idea: we'd been making cart icons by running an AI-generated image through a
 > `.cart.js` (sprite-draw + `pixelsnap`). The results are nice — but **frozen**. What if you could
 > *draw* in that loose, hand-inked style from the start, and get a living, breathing version
