@@ -109,7 +109,16 @@ static float PX[MAXPTS], PY[MAXPTS];                 // shared point pool (local
 static int   nps;
 typedef struct { int start, count; float h, cx, cy; int mat; } DBldg;   // building footprint ring
 static DBldg blds[MAXBLD]; static int nbld;
-static struct { int kind, start, count; } rways[MAXWAY]; static int nway;  // road lines (flat)
+static struct { int kind, start, count; signed char deck; } rways[MAXWAY]; static int nway;  // road lines; deck>0=bridge(layer), <0=tunnel, 0=at grade
+
+// parse a road's `sub` bridge code (osm-roads.js): "B<layer>" → +layer (bridge), "T..." → -1 (tunnel),
+// else 0 (at grade). s is null-terminated. Layer is a single digit in practice; clamp to [1,3].
+static signed char parse_deck(const char *s){
+  if (!s || !s[0]) return 0;
+  if (s[0]=='B'){ int L = (s[1]>='1' && s[1]<='9') ? s[1]-'0' : 1; return (signed char)(L>3?3:L); }
+  if (s[0]=='T') return -1;
+  return 0;
+}
 
 // area fills — flat ground polygons (water/green/zoning) drawn BENEATH roads + buildings.
 #define MAXAREA 80000
@@ -202,7 +211,7 @@ static void reset_pools(void){ nps=0; nbld=0; nway=0; narea=0; hf_g=0; g_exag=1.
 static int bld_mat(int start){ unsigned h=(unsigned)start*2654435761u; h^=h>>13; return (h>>8)%NMAT; }
 
 // route one decoded feature into the building or road pools.
-static void store_feature(int kind, int start, int count, float h){
+static void store_feature(int kind, int start, int count, float h, signed char deck){
   if (kind == K_BUILDING){
     if (nbld >= MAXBLD || count < 3) return;
     if (PX[start]==PX[start+count-1] && PY[start]==PY[start+count-1]) count--;   // drop closing dup
@@ -213,7 +222,7 @@ static void store_feature(int kind, int start, int count, float h){
     blds[nbld++] = (DBldg){ start, count, h, cx, cy, bld_mat(start) };
   } else if (is_road(kind)){
     if (nway >= MAXWAY || count < 2) return;
-    rways[nway].kind = kind; rways[nway].start = start; rways[nway].count = count; nway++;
+    rways[nway].kind = kind; rways[nway].start = start; rways[nway].count = count; rways[nway].deck = deck; nway++;
   } else if (is_area(kind)){
     if (narea >= MAXAREA || count < 3) return;
     if (PX[start]==PX[start+count-1] && PY[start]==PY[start+count-1]) count--;   // drop closing dup
@@ -238,12 +247,15 @@ static void load_bin(const char *buf, long len){
     int kind, sublen, npts; float fh=0;
     memcpy(&kind,p,4); p+=4;
     if (ver=='2'||ver=='3'){ memcpy(&fh,p,4); p+=4; }
-    memcpy(&sublen,p,4); p+=4; p+=sublen;
+    memcpy(&sublen,p,4); p+=4;
+    char subb[8]={0}; { int sl = sublen<7?sublen:7; if(sl>0) memcpy(subb,p,(size_t)sl); }   // road bridge/tunnel code
+    p+=sublen;
     memcpy(&npts,p,4); p+=4;
     if (kind<0||kind>=K_N) kind=K_ROAD;
+    signed char deck = is_road(kind) ? parse_deck(subb) : 0;
     int start=nps, got=0;
     for(int j=0;j<npts && p+8<=end;j++){ if(nps<MAXPTS){ float xy[2]; memcpy(xy,p,8); PX[nps]=xy[0]; PY[nps]=xy[1]; nps++; got++; } p+=8; }
-    if (got>=2) store_feature(kind, start, got, fh);
+    if (got>=2) store_feature(kind, start, got, fh, deck);
   }
   if (ver=='3' && p+4<=end){                               // trailing terrain heightfield: int32 G + float32 grid[G*G]
     int g; memcpy(&g,p,4); p+=4;
@@ -278,10 +290,12 @@ static void load_json(char *js, long len){
         for (int k=0;k<K_N;k++) if (NAMES[k] && !strcmp(kb,NAMES[k])){ kind=k; break; }
       }
       float fh = (hi>=0) ? (float)json_num(js,&tok[hi]) : 0;
+      int si=json_get(js,tok,fi,"sub"); char sb[16]={0}; if(si>=0) json_str(sb,sizeof sb,js,&tok[si]);
+      signed char deck = parse_deck(sb);
       if (pi>=0 && tok[pi].type==JSMN_ARRAY){
         int cnt=tok[pi].size/2, start=nps, got=0;
         for (int j=0;j<cnt && nps<MAXPTS;j++){ PX[nps]=(float)json_num(js,&tok[pi+1+j*2]); PY[nps]=(float)json_num(js,&tok[pi+1+j*2+1]); nps++; got++; }
-        if (got>=2) store_feature(kind, start, got, fh);
+        if (got>=2) store_feature(kind, start, got, fh, deck);
       }
       fi += json_span(tok, fi);
     }
@@ -484,6 +498,47 @@ static void paint_way(int w, float rhw, int col, float r2){
   }
 }
 
+// ── bridges (Phase 2): a bridge way (deck>0) renders as a RAISED deck — running surface + fascia sides,
+// ramped up from grade at both ends over RAMP metres, subdivided so even a 2-node span humps smoothly.
+// Height extrudes up-screen (project's z), so it reads as elevated in the 3D camera modes (flat in top-down).
+// osm-roads carries the bridge tag; citydrive lifts it. (docs/design/external-data-carts.md — bridges Phase 2.)
+#define DECK_H 4.0f     // lift per OSM layer (m) — tune to taste
+#define DECK_T 1.2f     // deck slab thickness (fascia depth, m)
+static void deck_quad(float ax,float ay,float za,float bx,float by,float zb,float hw,int col){
+  float dx=bx-ax,dy=by-ay,L=sqrtf(dx*dx+dy*dy)+1e-4f; float px=-dy/L*hw,py=dx/L*hw;
+  int xy[8]; wpt(ax+px,ay+py,za,&xy[0],&xy[1]); wpt(bx+px,by+py,zb,&xy[2],&xy[3]);
+  wpt(bx-px,by-py,zb,&xy[4],&xy[5]); wpt(ax-px,ay-py,za,&xy[6],&xy[7]); polyfill(xy,4,col);
+}
+static void deck_fascia(float ax,float ay,float za,float bx,float by,float zb,float hw,int sd,int col){
+  float dx=bx-ax,dy=by-ay,L=sqrtf(dx*dx+dy*dy)+1e-4f; float px=-dy/L*hw*sd,py=dx/L*hw*sd;
+  int xy[8]; wpt(ax+px,ay+py,za,&xy[0],&xy[1]); wpt(bx+px,by+py,zb,&xy[2],&xy[3]);
+  wpt(bx+px,by+py,zb-DECK_T,&xy[4],&xy[5]); wpt(ax+px,ay+py,za-DECK_T,&xy[6],&xy[7]); polyfill(xy,4,col);
+}
+static void draw_bridge_way(int w, float hw, int surfcol, float r2){
+  int st=rways[w].start, ct=rways[w].count; if (ct<2) return;
+  float lift = DECK_H * (rways[w].deck>0 ? rways[w].deck : 1);
+  float Ltot=0; for(int i=0;i+1<ct;i++){ float dx=PX[st+i+1]-PX[st+i],dy=PY[st+i+1]-PY[st+i]; Ltot+=sqrtf(dx*dx+dy*dy); }
+  if (Ltot<1e-3f) return;
+  const int SUBD=3; const float RAMP=6.0f;
+  float s=0;
+  for(int i=0;i+1<ct;i++){
+    float ax=PX[st+i],ay=PY[st+i],bx=PX[st+i+1],by=PY[st+i+1];
+    float segL=sqrtf((bx-ax)*(bx-ax)+(by-ay)*(by-ay));
+    if (seg_d2(ax,ay,bx,by,S.camx,S.camy)<=r2)
+      for(int k=0;k<SUBD;k++){
+        float t0=(float)k/SUBD, t1=(float)(k+1)/SUBD;
+        float px0=ax+(bx-ax)*t0, py0=ay+(by-ay)*t0, px1=ax+(bx-ax)*t1, py1=ay+(by-ay)*t1;
+        float s0=s+segL*t0, s1=s+segL*t1;
+        float z0=lift*fminf(1.0f,fminf(s0,Ltot-s0)/RAMP), z1=lift*fminf(1.0f,fminf(s1,Ltot-s1)/RAMP);
+        deck_quad(px0,py0,0,px1,py1,0,hw+0.5f,CLR_BROWNISH_BLACK);   // ground shadow → signals the deck is elevated
+        deck_fascia(px0,py0,z0,px1,py1,z1,hw,+1,CLR_DARKER_GREY);
+        deck_fascia(px0,py0,z0,px1,py1,z1,hw,-1,CLR_DARKER_GREY);
+        deck_quad(px0,py0,z0,px1,py1,z1,hw,surfcol);
+      }
+    s+=segL;
+  }
+}
+
 // ── lifecycle ────────────────────────────────────────────────────────────────
 void init(void){ load_data(); }
 
@@ -575,12 +630,16 @@ void draw(void) {
     // the sane default; raised decks are the bridge TODO (docs/design/external-data-carts.md · roadkit.md).
     for (int w=0; w<nway; w++) if (rways[w].kind==K_CANAL)
       paint_way(w, fmaxf(ROAD[K_CANAL].hw_m,1.0f), ROAD[K_CANAL].col, R2);
-    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // motor casing — one dark outline surface
+    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind) && rways[w].deck<=0) // motor casing (skip bridges)
       paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.5f)+CASE_M, CLR_BROWNISH_BLACK, R2);
-    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // motor asphalt — one grey connected surface
+    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind) && rways[w].deck<=0) // motor asphalt — connected surface
       paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.5f), CLR_DARK_GREY, R2);
-    for (int w=0; w<nway; w++){ int k=rways[w].kind;             // bike/foot/rail — own colour (canal done above)
-      if (!is_motor_road(k) && k!=K_CANAL) paint_way(w, fmaxf(ROAD[k].hw_m,1.0f), ROAD[k].col, R2); }
+    for (int w=0; w<nway; w++){ int k=rways[w].kind;             // bike/foot/rail — own colour (canal + bridges done elsewhere)
+      if (!is_motor_road(k) && k!=K_CANAL && rways[w].deck<=0) paint_way(w, fmaxf(ROAD[k].hw_m,1.0f), ROAD[k].col, R2); }
+    // BRIDGES last — raised decks over the flat network. Surface = asphalt for motor roads, own colour
+    // otherwise; a min deck width so thin footway/cycleway bridges still read as a raised span.
+    for (int w=0; w<nway; w++) if (rways[w].deck>0){ int k=rways[w].kind; int motor=is_motor_road(k);
+      draw_bridge_way(w, fmaxf(ROAD[k].hw_m, motor?1.5f:2.0f), motor?CLR_DARK_GREY:ROAD[k].col, R2); }
   }
 
   // collect near + on-screen buildings, depth-sort back-to-front, extrude
@@ -598,6 +657,10 @@ void draw(void) {
 #ifdef DE_TRACE
   watch("nbld","%d",nbld); watch("nd","%d",nd);   // buildings loaded / extruded this frame
   watch("camz","%.1f",S.camz); watch("gz","%.1f",ground_z(S.px,S.py));
+  { int nbr=0, nbrNear=0; for(int w=0;w<nway;w++) if(rways[w].deck>0){ nbr++;
+      float ax=PX[rways[w].start], ay=PY[rways[w].start];
+      if ((ax-S.camx)*(ax-S.camx)+(ay-S.camy)*(ay-S.camy) < RANGE_M*RANGE_M) nbrNear++; }
+    watch("nbridge","%d",nbr); watch("nbrNear","%d",nbrNear); }
 #endif
 
   // car — sized in METRES so it scales with the roads (a fixed-px car dwarfs a 6m street);
