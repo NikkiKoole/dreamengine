@@ -1,0 +1,9 @@
+# sloop rung F0 — get out at rest, walk a loop, come back near the rig
+# frames: 300  fps: 60
+tap 10 F
+down 30 RIGHT
+up 130 RIGHT
+down 130 DOWN
+up 190 DOWN
+down 190 LEFT
+up 290 LEFT
