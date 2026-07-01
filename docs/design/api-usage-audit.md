@@ -1,5 +1,7 @@
 # API usage audit — which functions do the carts actually use?
 
+<!-- de:driftable cmd="node tools/api-usage.js" as-of="2026-06-04" inputs="runtime/studio.h,tools/carts" -->
+
 *Snapshot: 2026-06-04 — 182 `studio.h` functions × 233 carts. Numbers go stale; the
 method doesn't. Re-run anytime:*
 

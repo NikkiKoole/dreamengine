@@ -73,7 +73,8 @@ docs/
 │   ├── teaching-gaps.md       what the API offers but no tutorial teaches — mouse/camera/audio-fx/touch/3D gaps, ranked; measured from cart-index.js + api-usage.js; the attack list for the on-ramp
 │   ├── tutorial-curriculum.md  plan for the next wave of tutorial carts (25+): the language-fundamentals / collision / whole-game-capstone tracks, adapted from the Nerdy Teachers PICO-8 course (adapt the arc, rewrite in C)
 │   ├── cart-survey-api-priorities.md   cart-evidence-first memo: what real carts prove, filtered through existing decisions
-│   ├── api-usage-audit.md   which API functions the carts actually use (least-used tail, the 11 never-used, doc-coverage gaps); re-runnable via `node tools/api-usage.js`
+│   ├── api-usage-audit.md   which API functions the carts actually use (least-used tail, the 11 never-used, doc-coverage gaps); re-runnable via `node tools/api-usage.js`. Marked `de:driftable` (see driftable-docs.md)
+│   ├── driftable-docs.md   the `de:driftable` convention: docs that freeze a tool's numbers DECLARE it, `stale-doc-check --driftable` + a cart-status advisory flag when the source moved. Plus the generate>execute>lint>register>accept hierarchy for keeping derived numbers honest
 │   ├── baked-rotation-atlas.md   pre-rotated sprite/shape atlas: fast blitted bodies, the centerline model, offscreen canvases
 │   ├── font-rendering.md         playful text beyond print: shadow/outline/wave/typewriter, inline codes, PICO-8 comparison; + 2 baked tiny fonts (3×5/4×6) awaiting print_small/print_tiny wiring
 │   ├── rasterization-consistency.md  OPEN: one consistent fill/outline/dither rule so shape edges always agree (seams, off-by-1, outline mismatch)

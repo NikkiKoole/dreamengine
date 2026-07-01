@@ -68,6 +68,7 @@ const strict = argv.includes("--strict");
 const daysIdx = argv.indexOf("--days");
 const graceDays = daysIdx >= 0 ? parseInt(argv[daysIdx + 1], 10) || 0 : 0;
 const showDocs = argv.includes("--docs"); // expand the noisy doc→doc churn tier (default: count only)
+const driftable = argv.includes("--driftable"); // curated registry mode (see below); ignores the heuristic tiers
 const touchesScope = (...rels) => !scope || rels.some(r => r.toLowerCase().includes(scope.toLowerCase()));
 
 // ---- git last-commit date for every tracked path, in ONE pass ----
@@ -96,6 +97,76 @@ function walk(dir, out = []) {
   return out;
 }
 const docFiles = walk(DOCS);
+
+// ============================================================================
+// --driftable — the CURATED registry (opposite of the heuristic tiers below).
+// A doc that freezes a tool's output DECLARES it, in an invisible marker:
+//
+//   <!-- de:driftable cmd="node tools/api-usage.js --gaps" as-of="2026-06-22" -->
+//   (optional: inputs="runtime/studio.h,tools/carts" — else defaults, see below)
+//
+// This mode does two things: prints the OVERVIEW (which docs are driftable, off
+// which command, snapshotted when), and CHECKS each by comparing `as-of` against
+// the newest last-commit date among that command's INPUTS. Inputs moved after the
+// snapshot → "likely drifted, re-run and eyeball". No fuzzy inference, no auto-
+// edit — a human declares the dependency and a human decides. Reuses the git-date
+// engine above. Default inputs when none declared: the tool's own script + the
+// cart shelf (`tools/carts`), the data almost all these tools read.
+// ============================================================================
+if (driftable) {
+  const tty0 = process.stdout.isTTY;
+  const b0 = s => (tty0 ? `\x1b[1m${s}\x1b[0m` : s);
+  const d0 = s => (tty0 ? `\x1b[2m${s}\x1b[0m` : s);
+  // newest last-commit date at/under a path (file → itself; dir → max over its files)
+  const newestUnder = rel => {
+    if (gitDate.has(rel)) return gitDate.get(rel);
+    let best = null;
+    const pref = rel.endsWith("/") ? rel : rel + "/";
+    for (const [p, dt] of gitDate) if (p.startsWith(pref) && (!best || dt > best)) best = dt;
+    return best;
+  };
+  const entries = [];
+  const MARK = /<!--\s*de:driftable\s+([^>]*?)-->/;
+  for (const f of docFiles) {
+    const rel = path.relative(ROOT, f);
+    if (!touchesScope(rel)) continue;
+    let inFence = false;
+    for (const line of fs.readFileSync(f, "utf8").split("\n")) {
+      if (/^\s*```/.test(line)) { inFence = !inFence; continue; } // skip example markers in code fences
+      if (inFence) continue;
+      const m = line.match(MARK);
+      if (!m) continue;
+      const attrs = m[1];
+      const get = k => (attrs.match(new RegExp(`${k}="([^"]*)"`)) || [])[1] || null;
+      const cmd = get("cmd"), asOf = get("as-of"), inputsAttr = get("inputs");
+      // resolve inputs: declared list, else [tool-script, tools/carts]
+      let inputs = inputsAttr ? inputsAttr.split(",").map(s => s.trim()).filter(Boolean) : [];
+      const script = cmd && (cmd.match(/tools\/[\w.-]+\.(?:js|sh|cjs)/) || [])[0];
+      if (!inputsAttr) { if (script) inputs.push(script); inputs.push("tools/carts"); }
+      const inputDates = inputs.map(p => ({ p, dt: newestUnder(p) })).filter(x => x.dt);
+      const newest = inputDates.reduce((a, x) => (!a || x.dt > a.dt ? x : a), null);
+      const drifted = asOf && newest && newest.dt > asOf;
+      entries.push({ rel, cmd, asOf, inputs, newest, drifted, lag: drifted ? daysBetween(asOf, newest.dt) : 0 });
+    }
+  }
+  if (json) { console.log(JSON.stringify({ driftable: entries }, null, 2)); process.exit(strict && entries.some(e => e.drifted) ? 1 : 0); }
+  if (!entries.length) {
+    console.log("no `de:driftable` docs registered" + (scope ? ` matching "${scope}"` : "") +
+      ".\n  mark one with:  " + d0(`<!-- de:driftable cmd="node tools/foo.js" as-of="YYYY-MM-DD" -->`));
+    process.exit(0);
+  }
+  const drift = entries.filter(e => e.drifted), fresh = entries.filter(e => !e.drifted);
+  console.log(b0(`DRIFTABLE DOCS (${entries.length}) — hand-declared snapshots of tool output:\n`));
+  for (const e of [...drift, ...fresh]) {
+    const tag = e.drifted ? b0("⚠ LIKELY DRIFTED") : (e.asOf ? "✓ fresh" : d0("· no as-of, can't check"));
+    console.log(`  ${b0(e.rel)}  ${tag}`);
+    console.log(d0(`      cmd: ${e.cmd || "(none)"}   snapshot: ${e.asOf || "(undated)"}`));
+    if (e.newest) console.log(d0(`      inputs newest: ${e.newest.p} @ ${e.newest.dt}` +
+      (e.drifted ? `  → ${e.lag}d after snapshot; re-run cmd + eyeball` : "")));
+  }
+  console.log(d0(`\n${entries.length} registered · ${drift.length} likely drifted · ${fresh.length} fresh · curated (declared, not inferred)`));
+  process.exit(strict && drift.length ? 1 : 0);
+}
 
 // ---- entity universe: hyphenated basenames of tools + docs ----
 // Rule (matches lint-xrefs): contains "-" AND has an alpha segment ≥4 chars.

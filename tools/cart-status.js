@@ -157,8 +157,18 @@ let compendiumStale = false;
 try { execSync(`node ${path.join(__dirname, "build-compendium.js")} --check`, { stdio: "ignore" }); }
 catch { compendiumStale = true; }
 
+// DRIFTABLE DOCS (advisory) — docs that hand-declared a `de:driftable` snapshot of a tool's
+// output, where the tool's inputs (usually the cart shelf) moved AFTER the snapshot date.
+// Cart edits shift those numbers, so this is the place you learn a snapshot doc needs a re-read.
+// See tools/stale-doc-check.js --driftable + docs/design/driftable-docs.md.
+let driftedDocs = [];
+try {
+  const out = execSync(`node ${path.join(__dirname, "stale-doc-check.js")} --driftable --json`, { encoding: "utf8" });
+  driftedDocs = (JSON.parse(out).driftable || []).filter(e => e.drifted).map(e => `${e.rel}  (snapshot ${e.asOf}, ${e.lag}d stale)`);
+} catch { /* advisory — never break cart-status */ }
+
 if (JSON_OUT) {
-  console.log(JSON.stringify({ needRebake, notPublished, stalePublished, engineStale, noEmbed, orphanSite, compendiumStale }, null, 2));
+  console.log(JSON.stringify({ needRebake, notPublished, stalePublished, engineStale, noEmbed, orphanSite, compendiumStale, driftedDocs }, null, 2));
   process.exit(0);
 }
 
@@ -178,6 +188,8 @@ if (engineStale.length) {
 }
 if (!QUIET || compendiumStale)
   console.log(`\nCOMPENDIUM — docs/cart-compendium.html (★ techniques)  ${compendiumStale ? "STALE → node tools/build-compendium.js" : "up to date"}`);
+if (driftedDocs.length)
+  console.log(`\nDRIFTABLE DOCS (advisory) — snapshot docs whose source moved after their as-of date  (${driftedDocs.length})\n${list(driftedDocs)}\n  → re-run the doc's declared cmd + eyeball; details: node tools/stale-doc-check.js --driftable`);
 if (noEmbed.length)
   console.log(`\nNOTE — .cart.png with no de:source chunk  (${noEmbed.length})\n${list(noEmbed)}`);
 if (orphanSite.length)

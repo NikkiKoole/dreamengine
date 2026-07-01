@@ -27,6 +27,9 @@ to the repo via the homes below; treat memory as a scratchpad for the live sessi
 - **API fn** → the four places in "Adding a new API function". **Cart** → a `de:meta` block in the
   cart's `.c` (`index.json` is *generated* from it — feeds the compendium); see
   [`docs/design/cart-metadata.md`](docs/design/cart-metadata.md).
+- **Derived numbers in a doc** (a table/count from a tool that will drift as the repo grows) →
+  prefer generating them; else drop a `de:driftable` marker so the drift is tracked, not silently
+  rotting. See [`docs/design/driftable-docs.md`](docs/design/driftable-docs.md).
 
 If you're tempted to add more than ~2 lines to CLAUDE.md, it belongs in a doc — link it instead.
 
@@ -204,8 +207,10 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
                              scope to a feature (`node tools/lint-xrefs.js touch`) to act on it
              stale-doc-check.js  doc-freshness finder. BROKEN REFERENCES tier = real issues (a doc cites a
                              code path or `tool --flag` that doesn't exist now); mtime tiers = nudges (TOOL DRIFT:
-                             a doc names a tool changed after it; DOC CHURN, --docs). grep + git dates, no dep
-                             graph; advisory, reconcile+commit clears an mtime flag
+                             a doc names a tool changed after it; DOC CHURN, --docs). `--driftable` = the CURATED
+                             tier: docs that declare a `de:driftable` snapshot of a tool's output, flagged when the
+                             tool's inputs moved after the snapshot (see docs/design/driftable-docs.md; surfaced by
+                             cart-status.js). grep + git dates, no dep graph; advisory
              gen-tcc-symbols.js   regenerate runtime/studio_tcc_symbols.h from studio.h (libtcc)
              build-history.js     generate docs/history.html from git + the spine
              api-usage.js    bulk "how often is X used"; cross-checks studio.h ↔ docs ↔ shell.js
