@@ -11,7 +11,7 @@
   ],
   "description": {
     "summary": "Draw with a velocity-sensitive ink brush — lines swell when you go slow, thin out when you go fast, and taper to a point at each end. Pick a tool, thickness, and bevel in the top panel.",
-    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Six brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), BRISTLE (raked parallel hairs), PAINT (a wide wet brush whose paint runs DOWN in drips from every exposed bottom edge of the stroke — so a serpentine drips off each of its bands, not just the lowest; a run stops when it meets paint below, so inner bands make short runs into the gaps and only the open bottom edge falls long. Run length ∝ the band's thickness. Still a pure function of path+seed, no simulation), and NIB (a flat calligraphy nib held at a fixed angle: width comes from the ANGLE between the stroke and the nib, not speed — a hairline when you move along the nib, full width across it, so you get true broad-nib thick/thins. Rotate the nib angle with [ and ]; each stroke keeps the angle it was drawn at), and OIL (thick impasto paint faked for the limited palette: an auto-bevel rim gives the raised, light-catching edge and raked highlight/shadow streaks along the drag read as the ridges and grooves of paint pushed by a knife). OUTLINE draws a fatter silhouette in its own colour UNDER the fill — a black rim + coloured fill is the chunky bubble-lettering look (draw with the fat ink brush, add bevel for a highlight, and you're at the Tiny-Jam logo). BEVEL embosses a stroke into a faux-3D rim; the light is a GLOBAL 'sun' set from an on-screen SUN popover (drag the dial to aim it, tap one of four colours warm peach → golden → neutral → cool moon, toggle auto-spin) or from the keyboard (, and . rotate, / recolours, \\ auto-rotates); every beveled stroke (and the oil-paint rim) relights together, so you sweep and recolour the sun across the whole drawing; BOIL brings a stroke alive in one of two styles (the boil button cycles off → wobble → pulse): WOBBLE = per-point hand-drawn jitter cycling ~7.5fps; PULSE = a subtle smooth grow/shrink breath about the stroke's centre. Almost free since rendering is a pure function of (stroke, seed). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT toggle on the bar (or the S key) makes this a tiny NON-DESTRUCTIVE vector editor: click a stroke to pick it (accent box), and the bar's controls retarget to that stroke — recolour it, change its dither, toggle bevel/boil, drag its thickness — while a property strip adds bevel-SIZE + boil-INTENSITY + outline-WIDTH sliders and bring-to-FRONT / send-to-BACK ordering. Edit any stroke any time; nothing is baked. A 7-colour pen — black/blue/red/green/cyan/magenta/yellow (cyan is a dark teal; pico32 has no true cyan) — picked from an always-visible palette strip (the seven swatches show their real colours; the active one wears an accent tab); each stroke keeps its colour. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp), likewise shown as an always-visible swatch strip — the step before a real flood-fill. The whole toolbar is ink-on-paper: white buttons, black glyphs; the brush dropdown opens a 2-column icon+name grid. A flood-fill tool + the pixelsnap animated-icon export come next.",
+    "detail": "Every stroke is stored as DATA (a path of points + the speed you drew each one at), not painted straight to pixels. Most brushes render that path as a chain of overlapping round stamps whose width = a slow→fat / fast→thin speed curve × an end-taper × a little seeded wobble — ink / pencil / fineliner / marker / chalk are different sets of those numbers (chalk drops stamps for a dry, broken grain). Six brushes render specially: SKETCH (a hairy web of threads, à la Krita's Sketch engine), SPRAY (an airbrush dot-cloud whose spread follows speed), BRISTLE (raked parallel hairs), PAINT (a wide wet brush whose paint runs DOWN in drips from every exposed bottom edge of the stroke — so a serpentine drips off each of its bands, not just the lowest; a run stops when it meets paint below, so inner bands make short runs into the gaps and only the open bottom edge falls long. Run length ∝ the band's thickness. Still a pure function of path+seed, no simulation. It also takes BEVEL for a raised glossy edge; boil wobbles the wet body but the runs stay put — they're 'dried', computed from the stable path), and NIB (a flat calligraphy nib held at a fixed angle: width comes from the ANGLE between the stroke and the nib, not speed — a hairline when you move along the nib, full width across it, so you get true broad-nib thick/thins. Rotate the nib angle with [ and ]; each stroke keeps the angle it was drawn at), and OIL (thick impasto paint faked for the limited palette: an auto-bevel rim gives the raised, light-catching edge and raked highlight/shadow streaks along the drag read as the ridges and grooves of paint pushed by a knife). OUTLINE draws a fatter silhouette in its own colour UNDER the fill — a black rim + coloured fill is the chunky bubble-lettering look (draw with the fat ink brush, add bevel for a highlight, and you're at the Tiny-Jam logo). BEVEL embosses a stroke into a faux-3D rim; the light is a GLOBAL 'sun' set from an on-screen SUN popover (drag the dial to aim it, tap one of four colours warm peach → golden → neutral → cool moon, toggle auto-spin) or from the keyboard (, and . rotate, / recolours, \\ auto-rotates); every beveled stroke (and the oil-paint rim) relights together, so you sweep and recolour the sun across the whole drawing; BOIL brings a stroke alive in one of two styles (the boil button cycles off → wobble → pulse): WOBBLE = per-point hand-drawn jitter cycling ~7.5fps; PULSE = a subtle smooth grow/shrink breath about the stroke's centre. Almost free since rendering is a pure function of (stroke, seed). Bevel + boil are PER-STROKE — each stroke captures the toggle state when you draw it, so some strokes can be beveled or boiling and others still; the toolbar toggles set the default for NEW strokes (this is the groundwork for a select-and-edit tool). A SELECT toggle on the bar (or the S key) makes this a tiny NON-DESTRUCTIVE vector editor: click a stroke to pick it (accent box), and the bar's controls retarget to that stroke — recolour it, change its dither, toggle bevel/boil, drag its thickness — while a property strip adds bevel-SIZE + boil-INTENSITY + outline-WIDTH sliders and bring-to-FRONT / send-to-BACK ordering. Edit any stroke any time; nothing is baked. A 7-colour pen — black/blue/red/green/cyan/magenta/yellow (cyan is a dark teal; pico32 has no true cyan) — picked from an always-visible palette strip (the seven swatches show their real colours; the active one wears an accent tab); each stroke keeps its colour. The fat brushes can be filled with a dpaint-style dither — a Bayer-ordered density ramp (~12→87% ink via fillp), likewise shown as an always-visible swatch strip — the step before a real flood-fill. The whole toolbar is ink-on-paper: white buttons, black glyphs; the brush dropdown opens a 2-column icon+name grid. A flood-fill tool + the pixelsnap animated-icon export come next.",
     "controls": "Top panel (ink-on-paper): a brush dropdown that opens a 2-column icon+name grid (ink/pencil/liner/marker/chalk/sketch/spray/bristle/paint/nib/oil), thickness slider, a BVL toggle, a BOIL cycle (off/wobble/pulse), UNDO, an OUT(line) toggle + an outline-colour ring chip, a SUN button (opens a light-dial + colour + spin popover), an always-visible dither-pattern strip, an always-visible 7-colour palette strip, and a SELECT (marquee) toggle — active swatches/toggles wear an accent tab. Drag to draw. Turn SELECT on (button or S key), click a stroke, then edit it via the bar + the bevel-size/boil-amt/outline-width sliders and the FRONT/BACK ordering buttons. Keys: B bevel, O boil, S select, U undo, C clear, [ / ] rotate the calligraphy nib angle, , / . rotate the bevel light (the sun), / cycles the sun's colour, \\ auto-rotates the sun."
   },
   "todo": [
@@ -336,6 +336,15 @@ static void render_sketch(const Stroke *s, const Boil *b) {
     }
 }
 
+// the optional raised bevel rim: a SHADOW copy away from the "sun" + a lit copy toward it
+// (global angle + colour). Shared by the stamp brushes AND the drip body.
+static void bevel_pass(const Stroke *s, const Boil *b) {
+    if (s->bevel <= 0) return;
+    float hx = cos_deg(bevel_angle) * s->bevel, hy = sin_deg(bevel_angle) * s->bevel;
+    render_stroke(s, -hx, -hy, SHADOW, b, 0);
+    render_stroke(s,  hx,  hy, LIGHTS[light_sel], b, 0);
+}
+
 // per-call coverage grid for the paint body — used to find bottom edges + stop runs.
 static unsigned char drip_cov[SCREEN_H][SCREEN_W];
 
@@ -374,14 +383,19 @@ static void emit_drip(int x, int yedge, int thk, int y1, const Stroke *s) {
 // (a band bottom) and run a drip from it. Pure function of (path, seed) — same soul as
 // boil, no simulation, fully re-renderable.
 static void render_drip(const Stroke *s, const Boil *b) {
+    bevel_pass(s, b);                         // optional raised rim UNDER the wet body
     render_stroke(s, 0, 0, s->color, b, 0);   // the wet body (same stamp chain as the fat brushes)
     if (s->n < 1) return;
+
+    // Drips are DRIED runs: compute their geometry from the STABLE (un-boiled) path + width, so a
+    // boiling body can wobble while the runs stay put instead of dancing/flickering frame to frame.
+    Boil still = { 0, 0, s->seed, 0, 0, 0 };
 
     // painted bounding box (points ± their radius), clamped to screen
     float minx = 1e9f, miny = 1e9f, maxx = -1e9f, maxy = -1e9f;
     for (int i = 0; i < s->n; i++) {
-        float x = s->pts[i].x, y = s->pts[i].y; boil_pt(s, i, &x, &y, b);
-        float r = sample_width(s, i, b->fseed) * 0.5f;
+        float x = s->pts[i].x, y = s->pts[i].y;
+        float r = sample_width(s, i, still.fseed) * 0.5f;
         if (x - r < minx) minx = x - r; if (x + r > maxx) maxx = x + r;
         if (y - r < miny) miny = y - r; if (y + r > maxy) maxy = y + r;
     }
@@ -390,11 +404,11 @@ static void render_drip(const Stroke *s, const Boil *b) {
     if (x1 > SCREEN_W - 1) x1 = SCREEN_W - 1; if (y1 > SCREEN_H - 1) y1 = SCREEN_H - 1;
     if (x1 < x0 || y1 < y0) return;
 
-    // rasterise the wet body's coverage (a disk per sample) into the bbox
+    // rasterise the wet body's coverage (a disk per sample) into the bbox — stable positions
     for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) drip_cov[y][x] = 0;
     for (int i = 0; i < s->n; i++) {
-        float cx = s->pts[i].x, cy = s->pts[i].y; boil_pt(s, i, &cx, &cy, b);
-        float r = sample_width(s, i, b->fseed) * 0.5f; if (r < 0.5f) r = 0.5f;
+        float cx = s->pts[i].x, cy = s->pts[i].y;
+        float r = sample_width(s, i, still.fseed) * 0.5f; if (r < 0.5f) r = 0.5f;
         for (int x = (int)(cx - r); x <= (int)(cx + r); x++) {
             if (x < x0 || x > x1) continue;
             float dx = x - cx, hh = r * r - dx * dx; if (hh < 0) continue; hh = sqrtf(hh);
@@ -486,11 +500,7 @@ static void draw_one(const Stroke *s, const Boil *b) {
     }
     if (s->outline > 0)   // outline: a fatter silhouette in outline_color, UNDER everything (bubble-letter rim)
         render_stroke(s, 0, 0, s->outline_color, b, s->outline * 2);
-    if (s->bevel > 0) {   // per-stroke SIZE, GLOBAL light angle (the "sun") — hilite toward it, shadow away
-        float hx = cos_deg(bevel_angle) * s->bevel, hy = sin_deg(bevel_angle) * s->bevel;
-        render_stroke(s, -hx, -hy, SHADOW, b, 0);
-        render_stroke(s,  hx,  hy, LIGHTS[light_sel], b, 0);
-    }
+    bevel_pass(s, b);     // per-stroke SIZE, GLOBAL sun angle+colour
     if (s->pattern) fillp(PATTERNS[s->pattern], PAPER);   // dpaint-style dither fills the body only
     render_stroke(s, 0, 0, s->color, b, 0);
     if (s->pattern) fillp_reset();
