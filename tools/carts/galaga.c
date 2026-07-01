@@ -16,7 +16,6 @@
   "homage": "Galaga (1981)",
   "description": "The formation shooter. Bees, butterflies and bosses fly in and lock into a swaying grid, then peel off to dive and shoot at you. The green Boss can drop a tractor beam — if it catches your ship you lose it, but shoot that boss while it tows your ship and you get it back as a DUAL FIGHTER with double fire. Every 4th wave from stage 3 is a CHALLENGING STAGE: enemies fly through in patterns and can not hurt you — hit as many as you can for a bonus (PERFECT = all 40). Extra ship at score milestones. A/D or arrows move, Z fire.",
   "todo": [
-    "Touch: needs an onscreen joystick.",
     "The sfx are a bit annoying."
   ]
 }
@@ -115,6 +114,7 @@ void init(void){
     for (int i = 0; i < NPB; i++) pb[i].alive = 0;
     for (int i = 0; i < NEB; i++) eb[i].alive = 0;
     start_stage();
+    touch_layout(TOUCH_ANALOG, 1);
 }
 
 static int alive_count(void){ int n = 0; for (int i = 0; i < NE; i++) if (en[i].alive) n++; return n; }
