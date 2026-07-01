@@ -48,11 +48,10 @@ also shipped alongside, for eyeballing band/grab-zone/placement without guessing
 > preview. Trade-off accepted: window-space controls are invisible to canvas-diff/dumps, so the
 > *draw* is eyeballed (maker) while the *brain* stays oracle-tested (`placetest` + the trace).
 
-Next: N action buttons beyond the hard-wired 2 (the draw skin still caps there), the
-vocabulary-row prototype cart (`columns`/`puyo` for d-pad, a free-move cart for analog — also
-the reference-image source for "Layout vocabulary" below), the editor's cart-reflective
-settings readout + force-show override, then iOS shell wiring and web deck/rails (both
-deferred by design — see "Platform targeting").
+Next: the editor's cart-reflective settings readout + force-show override (Phase 4b), then iOS
+shell wiring and web deck/rails (both deferred by design — see "Platform targeting"). N action
+buttons, the real-cart affects-list sweep, and the vocabulary-row reference cart (`touchvocab`,
+images in `docs/design/refs/touch-vocab/`) are shipped — see Checklist.
 Research, a recommendation, AND a concrete implementation plan follow (see "Implementation
 plan"). The task is
 pulled from **two ends**: the iOS port ([`ios-plan.md`](ios-plan.md) — raw `key()`/`btn()` carts
@@ -683,16 +682,15 @@ touches.
 - [x] **debug introspection** — `touch_layout_mode()` / `touch_ctrl_scale()` / `touch_debug(bool)` (band + grab-zone outlines, placement/scale text), for eyeballing placement work without guessing. Backs the permanent `dpaddemo` test-bench cart.
 - [x] **P3** N action buttons (0-4: A/B/X/Y, diamond-laid) — required first adding `BTN_X`/`BTN_Y` to the CORE input vocabulary (not just touch — `btn()`/`btnp()`/`btnr()`, keyboard defaults, the editor's remap panel), since only A/B existed before. Verified headless: all 4 diamond positions hit exclusively; unused slots (e.g. `n_buttons=2`) correctly fire nothing even when tapped.
 - [x] **P3** real-cart d-pad + analog validation, then the FULL affects-list sweep — rather than new throwaway prototype carts, wired `touch_layout()` into every existing cart that had a `de:meta.todo` request for exactly this (16 total). Started with 3 (`columns`, `puyo` — `TOUCH_DPAD4`, 1 button; `08-catchstar` — `TOUCH_ANALOG`, 0 buttons), then swept the rest of `action-plan.md`'s affects-list once the pattern was proven: `boids`, `doomfire`, `10-world` (analog, 0 — pure steering, no action anywhere in the cart); `defender`, `galaga`, `vampire`, `09-enemies`, `rollswarm`, `jumpstar` (analog, 1 — free move + a lone restart/action button); `drmario`, `sandburrow` (d-pad, 1 — grid + rotate/restart); `rogue`, `towerdefense` (d-pad, 2 — grid cursor + two distinct actions). Every mode/button-count choice was read off the cart's actual `btn()` usage, not guessed from genre (`jumpstar` looks like a 2-button platformer but jumping is fully automatic, so it only needed 1 button for "jump again after a fall"; `vampire` is auto-fire in play but still needs 1 button for its level-up popup). Each fulfilled todo removed (one, `09-enemies`, kept a *different*, still-open half of its todo — an editor/tutorial-launcher intro-screen issue unrelated to the joystick). Verified: all 16 build and run headless with no error; the underlying dpad/button mechanics were already exhaustively proven in isolation (see the entries above), so this validated the *integration* (does `touch_layout()` wired into a real cart's `init()` actually work end-to-end), not the primitives again.
-- [ ] **P3** a dedicated vocabulary-row REFERENCE cart (bakes one image per named scheme, deck/rails/overlay) — still open; `columns`/`puyo`/`08-catchstar` above are real gameplay validation, not the reference-image source itself. `touchpad` (the pixel-art mockup) is the closest existing thing but predates the real API.
+- [x] **P3** a dedicated vocabulary-row REFERENCE cart — `touchvocab.c` (SPACE cycles the 4 shipped rows over a mock game scene, calling the real `touch_layout()`, not a mockup). Baking it surfaced a real gap: every existing screenshot path (`make-cart.js --run`, `--dump`, the live-inspection `screenshot_request`) reads `canvas.texture` only, so the window-space draw skin (the June-30 pivot) was invisible to all of them — confirmed by a first bake showing the mock game but no controls at all. Fixed with a small, permanent addition: `.bake/window_screenshot_request` in `harness_inspect()` (`runtime/studio.c`), same request/response file pattern as `screenshot_request`, but capturing `LoadImageFromScreen()` (the actual window backbuffer) instead — so window-space draws are bake-able going forward, not just this once. `DE_SCHEME=n` env var picks the starting row for scripted bakes (sidesteps timing SPACE-presses). All 12 shots (4 rows × deck/rails/overlay, via `DE_WINDOW`) verified byte-distinct and eyeballed correct: `docs/design/refs/touch-vocab/`.
 - [ ] **P4b** editor settings rework — cart-reflective readout (reads the cart's declared layout) + force-show-on-desktop override (see "The editor setting" section)
 - [ ] **P4** wire `de_key_event` in the iOS shell for `key()` carts
 
-### First move (updated 2026-07-01 — everything below "Checklist" is now open, not this)
+### First move (updated 2026-07-01 — the reference cart shipped; everything else below "Checklist" is open)
 
-Two independent options, pick either: (a) the vocabulary-row reference cart (bakes an image per
-named scheme for "Layout vocabulary" below), or (b) start on the editor settings rework (Phase
-4b) now that there's real per-cart touch data (`columns`/`puyo`/`08-catchstar`) to reflect in the
-readout.
+Remaining: the editor settings rework (Phase 4b), now that there's real per-cart touch data
+(`columns`/`puyo`/`08-catchstar`/`touchvocab`) to reflect in the readout; or Phase 4 iOS shell
+wiring.
 
 ---
 

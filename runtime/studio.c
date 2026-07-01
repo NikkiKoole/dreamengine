@@ -1495,6 +1495,21 @@ static void harness_inspect(int fno) {
             UnloadImage(shot);
         }
     }
+    // window screenshot — the window BACKBUFFER, post-blit, so it includes window-space draw
+    // skins (e.g. the touch-controls overlay, drawn after the canvas blit) that screenshot_request
+    // above (canvas.texture only) can never see. See docs/design/touch-controls.md PIVOT.
+    f = fopen(".bake/window_screenshot_request", "r");
+    if (f) {
+        char out[512] = {0};
+        if (fgets(out, sizeof out, f)) out[strcspn(out, "\n\r")] = '\0';
+        fclose(f);
+        remove(".bake/window_screenshot_request");
+        if (out[0]) {
+            Image shot = LoadImageFromScreen();
+            ExportImage(shot, out);
+            UnloadImage(shot);
+        }
+    }
     // state
     f = fopen(".bake/state_request", "r");
     if (f) {
