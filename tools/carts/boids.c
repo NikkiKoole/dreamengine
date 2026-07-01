@@ -10,10 +10,7 @@
   "teaches": [
     "flocking"
   ],
-  "description": "A flock with no leader, from three little rules. Each boid watches only nearby neighbours and obeys: separation (steer away from anyone too close), alignment (match the flock heading), cohesion (drift toward the flock centre). Nobody is in charge yet the swarm moves like one organism — emergence. Steer the predator with the arrows and watch the flock part and regroup around it.",
-  "todo": [
-    "Touch: add an onscreen joystick for steering."
-  ]
+  "description": "A flock with no leader, from three little rules. Each boid watches only nearby neighbours and obeys: separation (steer away from anyone too close), alignment (match the flock heading), cohesion (drift toward the flock centre). Nobody is in charge yet the swarm moves like one organism — emergence. Steer the predator with the arrows and watch the flock part and regroup around it."
 }
 de:meta */
 #include "studio.h"
@@ -74,7 +71,7 @@ static void step(void) {
     }
 }
 
-void init(void) { make_flock(); for (int i = 0; i < 120; i++) step(); }
+void init(void) { make_flock(); for (int i = 0; i < 120; i++) step(); touch_layout(TOUCH_ANALOG, 0); }
 
 void update(void) {
     if (btn(0, BTN_LEFT))  predx -= 3;
