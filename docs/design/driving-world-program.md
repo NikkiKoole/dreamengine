@@ -1,6 +1,6 @@
 # The Driving World — program map
 
-STATUS: LIVING MAP (2026-07-01). **Milestone: P1 landed (OSM half) — `road_at()` drives sloop over real Delft (build a rig, drive real streets that drive grip, crash real buildings). the geometry-first RENDER arc is UNDERWAY in `citydrive` (the close pseudo-3D view where geometry is visible): ✅ connected asphalt surface (casing+fill, hierarchy by width), ✅ canals under roads (flat bridges), ✅ real OSM BRIDGES as raised decks + ✅ TUNNELS dashed (osm-roads now carries bridge/tunnel/layer) + ✅ cheap street-dressing (pavement/kerb bands + dashed centre-line markings) — next in this arc: curb-return junctions via `roadkit.h`, see [`roadkit.md`](roadkit.md). Other open arc: (2) Rung B-proc — the same `road_at()` seam over roadnet2 (the infinite procedural world).** The umbrella over the whole "build a vehicle, drive a procedural world" research — sloop + the road/world/city/render carts as **one program, not a pile of carts.** Sits ABOVE [`road-program-state.md`](road-program-state.md) (which is only the road-geometry tier) and pulls the other layers — movement, the world spine, rendering, real-world data, city content — into one read. Use it to see how far each layer is and **what to finish first.** Update the status table + the "finish first" call when a layer moves.
+STATUS: LIVING MAP (2026-07-02 — added the player-fantasy scoreboard; re-rated P2 (the chase pillar makes it player-facing, not just ambient life); named the on-foot seam as the only zero-work pillar). **Milestone: P1 landed (OSM half) — `road_at()` drives sloop over real Delft (build a rig, drive real streets that drive grip, crash real buildings). the geometry-first RENDER arc is UNDERWAY in `citydrive` (the close pseudo-3D view where geometry is visible): ✅ connected asphalt surface (casing+fill, hierarchy by width), ✅ canals under roads (flat bridges), ✅ real OSM BRIDGES as raised decks + ✅ TUNNELS dashed (osm-roads now carries bridge/tunnel/layer) + ✅ cheap street-dressing (pavement/kerb bands + dashed centre-line markings) — next in this arc: curb-return junctions via `roadkit.h`, see [`roadkit.md`](roadkit.md). Other open arc: (2) Rung B-proc — the same `road_at()` seam over roadnet2 (the infinite procedural world).** The umbrella over the whole "build a vehicle, drive a procedural world" research — sloop + the road/world/city/render carts as **one program, not a pile of carts.** Sits ABOVE [`road-program-state.md`](road-program-state.md) (which is only the road-geometry tier) and pulls the other layers — movement, the world spine, rendering, real-world data, city content — into one read. Use it to see how far each layer is and **what to finish first.** Update the status table + the "finish first" call when a layer moves.
 
 > Companion to [`big-game-backlog.md`](big-game-backlog.md) (what's left *per cart* + the cross-cutting seams) and [`showreel-teaser.md`](showreel-teaser.md) (the trailer as a forcing function). This doc is the **horizontal map**: the layers, where they converge, and the recommended order. The field note [`field-notes/004-roads-as-convergence-layer.md`](../field-notes/004-roads-as-convergence-layer.md) is the discovery this formalizes.
 
@@ -74,7 +74,7 @@ The transition field note 004 called significant: consuming OSM instead of gener
 ### 7. Agents — life on the network (the frontier)
 | Cart | Status | Role |
 |---|---|---|
-| **`traffic-ai`** (in `trackgen`) | ◑ BUILDING | NPC driving — lane-keeping, IDM car-following, overtaking, traffic lights, phantom jams, K-turns. *Only the line they follow changes to wire into the real world* (`cl[]` → `road_at()`). Doc: [`traffic-ai.md`](traffic-ai.md). |
+| **`traffic-ai`** (in `trackgen`) | ◑ BUILDING — **richer than this table long implied** | NPC driving — lane-keeping, IDM car-following, overtaking (incl. around a fully stopped player), traffic lights with real queues, phantom jams, K-turns — **plus the whole GTA chase pillar, already prototyped**: press `C` and reckless cops route to the player across a two-loop crossing network, run lights, beeline off-road to intercept, pincer/box the suspect and park on him; ambient civilians scatter out of the chase's path. Spec-locked (62 assertions). *Only the line they follow changes to wire into the real world* (`cl[]` → `road_at()`). Doc: [`traffic-ai.md`](traffic-ai.md). |
 | pedestrians / crowds | ○ seed | `menigte.md` — 10k closed-form NPCs; the on-foot population. |
 
 ## Where the layers converge — the seams
@@ -150,6 +150,25 @@ The honest gap (named 2026-07-01): **we don't yet have *realistic* procedural ro
 
 **The reframe this gives:** roadnet2 isn't "the realistic generator we have" — it's the **clean substrate the realistic generator will plug into**, calibrated against OSM. So the story isn't "our roadgen must get good before we can drive"; it's **drive real Delft now → measure it → grow a generator that matches → swap it behind the same `road_at()`.** Same seam (P1), better producer over time. This is Phase-2/Stage-3 work (the world composer); it comes *after* P1 proves the drive-the-real-world seam.
 
+## The player-fantasy scoreboard (added 2026-07-02)
+
+The seven layers above are *stack*-ordered (what sits on what). The maker's pitch is *experience*-ordered —
+**"a procedural world with a good road network, drive my GTA-1 car, get out of the car to fight, do other
+cool stuff."** Reading the same program through that lens exposes different gaps than the stack view does:
+
+| Player fantasy | Carried by | State |
+|---|---|---|
+| **Drive real streets** | `sloop` + `road_at()` | ✅ works today (OSM Delft: real grip, collidable buildings, drag-a-city) |
+| **Get chased / living traffic** | `trackgen` (traffic-ai + the chase pillar) | ✅ rich + spec-locked (62) — **but on its own toy track**; P2 = the port |
+| **Streets that *look* real** | `citydrive` → `roadkit.h` | ◑ the active arc (markings/zebras/give-way landed; curb returns next) |
+| **The world is infinite** | `roadnet2` (Rung B-proc) | ○ seam decided + proven, procedural producer unbuilt |
+| **Get out and fight** | `sloop` ∪ `flank` — **nobody's cart** | ✗ untouched — the only pillar with zero work anywhere ([backlog seam #1](big-game-backlog.md); *can start now, independent of everything else*) |
+
+What this lens adds to the P-ranking below: four of five pillars have real momentum; the on-foot seam is
+the lone zero, and P2 is the cheapest way to turn already-built richness (the chase brain) into a
+player-facing scene (cops through real Delft). The two of them — P2 and the on-foot seam — light the
+fantasy fastest, and neither blocks the other or the infrastructure track (B-proc).
+
 ## ★ Finish the right stuff first
 
 The honest read: **the sandboxes are done; the payoff now is integration, not more sandbox polish.** roadlab, streetlab, cityplan, cityview, roadview are all shipped or spec-locked. The risk is endlessly adding junction primitives and metrics (diminishing returns — the grammar is complete) while the three seams above stay open. Recommended order:
@@ -183,7 +202,7 @@ Rung ladder:
 
 **Honest caveat:** OSM Delft is a **fixed bbox** (drive across it, not forever); the infinite north star is roadnet2's job (Rung B-proc). But both feed the *identical* `road_at()`, so OSM-first wasted nothing — the deterministic, per-frame-fast **spatial index is built and proven**, and it's shared by both producers; pointing it at roadnet2 is now mostly wiring. *MVP caveats to revisit:* building boxes are single oriented rects (L-shapes over-cover; a few may clip a street), demolition is fixed 3×3 rubble, and `gen_chunk` linear-scans buildings per chunk-load (fine at delft-centre's 5.3k; a whole-city set wants a chunk-bucket index).
 
-**P2 — Land NPC traffic on the real world (seam 1, layer 7).** traffic-ai's behaviour is built in trackgen; only the followed line changes (`cl[]` → `road_at()`). Once P1 lands, this is mostly a provider swap and makes the world feel *alive*, not empty.
+**P2 — Land NPC traffic on the real world (seam 1, layer 7).** traffic-ai's behaviour is built in trackgen; only the followed line changes (`cl[]` → `road_at()`). P1 has landed, so this is unblocked *now* — mostly a provider swap. **Re-rated 2026-07-02: P2 is bigger than "ambient life."** trackgen already carries the chase pillar (reckless cops that route across a network, intercept off-road, box the suspect; civilians that scatter — see layer 7), so P2's real payoff is **a police chase through real Delft streets** — a showreel scene, not background dressing. That makes it rival Rung B-proc for leverage: B-proc is the bigger *infrastructure* move, P2 the bigger *player-facing* one, and they don't block each other.
 
 **P3 — The world composer (seam 2 / Phase 2).** Two-tier major→minor generator stitching streetlab patterns per region. **Only after P0–P1** — composing before there's a spine + consumer is premature.
 
