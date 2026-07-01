@@ -467,6 +467,23 @@ static void road_seg(float ax,float ay,float bx,float by,float hw,int col){
   polyfill(xy,4,col);
 }
 
+// Motor carriageways render as ONE connected surface (casing + asphalt, hierarchy by WIDTH) so a junction
+// fuses into a coherent road instead of a patchwork of per-class neon fills; bike/foot/canal/rail keep
+// their own colour (separate networks). Connectivity Phase 0 — see docs/design/roadkit.md.
+static bool is_motor_road(int k){
+  return k==K_HIGHWAY||k==K_ARTERIAL||k==K_ROAD||k==K_TRACK||k==K_SECONDARY||k==K_TERTIARY||k==K_SERVICE;
+}
+// paint one way as quads + round-joint discs (radius rhw, colour col); near-camera segments only (r2 cull).
+static void paint_way(int w, float rhw, int col, float r2){
+  int st=rways[w].start, ct=rways[w].count;
+  for (int i=0;i+1<ct;i++){
+    float ax=PX[st+i], ay=PY[st+i], bx=PX[st+i+1], by=PY[st+i+1];
+    if (seg_d2(ax,ay,bx,by,S.camx,S.camy) > r2) continue;   // keep any segment passing near (no pop)
+    road_seg(ax,ay,bx,by,rhw,col);
+    if (rhw >= 2.0f){ if (i==0) pdisc(ax,ay,rhw,col); pdisc(bx,by,rhw,col); }  // round joints → fuse
+  }
+}
+
 // ── lifecycle ────────────────────────────────────────────────────────────────
 void init(void){ load_data(); }
 
@@ -547,22 +564,18 @@ void draw(void) {
     }
   }
 
-  // flat roads next (over the ground areas) — only segments near the camera
+  // flat roads (over the ground areas), near-camera only. Motor carriageways render as ONE connected
+  // surface: a dark CASING pass (widened) then an ASPHALT pass (true width) → the network fuses at every
+  // junction and each road gets a kerb edge, hierarchy reading by WIDTH not neon fill. Bike/foot/canal/
+  // rail draw last in their own colour (separate networks). (docs/design/roadkit.md — connectivity Phase 0.)
   if (S.roads_on){
-    for (int w=0; w<nway; w++){
-      int k=rways[w].kind, st=rways[w].start, ct=rways[w].count;
-      float hw=ROAD[k].hw_m; int col=ROAD[k].col;
-      float rhw = fmaxf(hw, 1.5f);
-      for (int i=0;i+1<ct;i++){
-        float ax=PX[st+i], ay=PY[st+i], bx=PX[st+i+1], by=PY[st+i+1];
-        if (seg_d2(ax,ay,bx,by,S.camx,S.camy) > R2) continue;   // keep any segment passing near (no pop)
-        road_seg(ax,ay,bx,by,rhw,col);
-        if (rhw >= 2.0f){                                       // round the joints so segments fuse, not read as separate rects
-          if (i==0) pdisc(ax,ay,rhw,col);
-          pdisc(bx,by,rhw,col);
-        }
-      }
-    }
+    const float CASE_M = 1.2f;                                   // kerb/casing width beyond the carriageway (m)
+    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // pass 1: casing — one dark outline surface
+      paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.5f)+CASE_M, CLR_BROWNISH_BLACK, R2);
+    for (int w=0; w<nway; w++) if (is_motor_road(rways[w].kind)) // pass 2: asphalt — one grey connected surface
+      paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.5f), CLR_DARK_GREY, R2);
+    for (int w=0; w<nway; w++) if (!is_motor_road(rways[w].kind))// pass 3: bike/foot/canal/rail — own colour
+      paint_way(w, fmaxf(ROAD[rways[w].kind].hw_m,1.0f), ROAD[rways[w].kind].col, R2);
   }
 
   // collect near + on-screen buildings, depth-sort back-to-front, extrude
