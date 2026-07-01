@@ -55,15 +55,22 @@ the geometry-first road-rendering story leads in citydrive, not in sloop's fast 
 
 ## The three paths (and the call)
 
-1. **Cheap street-dressing now — in `citydrive` first** *(independent of the roadkit extraction, days).*
-   Centre-line + lane markings on citydrive's projected road quads, then class-based widths, then
-   pavement/kerb bands. ~70% of the "this is a real street" feel **where it's visible** (the close
-   pitched camera), for little effort. The same dressing can later be mirrored onto sloop's ribbons for
-   its fast drive. **Not blocked on roadkit; start here.**
+0. **Connectivity FIRST — the foundation** *(days, no roadkit).* citydrive draws each segment as an
+   independent quad (`road_seg`), so roads **facet on bends** (outer-gap) and **pile at junctions** (no
+   merge). Before any dressing: draw a draped **disc of radius = half-width at every polyline vertex +
+   endpoint** — one primitive that rounds the bends AND merges the meeting ways at each shared node into
+   a connected (blobby, pre-grammar) junction. Markings on disconnected roads look broken, so this comes
+   *before* #1. **← START HERE.**
+1. **Cheap street-dressing — in `citydrive`** *(days, no roadkit; after #0).* Centre-line + lane
+   markings on the now-connected projected roads, then class-based widths, then pavement/kerb bands.
+   ~70% of the "this is a real street" feel **where it's visible** (the close pitched camera). Mirrorable
+   onto sloop's ribbons later.
 2. **`roadkit.h` — the real integration** *(the architecturally correct move; this doc).* Extract the
    grammar so **citydrive** (then, later, sloop) renders through streetlab/roadlab's *actual* geometry —
    curb returns, the leg model, the typed cross-section. The thing we've circled — **decision: GO**,
-   designed from citydrive as the working consumer.
+   designed from citydrive as the working consumer. **The field renderer stays on the table as the clean
+   successor** (below) — it makes #0's connectivity, #1's markings, and the curb-returns all *thresholds
+   on one distance field*, superseding the cheap disc-joins rather than layering on them.
 3. **`sloop` gets it later** — either the ground-plane render brought to its top-down (mostly wasted
    at driving zoom → likely only its own street-camera tier) or, more likely, **sloop's rig driven
    inside citydrive**. Comes after the render is proven; cheap because of the shared seam.
@@ -108,19 +115,25 @@ roadkit's renderer. Extracting now designs the interface from **citydrive as the
 
 ## Phasing (each step gated; stop at any natural line)
 
-1. **Cheap street-dressing in citydrive** *(not the extraction; parallel, days).* Markings + widths +
-   pavement/kerb bands on citydrive's projected road quads. Visible payoff immediately; validates the
-   ground-decal approach before the harder junction geometry. **← START HERE.**
-2. **Pure-geometry extract (safe first roadkit step).** Move the pure fns (`curb_return`, the leg model,
+1. **Connectivity — disc-joins in citydrive** *(not the extraction; days).* A draped disc (radius =
+   half-width) at every polyline vertex + endpoint → rounds bends, merges junctions. The foundational
+   geometry fix; everything else sits on connected roads. **← START HERE.**
+2. **Cheap street-dressing in citydrive** *(days).* Markings + widths + pavement/kerb bands on the
+   now-connected projected roads. Visible payoff; validates the ground-decal approach before extraction.
+3. **Pure-geometry extract (safe first roadkit step).** Move the pure fns (`curb_return`, the leg model,
    `cross_hw`, corner counts) into `roadkit.h`; `streetlab` `#include`s it and calls them unchanged.
    **`spec` must stay 104/0** — a pure move, no behaviour change. De-risks + gives a real interface.
    (Note: even `ux`/`uy` differ between streetlab (near-zero snap) and roadlab (none) — roadkit needs a
    deliberate canonical form; don't blind-copy.)
-3. **Field renderer into roadkit** as the N-arm-native render entry; **citydrive** renders its ground
-   through it (streetlab's `DE_FIELD_ROADS` path is the reference). `road-check` + `mirror-diff` gate it.
-4. **Grade dispatch** — `roadlab` calls roadkit; one `roadkit_junction(legs, grade)` routes at-grade vs
+4. **Field renderer into roadkit** *(KEPT ON THE TABLE — the clean successor).* One lateral distance
+   field: asphalt = within half-width of the nearest centerline → connectivity #1, markings #2, and
+   curb-returns all become **thresholds on the field**, replacing the disc-joins + decals with the
+   uniform method. N-arm-native; **citydrive** renders its ground through it (streetlab's
+   `DE_FIELD_ROADS` path is the reference). Per-pixel cost gated on `software-canvas.md` but affordable
+   at citydrive's near field. `road-check` + `mirror-diff` gate it.
+5. **Grade dispatch** — `roadlab` calls roadkit; one `roadkit_junction(legs, grade)` routes at-grade vs
    grade-separated. Fed identically from a seed or OSM.
-5. **`sloop` gets it** — the car ∪ the render, via the shared seam. The easy, last step.
+6. **`sloop` gets it** — the car ∪ the render, via the shared seam. The easy, last step.
 
 ## Risks / dependencies
 
