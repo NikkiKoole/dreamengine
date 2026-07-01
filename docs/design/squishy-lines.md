@@ -294,6 +294,14 @@ once v1 lands (not committed):
   in select mode); the cursor previews the nib edge live so you can see the angle. Still pure
   `f(path, seed)`. Next: a per-stroke angle slider in the select property strip; a pressure/gap that
   lifts the nib for split strokes.
+- **Oil / impasto (shipped, 2026-07-01).** A `K_IMPASTO` "oil" brush — thick paint faked for the
+  2-tone/limited palette (true impasto wants alpha + per-colour light/dark we don't have). `render_impasto`
+  stacks three cheap cues: an **auto-bevel rim** (`render_stroke` SHADOW +offset / HILITE −offset, the
+  same trick the bevel tool uses) for the raised light-catching edge, the fat colour body, then
+  **raked HILITE/SHADOW streaks** along the drag (like `render_bristle` but alternating ridge/groove
+  colours) so the paint looks pushed by a stiff brush or knife. Pure `f(path, seed)`. It's a
+  characterful *fake*, not physical impasto — good enough for the lo-fi surface; a 24-bit paint layer
+  would let it mix real light/dark of the paint colour later.
 - **Flood-fill (still wanted)** — the *raster* other half: flood a bounded region, lay a dither/ramp
   in it. This one genuinely needs the **persistent layer buffer** (flood-fill is a raster op; the cart
   re-renders from data each frame and `pget` reads *last* frame). Do it *with* the layer-buffer
