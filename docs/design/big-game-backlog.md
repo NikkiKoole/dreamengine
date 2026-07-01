@@ -37,7 +37,7 @@ but #1 (the avatar/seam) can prototype *now* against any single cart.
 
 | Cart | Pillar | Sandbox status | Biggest thing left |
 |---|---|---|---|
-| **sloop** | drive | rungs 1–2.7 + collidable world ✓ | NPC traffic + breakage (both need the world) |
+| **sloop** | drive | rungs 1–2.7 + collidable world ✓ + **drives real OSM Delft ✓** (2026-07-01) | NPC traffic + breakage; **`road_at()` over roadnet2** (the proc world — Rung B-proc) |
 | **roadlab** | world | ✅ done, spec-locked (25) | port into the composer |
 | **streetlab** | world | ✅ M1–M7 done, spec-locked | production-fidelity generator + integration |
 | **roadnet2** | world | partial (highway tier) | the whole street-level build (the composer's core) |
@@ -87,6 +87,7 @@ roadnet v1: rungs 1–3 (seam-true highway splines, terrain-aware). roadnet2: th
 - ✓ **Top-down town placement** (parked) — settlement-relationship-driven, not "driveway onto a freeway."
 - ✓ Polish: reference-grid faintness, road-density tuning, node-marker size, ~500 km scope to commit.
 - ✓ **rung 4 — wire `road_at()` into sloop** (the moment the rig drives the real world). Tunnels/landmarks parked.
+      **✅ CONSUMER SIDE DONE (2026-07-01):** sloop's `road_at()` + spatial index + render/grip/collision all shipped, proven over **OSM Delft** — so roadnet2 only has to *expose* its own `road_at()` (nearest-edge over its graph) and it swaps straight in behind the same seam ([`driving-world-program.md`](driving-world-program.md) Rung B-proc).
 
 ### flank (fight) — [`flank-tactical-ai.md`](flank-tactical-ai.md)
 Core AI shipped (comms, flow-field, flanking, cover, alertness, weapon abstraction, scenarios, ammo).
