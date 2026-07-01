@@ -61,7 +61,11 @@ const KIND_IX = { highway: 0, arterial: 1, road: 2, track: 3, water: 4, canal: 5
                   // appended — keep in lockstep with the K_* enum in roadview.c (APPEND ONLY,
                   // never reorder: the .rvb encodes each feature's kind as this index).
                   secondary: 17, tertiary: 18, service: 19, cycleway: 20, footway: 21,
-                  other_area: 22, other_line: 23 };
+                  other_area: 22, other_line: 23,
+                  // node-level control POINTS (like tree) — the at-junction reality we used to only infer.
+                  crossing: 24, give_way: 25, stop: 26, traffic_signals: 27, calming: 28 };
+// kinds stored as a single point (a node, not a way): tree + the node-level control features.
+const POINT_KINDS = new Set(['tree', 'crossing', 'give_way', 'stop', 'traffic_signals', 'calming']);
 // line-road kinds that can be a bridge/tunnel (carried in `sub` as "B<layer>"/"T<layer>" — see below).
 const BRIDGEABLE = new Set(['highway','arterial','road','track','secondary','tertiary','service','cycleway','footway','rail']);
 const SIMPLIFY = parseFloat(opt('--simplify', '8'));
@@ -279,8 +283,8 @@ function buildDoc(source, name, ways) {
   const features = [];
   for (const w of ways) {
     let local = w.pts.map(([x, y]) => [x - minx, y - miny]);
-    if (w.kind !== 'building' && w.kind !== 'tree') local = simplify(local, SIMPLIFY);
-    if (local.length < 1 || (local.length < 2 && w.kind !== 'tree')) continue;  // trees are single points
+    if (w.kind !== 'building' && !POINT_KINDS.has(w.kind)) local = simplify(local, SIMPLIFY);
+    if (local.length < 1 || (local.length < 2 && !POINT_KINDS.has(w.kind))) continue;  // point kinds are single nodes
     const flat = [];
     for (const [x, y] of local) flat.push(round(x), round(y));
     const feat = { kind: w.kind, name: w.name || '', pts: flat };
@@ -489,6 +493,9 @@ async function overpass(S, W, N, E, name) {
             `relation["leisure"]${bb};` +
             `relation["waterway"="riverbank"]${bb};` +
             `node["natural"="tree"]${bb};` +
+            // node-level road control — the real crossings / give-way / stop / signals we used to only infer
+            `node["highway"~"^(crossing|give_way|stop|traffic_signals)$"]${bb};` +
+            `node["traffic_calming"]${bb};` +
             `);out geom;`;
   console.log(`querying Overpass for bbox ${S},${W},${N},${E} …`);
   // the public instances 504/429 under load — try the mirrors in turn
@@ -522,9 +529,18 @@ async function overpass(S, W, N, E, name) {
 
   const ways = [];
   for (const el of els) {
-    if (el.type === 'node') {                          // individual trees = point nodes
-      if (el.tags?.natural === 'tree' && el.lat != null)
-        ways.push({ kind: 'tree', name: '', pts: [merc(el.lon, el.lat)] });
+    if (el.type === 'node') {                          // point nodes: trees + node-level road control
+      const nt = el.tags || {};
+      if (el.lat == null) continue;
+      if (nt.natural === 'tree') { ways.push({ kind: 'tree', name: '', pts: [merc(el.lon, el.lat)] }); continue; }
+      let nk = null, nsub = '';
+      const hw = nt.highway;
+      if (hw === 'crossing')            { nk = 'crossing'; nsub = nt['crossing:markings'] || nt.crossing || ''; }
+      else if (hw === 'give_way')       nk = 'give_way';
+      else if (hw === 'stop')           nk = 'stop';
+      else if (hw === 'traffic_signals') nk = 'traffic_signals';
+      else if (nt.traffic_calming)      nk = 'calming';
+      if (nk) ways.push({ kind: nk, name: '', sub: nsub, pts: [merc(el.lon, el.lat)] });
       continue;
     }
     if (el.type !== 'way' || !el.geometry) continue;

@@ -126,11 +126,17 @@ consumer plan in [`roadkit.md`](roadkit.md).
 | on-road `cycleway=lane` / `cycleway:*` | `C b/l/r` | ~11 | ✅ citydrive red fietsstrook along the carriageway edge (tagged side/s) |
 | `junction=roundabout` | `R` | rare | ⏳ captured (resolves the equal-class voorrang case) |
 
-**Tier 2 — node-level control (NOT fetched: the query only asks for `node["natural"="tree"]`; needs new
-`KIND_IX`/enum slots in `citydrive.c` + `roadview.c`).** The *real* versions of things we currently infer:
-- `highway=give_way` / `stop` / `traffic_signals` — real priority per approach (vs our class-inferred voorrang).
-- `highway=crossing` (`crossing=zebra/marked/traffic_signals`) — the marked crossings (why the per-arm zebra guess was wrong).
-- `traffic_calming=bump/hump/table` — woonerf detail.
+**Tier 2 — node-level control.** ✅ **fetched 2026-07-02:** `osm-roads.js` now queries these nodes and emits
+them as new POINT kinds (like `tree`), appended to `KIND_IX` **and** the `K_*` enums in `citydrive.c` +
+`roadview.c` (indices 24–28, append-only). Delft centre: 43 crossings, 92 traffic-signals, 43 give-way, 57
+calming (0 stop — NL uses give-way). The *real* versions of things we used to infer:
+- `highway=crossing` (`K_CROSSING`) — ✅ **citydrive renders a real zebra** at the node, oriented across the
+  nearest carriageway (`draw_zebra` + `nearest_motor_dir`). Placed from data, not guessed per junction-arm
+  (why the earlier blanket per-arm zebra was pulled).
+- `highway=give_way`/`stop` (`K_GIVEWAY`/`K_STOP`) — captured; **next:** feed the haaientanden (real priority
+  per approach, replacing the class-inferred voorrang where a give-way node says which arm actually yields).
+- `highway=traffic_signals` (`K_SIGNALS`), `traffic_calming` (`K_CALMING`) — captured (`pnode[]`); not drawn yet.
+- roadview loads none of them visually (its loader drops non-tree single-point features) — safe, just ignored.
 
 **Tier 3 — carried-but-unused / minor.** `name` is already packed per feature (unused by citydrive — free labels);
 `ref` (road numbers A13/N470 → shields) is *not* captured; `parking:lane`, `turn:lanes`, `building:colour`/`roof:shape` dropped.

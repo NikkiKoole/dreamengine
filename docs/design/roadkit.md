@@ -191,8 +191,16 @@ roadkit's renderer. Extracting now designs the interface from **citydrive as the
    pass draws out to the *fixed class corridor*, so a narrowed one-way street automatically gets a **fatter
    pavement** (the real Dutch centre look: narrow one-way carriageway, wide footway, same building-to-building
    corridor). All the carriageway passes (casing, surface, markings, on-road cycle lane) key off `road_hw`;
-   only the pavement's outer edge stays at the class corridor. **Still faked / next:** the node-level tier
-   (crossings, give-way/stop/signals)
+   only the pavement's outer edge stays at the class corridor.
+
+   **Node-level control tier (2026-07-02).** `osm-roads.js` now fetches the control *nodes*
+   (`highway=crossing`/`give_way`/`stop`/`traffic_signals`, `traffic_calming`) and emits them as new POINT
+   kinds (24–28, appended to `KIND_IX` + the `K_*` enums in citydrive **and** roadview). citydrive stores them
+   in `pnode[]` and **renders real crossings** as a zebra at the OSM node, oriented across the nearest
+   carriageway (`draw_zebra`/`nearest_motor_dir`) — the marked-crossing render done from data, replacing the
+   pulled per-arm guess. Delft centre: 43 crossings / 92 signals / 43 give-way / 57 calming. **Next:** wire the
+   give-way/stop nodes into the haaientanden (real per-approach priority instead of the class heuristic), and
+   a traffic-signals marker.
    needs new kind indices (enum surgery in `citydrive.c` + `roadview.c`), so it's the next importer chunk.
 3. **Pure-geometry extract (safe first roadkit step).** Move the pure fns (`curb_return`, the leg model,
    `cross_hw`, corner counts) into `roadkit.h`; `streetlab` `#include`s it and calls them unchanged.
