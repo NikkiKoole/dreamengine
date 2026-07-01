@@ -14,7 +14,7 @@
   "lineage": "the harmony/rhythm sibling of 06-sound (single-note melody)",
   "description": {
     "summary": "Stack chords from a scale and gate a hi-hat with a Euclidean rhythm.",
-    "detail": "degree(scale, octave, n) picks a chord ROOT from a scale degree; chord()/strum() stack a triad on it (strum staggers the notes into a tiny arpeggio). euclid(hits, steps, b) spreads hits as evenly as possible across steps — the same algorithm behind claves and tresillo — gating a hi-hat under a I-IV-V-vi progression.",
+    "detail": "degree(scale, octave, n) picks a chord ROOT from a scale degree; chord()/strum() stack a triad on it (strum staggers the notes into a tiny arpeggio), voiced on the engine's real StifKarp grand piano. euclid(hits, steps, b) spreads hits as evenly as possible across steps — the same algorithm behind claves and tresillo — gating a filtered-noise hi-hat under a I-IV-V-vi progression.",
     "controls": "left/right arrows change the hi-hat's euclid density"
   }
 }
@@ -29,6 +29,8 @@ de:meta */
 // clave and tresillo patterns, not just a drum-machine trick.
 
 #define STEPS 16   // one bar, 16th notes
+#define SL_PIANO 5 // real grand piano (INSTR_PIANO — StifKarp struck string) for the chords
+#define SL_HAT   6 // filtered noise for the hi-hat, instead of a raw noise burst
 
 // a I-IV-V-vi progression in C major — degree indices into SCALE_MAJOR
 static const int   ROOT_DEGREE[4] = { 0, 3, 4, 5 };
@@ -40,6 +42,12 @@ static int hits = 5;        // euclid density — tweak with left/right
 static int last_chord = -1;
 static int last_step  = -1;
 
+void init() {
+    instrument(SL_PIANO, INSTR_PIANO, 1, 0, 7, 1800);  // struck, long release — rings on its own
+    instrument(SL_HAT, INSTR_NOISE, 0, 24, 0, 14);     // fast decay = a tick, not a splat
+    instrument_filter(SL_HAT, FILTER_HIGH, 7000, 2);   // highpass strips the noise's low-end mud
+}
+
 void update() {
     bpm(96);
 
@@ -47,13 +55,16 @@ void update() {
     if (chord_i != last_chord) {
         last_chord = chord_i;
         int root = degree(SCALE_MAJOR, 3, ROOT_DEGREE[chord_i]);
-        strum(root, CHORD_KIND[chord_i], INSTR_TRI, 5, 35);
+        strum(root, CHORD_KIND[chord_i], SL_PIANO, 5, 35);
     }
 
     int step = beat() * 4 + (int)(beat_pos() * 4);   // 16th-note counter
     if (step != last_step) {
         last_step = step;
-        if (euclid(hits, STEPS, step)) note(72, INSTR_NOISE, 3);
+        if (euclid(hits, STEPS, step)) {
+            bool downbeat = (step % STEPS) == 0;
+            note(92, SL_HAT, downbeat ? 5 : 3);      // accent the top of the bar
+        }
     }
 
     if (keyp(KEY_RIGHT)) hits = min(hits + 1, STEPS);
