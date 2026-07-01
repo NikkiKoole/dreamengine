@@ -1,6 +1,6 @@
 # The Driving World — program map
 
-STATUS: LIVING MAP (2026-07-02 — added the player-fantasy scoreboard; re-rated P2 (the chase pillar makes it player-facing, not just ambient life); named the on-foot seam as the only zero-work pillar). **Milestone: P1 landed (OSM half) — `road_at()` drives sloop over real Delft (build a rig, drive real streets that drive grip, crash real buildings). the geometry-first RENDER arc is UNDERWAY in `citydrive` (the close pseudo-3D view where geometry is visible): ✅ connected asphalt surface (casing+fill, hierarchy by width), ✅ canals under roads (flat bridges), ✅ real OSM BRIDGES as raised decks + ✅ TUNNELS dashed (osm-roads now carries bridge/tunnel/layer) + ✅ street-dressing (pavement/kerb bands, lane markings) + ✅ **real-OSM-data-driven** look — surface (brick/klinker vs asphalt), per-street sidewalks, carriageway width (one-way streets narrow → fatter pavement), lane-count/one-way markings, red cycleways (separate + on-road), real zebra crossings, and give-way haaientanden (real per-approach voorrang) — next in this arc: curb-return junctions via `roadkit.h`, see [`roadkit.md`](roadkit.md). Other open arc: (2) Rung B-proc — the same `road_at()` seam over roadnet2 (the infinite procedural world).** The umbrella over the whole "build a vehicle, drive a procedural world" research — sloop + the road/world/city/render carts as **one program, not a pile of carts.** Sits ABOVE [`road-program-state.md`](road-program-state.md) (which is only the road-geometry tier) and pulls the other layers — movement, the world spine, rendering, real-world data, city content — into one read. Use it to see how far each layer is and **what to finish first.** Update the status table + the "finish first" call when a layer moves.
+STATUS: LIVING MAP (2026-07-02 — player-fantasy scoreboard added; P2 re-rated (the chase pillar makes it player-facing); **on-foot seam rung F0 LANDED in sloop** — get out at the seat cell, walk the collidable world, get back in, spec-pinned). **Milestone: P1 landed (OSM half) — `road_at()` drives sloop over real Delft (build a rig, drive real streets that drive grip, crash real buildings). the geometry-first RENDER arc is UNDERWAY in `citydrive` (the close pseudo-3D view where geometry is visible): ✅ connected asphalt surface (casing+fill, hierarchy by width), ✅ canals under roads (flat bridges), ✅ real OSM BRIDGES as raised decks + ✅ TUNNELS dashed (osm-roads now carries bridge/tunnel/layer) + ✅ street-dressing (pavement/kerb bands, lane markings) + ✅ **real-OSM-data-driven** look — surface (brick/klinker vs asphalt), per-street sidewalks, carriageway width (one-way streets narrow → fatter pavement), lane-count/one-way markings, red cycleways (separate + on-road), real zebra crossings, and give-way haaientanden (real per-approach voorrang) — next in this arc: curb-return junctions via `roadkit.h`, see [`roadkit.md`](roadkit.md). Other open arc: (2) Rung B-proc — the same `road_at()` seam over roadnet2 (the infinite procedural world).** The umbrella over the whole "build a vehicle, drive a procedural world" research — sloop + the road/world/city/render carts as **one program, not a pile of carts.** Sits ABOVE [`road-program-state.md`](road-program-state.md) (which is only the road-geometry tier) and pulls the other layers — movement, the world spine, rendering, real-world data, city content — into one read. Use it to see how far each layer is and **what to finish first.** Update the status table + the "finish first" call when a layer moves.
 
 > Companion to [`big-game-backlog.md`](big-game-backlog.md) (what's left *per cart* + the cross-cutting seams) and [`showreel-teaser.md`](showreel-teaser.md) (the trailer as a forcing function). This doc is the **horizontal map**: the layers, where they converge, and the recommended order. The field note [`field-notes/004-roads-as-convergence-layer.md`](../field-notes/004-roads-as-convergence-layer.md) is the discovery this formalizes.
 
@@ -162,12 +162,21 @@ cool stuff."** Reading the same program through that lens exposes different gaps
 | **Get chased / living traffic** | `trackgen` (traffic-ai + the chase pillar) | ✅ rich + spec-locked (62) — **but on its own toy track**; P2 = the port |
 | **Streets that *look* real** | `citydrive` → `roadkit.h` | ◑ the active arc (markings/zebras/give-way landed; curb returns next) |
 | **The world is infinite** | `roadnet2` (Rung B-proc) | ○ seam decided + proven, procedural producer unbuilt |
-| **Get out and fight** | `sloop` ∪ `flank` — **nobody's cart** | ✗ untouched — the only pillar with zero work anywhere ([backlog seam #1](big-game-backlog.md); *can start now, independent of everything else*) |
+| **Get out and fight** | `sloop` (foot mode, fenced) ∪ `flank` (the brain, later) | ◑ **rung F0 landed 2026-07-02** — stop, press F, step out of the SEAT CELL as a one-tile person (the seat's occupant, 7px), walk the same collidable world (rig hull / buildings / parked cars push back), walk back to the seat to drive; pinned by sloop's FIRST `spec()` (11 assertions). Remaining rungs: **F1** surface-aware walking (`road_at()` pavements) → **F2** enter a building (`interiors` BSP at the footprint) → **F3** lift flank's brain as a library header (ADR-0006) and *fight*. ([backlog seam #1](big-game-backlog.md)) |
 
-What this lens adds to the P-ranking below: four of five pillars have real momentum; the on-foot seam is
-the lone zero, and P2 is the cheapest way to turn already-built richness (the chase brain) into a
-player-facing scene (cops through real Delft). The two of them — P2 and the on-foot seam — light the
-fantasy fastest, and neither blocks the other or the infrastructure track (B-proc).
+What this lens adds to the P-ranking below: every pillar now has real momentum (the on-foot seam got its
+first rung 2026-07-02 — the avatar exists, the car↔foot handoff works and is spec-pinned; the *fight*
+half is rungs F2–F3). P2 stays the cheapest way to turn already-built richness (the chase brain) into a
+player-facing scene (cops through real Delft). P2 and the on-foot rungs light the fantasy fastest, and
+neither blocks the other or the infrastructure track (B-proc).
+
+**Rung-F0 design decisions worth keeping** (they shape F1–F3): the avatar is **the occupant of the seat
+cell** — no new abstraction. Exit spawns beside the seat's world position (stepped outward until clear of
+the hull); entry is *reach of the seat cell*, not "the vehicle," so a long rig means walking to the cab;
+a rig with no seat can't be entered — the same rule that makes it drivable. The exit gate is ~10 km/h,
+deliberately above the automatic's idle creep (~8.3 px/s), so brake→F just works. On foot the camera
+eases to 1:1 north-up — at 7px the avatar reads without a zoom-in tier (GTA1-scale, cartoon-big). The
+code is fenced in `sloop.c` (`FOOT MODE` block) to lift into its own module when F3 arrives.
 
 ## ★ Finish the right stuff first
 

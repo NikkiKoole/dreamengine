@@ -18,6 +18,12 @@ real "what to build next":
    the **person** who walks → enters a car → drives → gets out → enters a building → talks → fights.
    This avatar + the car↔foot handoff (a [transition](transitions.md)) is the *spine* of "equal
    driving and on-foot." It is the single most load-bearing missing piece, and it's nobody's cart.
+   **◑ Rung F0 LANDED (2026-07-02, in sloop, fenced):** the avatar exists — the occupant of the
+   SEAT CELL (one 7px rig tile) steps out at a stop (F), walks the same collidable world, and
+   re-enters by walking back within reach of that seat cell; pinned by sloop's first `spec()`
+   (11 assertions). Remaining rungs: F1 surface-aware walking (`road_at()`), F2 enter a building
+   (`interiors`), F3 lift flank's brain as a library header → *fight*. Ladder + design decisions:
+   [`driving-world-program.md`](driving-world-program.md) → the player-fantasy scoreboard.
 2. **The world composer.** One seed-driven cart that wires the sandboxes via their named seams —
    `road_at()` (roadnet2) · `make_junction(legs,type)` (roadlab) · `gen_network(pattern,seed)`
    (streetlab) · lotfill atoms · interiors floor-plans · flank spawns. Phase 2 in
