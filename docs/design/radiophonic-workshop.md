@@ -93,6 +93,10 @@ exactly [`input-recording-looper.md`](input-recording-looper.md)'s notes-quantiz
 gestures-verbatim split. For the rack program this implies the lane format eventually wants **two
 lane kinds** — step lanes (tap cells) and gesture lanes (recorded, shown as a drawn curve) — and
 the Workshop box, whose lead voices are ALL gestural, is the cart that forces that decision.
+**Proof shipped 2026-07-02: the `otafamily` cart** (four characterized otamatones + the dog) runs
+loopstation's gesture-stream scheme as its whole play loop — arm a member, its ribbon *performance*
+records and replays verbatim next to delia-style step rows. Gesture lanes and step lanes now
+coexist in one shipped cart; the rack lane format can copy it.
 
 ### The shape fork (open — maker deciding, after the pieces exist)
 
