@@ -6,6 +6,10 @@ V1 landed as designed: Song→Chain→Phrase, single-track phrase view, mnemonic
 arrangement walk (chain rollover, transpose re-pitch, HOP odd meters). One build-time deviation:
 the headless spec build freezes the beat clock, so the sequencer advance lives in a `seq_tick()`
 the spec drives by hand. Still open from "Cut from v1": tables, live mode, the song-codec blob.
+v1.1 (same day, maker ask): the **random-song generator** — `R` rolls a song, `B` hops genre
+(CHIP / HOUSE / HIPHOP / DNB, each its own drum grammar / bass style / lead density / tempo band).
+Learning-by-seeing: every roll rewrites the SAME phrase/chain slots the demo uses, so the views
+stay comparable across rolls and the genre differences read directly off the grid.
 
 ## Why — the gap on the shelf
 
