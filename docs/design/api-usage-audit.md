@@ -66,13 +66,11 @@ portrait of what the repo became: half fantasy console, half instrument workshop
 - **The live-voice sound tier boomed**: `note_on` 96 · `note_off` 61 · `note_pitch` 51 ·
   `note_vol` 29 (were 8–14). The deep modulation tier stays thin — `note_res` 9 ·
   `note_filter` 5 · `note_env` 2 — used, barely, same as last audit.
-- **Four-places gaps: exactly three, all deliberate-looking** — `de_data_path`,
-  `de_dropped_file`, `de_open_path` are missing from both `studioDocs.js` and `shell.js`.
-  These are the EXPERIMENTAL runtime-data hooks
-  ([external-data-carts.md](external-data-carts.md) explicitly calls them "not committed
-  API"), so undocumented-pending-commitment is defensible — but decide it, don't drift it:
-  either document them or mark the experiment's exit criteria. (`paused`'s gap from last
-  audit was fixed.)
+- **Four-places gaps: zero.** The audit's one finding — `de_data_path`/`de_dropped_file`/
+  `de_open_path` undocumented — was the flag that triggered
+  [ADR-0025](../decisions/0025-external-data-hooks-are-committed-api.md): the experimental
+  data hooks were promoted to committed API the same day (sloop/roadview/citydrive had
+  already made them load-bearing). (`paused`'s gap from the last audit was also fixed.)
 
 ## Tooling note: clangd/LSP works on this repo
 

@@ -467,6 +467,11 @@ export const studioDocs = {
   S:          { sig: '#define S ((STATE *)de_state(sizeof(STATE)))', doc: 'Your cart\'s state — a pointer to the `STATE { ... }` block you declared. Use S->field to read or write it; the values survive a live reload, so you can tweak code while the game runs without losing where you were.\nS->score += 10;\nGotcha: if you reorder/retype fields in STATE, relaunch (close + run) so the block is freshly zeroed. Sugar over `de_state()`.' },
   GameState:  { sig: 'struct GameState  // your STATE block', doc: 'The struct type behind `STATE { ... }` and `S`. You normally never write `GameState` directly — you declare it as STATE { ... } and use it through S->field. See STATE, S and de_state.\nSTATE { int x; int score; };' },
 
+  // ── external data ── (a cart that loads a world from a file — decision 0025)
+  de_data_path:    { sig: 'const char *de_data_path(void)', doc: 'The path handed to the cart at launch with --data <file> (or the $DE_DATA env var), else NULL. A data-driven cart reads its world from it at startup — sloop and roadview load real OpenStreetMap cities this way (swap the file, drive a different city).\nconst char *p = de_data_path();\nif (p) load_world(p);' },
+  de_dropped_file: { sig: 'const char *de_dropped_file(void)', doc: 'The path of a file dragged onto the game window THIS frame, else NULL. Poll it in update() to let the player swap data at runtime — drop a new city file on sloop and you drive that city.\nconst char *drop = de_dropped_file();\nif (drop) load_world(drop);' },
+  de_open_path:    { sig: 'void de_open_path(const char *path)', doc: 'Reveal a file or folder in the OS file manager (Finder / Explorer) — show the player where the cart\'s data files live so they can find or drop in new ones.\nif (keyp(\'O\')) de_open_path("../data");' },
+
   // ── math ── (angles in degrees: 0 = right, 90 = down)
   abs:        { sig: 'int abs(int v)',                                                 doc: 'Absolute value — drops the minus sign. abs(-5) is 5.' },
   min:        { sig: 'int min(int a, int b)',                                          doc: 'The smaller of two numbers.' },

@@ -1,8 +1,13 @@
-# External data → carts (EXPERIMENT)
+# External data → carts
 
-**Status:** experimental, not committed API. The question being probed: can a cart load a
-data blob at **runtime** instead of baking the data into its C source? If this proves its
-worth it graduates; if not, the pieces below delete cleanly (they touch almost nothing).
+**Status:** GRADUATED (2026-07-02) — the runtime hooks (`de_data_path`/`de_dropped_file`/
+`de_open_path`) are **committed API** per [ADR-0025](../decisions/0025-external-data-hooks-are-committed-api.md)
+(documented in all four places; the commitment is paths-not-formats — what's inside the file
+stays cart-land policy). The question this experiment probed — can a cart load a data blob at
+**runtime** instead of baking it into its C source? — was answered by its consumers: roadview,
+citydrive and sloop all drive real OSM cities through these hooks. This doc remains the design
+story: the formats (`.rvb`), the pipeline (`osm-roads.js`), and what each consumer does with
+the data.
 
 ## Session handoff — pick up here
 
