@@ -383,6 +383,7 @@ void scope_read(float *dst, int n);        // OSCILLOSCOPE: copy the latest n mo
 #define FILTER_STEINER_HP 7 // Steiner-Parker highpass — the aggressive filter's HP response
 #define FILTER_STEINER_BP 8 // Steiner-Parker bandpass — the aggressive filter's BP response
 #define FILTER_STEINER_NF 9 // Steiner-Parker notch — the aggressive filter's notch response
+#define FILTER_DIODE 10  // the TB-303 diode-ladder lowpass — THE acid filter: ~18dB/oct (between FILTER_LOW's 12 and the Moog ladder's 24), drains bass as resonance climbs, and the resonance saturates INSIDE the loop (the diodes) so it growls instead of ringing clean. Self-oscillates at the top. Lowpass-only
 void instrument_filter(int slot, int mode, int cutoff_hz, int resonance);  // mode FILTER_*, cutoff in Hz (e.g. 800), resonance 0..15 (high = whistly peak). sweep cutoff with LFO_CUTOFF
 
 // modulation envelopes per instrument — a one-shot AD contour (the envelope twin of the LFO).

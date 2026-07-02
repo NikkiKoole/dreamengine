@@ -47,6 +47,7 @@ This page is only the routing layer.
 |---|---|
 | `runtime/sound.h` (queues/requests) | `play.js soundcheck script /dev/null --headless --frames 900 \| grep "\[sound\]"` — silence = PASS |
 | a **pitched** engine | **`tune-check.js --quiet`** (SINE = 0¢ control) |
+| a **filter** (topology/resonance/dispatch) | **`filter-spec.js`** — slope + res peak + bass drain vs the blessed table in audio-notes §25 |
 | **levels / effects** | **`level-check.js`**, **`fx-check.js`**; feedback/voice-lifetime → **`soak-check.js`**; DC offset → **`dc-check.js`** |
 | engine math / optimizer | **`web-audio-check.js`** (wasm-vs-native parity) |
 | want a WAV A/B vs navkit | **`wav-analyze.js`** + **`wav-correlate/-envelope/-modrate.js`**, **`harmonic-spec.js`** |

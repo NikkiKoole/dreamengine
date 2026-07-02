@@ -2091,3 +2091,51 @@ played yet). The `varispeed` cart calls `varispeed(1.0)` on frame 0, so it's cov
   earlier "crest-0 dB / wrong pitch" was the test note not sustaining, not an engine fault.
 - Gates re-run after the edit: compile-gate clean, `tune-check` / `level-check` / `fx-check` all
   pass with zero deltas (byte-identical at rest — varispeed isn't engaged in those sweeps).
+
+## 25. TB-303 diode-ladder filter — `FILTER_DIODE` (2026-07-02)
+
+Fourth filter character, and the first one built to a **measured** target: the acid filter
+for the rebirth-classic rack ([`rebirth-classic.md`](rebirth-classic.md) §3). The §17 audit
+already named the gap — the 303 squelch is "the filter driven into saturation, not the
+filter" — and a fidelity pass with the new **`tools/filter-spec.js`** (see below) made it
+quantitative. The three 303 signatures, and which engine filter had them (saw @ A1, response
+vs `FILTER_OFF`):
+
+| signature (303 target)        | `FILTER_LOW`   | `FILTER_LADDER` | `FILTER_STEINER` | **`FILTER_DIODE`** |
+|-------------------------------|----------------|-----------------|------------------|--------------------|
+| slope ≈ 18 dB/oct             | −10            | −21..−23        | −17..−20         | **−16..−17.5**     |
+| bass drain as res climbs      | none           | −6→−14 dB       | ~none            | **−4→−8 dB**       |
+| saturation inside the loop    | none           | none (linear)   | tanh             | **tanh**           |
+| res peak @fc=600, res 8/12    | +1.4 / +7.1    | −1.3 / +4.4     | −0.4 / +4.6      | **+3.3 / +10.6**   |
+
+No pre-existing filter had all three; the diode has all three, and its resonance *wakes up
+earlier* (the ring lives at usable knob positions, not just near self-osc).
+
+Implementation (`sound_diode`, beside `sound_ladder`; constant `FILTER_DIODE 10`): the ZDF
+transistor-ladder skeleton (reuses `lad_s[]`, no new voice fields) with three circuit
+differences — the output taps **stage 3** (≈18 dB/oct, the 303's measured rolloff; the Moog
+taps 4), the **feedback path saturates** (`tanh(B·1.5)/1.5` — unity small-signal so low-level
+response stays honest, clips the scream: the diodes), and a gentle resonance makeup
+(`y3·(1+0.2k)`) so the squelch stays usable while the passband drains (the drain itself is
+topology and preserved). Feedback still off stage 4 → ladder bass-drain + self-oscillation
+kept; `k` runs to 4.3 (the tanh bounds the loop — self-osc settles where loop gain hits 1).
+Honest scope: like the Steiner it's a *flavour* with a measured target, not a component-level
+303 model (no oversampling; navkit's oversampled ladder remains the donor if aliasing ever
+shows at the top of the range). Four-place wired; purely additive dispatch arm (mode 10 checked
+before the `>= FILTER_STEINER` range), every existing voice byte-identical.
+
+Musical A/B (tb303 cart, ACID 1 pattern, default knobs, `play.js --wav`): SVF −20.5 dB RMS /
+crest 7.2 (flat, polite) · transistor ladder −26.2 / 12.0 (drained, starved) · **diode −23.7 /
+10.1** (drained but compensated — punchy). `tools/carts/tb303.c` now ships on `FILTER_DIODE`
+via its `ACID_FILTER` define (one line back to `FILTER_LOW` to compare by ear).
+
+**`tools/filter-spec.js`** is the reusable half: renders a generated probe cart (saw @ A1
+through each filter config per 1s segment, tune-check RECIPE pattern), Goertzel-measures every
+harmonic against a `FILTER_OFF` reference, and reports slope (fit 2–4×fc), resonance peak, and
+fundamental drain per res step. Deterministic; cite its table as acceptance evidence for any
+sound.h filter change (`--modes low,ladder,steiner,diode`, `--json`, `--keep`).
+
+Environmental gotcha discovered mid-spike, for the record: the play.js harness (any Raylib
+cart, even `--headless`) **segfaults in `rlglInit`/`InitWindow` when the Mac's display is
+asleep** — a 3 A.M. render suddenly crashing signal-11 with an empty trace is the screen lock,
+not your engine edit. Fix: `caffeinate -du node tools/play.js …` (wakes + holds the display).

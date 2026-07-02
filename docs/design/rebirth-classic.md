@@ -3,7 +3,9 @@
 STATUS: READY TO BUILD — designed (2026-07-02) from a four-thread research pass over the shipped
 machine carts, the effects surface, the generator precedents and the filter engine. Proposes taking
 the pilot slot in the [`tinyjam-racks.md`](tinyjam-racks.md) build order (rationale in §Why this
-pilot). Nothing built yet; the filter fidelity spike (§3) is the first increment.
+pilot). **The filter fidelity spike (§3) SHIPPED same day**: `FILTER_DIODE` in the engine,
+`tools/filter-spec.js` as its oracle, tb303.c upgraded (audio-notes §25 has the measured table).
+The rack cart itself (§5 steps 2+) is not started.
 
 > The rebirth-classic row of the [`tinyjam-racks.md`](tinyjam-racks.md) rack table, promoted to its
 > own design. Maker direction captured here (2026-07-02): **build the cart first, self-contained —
@@ -155,25 +157,27 @@ What the engine has today:
   seeding, Q/frequency compensation. A proper 303 filter is a **port + diode-topology adaptation**,
   not greenfield DSP. (navkit has no diode ladder either — its model is the Juno IR3109 lineage.)
 
-**The fidelity ladder, cheapest first, each rung gated by measurement + ears:**
+**The fidelity ladder — RESOLVED (2026-07-02, the spike ran same day as the design):**
 
-1. **A/B as-is**: render one committed acid pattern (deterministic `.script`) through `FILTER_LOW`
-   / `FILTER_LADDER` / `FILTER_STEINER` — one-line swaps in the voice recipe. `play.js --wav` →
-   `harmonic-spec.js` (resonance peak, bass-harmonic thinning) + `wav-envelope.js` (sweep contour)
-   + listening.
-2. **If none squelches** (expected: the ladder gets close, but linear feedback won't growl):
-   build **`FILTER_DIODE`** — ZDF diode ladder, ~18dB/oct character, saturation *inside* the loop,
-   porting navkit's oversampling + resonance calibration onto the existing `sound_ladder` skeleton.
-   **Pre-approved by the maker** (2026-07-02). Ships under the four-place API rule (+ audio-notes
-   §17-ledger entry) with the sound.h gates (`soundcheck` silence run, `tune-check --quiet`), and
-   before/after renders committed as acceptance evidence.
-3. Either way, **the winning filter upgrades the shipped `tb303.c`** — a fidelity gift independent
-   of the rack.
+1. **A/B ran** via the new **`tools/filter-spec.js`** (fixed-pitch saw probe, Goertzel per
+   harmonic vs a `FILTER_OFF` reference — the tool this section asked for, now shipped). Verdict:
+   **no pre-existing filter had all three signatures** — the SVF has none (−10 dB/oct, no drain,
+   linear), the transistor ladder has drain but is too steep (−22) and linear, the Steiner has the
+   slope + loop-tanh but no drain.
+2. **`FILTER_DIODE` was built** (`sound_diode` in sound.h, mode 10): ZDF ladder skeleton with a
+   stage-3 tap (−16..−17.5 dB/oct measured), tanh in the feedback path, and gentle res makeup.
+   Measured: bass drain −4→−8 dB across the res sweep, resonance peak +3.3 dB at res 8 / +10.6 at
+   res 12 (rings at usable knob positions where all the others stay flat until ~15). Full table +
+   implementation notes: [`audio-notes.md`](audio-notes.md) §25. Deliberately NOT ported yet:
+   navkit's 2× oversampling (single-rate is clean at these ranges; the donor is on file if the top
+   of the range ever aliases).
+3. **`tb303.c` upgraded**: ships on `FILTER_DIODE` via its `ACID_FILTER` define (one line back to
+   `FILTER_LOW` for an ear A/B). Musical renders (ACID 1 pattern): SVF −20.5 dB RMS / crest 7.2 ·
+   transistor ladder −26.2 / 12.0 (starved) · diode −23.7 / 10.1 (drained but punchy).
 
-Tooling gap worth closing in the same spike: no filter-sweep/frequency-response analyzer exists in
-`tools/`. A small **`filter-spec.js`** (fixed-pitch saw, stepped cutoff/res, reports slope at the
-knee + resonance peak + bass-thinning ratio) makes the verdict reproducible and re-blessable, in
-the house style of the other audio gates.
+`filter-spec.js` is now the standing oracle for any sound.h filter change
+([`checks-and-oracles.md`](../guides/checks-and-oracles.md) row added); its §25 table is the
+blessed baseline the rack builds on.
 
 Same bar applies down the rack, in order of audibility: the 303 filter (above) ≫ 909 kick attack
 click ≫ hat FM stand-ins (already the honest documented compromise for 6-bit ROM samples) ≫ the
@@ -188,8 +192,8 @@ day one — original faceplate name, RB-338 in `lineage`/`homage` metadata where
 
 ## 5. Build order
 
-1. **Filter fidelity spike** (§3): the A/B, `filter-spec.js`, `FILTER_DIODE` if the verdict demands
-   it, tb303.c upgraded. Independent, ships value even if the rack stalls.
+1. ~~**Filter fidelity spike** (§3)~~ **SHIPPED 2026-07-02**: `filter-spec.js` + `FILTER_DIODE` +
+   tb303.c upgraded (audio-notes §25).
 2. **The cart, playable**: 320×240 accordion shell; Machine303 ×2 + DrumPanel ×2 with curated
    slots; shared transport; banks A–D + chain row; `save_bytes` persistence. Hand-authored default
    patterns (one per bank) so it's an instrument before it's a generator.

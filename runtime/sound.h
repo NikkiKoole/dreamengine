@@ -4359,6 +4359,44 @@ static inline float sound_steiner(Voice *v, float in, float cutoff_hz) {
     }
 }
 
+// TB-303-style DIODE-ladder lowpass — one sample (the acid filter; rebirth-classic §3 /
+// audio-notes §17: the 303 squelch is "the filter driven into saturation, not the filter").
+// Same ZDF skeleton as the transistor ladder (reuses lad_s[]), three circuit differences
+// that make it the 303 and not the Moog:
+//   · the output taps STAGE 3 — ≈18dB/oct, the 303's measured rolloff (Moog taps 4 = 24dB)
+//   · the feedback path SATURATES (the diodes) where the Moog's buffered stages stay
+//     linear — resonance + envelope growl into the clip instead of ringing clean
+//   · a touch of resonance makeup keeps the squelch usable while the passband drains
+//     (the drain itself — the 303 thinning as it screams — is topology, and preserved)
+// Feedback still comes off stage 4, so bass drain + self-oscillation keep ladder behavior.
+// tanh bounds the loop (k may exceed 4 safely; self-osc settles where loop gain hits 1).
+// Lowpass-only, like the hardware.
+static inline float sound_diode(Voice *v, float in, float cutoff_hz) {
+    float g  = tanf(3.14159265f * cutoff_hz / (float)SOUND_SAMPLE_RATE);
+    float G  = g / (1.0f + g);                          // one-pole TPT integrator gain
+    float res = (2.0f - v->flt_q) * (1.0f / 0.13f);     // recover res 0..15 from the damping
+    if (res < 0.0f) res = 0.0f; else if (res > 15.0f) res = 15.0f;
+    float k  = res * (4.3f / 15.0f);                    // a hair past 4 — the tanh bounds it
+
+    float oG = 1.0f - G;
+    float S1 = oG * v->lad_s[0], S2 = oG * v->lad_s[1], S3 = oG * v->lad_s[2], S4 = oG * v->lad_s[3];
+    float G2 = G * G, G3 = G2 * G, G4 = G3 * G;
+    float B  = G3 * S1 + G2 * S2 + G * S3 + S4;         // state part of the stage-4 feedback
+    float fb = tanhf(B * 1.5f) * (1.0f / 1.5f);         // the diodes: unity small-signal, clips the scream
+    float u  = (in - k * fb) / (1.0f + k * G4);         // linear resolve on the u-part (approx, bounded)
+
+    float y1 = G * u  + S1; v->lad_s[0] = 2.0f * y1 - v->lad_s[0];
+    float y2 = G * y1 + S2; v->lad_s[1] = 2.0f * y2 - v->lad_s[1];
+    float y3 = G * y2 + S3; v->lad_s[2] = 2.0f * y3 - v->lad_s[2];
+    float y4 = G * y3 + S4; v->lad_s[3] = 2.0f * y4 - v->lad_s[3];
+
+    for (int i = 0; i < 4; i++) {                        // belt-and-braces, like the ladder clamp
+        if      (v->lad_s[i] >  8.0f) v->lad_s[i] =  8.0f;
+        else if (v->lad_s[i] < -8.0f) v->lad_s[i] = -8.0f;
+    }
+    return y3 * (1.0f + 0.20f * k);                      // stage-3 tap + gentle res makeup
+}
+
 // Drop any held-note ownership a voice carries (it's about to be reused or has finished),
 // so the handle that owned it goes stale and its setters start no-op'ing.
 static void sound_unclaim_held(int vi) {
@@ -5531,6 +5569,7 @@ static void sound_callback(void *buffer_data, unsigned int frames) {
                 if (cutoff < 20.0f) cutoff = 20.0f;
                 if (cutoff > SOUND_SAMPLE_RATE * 0.45f) cutoff = SOUND_SAMPLE_RATE * 0.45f;
                 s = v->flt_mode == FILTER_LADDER       ? sound_ladder(v, s, cutoff)
+                  : v->flt_mode == FILTER_DIODE        ? sound_diode(v, s, cutoff)
                   : v->flt_mode >= FILTER_STEINER      ? sound_steiner(v, s, cutoff)   // 6..9 = Steiner LP/HP/BP/NF
                   : sound_svf(v, s, cutoff);
             }

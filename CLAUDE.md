@@ -149,6 +149,9 @@ tools/     repo-root CLI tools (plain `node`, CommonJS). One line each — read 
              wav-correlate.js / wav-envelope.js / wav-modrate.js / harmonic-spec.js   WAV A/B
                              analysis (sample correlation / amp+brightness envelope / LFO rate+depth /
                              harmonic series) — for A/B-ing a render against navkit
+             filter-spec.js  measure a per-voice FILTER's actual response (slope dB/oct, resonance peak,
+                             bass drain per res step) via a generated probe cart — acceptance evidence for
+                             any sound.h filter change; born from the 303-fidelity spike (audio-notes §25)
              sprite-draw.js  reusable 2D pixel-canvas API for programmatic .cart.js sprites
              sprite-preview.js  render a .cart.js's sprites to one labelled PNG (no compile/run) — the tight loop for code-drawn sprites
              pixelsnap.js    clean up "AI pixel art": snap soft/off-grid pixels onto a real grid + posterize
