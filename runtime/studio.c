@@ -242,6 +242,7 @@ static bool            poly_fill_fast = true;        // false → legacy per-pix
 static bool            disc_fill_fast = true;        // false → legacy per-pixel circle/oval fill (A/B; env DE_DISC_FILL=legacy)
 static bool            clamp_cache_on = true;        // false → recompute the fill scan-box every call (A/B; env DE_CLAMP_CACHE=off)
 static bool            blit_fast_on   = true;        // false → legacy per-pixel sw_blit (A/B; env DE_BLIT_FAST=off). Fast path: direct uint32 row-copy for the axis-aligned, unscaled, unflipped, zoom==1, no-pal blit
+static bool            tritex_fast_on = true;        // false → legacy sw_tritex (A/B; env DE_TRITEX_FAST=off). Fast path: bbox clamped to the visible region + hoisted row-write plot (zoom==1 canvas)
 // NB: a branchless masked-blend inner loop was tried here (write EVERY pixel, blend by an alpha
 // mask, no per-pixel branch → auto-vectorizable) and MEASURED 1.5× SLOWER on bunnymark (37 vs 24
 // ms/frame, bit-identical). It's a TRADE, not a dead end — which side wins depends on sprite
@@ -749,7 +750,13 @@ static void sw_blit(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int 
 // barycentric u,v sampled from spritesheet_img → sw_pset. Adjacent tris tile gap-free (top-left).
 static float sw_edge(float ax,float ay,float bx,float by,float px,float py){ return (bx-ax)*(py-ay)-(by-ay)*(px-ax); }
 static int   sw_topleft(float ax,float ay,float bx,float by){ float dx=bx-ax,dy=by-ay; return (dy<0.f)||(dy==0.f&&dx<0.f); }
-static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,float u1,float v1, float x2,float y2,float u2,float v2){
+// ── A/B SWITCH (temporary, 2026-07) ─────────────────────────────────────────
+// The original sw_tritex, kept verbatim while the clamped/hoisted path below soaks
+// (DE_TRITEX_FAST=off routes here). Its flaw: the scan box is the RAW vertex bbox —
+// a face projected near the 3D camera lands coordinates in the thousands, so one
+// triangle scans millions of never-plotted pixels (infiniminer: 1.2s/frame).
+// TODO: once the fast path is trusted, delete this + the flag.
+static void sw_tritex_legacy(float x0,float y0,float u0,float v0, float x1,float y1,float u1,float v1, float x2,float y2,float u2,float v2){
     if (!spritesheet_img.data) return;
     float area = sw_edge(x0,y0,x1,y1,x2,y2);
     if (area == 0.f) return;
@@ -769,6 +776,71 @@ static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,flo
                 // plot via pset_rgb (arbitrary sampled RGB, no palette index) → backend-agnostic:
                 // on-canvas → sw_pset → cbuf; off-canvas (DE_CPU_RASTER) → DrawPixel. tritex uses the
                 // keyed sheet; no pal swap (matches GPU).
+                if (cc.a >= 128 && !sw_keyed(cc)) pset_rgb(px, py, (cc.r << 16) | (cc.g << 8) | cc.b);
+            }
+        }
+    }
+}
+// The optimized path. Coverage + texel DECISIONS are the legacy float math verbatim
+// (same sw_edge order, same w/area divisions), so every plotted pixel is byte-identical.
+// Two changes, both to what's ITERATED / how an already-decided pixel is WRITTEN:
+//   1. the scan box is intersected with the visible region (poly_clamp_scan — the same
+//      camera-aware clamp every software fill uses), so a huge near-projected triangle
+//      only scans pixels that could land on screen;
+//   2. on the software canvas at zoom==1 the plot skips the per-pixel pset_rgb →
+//      sw_pset → sw_w2s → sw_plot1 chain: camera offset + clip are hoisted into the
+//      loop bounds once, and the write is a direct cbuf row store (sw_blit's pattern).
+//      zoom!=1 (block footprint) and off-canvas DE_CPU_RASTER keep the pset_rgb plot.
+static void sw_tritex(float x0,float y0,float u0,float v0, float x1,float y1,float u1,float v1, float x2,float y2,float u2,float v2){
+    if (!tritex_fast_on) { sw_tritex_legacy(x0,y0,u0,v0, x1,y1,u1,v1, x2,y2,u2,v2); return; }
+    if (!spritesheet_img.data) return;
+    float area = sw_edge(x0,y0,x1,y1,x2,y2);
+    if (area == 0.f) return;
+    if (area < 0.f) { float t; t=x1;x1=x2;x2=t; t=y1;y1=y2;y2=t; t=u1;u1=u2;u2=t; t=v1;v1=v2;v2=t; area=-area; }
+    int minx=(int)floorf(fminf(x0,fminf(x1,x2))), maxx=(int)ceilf(fmaxf(x0,fmaxf(x1,x2)));
+    int miny=(int)floorf(fminf(y0,fminf(y1,y2))), maxy=(int)ceilf(fmaxf(y0,fmaxf(y1,y2)));
+    poly_clamp_scan(&minx, &miny, &maxx, &maxy);        // skip never-plotted off-screen cells
+    if (maxx < minx || maxy < miny) return;
+    int tl0=sw_topleft(x1,y1,x2,y2), tl1=sw_topleft(x2,y2,x0,y0), tl2=sw_topleft(x0,y0,x1,y1);
+    if (sw_canvas_active && cam.zoom == 1.0f) {
+        // hoist sw_pset's per-pixel work: sw_w2s at zoom==1 is a constant integer
+        // offset, and sw_plot1's clip+bounds tests are monotonic in px/py — fold both
+        // into the scan range, then the inner loop writes rows directly.
+        int camdx = (int)(cam.target.x - cam.offset.x), camdy = (int)(cam.target.y - cam.offset.y);
+        int sxlo = 0, sxhi = SCREEN_W, sylo = 0, syhi = SCREEN_H;          // half-open screen range
+        if (clip_active) { if (clip_cx > sxlo) sxlo = clip_cx; if (clip_cy > sylo) sylo = clip_cy;
+                           if (clip_cx + clip_cw < sxhi) sxhi = clip_cx + clip_cw;
+                           if (clip_cy + clip_ch < syhi) syhi = clip_cy + clip_ch; }
+        if (minx < sxlo + camdx) minx = sxlo + camdx;  if (maxx > sxhi - 1 + camdx) maxx = sxhi - 1 + camdx;
+        if (miny < sylo + camdy) miny = sylo + camdy;  if (maxy > syhi - 1 + camdy) maxy = syhi - 1 + camdy;
+        for (int py=miny; py<=maxy; py++) {
+            uint32_t *row = &sw_dst[(SCREEN_H - 1 - (py - camdy)) * SCREEN_W];
+            float fy = py + 0.5f;
+            for (int px=minx; px<=maxx; px++) {
+                float fx = px + 0.5f;
+                float w0=sw_edge(x1,y1,x2,y2,fx,fy), w1=sw_edge(x2,y2,x0,y0,fx,fy), w2=sw_edge(x0,y0,x1,y1,fx,fy);
+                int in0=(w0>0.f)||(w0==0.f&&tl0), in1=(w1>0.f)||(w1==0.f&&tl1), in2=(w2>0.f)||(w2==0.f&&tl2);
+                if (!(in0 && in1 && in2)) continue;
+                float l0=w0/area, l1=w1/area, l2=w2/area;
+                int iu=(int)(l0*u0+l1*u1+l2*u2), iv=(int)(l0*v0+l1*v1+l2*v2);
+                if ((unsigned)iu<(unsigned)spritesheet_img.width && (unsigned)iv<(unsigned)spritesheet_img.height) {
+                    DeColor cc = img_texel(&spritesheet_img, iu, iv);
+                    if (cc.a >= 128 && !sw_keyed(cc))
+                        row[px - camdx] = sw_pack((DeColor){ cc.r, cc.g, cc.b, 255 });   // = sw_plot1's store
+                }
+            }
+        }
+        return;
+    }
+    for (int py=miny; py<=maxy; py++) for (int px=minx; px<=maxx; px++) {   // zoomed canvas / DE_CPU_RASTER
+        float fx=px+0.5f, fy=py+0.5f;
+        float w0=sw_edge(x1,y1,x2,y2,fx,fy), w1=sw_edge(x2,y2,x0,y0,fx,fy), w2=sw_edge(x0,y0,x1,y1,fx,fy);
+        int in0=(w0>0.f)||(w0==0.f&&tl0), in1=(w1>0.f)||(w1==0.f&&tl1), in2=(w2>0.f)||(w2==0.f&&tl2);
+        if (in0 && in1 && in2) {
+            float l0=w0/area, l1=w1/area, l2=w2/area;
+            int iu=(int)(l0*u0+l1*u1+l2*u2), iv=(int)(l0*v0+l1*v1+l2*v2);
+            if ((unsigned)iu<(unsigned)spritesheet_img.width && (unsigned)iv<(unsigned)spritesheet_img.height) {
+                DeColor cc = img_texel(&spritesheet_img, iu, iv);
                 if (cc.a >= 128 && !sw_keyed(cc)) pset_rgb(px, py, (cc.r << 16) | (cc.g << 8) | cc.b);
             }
         }
@@ -2410,6 +2482,8 @@ int main(int argc, char **argv) {
       if (bp && strcmp(bp, "on") == 0) pset_batch = true; }            // DE_BATCH_PSET=on → coalesce psets into one draw call
     { const char *bf = getenv("DE_BLIT_FAST");          // A/B the software-canvas sprite-blit fast path:
       if (bf && strcmp(bf, "off") == 0) blit_fast_on = false; }        // DE_BLIT_FAST=off → legacy per-pixel sw_blit
+    { const char *tf = getenv("DE_TRITEX_FAST");        // A/B the software textured-triangle fast path:
+      if (tf && strcmp(tf, "off") == 0) tritex_fast_on = false; }      // DE_TRITEX_FAST=off → legacy unclamped sw_tritex
     { const char *sc = getenv("DE_SOFTWARE_CANVAS");    // A/B the software canvas (Phase 0 probe):
       if (sc && strcmp(sc, "on") == 0) { sw_canvas_enabled = true; sw_canvas_active = true; } }  // DE_SOFTWARE_CANVAS=on
     { const char *cl = getenv("DE_CPU_RASTER");         // CPU rasterizers off-canvas too (A/B hygiene, see decl):
