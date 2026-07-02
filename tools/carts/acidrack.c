@@ -23,7 +23,7 @@
   "description": {
     "summary": "Two 303s, the full 909, the curated 808 and per-device FX in one cart — and a SONG CODE: 8 hex characters that generate a whole arranged acid track (banks A-D + the chain), ready to edit while it plays, then export as WAV.",
     "detail": "The RB-338 homage, increment 2: two full TB-303 voices (the engine's FILTER_DIODE diode-ladder squelch, authentic non-retriggering slide, accent into the filter env, live CUT/RES/DRV knobs per machine) + the COMPLETE tr909 kit (11 voices — analog kick/snare/toms/rim/clap, FM-clang metal, the stroke family: right-click a cell for flam/drag/ratchet, the METAL-FILTER XY pad riding all five metal highpasses, TOTAL ACCENT row) + the curated tr808 (9 voices: boom kick, snare, 2 toms, clap, maracas, cowbell, hats — congas/clave/rim/cymbal cut per the rack slot budget), all clocked off one transport with the 909's period-correct even-16th SHUFFLE (one master knob + Z/X). Effects are PER-DEVICE like the real RB-338: every machine strip has an [fx] view (the header button swaps the grid for that machine's effects) with DIST (per-voice drive on that machine only — drums scream while the rest stays clean) and SEND (its level into THE one shared tempo-synced delay unit, per-device routing like the hardware; the 909's fx view also hosts the METAL pad and SHUFFLE). The MASTER strip keeps what genuinely needs a bus: the delay unit's TIME (snaps 1/16, 1/8, dotted-8th, 1/4) and FB, GLU (the glue compressor that tames the drop), and the PCF: a pattern-controlled filter whose 16-step level lane is drawn per BANK, so the arrangement itself rides the master lowpass — the demo's build bank is literally a drawn ramp that opens the filter over one bar. (True per-device PCF/comp waits on machine buses — effects-bus-architecture.md Increment G.) The rack is an ACCORDION: each machine is a slim strip showing its name, a live 16-tick mini pattern with the playhead, and a MUTE — tap a strip to expand its full editor (piano roll + flag rows + knobs for a 303, trigger grid for the drums). Sound never depends on what's open. Patterns live in four BANKS (A-D, the transport buttons); the SONG row at the bottom chains up to 64 bars of banks into a real track — tap a cell to cycle A→B→C→D→empty. Everything autosaves.",
-    "controls": "SPACE run/stop · tap a strip header to expand · A-D buttons pick the edit bank (also LEFT/RIGHT) · SONG button toggles chain playback · tap SONG-row cells to write the arrangement · UP/DOWN tempo · Z/X shuffle · roll: tap/drag paints notes, tap a note to erase · OCT/ACC/SLD rows toggle per step · drums: tap cells, right-click a 909 cell for flam/drag/ratchet, AC row = accent, drag the METAL pad for hat tone · MASTER strip: GEN new song code (also G), tap code digits to nudge, [ ] history, WAV = export the arrangement · [fx] button on a machine strip: its DIST + delay SEND + per-voice TUNE/DEC/CHAR mini-knobs (drag up=coarse right=fine, rclick=reset; 909: also METAL pad + SHUF) · MASTER strip: delay TIME/FB, GLU, PCF/RES + drag the lane to draw the filter pattern · CPY/CLR/RND act on WHAT'S OPEN: a machine strip = just its lane of the edit bank, MASTER = the whole bank (CPY arms — tap the target bank to paste)"
+    "controls": "SPACE run/stop · tap a strip header to expand · A-D buttons pick the edit bank (also LEFT/RIGHT) · SONG button toggles chain playback · tap SONG-row cells to write the arrangement · UP/DOWN tempo · Z/X shuffle · roll: tap/drag paints notes, tap a note to erase · OCT/ACC/SLD rows toggle per step · drums: tap cells, right-click a 909 cell for flam/drag/ratchet, AC row = accent, drag the METAL pad for hat tone · MASTER strip: GEN new song code (also G), tap code digits to nudge, [ ] history, WAV = export the arrangement · drum grids: per-voice TUNE/DEC/CHAR mini-knobs beside the rows (drag up=coarse right=fine, rclick=reset) · [fx] button on a machine strip: its DIST + delay SEND (909: also METAL pad + SHUF) · MASTER strip: delay TIME/FB, GLU, PCF/RES + drag the lane to draw the filter pattern · CPY/CLR/RND act on WHAT'S OPEN: a machine strip = just its lane of the edit bank, MASTER = the whole bank (CPY arms — tap the target bank to paste)"
   }
 }
 de:meta */
@@ -923,13 +923,13 @@ void update(void) {
             mark_dirty();
             continue;
         }
-        // start one: the matrix lives in the drum fx views (cols T/D/C)
-        if (tap && (expanded == STRIP_909 || expanded == STRIP_808) && fxview[expanded]) {
+        // start one: the columns sit beside the grid in the SEQ view
+        if (tap && (expanded == STRIP_909 || expanded == STRIP_808) && !fxview[expanded]) {
             int nv = expanded == STRIP_909 ? N909 : N808;
             int rh = expanded == STRIP_909 ? 9 : 10;
-            int y0 = strip_y(expanded) + HDR_H;
-            if (px >= 28 && px < 64 && py >= y0 + 10 && py < y0 + 10 + nv * rh) {
-                int v = (py - (y0 + 10)) / rh, k = (px - 28) / 12;
+            int gy = strip_y(expanded) + HDR_H + (expanded == STRIP_909 ? 4 : 6);
+            if (px >= 248 && px < 284 && py >= gy && py < gy + nv * rh) {
+                int v = (py - gy) / rh, k = (px - 248) / 12;
                 const char **k2 = expanded == STRIP_909 ? K2LAB9 : K2LAB8;
                 if (k != 2 || k2[v]) {
                     kdrag_id = id; kdrag_mach = expanded == STRIP_909 ? 9 : 8;
@@ -1033,13 +1033,13 @@ void update(void) {
     }
 
     // right-click on a matrix knob = reset to center (the shipped recipe)
-    if (mouse_pressed(MOUSE_RIGHT) && (expanded == STRIP_909 || expanded == STRIP_808) && fxview[expanded]) {
+    if (mouse_pressed(MOUSE_RIGHT) && (expanded == STRIP_909 || expanded == STRIP_808) && !fxview[expanded]) {
         int nv = expanded == STRIP_909 ? N909 : N808;
         int rh = expanded == STRIP_909 ? 9 : 10;
-        int y0 = strip_y(expanded) + HDR_H;
+        int gy = strip_y(expanded) + HDR_H + (expanded == STRIP_909 ? 4 : 6);
         int px = mouse_x(), py = mouse_y();
-        if (px >= 28 && px < 64 && py >= y0 + 10 && py < y0 + 10 + nv * rh) {
-            int v = (py - (y0 + 10)) / rh, k = (px - 28) / 12;
+        if (px >= 248 && px < 284 && py >= gy && py < gy + nv * rh) {
+            int v = (py - gy) / rh, k = (px - 248) / 12;
             float *kt = expanded == STRIP_909 ? kt9 : kt8;
             float *kd = expanded == STRIP_909 ? kd9 : kd8;
             float *kc = expanded == STRIP_909 ? kc9 : kc8;
@@ -1241,14 +1241,37 @@ static void draw_drum_grid(const char **names, int nv, unsigned short *rows,
     font(FONT_NORMAL);
 }
 
+// the per-voice TUNE/DEC/CHAR columns — row-aligned beside the grid, like
+// the source carts' panels (always visible while you sequence)
+static void draw_voice_knobs(int mach, const char **names, const char **k2lab, int nv,
+                             float *kt, float *kd, float *kc, int gy, int rh) {
+    for (int v = 0; v < nv; v++) {
+        int ry = gy + v * rh;
+        draw_miniknob(250, ry, kt[v], kt[v] == 0.5f ? CLR_LIGHT_GREY : CLR_YELLOW);
+        draw_miniknob(262, ry, kd[v], kd[v] == 0.5f ? CLR_LIGHT_GREY : CLR_YELLOW);
+        if (k2lab[v]) draw_miniknob(274, ry, kc[v], kc[v] == 0.5f ? CLR_LIGHT_GREY : CLR_ORANGE);
+    }
+    font(FONT_SMALL);
+    print("T", 252, gy + nv * rh + 2, CLR_DARK_GREY);
+    print("D", 264, gy + nv * rh + 2, CLR_DARK_GREY);
+    print("C", 276, gy + nv * rh + 2, CLR_DARK_GREY);
+    // the dragged knob names itself, floating on its own row
+    if (kdrag_id != -1 && kdrag_mach == mach) {
+        const char *lab = kdrag_k == 0 ? "TUNE" : kdrag_k == 1 ? "DEC" : k2lab[kdrag_v];
+        char buf[24];
+        snprintf(buf, sizeof buf, "%s %s %.2f", names[kdrag_v], lab ? lab : "", *kdrag_val());
+        int ry = gy + kdrag_v * rh;
+        rectfill(148, ry - 1, 98, 9, CLR_BLACK);
+        print(buf, 152, ry + 1, CLR_YELLOW);
+    }
+    font(FONT_NORMAL);
+}
+
 static void draw_909_panel(int y0) {
     Pattern *P = &bank[editBank];
     rectfill(2, y0, 316, PANEL_H - 2, CLR_BLACK);
     draw_drum_grid(NAME909, N909, P->d909, P->st909, P->acc909, flash909, 36, y0 + 4, 9);
-    font(FONT_SMALL);
-    print("rclick cell", 252, y0 + 86, CLR_DARK_GREY);
-    print("= strokes", 252, y0 + 94, CLR_DARK_GREY);
-    font(FONT_NORMAL);
+    draw_voice_knobs(9, NAME909, K2LAB9, N909, kt9, kd9, kc9, y0 + 4, 9);
 }
 
 // ── the per-machine FX views (the [fx] header button) — RB-338 style: ─────
@@ -1264,35 +1287,10 @@ static void draw_303_fx(int i, int y0) {
     print("delay TIME/FB live on the MASTER strip", 12, y0 + 60, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
-// the per-voice TUNE/DEC/CHAR matrix (columns at x=30/42/54, 8px rotaries)
-static void draw_voice_knobs(int mach, const char **names, const char **k2lab, int nv,
-                             float *kt, float *kd, float *kc, int y0, int rh) {
-    font(FONT_SMALL);
-    print("T", 32, y0 + 2, CLR_MEDIUM_GREY);
-    print("D", 44, y0 + 2, CLR_MEDIUM_GREY);
-    print("C", 56, y0 + 2, CLR_MEDIUM_GREY);
-    for (int v = 0; v < nv; v++) {
-        int ry = y0 + 10 + v * rh;
-        print(names[v], 8, ry + 1, CLR_MEDIUM_GREY);
-        draw_miniknob(30, ry, kt[v], kt[v] == 0.5f ? CLR_LIGHT_GREY : CLR_YELLOW);
-        draw_miniknob(42, ry, kd[v], kd[v] == 0.5f ? CLR_LIGHT_GREY : CLR_YELLOW);
-        if (k2lab[v]) draw_miniknob(54, ry, kc[v], kc[v] == 0.5f ? CLR_LIGHT_GREY : CLR_ORANGE);
-    }
-    // the dragged knob names itself (CHAR is per-voice: ATTK/SNPY/CLIK/TONE…)
-    if (kdrag_id != -1 && kdrag_mach == mach) {
-        const char *lab = kdrag_k == 0 ? "TUNE" : kdrag_k == 1 ? "DEC" : k2lab[kdrag_v];
-        char buf[24];
-        snprintf(buf, sizeof buf, "%s %s %.2f", names[kdrag_v], lab ? lab : "", *kdrag_val());
-        print(buf, 8, y0 + 10 + nv * rh + 2, CLR_YELLOW);
-    }
-    font(FONT_NORMAL);
-}
-
 static void draw_909_fx(int y0) {
     rectfill(2, y0, 316, PANEL_H - 2, CLR_BLACK);
-    draw_voice_knobs(9, NAME909, K2LAB9, N909, kt9, kd9, kc9, y0, 9);
-    if (ui_knob(&dist9, 110, y0 + 16, "DIST")) mark_dirty();
-    if (ui_knob(&send[2], 150, y0 + 16, "SEND")) mark_dirty();
+    if (ui_knob(&dist9, 26, y0 + 16, "DIST")) mark_dirty();
+    if (ui_knob(&send[2], 64, y0 + 16, "SEND")) mark_dirty();
     // the metal-filter XY pad (X = five metal highpass cutoffs, Y = resonance)
     int padx = 190, pady = y0 + 30;
     rectfill(padx, pady, 60, 40, CLR_DARKER_GREY);
@@ -1302,18 +1300,15 @@ static void draw_909_fx(int y0) {
     if (ui_slider(&swingf, 254, y0 + 44, 56, "SHUF")) { swing = 50 + (int)(swingf * 16.0f); mark_dirty(); }
     font(FONT_SMALL);
     print("METAL", padx + 18, pady + 42, CLR_MEDIUM_GREY);
-    print("drag knobs: up=coarse right=fine", 110, y0 + 92, CLR_DARK_GREY);
-    print("rclick knob = reset", 110, y0 + 100, CLR_DARK_GREY);
+    print("DIST rides every 909 voice; SEND feeds the delay", 12, y0 + 84, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
 static void draw_808_fx(int y0) {
     rectfill(2, y0, 316, PANEL_H - 2, CLR_BLACK);
-    draw_voice_knobs(8, NAME808, K2LAB8, N808, kt8, kd8, kc8, y0, 10);
-    if (ui_knob(&dist8, 110, y0 + 16, "DIST")) mark_dirty();
-    if (ui_knob(&send[3], 150, y0 + 16, "SEND")) mark_dirty();
+    if (ui_knob(&dist8, 26, y0 + 16, "DIST")) mark_dirty();
+    if (ui_knob(&send[3], 64, y0 + 16, "SEND")) mark_dirty();
     font(FONT_SMALL);
-    print("TUNE / DEC / CHAR per voice — the hardware's little knobs", 110, y0 + 60, CLR_DARK_GREY);
-    print("drag: up=coarse right=fine · rclick = reset", 110, y0 + 68, CLR_DARK_GREY);
+    print("DIST rides every 808 voice; SEND feeds the delay", 12, y0 + 84, CLR_DARK_GREY);
     font(FONT_NORMAL);
 }
 
@@ -1321,9 +1316,7 @@ static void draw_808_panel(int y0) {
     Pattern *P = &bank[editBank];
     rectfill(2, y0, 316, PANEL_H - 2, CLR_BLACK);
     draw_drum_grid(NAME808, N808, P->d808, NULL, P->acc808, flash808, 36, y0 + 6, 10);
-    font(FONT_SMALL);
-    print("the boom box", 254, y0 + 8, CLR_DARK_GREY);
-    font(FONT_NORMAL);
+    draw_voice_knobs(8, NAME808, K2LAB8, N808, kt8, kd8, kc8, y0 + 6, 10);
 }
 
 static void draw_master_panel(int y0) {
