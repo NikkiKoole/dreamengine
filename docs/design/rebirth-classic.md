@@ -213,8 +213,14 @@ day one — original faceplate name, RB-338 in `lineage`/`homage` metadata where
   But does the *generator* use both per song, or pick one per seed with the other muted?
 - **Shuffle scope** — one master shuffle knob (period-correct even-16ths), or per-machine like the
   standalone carts (the 808's offbeat-8th anachronism preserved)? Lean: one master knob.
-- **PCF routing** — ReBirth's PCF was per-device; ours is the master `filter()`. Master-only for
-  v1, or a second `filter_inst` instance for one assignable device bus?
+- **PCF routing → the MACHINE-BUS engine gap (recorded 2026-07-02, maker thinking on it).**
+  ReBirth's effects were per-DEVICE (assign buttons per machine); the rack's v2 FX gets
+  per-device dist + delay the engine-free way (per-voice `instrument_drive` + the shared echo
+  send with per-machine send knobs), but per-device **PCF and comp** genuinely need slots
+  grouped onto one bus — every voice's own filter is already taken by its machine recipe, and
+  `glue()` targets one bus. The engine sketch (an `instrument_bus(slot, group)` assignment) is
+  banked as **Increment G in [`effects-bus-architecture.md`](effects-bus-architecture.md)** —
+  it also unlocks per-lane fx for every future rack.
 - **303 panel compaction** — does the piano roll survive at ~128px height with touch targets, or
   does the expanded 303 need a reduced flag-row layout (OCT/ACC/SLD as cell states instead of
   separate rows)?

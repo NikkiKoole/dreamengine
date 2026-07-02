@@ -715,6 +715,26 @@ instrument's aux bus, one on master) — limited, not arbitrary serial placement
 
 ---
 
+## Increment G — MACHINE / GROUP buses: route N slots through ONE device bus (wanted 2026-07-02)
+
+The first real customer hit this wall: **acidrack** (the RB-338 rack,
+[`rebirth-classic.md`](rebirth-classic.md)) wants ReBirth's per-DEVICE effects — PCF filter on
+just the 909, compressor on just the drums, dist on one 303 — but a "device" there is a GROUP
+of instrument slots (the 909 = 13 slots), and the engine has no way to say *"these slots share
+one FX bus."* Today: per-slot `instrument_*` effects auto-grab up to 7 private buses (a 13-slot
+machine would starve the pool), and bus-level effects (`glue`, `filter_inst`, the inserts) only
+target master or one slot's private bus. What exists nearby: `fx_bus_for(slot)` auto-grab,
+`instrument_reverb_bus` (aux-tank claim), the spatial emitter buses (also per-slot).
+
+The sketch: an explicit assignment — `instrument_bus(slot, group)` (0 = auto/private, 1..N =
+named group bus) so `fx_bus_for()` returns the group; then every existing bus effect
+(`glue(bus,…)`, per-bus `fx_order`, `filter` via `FX_INST`) works on machine groups for free.
+Blast radius to check: per-slot fx that assume a private bus (shimmer/grains aux pools), voice
+→ bus routing in the render loop, and the 7-bus budget (groups should COUNT AGAINST it, not
+multiply it). Unlocks: acidrack's authentic per-device PCF/comp (its v2 shipped per-device
+dist/delay the cheap way — per-voice drive + the shared echo send), per-lane fx in every future
+tinyjam rack, and "bus the drums through one crush" recipes carts keep faking per-slot.
+
 ## 6. Cost ledger
 
 | Concern | A: reorder | B: multi-reverb | C: reverb-as-bus |
