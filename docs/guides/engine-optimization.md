@@ -222,6 +222,32 @@ no per-row division) was considered and parked: `tristress` BIG (8 large) 0.33ms
 clamp cost — is sub-millisecond even in torture. A documented **seam** is left in `trifill`
 (`studio.c`) and the rig is `tools/carts/tristress.c` (BIG/MANY scenes).
 
+### Textured triangles (`sw_tritex`) — SHIPPED (`DE_TRITEX_FAST=off`)
+The software-canvas `tritex` rasterizer scanned the **raw vertex bounding box** — no clamp to
+the visible region. Harmless for 2D use, catastrophic for the 3D pipeline it serves
+(rot3→project3→zsort→tritex): a face near the 3D camera projects to coordinates in the
+thousands, so ONE triangle scanned millions of never-plotted cells, 3 edge functions each.
+`infiniminer` (3867 tritex + 924 trifill/frame, first-person cubes) ran at **1204ms/frame**
+(~0.8fps) on the canvas; a CPU sample put 88% of on-CPU time at the top of `tritex` itself —
+the scan, not the plotting. Two changes, decisions untouched (legacy float edge/texel math
+verbatim, so every plotted pixel is byte-identical):
+1. **Scan-box clamp** via `poly_clamp_scan` — the same per-frame-cached camera-aware clamp
+   every software fill already uses (trifill got it in 2026-06-02's first ledger entry;
+   tritex never did).
+2. **Hoisted plot** on the zoom==1 canvas — the per-pixel `pset_rgb → sw_pset → sw_w2s →
+   sw_plot1` chain (camera transform + clip + bounds + PROF, per pixel) folded into the loop
+   bounds once, inner loop writes cbuf rows directly (`sw_blit` fast path's pattern). Zoomed
+   canvas and off-canvas `DE_CPU_RASTER` keep the general plot (still get the clamp).
+
+**Validation:** 5-cart frame dumps byte-identical legacy-vs-fast on the SW canvas
+(`textured3d`/`podracer`/`citydrive`/`infiniminer`/`drawall`), determinism control run;
+`canvas-diff drawall` unchanged vs legacy (it has a pre-existing 109px GPU-vs-SW divergence,
+identical under both paths — likely the recent `print_scaled` addition, tracked separately).
+**Result:** `infiniminer` 1204→3.4ms (**358×** — the SW canvas now *beats* that cart's 3.8ms
+GPU path, whose per-quad rlgl emit isn't free), `podracer` 19.1→1.6ms (12×, back under
+budget), `citydrive` 2.35→1.57ms (1.5×), `textured3d` 1.22→1.06ms. The remaining 3D-cart cost
+is real coverage + `line()` DDA, not scan waste.
+
 ### Outline strokes (`circ`/`oval`/`poly`/`ngon`/`star`) — PARKED (seams left)
 The span work optimized the *fills*; the *outlines* are still the old per-pixel path, and it's the
 last unoptimized software-coverage shape. They're **O(r²)**: scan the whole bounding box, test
@@ -313,6 +339,7 @@ competitive, which is the point of the toggle.)
 | 2026-06 | all software fills | per-frame clamp-box cache (4 matrix inverts → per camera-change) | `clampstress` STATIC+PAN byte-identical, `raster_test` 0 | `clampstress` 28%; qbert 9%, oersoep 10%; neutral on large-fill carts | `DE_CLAMP_CACHE=off` · `13fdeca` |
 | 2026-06-25 | software canvas (rotated blits) | texel-read (`img_texel`) + no-scale fast path + inline-plot + camera/row-pointer hoist on `de_cpu_img_rot`/`sw_blit`/`sw_tritex` | `canvas-diff` 0px (byte-identical), `build-all` | `rotstress` 12.70→8.14ms @4000 (~36%); slowdown vs GPU ~11×→7×; **flipped `cityview` to a SW win** | full write-up in [software-canvas.md](../design/software-canvas.md) "Rotated-sampling optimization" |
 | 2026-06-25 | software canvas (sprite blit) | `sw_blit` fast path: direct `uint32` row-copy for the axis-aligned/unscaled/unflipped/`zoom==1`/no-pal/RGBA8 case (skips per-pixel `img_texel`/`sw_keyed`/`sw_pset`/`sw_w2s`/`sw_pack` + the `i*sw/dw` divide; clip once) | `canvas-diff bunnymark` frame 0 = 0px (byte-identical to GPU, path on & off), `build-all` 436/436 | `bunnymark` software 3.25→0.59ms @1200 (**5.5×**); SW-vs-HW sprite gap ~12×→~2× | `DE_BLIT_FAST=off` · `aeebfddd` |
+| 2026-07-02 | software canvas (textured tris / 3D) | `sw_tritex` scan-box clamp (`poly_clamp_scan` — the raw vertex bbox scanned millions of off-screen cells for near-projected 3D faces) + hoisted row-write plot on the zoom==1 canvas (camera offset/clip folded into loop bounds; decisions = legacy float math verbatim) | 5-cart SW frame dumps byte-identical legacy-vs-fast (textured3d/podracer/citydrive/infiniminer/drawall) + determinism control; `canvas-diff drawall` unchanged vs legacy | **`infiniminer` 1204→3.4ms (358×, now beats its 3.8ms GPU path)**, `podracer` 19.1→1.6ms (12×), `citydrive` 1.5×, `textured3d` 1.15× | `DE_TRITEX_FAST=off` · `0b7af3d2` |
 
 ---
 
