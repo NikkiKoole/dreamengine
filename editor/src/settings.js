@@ -1,4 +1,4 @@
-const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal', scaleFilter: 0, renderMode: 'gpu', iosConfig: 'debug' }
+const DEFAULTS = { screenW: 320, screenH: 200, scale: 4, mapW: 128, mapH: 64, cellW: 16, cellH: 16, touchControls: false, worklet: false, showProfiler: false, showPublish: false, showNetplay: false, welcomeCart: 'zoo', backend: 'native', buildMode: 'normal', scaleFilter: 0, renderMode: 'gpu', iosConfig: 'debug' }
 
 // ── key bindings ──────────────────────────────────────────────
 // Values are raylib (GLFW) keycodes — letters/digits are ASCII, specials match
@@ -84,6 +84,7 @@ function load() {
     worklet:       localStorage.getItem('worklet') === '1',
     showProfiler:  localStorage.getItem('showProfiler') === '1',
     showPublish:   localStorage.getItem('showPublish') === '1',
+    showNetplay:   localStorage.getItem('showNetplay') === '1',
     welcomeCart:   localStorage.getItem('welcomeCart') || 'zoo',
     backend:       localStorage.getItem('backend')   || DEFAULTS.backend,
     buildMode:     localStorage.getItem('buildMode') || DEFAULTS.buildMode,
@@ -370,6 +371,21 @@ export function buildSettingsPanel(el) {
   ))
   pubSection.appendChild(note('\u26A0 publishes the CURRENT cart to the PUBLIC internet. One click: compiles to wasm, writes the C source back to tools/carts/<name>.c, COMMITS to the git repo (github.com/NikkiKoole/dreamengine) and PUSHES to master \u2014 live ~1 min later at nikkikoole.github.io/dreamengine/<name>/. The cart needs a name (load one from the gallery, or save yours first). Sprites drawn in the sprite editor ship with the build but are NOT written back to a .cart.js generator \u2014 see the "sprite story" in docs/STATUS.md. desktop app only.'))
   el.appendChild(pubSection)
+
+  // \u2500\u2500 multiplayer (netplay, advanced) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  const netSection = section('multiplayer')
+  netSection.appendChild(checkbox(
+    'show \u{1F310} multiplayer button in the toolbar',
+    settings.showNetplay,
+    v => {
+      settings.showNetplay = v
+      save('showNetplay', v ? '1' : '0')
+      const btn = document.getElementById('net-btn')
+      if (btn) btn.style.display = v ? '' : 'none'
+    },
+  ))
+  netSection.appendChild(note('lockstep netplay over the LAN \u2014 host on one machine, join by IP from another, and both drive the same cart (P0 = host, P1 = joiner). Experimental; carts stay network-unaware. desktop app only.'))
+  el.appendChild(netSection)
 }
 
 function section(title) {

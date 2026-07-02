@@ -1181,7 +1181,10 @@ rebuildSettings()
 const runBtn  = document.getElementById('run-btn')
 const buildLog = document.getElementById('build-log')
 
-runBtn.addEventListener('click', async () => {
+// build + run the current buffer. `net` is null for a normal run, or
+// { mode:'host' } / { mode:'join', ip } for lockstep netplay (rung 2 — see the
+// 🌐 button below). Shared so run / host / join take the identical build path.
+async function runCart(net) {
   if (!window.studio) {
     showLog({ ok: false, cmd: null, output: 'run requires the desktop app  (npm start)' })
     return
@@ -1191,6 +1194,7 @@ runBtn.addEventListener('click', async () => {
   setErrorLines([])
   runBtn.textContent = '⏳ compiling…'
   runBtn.disabled = true
+  netBtn && (netBtn.disabled = true)
   buildLog.style.display = 'none'
   rlogClear()
 
@@ -1203,13 +1207,68 @@ runBtn.addEventListener('click', async () => {
   // export the current map as raw bytes
   await window.studio.saveMap(getMapBytes())
 
-  const result = await window.studio.run(code, { ...settings, cartName: currentCartName })
+  const result = await window.studio.run(code, { ...settings, cartName: currentCartName, net: net || undefined })
   liveHostRunning = !!(result && result.live)   // a live window is now open → enable auto-reload
 
   runBtn.textContent = '▶ run'
   runBtn.disabled = false
+  netBtn && (netBtn.disabled = false)
+
+  // host: surface the address the joiner must type (also printed in the runtime log)
+  if (result && result.ok && net && net.mode === 'host' && result.netIp) {
+    showToast(`🌐 hosting at ${result.netIp} — on the other machine click 🌐 → Join and type that IP`, 8000)
+  }
 
   showLog(result)
+}
+
+runBtn.addEventListener('click', () => runCart(null))
+
+// ── multiplayer (netplay) button — rung 2, LAN by IP ──────────
+// One machine hosts (P0), another on the same wifi joins by the host's IP (P1).
+// docs/design/multiplayer-research.md. Native run backend only (browsers have no
+// UDP; the live host owns its own loop, so the lockstep barrier doesn't fit yet).
+const netBtn = document.getElementById('net-btn')
+if (settings.showNetplay && netBtn) netBtn.style.display = ''   // hidden by default; opt-in via settings → multiplayer
+let netMenu = null
+function closeNetMenu() {
+  if (!netMenu) return
+  netMenu.remove(); netMenu = null
+  document.removeEventListener('mousedown', netMenuOutside)
+}
+function netMenuOutside(e) {
+  if (netMenu && !netMenu.contains(e.target) && e.target !== netBtn) closeNetMenu()
+}
+netBtn?.addEventListener('click', () => {
+  if (!window.studio) { showLog({ ok:false, cmd:null, output:'multiplayer requires the desktop app  (npm start)' }); return }
+  if (settings.backend === 'live') { showToast('multiplayer needs the native run backend — turn off “live” in settings', 4000); return }
+  if (netMenu) { closeNetMenu(); return }
+
+  netMenu = document.createElement('div')
+  netMenu.id = 'net-menu'
+  netMenu.innerHTML = `
+    <button id="net-host">🖥 Host on this machine  ·  you are P0</button>
+    <div class="net-row">
+      <input id="net-ip" type="text" placeholder="host IP, e.g. 192.168.1.23" spellcheck="false" />
+      <button id="net-join">Join · P1</button>
+    </div>
+    <div class="net-hint">Same wifi, no servers. The host shows its IP when it starts — type it here.</div>`
+  document.body.appendChild(netMenu)
+  const r = netBtn.getBoundingClientRect()
+  netMenu.style.top   = `${r.bottom + 4}px`
+  netMenu.style.right = `${window.innerWidth - r.right}px`
+
+  const ipInput = netMenu.querySelector('#net-ip')
+  const doJoin = () => {
+    const ip = ipInput.value.trim()
+    if (!ip) { ipInput.focus(); return }
+    closeNetMenu(); runCart({ mode: 'join', ip })
+  }
+  netMenu.querySelector('#net-host').onclick = () => { closeNetMenu(); runCart({ mode: 'host' }) }
+  netMenu.querySelector('#net-join').onclick = doJoin
+  ipInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin() })
+  ipInput.focus()
+  setTimeout(() => document.addEventListener('mousedown', netMenuOutside), 0)
 })
 
 // ── live auto-reload ──────────────────────────────────────────
@@ -1324,11 +1383,11 @@ window.addEventListener('keydown', e => {
 
 const toast = document.getElementById('toast')
 let toastTimer = null
-function showToast(msg) {
+function showToast(msg, ms = 2000) {
   toast.textContent = msg
   toast.classList.add('visible')
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toast.classList.remove('visible'), 2000)
+  toastTimer = setTimeout(() => toast.classList.remove('visible'), ms)
 }
 
 function applyCart(cart) {
