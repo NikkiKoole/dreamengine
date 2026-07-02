@@ -23,9 +23,11 @@ real "what to build next":
    re-enters by walking back within reach of that seat cell. **◑ Rung F1 landed same day:** the
    surface drives the walk via the same `road_at()` seam as the rig's grip — tarmac + the
    `RoadHit.on_pave` pavement strip walk full pace, grass drags ~0.6×, identical over the stub
-   grid and OSM Delft. Pinned by sloop's first `spec()` (16 assertions). Remaining rungs: F2
-   enter a building (`interiors`), F3 lift flank's brain as a library header → *fight*. Ladder +
-   design decisions:
+   grid and OSM Delft. **◑ Rung F2 landed same day:** houses are enterable — one door on the
+   street-facing wall (probed with `road_at()`), a deterministic per-building BSP floor plan
+   (rooms/doorways/corner furniture, connectivity-verified by re-roll), roof lifts in-place while
+   you're inside, camera eases to 2×. Pinned by sloop's first `spec()` (25 assertions). Remaining
+   rung: F3 lift flank's brain as a library header → *fight*. Ladder + design decisions:
    [`driving-world-program.md`](driving-world-program.md) → the player-fantasy scoreboard.
 2. **The world composer.** One seed-driven cart that wires the sandboxes via their named seams —
    `road_at()` (roadnet2) · `make_junction(legs,type)` (roadlab) · `gen_network(pattern,seed)`
