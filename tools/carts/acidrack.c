@@ -439,11 +439,16 @@ static void apply_fx(void) {
     if (fxk[F_TIME] != aTime || fxk[F_FB] != aFb || mix != aMix || tempo != aTempo) {
         static const float DIV[4] = { 0.25f, 0.5f, 0.75f, 1.0f };   // 1/16 · 1/8 · dotted · 1/4
         int ms = (int)(60000.0f / tempo * DIV[(int)(fxk[F_TIME] * 3.999f)]);
-        echo_insert(ms, fxk[F_FB] * 0.85f, 0.45f, mix < 0.02f ? 0.0f : mix);
+        // fb ≤ 0.72 and ≤ 80% wet: full-wet + near-unity feedback made a
+        // sustained wall of energy that held the glue comp in permanent
+        // full gain-reduction — "the sound stops" (measured, 2026-07-02)
+        echo_insert(ms, fxk[F_FB] * 0.72f, 0.45f, mix < 0.02f ? 0.0f : mix * 0.8f);
         aTime = fxk[F_TIME]; aFb = fxk[F_FB]; aMix = mix; aTempo = tempo;
     }
     if (glu != aGlue) {
-        glue(0, glu < 0.02f ? 0.0f : glu, 8, 150);
+        // knob maxes at HEAVY GLUE, never a mute — amount 1.0 could duck the
+        // whole mix to silence under a sustained loud tail (same incident)
+        glue(0, glu < 0.02f ? 0.0f : glu * 0.55f, 8, 150);
         aGlue = glu;
     }
 }
