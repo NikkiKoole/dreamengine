@@ -318,6 +318,7 @@ AudioStream LoadAudioStream(unsigned int sampleRate, unsigned int sampleSize, un
 Font LoadFontFromImage(Image image, Color key, int firstChar);
 Image LoadImageFromMemory(const char *fileType, const unsigned char *fileData, int dataSize);
 Image LoadImageFromTexture(Texture2D texture);
+Image LoadImageFromScreen(void);
 RenderTexture2D LoadRenderTexture(int width, int height);
 Shader LoadShaderFromMemory(const char *vsCode, const char *fsCode);
 Texture2D LoadTextureFromImage(Image image);

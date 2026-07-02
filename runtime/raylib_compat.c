@@ -126,6 +126,7 @@ AudioStream LoadAudioStream(unsigned int sampleRate, unsigned int sampleSize, un
 Font LoadFontFromImage(Image image, Color key, int firstChar) { Font r = {0}; return r; }
 Image LoadImageFromMemory(const char *fileType, const unsigned char *fileData, int dataSize) { Image r = {0}; return r; }
 Image LoadImageFromTexture(Texture2D texture) { Image r = {0}; return r; }
+Image LoadImageFromScreen(void) { Image r = {0}; return r; }
 RenderTexture2D LoadRenderTexture(int width, int height) { RenderTexture2D r = {0}; return r; }
 Shader LoadShaderFromMemory(const char *vsCode, const char *fsCode) { Shader r = {0}; return r; }
 Texture2D LoadTextureFromImage(Image image) { Texture2D r = {0}; return r; }
