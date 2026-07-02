@@ -4,7 +4,12 @@
 > modules** (Strumharpy/omnichord, FM, martenot…) and **effects / playables** (kaoss, theremin).
 > See [`tinyjam-marketing.md`](../marketing/tinyjam/tinyjam-marketing.md) §2 + §3.8. (Renamed from "tinydaws" 2026-06-29.)
 
-STATUS: IDEA / exploration (2026-06). Nothing built yet. Follow-up brainstorm (bias knobs, the
+STATUS: PILOT SHIPPED (2026-07-02) — **the first rack is live**: `acidrack` (rebirth-classic,
+which took the pilot slot from rebirth-house — the swap case + build record:
+[`rebirth-classic.md`](rebirth-classic.md)). Generate → play → export proven end to end
+(seeded banks+chain from an 8-hex song code, editable while playing, WAV export). The lane
+format, seed-code handoff FROM RADIOS, song.h export tier and `rack.h` extraction are still
+open — rebirth-house is customer #2 and triggers them. Rest of this doc = the program. Follow-up brainstorm (bias knobs, the
 agentic RLHF loop, the Game&Watch dancer, MIDI-in): [`tinyjam-racks-followup.md`](tinyjam-racks-followup.md).
 Companion reading:
 [`../guides/game-music.md`](../guides/game-music.md) (the generation recipes this

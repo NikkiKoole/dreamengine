@@ -639,12 +639,18 @@ NOISE click. All use `INSTR_SINE` as the base voice.
 | sine/celsta | SINE | A1 D600 R300 S0 · LP5700 · o2@19.02st · mallet(0.50/0.55/0.45) | Music box; bass resembles a steel drum. |
 | sine/banjo | SINE | A1 D400 R150 S0 · LP3400 · o2@12st + o3@19.02st · mallet(0.10/0.90/0.10) | Hollow and resonant, fast-fading octave + 5th. |
 
-### tb303 (synth — one voice, two wave variants, from tb303.c)
+### tb303 (synth — one voice, two wave variants, from tb303.c; ×2 in acidrack.c)
+
+> **The filter is `FILTER_DIODE` since 2026-07-02** (audio-notes §25): a real diode-ladder
+> model — ~18dB/oct, bass drains as resonance climbs, saturation INSIDE the loop so it
+> growls. Older acid recipes on `FILTER_LOW` (braindance, squarepusher) still work but are
+> the clean-SVF approximation — upgrading them is a one-constant swap worth taking when
+> touching those carts.
 
 | name | engine | recipe | character |
 |---|---|---|---|
-| saw/303 | SAW | 2/60/25 S6 · FILTER_LOW 60–3840Hz/0–15Q · ENV_CUTOFF 0–3000Hz · drive · 0.48 duty · echo | Acid house — saw through resonant lowpass, live envelope + drive. The classic TB-303 tone. |
-| square/303 | SQUARE | 2/60/25 S6 · FILTER_LOW 60–3840Hz/0–15Q · ENV_CUTOFF 0–3000Hz · drive · echo | Same path, square wave — brighter, more digital bite. |
+| saw/303 | SAW | 2/60/25 S6 · FILTER_DIODE 60–3840Hz/0–15Q · ENV_CUTOFF 0–3000Hz · drive · 0.48 duty · echo | Acid house — saw through the diode ladder, live envelope + drive. The classic TB-303 squelch. |
+| square/303 | SQUARE | 2/60/25 S6 · FILTER_DIODE 60–3840Hz/0–15Q · ENV_CUTOFF 0–3000Hz · drive · echo | Same path, square wave — brighter, more digital bite. |
 
 ### juno (poly synth — saw+sub+resonant-LP, the chorus IS the patch, from juno.c)
 

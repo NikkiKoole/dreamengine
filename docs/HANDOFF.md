@@ -200,6 +200,12 @@ Cart sources live in `tools/carts/XX-name.c`. Config files (sprites + map) live 
 
 ## Gotchas / environment facts
 
+- **Display asleep = every play.js/make-cart run SEGFAULTS in `rlglInit`** (signal 11, empty
+  trace) — Raylib needs a live GL context even `--headless`, so late-night unattended renders
+  suddenly "break the engine" when the screen locks. It's not your edit. Fix:
+  `caffeinate -du node tools/play.js …` (wakes + holds the display). Discovered mid
+  filter-spike 2026-07-02 (audio-notes §25), took out a parallel agent's runs too.
+
 - **`main.cjs` / `preload.cjs` changes need an Electron restart** (`npm start`);
   Vite hot-reloads everything else.
 - **`▶ run` only works in Electron** (it spawns clang); the browser tab edits but can't run.
