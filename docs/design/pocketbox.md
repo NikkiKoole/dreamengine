@@ -7,6 +7,17 @@ conditions, chord track + CHD modes, finger-drawn wave tracks, patterns + link/p
 features were needed**. Deferred to the cart's `de:meta.todo[]`: seeded generator, per-track arp
 page, WAV-export button, mixer-meters page, step/track copy, `spec()`.
 
+**First-play verdict (maker, 2026-07-02): the naked modal grammar was ILLEGIBLE** — "I don't
+understand the paradigm." The faithful port shipped the PGB-1's one-keypad-many-meanings grammar
+with no printed faceplate (hardware's labels) and no manual (hardware's onboarding), so the mode
+keys read as arbitrary. Fixed same day with a **legibility pass**: per-mode key labels (track
+names / P1–16 / part numbers / note names / FX names — the screen doing what hardware printing
+does) + an always-on hint line stating what the 16 keys and the strip mean right now. The data
+point for the rack program, paired with yachtrack's: **knob-forest = too indirect (yacht-rack),
+unlabeled modal grammar = too opaque (this, v1.0)** — the target is modal depth with the meaning
+always visible. If the labeled version still doesn't click, the fallback is the §2 hybrid
+(always-visible step grid, modes only for depth).
+
 > The maker's framing: "between an instrument and a rack." Exactly right — this is the missing
 > middle of the shelf: the **player-authored** groovebox (tracker's authorship) with the
 > **immediacy** of a hardware box (the racks' directness), and no generator required to be fun.
