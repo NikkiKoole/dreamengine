@@ -326,6 +326,22 @@
     "lineage": "the on-ramp teaching-gaps.md flagged as missing: cube3d/solid3d/textured3d demo the full 3D pipeline but nothing teaches its moving parts one at a time on the smallest possible shape (a single quad, not a solid) -- including the affine warp + subdivision fix textured3d otherwise introduces alone."
   },
   {
+    "title": "acid rack",
+    "description": "Two 303s and a drum machine in one rack — pattern banks A-D chained into a real song. The ReBirth move: everything runs together, you edit while it plays. The RB-338 homage, increment 1: two full TB-303 voices (the engine's FILTER_DIODE diode-ladder squelch, authentic non-retriggering slide, accent into the filter env, live CUT/RES/DRV knobs per machine) + a four-voice 909 starter kit (kick with the ATTACK click layer, clap retriggers, FM-clang hats with choke), all clocked off one transport. The rack is an ACCORDION: each machine is a slim strip showing its name, a live 16-tick mini pattern with the playhead, and a MUTE — tap a strip to expand its full editor (piano roll + flag rows + knobs for a 303, trigger grid for the drums). Sound never depends on what's open. Patterns live in four BANKS (A-D, the transport buttons); the SONG row at the bottom chains up to 64 bars of banks into a real track — tap a cell to cycle A→B→C→D→empty. Everything autosaves. SPACE run/stop · tap a strip header to expand · A-D buttons pick the edit bank (also LEFT/RIGHT) · SONG button toggles chain playback · tap SONG-row cells to write the arrangement · UP/DOWN tempo · roll: tap/drag paints notes, tap a note to erase · OCT/ACC/SLD rows toggle per step · drums: tap cells",
+    "file": "acidrack.cart.png",
+    "created": "2026-07-02",
+    "kind": [
+      "instrument"
+    ],
+    "teaches": [
+      "step-sequencer",
+      "subtractive-synth",
+      "drum-synthesis"
+    ],
+    "lineage": "Propellerhead ReBirth RB-338 (1997) — the 2×TB-303 + drum-machine acid rack — rebuilt as one cart from the shipped machine carts (tb303 ×2 on the new FILTER_DIODE, tr909 voices), with Reason-style rack-fold accordion panels and pattern banks + a chain row = song mode. Increment 1 of docs/design/rebirth-classic.md.",
+    "homage": "Propellerhead ReBirth RB-338 (1997)"
+  },
+  {
     "title": "acoustics probe",
     "description": "v3 acoustic-zones PROBE (spatial.md): a little guy walks rooms to hear where the API hurts, hand-wired against existing knobs only. ARROWS to move. FOOTSTEPS change tone by ground (tile click / carpet thud / wood knock / grass rustle) and carry the room's reverb (absorption: bright tile vs dead carpet). Each ROOM sets the master reverb (zone) — crossing rooms re-applies it (listen for the abrupt switch = the 'rideable reverb' gap). A RADIO (left room) + MACHINE (right room) emit continuously; a wall between you and one muffles it (occlusion: raycast -> note_cutoff + note_vol), the doorway opens it up. Findings: cart header + STATUS open item.",
     "file": "acoustics.cart.png",
