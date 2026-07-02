@@ -39,6 +39,7 @@ The compiled cart binary accepts:
 | `--dump-every N` | … every Nth frame (default 1 with `--dump`) |
 | `--headless` | hidden window (for batch replay/script) |
 | `--save-dir DIR` | where `cart.sav`/`cart.kv`/`cart.blob` live (default: cwd). The editor and `play.js` pass `saves/<cart>` automatically, so every cart gets its own save folder under `build/saves/` — harness runs can't clobber (or inherit) another cart's hiscores |
+| `--net-host` / `--net-join IP` / `--net-port N` | lockstep netplay, rung 1 (`runtime/net.h` — [`../design/multiplayer-research.md`](../design/multiplayer-research.md)): two native builds play the same 2-player cart over UDP (localhost or LAN by IP). Implies `--det`; the host's seed rides the handshake. Host = player 0, joiner = player 1 — carts stay network-unaware (`btn(player,…)` means "which machine"). v1 syncs `btn()` only. Drive both sides at once with `play.js <name> netdemo` (below) |
 
 `--record` and `--trace` flush every frame, so a live session can be tailed.
 
@@ -93,6 +94,13 @@ node tools/play.js <name> record <out.rec>     # play live, capture inputs
 node tools/play.js <name> replay <in.rec>      # replay a recording
 node tools/play.js <name> beats  <in.beats>    # compile a beat-script + run (you drive)
 node tools/play.js <name> script <in.script>   # run a raw frame-script as-is
+node tools/play.js <name> netdemo [script]     # lockstep netplay: spawn a host+joiner pair over
+                                               # UDP loopback (side-by-side windows) — also the
+                                               # DESYNC gate: --host-script/--join-script drive
+                                               # each side differently, and the per-frame trace
+                                               # diff ends LOCKSTEP OK / DESYNC (exits nonzero).
+                                               # Blessed check + committed netcheck clips:
+                                               # checks-and-oracles.md ("lockstep netplay" row)
 ```
 
 Options pass through: `--trace --frames --dump --dump-every --headless --seed --bpm`.
