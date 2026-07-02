@@ -69,13 +69,14 @@ probed the voice, the filter-spec spike preceded acidrack.) The leads need nothi
 (`heldnotes`), martenot, musicalsaw are proven solo carts. The unproven pieces, each a candidate
 standalone cart:
 
-- **the concrète tape-kit** — the §3 rhythm section as its own playable drum cart: polymetric
-  unequal-length lanes, the four voices (thud / ringmod'd lampshade ticks / pips / reversed
-  swell), splice offsets. This one cart proves most of §3 in isolation.
-- **a ring-mod playable** — `INSTR_MALLET`/found-sounds through `instrument_ringmod()` as an
-  instrument you play (nothing on the shelf showcases ring mod as a *voice* yet — `FX_RINGMOD`
-  shipped as a pedal, no cart owns it).
-- **BBC pips / test-tone blips** — likely folds into the tape-kit rather than earning a cart.
+- **the concrète tape-kit** — **SHIPPED 2026-07-02 as the `delia` cart**: five polymetric
+  unequal-length lanes (16 thud / 5 ringmod'd lampshade / 7 BBC pips, long pip on step 0 / 11
+  splice clicks / 32 reversed swell), per-lane loop-length editing, seed-baked splice offsets,
+  RING carrier + tape WOW/FLUT knobs. Proves the §3 design in isolation; also absorbs the
+  ring-mod-as-voice piece (the LAMP lane is `INSTR_MALLET` through `instrument_ringmod()`) and
+  the pips. Remaining polish lives in its `de:meta.todo[]` (touch pads, spec(), autosave,
+  varispeed ribbon).
+- ~~a ring-mod playable~~ / ~~BBC pips~~ — folded into `delia` as lanes rather than own carts.
 
 Related ingredient the maker flagged worth more use: **the live-looper** (`loopstation.c` — "the
 first cart that records itself"). Overdubbing a theremin/martenot line *over* the tape-kit's
