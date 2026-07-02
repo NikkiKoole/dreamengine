@@ -125,14 +125,34 @@ count, each bunny one `sspr()` of a 32×32 sprite (a pure CPU-blit stress, no `p
 [ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md) — **software canvas is canonical
 for 2D (ANGLE-free iOS); `tritex`/3D is GPU-only and off the initial iOS target list.**
 
-## ⚠ Known issue — software renderer renders only the first frame (2026-07-01)
+**⟲ The `tritex` half is OVERTURNED by re-measurement (2026-07-02).** The `sw_tritex` scan-box clamp +
+hoisted plot (`0b7af3d2`, infiniminer 358× on desktop) re-measured on the SAME device (iPhone SE 2G,
+A13, iOS 15.4.1) and SAME Debug config via `ios/measure-device.sh`:
 
-Observed running **`sloop`** under the `DE_NO_RAYLIB` software engine (`tools/build-nr.sh`): it paints a
-**single stuck first frame** then doesn't update/animate — the GPU/Raylib build is fine. Not yet
-diagnosed; unknown whether it's sloop-specific or engine-wide (the software path's main loop / present /
-input pump). **To look at:** does it repro on a simpler cart under `build-nr.sh`? If yes → engine-wide
-(the `DE_NO_RAYLIB` frame-loop), if no → something sloop does that the software path doesn't drive. Start
-by A/B-ing one trivially-animated cart vs sloop under the software engine.
+| cart | type | engine avg | engine max | **fps** | was (2026-06-29) |
+|------|------|-----------|-----------|---------|------------------|
+| `podracer` | 3D / `tritex` canyon | **~6.0ms** | 7.4ms | **59** | ~89ms / ~10fps |
+| `infiniminer` | 3D / `tritex` voxels (heaviest: ~3.9k tris/frame) | **~10.9ms** | 11.3ms | **59** | — |
+
+Both inside the 16.67ms budget with headroom, in a *Debug* build (Release runs several× faster). The
+old verdict "optimization won't rescue it into budget" no longer holds — 3D carts are viable on the
+iOS target on perf grounds. Two caveats from the same session: (1) the numbers are only real because
+the `raylib_compat` `GetScreenToWorld2D`/`GetWorldToScreen2D` **stubs** were fixed the same day
+(`4fe536b1`) — before that, `poly_clamp_scan` collapsed every poly/tritex scan box to nothing under
+`DE_NO_RAYLIB`, so the geometry silently didn't draw (an empty-scene "measurement" read ~4–5ms and
+looked plausible; always EYEBALL the device screen before trusting a perf number). (2) `citydrive`
+remains unmeasured — it loads its OSM `.rvb` from `../data` at runtime, which isn't bundled into the
+app; measuring it needs a data-bundling step (open, small).
+
+## ✅ RESOLVED — software renderer rendered only the first frame (2026-07-01 → fixed 2026-07-02)
+
+Was: **`sloop`** under the software path painted a **single stuck first frame**. Diagnosed and fixed in
+`25ee60c3`: `smooth_zoom`'s GPU capture (`camera_ex` → `EndTextureMode`/`BeginTextureMode(smooth_rt)`)
+ran mid-software-frame where no render target is open, and `smooth_composite`'s leaked
+`BeginTextureMode(canvas)` swallowed the present — the window froze on the last good frame. Trigger =
+`smooth_zoom(true)` + fractional zoom (sloop's speed-zoom); cart-agnostic. Fix: skip the capture when
+`sw_canvas_active` — the canvas renders fractional zoom natively (`sw_w2s` axis-aligned scale). Full
+note: [software-canvas.md](software-canvas.md) (2026-07-02 update).
 
 ## Built — the platform seam, phase A → D.2 (2026-06-29)
 
@@ -243,9 +263,9 @@ build (`build-nr.sh`); the real picture is narrower than feared:
 | **`pal()`** (palette-swap) | ✅ **full parity** — `sw_recolor()` is the CPU twin of `PAL_FS`; `canvas-diff` = **0px** on palettelab/smooch/neonrain/heroes | 37 |
 | **scale present filter** | ✅ **non-issue** — no cart uses it; on iOS the *host* (`CanvasView`) does nearest-neighbour scaling | 0 |
 | fractional **zoom** (`camera_ex`) | ✅ **works** (orbit renders); only *cosmetically* ≠ GPU (sub-pixel rounding), which doesn't matter with no GPU reference | many |
-| **`smooth_zoom`** (offscreen RT) | ⚠️ GPU-only; degrades to **plain zoom** (the fractional-zoom AA just doesn't apply) | `sloop` |
+| **`smooth_zoom`** (offscreen RT) | ✅ **skipped by construction** (2026-07-02, `25ee60c3`) — the canvas zooms natively, so it's a clean plain zoom; previously the capture dance corrupted/froze the frame | `sloop` |
 | **camera ROTATION** (`camera_ex` angle≠0) | ✅ **works** — software rotation rasterizer (offscreen world layer → rotate-composite); a 25° probe is **27/64000 px (0.04%)** off the GPU | `hotline`, `sloop`, `coaster`, `worldpointer` |
-| **`tritex`/3D** | ❌ GPU-only by perf (~89ms on the phone CPU) — off the initial iOS list ([ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md)) | `podracer`, … |
+| **`tritex`/3D** | ✅ **in budget on-device since the `sw_tritex` clamp** (2026-07-02: podracer ~6.0ms / infiniminer ~10.9ms @59fps on the A13, Debug) — the old ~89ms verdict + [ADR-0024](../decisions/0024-software-canvas-is-canonical-for-2d.md)'s 3D exception are overturned by re-measurement (see above) | `podracer`, `infiniminer`, `textured3d`; `citydrive` unmeasured (data not bundled) |
 
 **Camera rotation — was a freeze, now a rasterizer.** `camera_ex(angle≠0)` first set the sticky
 `sw_force_gpu` to fall back to the GPU path — but with no GPU the stubs no-op and `sw_cbuf` never

@@ -68,8 +68,9 @@ several× faster):
   (`sw_recolor`, `canvas-diff` 0px), the **scale filter is a non-issue** (no cart uses it; the iOS host
   scales), and **camera rotation now works** on the software canvas too (an offscreen world layer
   rotate-composited about the screen centre — a 25° probe is 0.04% off the GPU). The only remaining
-  portable-2D gap is **`smooth_zoom`**'s offscreen-RT antialiasing (degrades to plain zoom, 1 cart).
-  `tritex`/3D stays off-list by perf, per this ADR.
+  portable-2D gap was **`smooth_zoom`**'s offscreen-RT antialiasing (closed 2026-07-02: skipped by
+  construction on the canvas — it zooms natively; `25ee60c3`).
+  `tritex`/3D stays off-list by perf, per this ADR — **overturned, see Update below.**
 - A pile of GPU-vs-SW A/B scaffolding can eventually be pruned for the portable build (see
   `engine-portability.md` §"Settle and prune the A/B flags").
 - **Not forever-exclusive:** the seam keeps the GPU path alive, so a later Metal backend can take 3D
@@ -83,3 +84,17 @@ several× faster):
 - **Optimize the SW triangle rasterizer to rescue `tritex`.** Possible, but ~89ms → <16ms on a phone
   CPU is a >5× ask for a perspective-correct textured rasterizer; a GPU is the right tool. Deferred,
   not pursued, for the initial target.
+
+## Update (2026-07-02) — the `tritex` exception is overturned by re-measurement
+
+The "optimize the SW rasterizer" alternative above happened anyway, for desktop reasons
+(`sw_tritex` scan-box clamp + hoisted plot, `0b7af3d2` — the raw-bbox scan was iterating millions of
+never-plotted off-screen cells per near-projected triangle, not doing rasterization work). Re-measured
+on the SAME device + Debug config as this ADR's table: **`podracer` ~6.0ms (was ~89ms), `infiniminer`
+~10.9ms, both a locked 59fps** — inside budget with headroom before a Release build. So the *2D
+decision stands unchanged and strengthened*, but **3D/`tritex` carts are no longer excluded on perf
+grounds**; the iOS target list can include them. (The re-measurement also required fixing the
+`raylib_compat` `GetScreenToWorld2D`/`GetWorldToScreen2D` `{0,0}` stubs, `4fe536b1` — without them the
+whole poly/tritex family silently drew nothing under `DE_NO_RAYLIB`, which had made an earlier
+same-day "measurement" an empty-scene lie. Numbers + caveats:
+[`engine-portability.md`](../design/engine-portability.md) §"the `tritex` half is OVERTURNED".)
