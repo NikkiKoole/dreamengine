@@ -736,10 +736,16 @@ static void sw_blit(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int 
         }
         return;
     }
+    // Nearest sampling at the DEST pixel CENTRE — floor((i+0.5)*sw/dw) — the GPU POINT-filter
+    // convention DrawTexturePro rasterizes with (fragment centre → texcoord → floor). The old
+    // top-left truncation (i*sw/dw) agreed at integer ratios (2× text/tiles) but phase-shifted
+    // non-integer scales by up to one texel vs the GPU (drawall's 16→24 sspr: 109 differing px).
+    // Unscaled (dw==sw) both formulas reduce to i, so flips/recolors at 1:1 are unchanged.
+    // Flipped: texcoords run (s+size)→s, so the centre maps to (s+size) - (i+0.5)*size/dsize.
     for (int j = 0; j < dh; j++) {
-        int syy = fy ? (sy + sh - 1 - j * sh / dh) : (sy + j * sh / dh);
+        int syy = fy ? (int)((sy + sh) - (j + 0.5f) * sh / dh) : (sy + (int)((j + 0.5f) * sh / dh));
         for (int i = 0; i < dw; i++) {
-            int sxx = fx ? (sx + sw - 1 - i * sw / dw) : (sx + i * sw / dw);
+            int sxx = fx ? (int)((sx + sw) - (i + 0.5f) * sw / dw) : (sx + (int)((i + 0.5f) * sw / dw));
             DeColor c = img_texel(&spritesheet_img, sxx, syy);
             if (c.a < 128 || sw_keyed(c)) continue;
             sw_pset(dx + i, dy + j, recolor ? sw_recolor(c) : c);
@@ -4158,12 +4164,15 @@ void camera_ex(int x, int y, float zoom, float angle) {
 // is a pure CPU op. Screen space, no camera (a post-effect, like the GPU version). NB: no snapshot —
 // assumes dest doesn't overlap source (the common "magnify a corner elsewhere" use).
 static void sw_zoom_rect(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh) {
+    // dest-pixel-CENTRE nearest sampling (floor((j+0.5)*sh/dh)) — the same GPU POINT-filter
+    // convention as sw_blit's scaled path, matching the GPU zoom_rect's DrawTexturePro magnify.
+    // Integer magnifications (drawall's 2×) are identical under both formulas.
     for (int j = 0; j < dh; j++) {
-        int syy = sy + j * sh / dh;
+        int syy = sy + (int)((j + 0.5f) * sh / dh);
         if ((unsigned)syy >= (unsigned)SCREEN_H) continue;
         const uint32_t *srow = &sw_cbuf[(SCREEN_H - 1 - syy) * SCREEN_W];
         for (int i = 0; i < dw; i++) {
-            int sxx = sx + i * sw / dw;
+            int sxx = sx + (int)((i + 0.5f) * sw / dw);
             if ((unsigned)sxx >= (unsigned)SCREEN_W) continue;
             sw_plot1(dx + i, dy + j, srow[sxx]);
         }

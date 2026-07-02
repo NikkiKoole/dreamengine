@@ -261,7 +261,7 @@ be coalesced.
 >   tilemaps rendered **blank** under the canvas. Now routes through `sw_blit` exactly like
 >   `spr`/`sspr`. *Verified visually:* `gta`/`advancewars` terrain renders correctly (was blank
 >   before). At `map_scale 1` the blit sampler is the identity (`i*sw/dw == i`), so it's pixel-exact;
->   scaled tiles inherit the nearest-sampling caveat below.
+>   scaled tiles inherited the nearest-sampling caveat below (since FIXED — see that bullet).
 > - **`rectfill_rgb()`** — `pset_rgb` was ported but its rect sibling wasn't; the true-colour
 >   CPU-shader bars disappeared. Now a `sw_fillrect` row-memset (memset path → byte-exact).
 > - **`print_outline()`** — only the inner `print()` was sw-aware; the 8 outline passes went to GPU,
@@ -283,12 +283,18 @@ be coalesced.
 >   `line()` is the last GL-picks-pixels primitive) + the playable magnified demo
 >   `tools/carts/linecompare.c` (`B` cycles DDA / coverage / perp-offset). The DDA-vs-coverage
 >   trade-off and the "split by use" finding are in the §"DDA vs coverage for the line" note below.
-> - **scaled blits** (`spr`/`sspr`/`map` with scale, `tritex`) — the CPU nearest sampler
->   (`sx + i*sw/dw`) rounds differently than GPU POINT-filter at footprint boundaries.
+> - ~~**scaled blits** (`spr`/`sspr`/`map` with scale, `tritex`) — the CPU nearest sampler
+>   (`sx + i*sw/dw`) rounds differently than GPU POINT-filter at footprint boundaries.~~
+>   **FIXED (2026-07-02):** `sw_blit`'s scaled path and `sw_zoom_rect` now sample at the **dest
+>   pixel centre** — `floor((i+0.5)*sw/dw)` — the GPU POINT-filter convention DrawTexturePro
+>   rasterizes with (`tritex` already matched via the stritex convention). Integer-ratio scales
+>   (2× text/tiles) were identical under both formulas; non-integer ratios were phase-shifted up
+>   to one texel (drawall's 16→24 `sspr`: 109px). `canvas-diff drawall` now gates at **0px**
+>   (was `--max 80`); cityview/masseffect/advancewars still 0px.
 >
-> So an all-frames `shasum` A/B is the **wrong oracle** for any line/scaled-blit cart — use a
+> So an all-frames `shasum` A/B is the **wrong oracle** for a line-drawing cart — use a
 > bounded pixel-diff (`magick compare -metric AE`) + an eyeball, and reserve byte-equality for the
-> pset/fill primitives (the `swcanvas_test` shasum still holds for those).
+> pset/fill/blit primitives (the `swcanvas_test` shasum still holds for those).
 >
 > **Tools for verifying a canvas change** (and where they fit in the wider gate map —
 > [`../guides/checks-and-oracles.md`](../guides/checks-and-oracles.md)): **`canvas-diff.js`** (the
