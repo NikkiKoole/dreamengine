@@ -2027,9 +2027,18 @@ static void loop_step(void) {
 
     draw_window:;   // pause skips update+draw above; canvas shows last frozen frame
     if (pause_active) {
-        BeginTextureMode(canvas);   // draw overlay at native resolution — scales up with the game
+        if (sw_canvas_active) {
+            // software canvas: the overlay's primitives write sw_cbuf, but the
+            // per-frame UpdateTexture(canvas.texture, sw_cbuf) lives in the redraw
+            // block we just skipped — so re-upload here or the present blits a
+            // stale (overlay-less) texture. (GPU path draws straight to the texture.)
             draw_pause_canvas();
-        EndTextureMode();
+            UpdateTexture(canvas.texture, sw_cbuf);
+        } else {
+            BeginTextureMode(canvas);   // draw overlay at native resolution — scales up with the game
+                draw_pause_canvas();
+            EndTextureMode();
+        }
     }
     // scale up to the window — RenderTexture is flipped in Y
     float sox = 0, soy = 0;
