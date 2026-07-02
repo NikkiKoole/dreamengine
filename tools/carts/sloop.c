@@ -15,7 +15,7 @@
   ],
   "lineage": "Inspired by Cataclysm: DDA's vehicle system; sibling to orbit (same integrator) and coaster (same physics honesty); extends worldgen's infinite chunk-streamed city as its drive world.",
   "genre": "sandbox",
-  "description": "Build a vehicle from parts on a grid, then drive it across a procedural world - Cataclysm: DDA's vehicle system as the seed. The one honest core: the rig is NOT a sprite with stats, it's a GRID OF PARTS, and how it drives is COMPUTED from what you bolted on. Total mass, centre of mass and moment of inertia are all derived from the grid, then the whole thing is one 2-D rigid body: accel = engine_force / mass (heavy rig crawls), turn rate = steer_torque / I (big rig turns lazily), and an engine bolted off the centre-line makes its own yaw torque so an asymmetric build genuinely pulls. Tire grip bleeds away sideways velocity so it tracks its nose like a car, not an air-hockey puck - and the handbrake (hold SPACE) turns that same grip term DOWN so the tail breaks loose and you DRIFT, laying tire marks on the asphalt, then hooks back up on release. The world is COLLIDABLE: an infinite, deterministic, chunk-streamed city of roads, houses, scattered cones and PARKED CARS, all resolved by one number - the contact impulse J vs each object's strength. Run a cone over (it gives, scatters), crash a house (it holds - until a heavy rig at speed smashes through), and shunt a parked car: the car is a REAL rigid body with mass and inertia, so the same impulse knocks and spins it like a billiard ball of steel and glass while kicking back on your rig (a buggy bounces, an 18-wheeler bulldozes), then it slides and spins a long way before settling - only an extreme hit crumples one. Clip any of them off your centre-line and the off-centre impulse spins you. Hit TAB for the BUILD editor: place parts on the grid (frame/engine/wheel/caster/seat) and watch the centre-of-mass crosshair and the mass/top-speed/turn/understeer readouts move LIVE - then flip back and drive what you built. Caster wheels roll but barely grip sideways, so an all-caster rig slides and pivots like a pushed piano. Each rig runs a transmission (cycle G: 1-gear / automatic / manual with a real H-gate, and reverse is a GEAR not the brake) and an ENGINE KIND (cycle K in BUILD): electric (flat, snappy), gas (revvy mid-band), diesel (low-end grunt), steam (spool-up), nuclear (huge, flat) - each is just power + mass + a delivery curve, so they drive AND sound distinct with no special-casing in the drive loop. The engine kind also carries its GEARING, which is what unlocks the extremes: press 9 for a SUPERCAR (RACE V12, tall gears -> 300 km/h) and 0 for a TRUCK (TRACTOR, ultra-short gears -> ~45 km/h of grunt). Press 1-0 plus -,= to load twelve preset rigs as editable templates and FEEL the difference - balanced buggy, heavy hauler, twin-engine sprinter, loose jalopy, darty motorbike, FWD/RWD/4WD drivetrains, the 300 supercar, the 45 km/h tractor-truck, a long lumbering 18-wheeler SEMI and a SCHOOLBUS - all from the same core with zero per-rig tuning. Grip is PER-AXLE (the two-axle model): push too hard and the tyres let go - the front washes wide (understeer), the rear steps out (oversteer), power-on breaks the driven axle loose, and the handbrake cuts the REAR for a drift; stand on the brake at speed and you lock up with skid marks and a screech. TAB build/drive, click to place, Z/UP gas, X/DOWN brake, LEFT/RIGHT steer, SPACE handbrake-drift, Q/E or the H-gate to shift (down at a stop = reverse), I ignition, G transmission, K engine kind, 1-0/-/= templates, R reset. GET OUT OF THE CAR: stop and press F -- you step out of the seat cell as a one-tile person (the seat's occupant, same scale as the rig's parts), walk with arrows/WASD (Z jogs), and the same world pushes back on foot: buildings and parked cars block you, the camera eases in to 1:1. Walk back to your seat and press F to drive again -- on a long rig that means walking to the cab, because entry is the SEAT cell, not 'the vehicle'. A rig with no seat can't be entered, the same rule that makes it drivable. DRIVE A REAL CITY: drag a .rvb road-data file (e.g. data/delft-centre.rvb, made by data-tools/roadview/osm-roads.js) onto the window to leave the procedural world and drive real OpenStreetMap streets — the road surface drives handling (grip drops the moment you slide off the tarmac) and the real building footprints are solid obstacles you crash into; O reveals the data folder. Same runtime data hooks as roadview; swap the file, drive a different city."
+  "description": "Build a vehicle from parts on a grid, then drive it across a procedural world - Cataclysm: DDA's vehicle system as the seed. The one honest core: the rig is NOT a sprite with stats, it's a GRID OF PARTS, and how it drives is COMPUTED from what you bolted on. Total mass, centre of mass and moment of inertia are all derived from the grid, then the whole thing is one 2-D rigid body: accel = engine_force / mass (heavy rig crawls), turn rate = steer_torque / I (big rig turns lazily), and an engine bolted off the centre-line makes its own yaw torque so an asymmetric build genuinely pulls. Tire grip bleeds away sideways velocity so it tracks its nose like a car, not an air-hockey puck - and the handbrake (hold SPACE) turns that same grip term DOWN so the tail breaks loose and you DRIFT, laying tire marks on the asphalt, then hooks back up on release. The world is COLLIDABLE: an infinite, deterministic, chunk-streamed city of roads, houses, scattered cones and PARKED CARS, all resolved by one number - the contact impulse J vs each object's strength. Run a cone over (it gives, scatters), crash a house (it holds - until a heavy rig at speed smashes through), and shunt a parked car: the car is a REAL rigid body with mass and inertia, so the same impulse knocks and spins it like a billiard ball of steel and glass while kicking back on your rig (a buggy bounces, an 18-wheeler bulldozes), then it slides and spins a long way before settling - only an extreme hit crumples one. Clip any of them off your centre-line and the off-centre impulse spins you. Hit TAB for the BUILD editor: place parts on the grid (frame/engine/wheel/caster/seat) and watch the centre-of-mass crosshair and the mass/top-speed/turn/understeer readouts move LIVE - then flip back and drive what you built. Caster wheels roll but barely grip sideways, so an all-caster rig slides and pivots like a pushed piano. Each rig runs a transmission (cycle G: 1-gear / automatic / manual with a real H-gate, and reverse is a GEAR not the brake) and an ENGINE KIND (cycle K in BUILD): electric (flat, snappy), gas (revvy mid-band), diesel (low-end grunt), steam (spool-up), nuclear (huge, flat) - each is just power + mass + a delivery curve, so they drive AND sound distinct with no special-casing in the drive loop. The engine kind also carries its GEARING, which is what unlocks the extremes: press 9 for a SUPERCAR (RACE V12, tall gears -> 300 km/h) and 0 for a TRUCK (TRACTOR, ultra-short gears -> ~45 km/h of grunt). Press 1-0 plus -,= to load twelve preset rigs as editable templates and FEEL the difference - balanced buggy, heavy hauler, twin-engine sprinter, loose jalopy, darty motorbike, FWD/RWD/4WD drivetrains, the 300 supercar, the 45 km/h tractor-truck, a long lumbering 18-wheeler SEMI and a SCHOOLBUS - all from the same core with zero per-rig tuning. Grip is PER-AXLE (the two-axle model): push too hard and the tyres let go - the front washes wide (understeer), the rear steps out (oversteer), power-on breaks the driven axle loose, and the handbrake cuts the REAR for a drift; stand on the brake at speed and you lock up with skid marks and a screech. TAB build/drive, click to place, Z/UP gas, X/DOWN brake, LEFT/RIGHT steer, SPACE handbrake-drift, Q/E or the H-gate to shift (down at a stop = reverse), I ignition, G transmission, K engine kind, 1-0/-/= templates, R reset. GET OUT OF THE CAR: stop and press F -- you step out of the seat cell as a one-tile person (the seat's occupant, same scale as the rig's parts), walk with arrows/WASD (Z jogs), and the same world pushes back on foot: buildings and parked cars block you, the camera eases in to 1:1, and the GROUND drives your pace - tarmac and the pavement strip beside it walk full speed, grass drags you to ~0.6x (the same road_at() surface seam that drives the rig's grip, so it works identically in the procedural grid and in real OSM Delft). Walk back to your seat and press F to drive again -- on a long rig that means walking to the cab, because entry is the SEAT cell, not 'the vehicle'. A rig with no seat can't be entered, the same rule that makes it drivable. DRIVE A REAL CITY: drag a .rvb road-data file (e.g. data/delft-centre.rvb, made by data-tools/roadview/osm-roads.js) onto the window to leave the procedural world and drive real OpenStreetMap streets — the road surface drives handling (grip drops the moment you slide off the tarmac) and the real building footprints are solid obstacles you crash into; O reveals the data folder. Same runtime data hooks as roadview; swap the file, drive a different city."
 }
 de:meta */
 #include "studio.h"
@@ -604,7 +604,9 @@ static int  zone_at(float x, float y);   // (defined below; gen_chunk needs it t
 // so behaviour is unchanged. The point: callers ask road_at() instead of inlining the grid math, so
 // Rung B can swap the BODY for OSM (real Delft .rvb) or roadnet2 with NO change here. `cls` is a coarse
 // hierarchy (the zone, for now). Fields mirror roadnet's RoadHit so the contract survives the swap.
-typedef struct { int on_road; int zone; int cls; } RoadHit;
+typedef struct { int on_road; int zone; int cls; int on_pave; } RoadHit;   // on_pave (rung F1, appended):
+                                             // carriageway OR the ~2m strip beside it — the pavement band
+                                             // the avatar walks at full pace; the rig's grip ignores it
 static RoadHit road_at(float x, float y);   // (defined below, beside zone_at)
 static int osm_loaded;                       // Rung B: 1 once a .rvb is loaded (defined with the OSM block below)
 // Rung C: OSM building footprints → collidable OB_HOUSE obstacles. Declared here (gen_chunk, above the
@@ -1041,6 +1043,8 @@ static void rot(float lx, float ly, float *wx, float *wy) {
 #define FOOT_REACH   14.0f     // F re-enters within this of the seat cell (~2 cells)
 #define FOOT_EXIT_SPD 14.0f    // rig must be this slow to step out (≈10 km/h, a crawl — deliberately
                                // ABOVE the automatic's idle creep ~8.3 px/s, so brake→F just works)
+#define FOOT_OFFROAD  0.62f    // F1: grass/rough drags the walk — the on-foot twin of OFFROAD_GRIP
+#define FOOT_PAVE_M   2.0f     // F1: the pavement strip beside a carriageway (metres, OSM) walks full pace
 static float foot_x, foot_y;             // avatar world position
 static float foot_dx = 1, foot_dy = 0;   // last walk direction (unit) — the head pixel leads
 static int   foot_deny;                  // frames left on the "stop first" flash (F while moving)
@@ -1125,6 +1129,9 @@ static void update_foot(float dt_) {
     if (m2 > 0.01f) {
         float inv = 1.0f / fsqrt(m2);       // diagonals walk no faster
         float spd = (key('Z') || btn(0, BTN_A)) ? FOOT_RUN : FOOT_SPD;
+        RoadHit fh = road_at(foot_x, foot_y);            // F1: the ground drives the feet — the SAME
+        if (!fh.on_road && !fh.on_pave) spd *= FOOT_OFFROAD;   // seam as the rig's tyres. Tarmac + the
+                                                         // pavement strip walk full pace; grass drags.
         foot_x += mx * inv * spd * dt_;
         foot_y += my * inv * spd * dt_;
         foot_dx = mx * inv; foot_dy = my * inv;
@@ -1959,6 +1966,9 @@ void update(void) {
     watch("foot", "%d", mode == MODE_FOOT);        // rung F0: the car↔foot seam, traced
     watch("foot_x", "%.1f", foot_x);
     watch("foot_y", "%.1f", foot_y);
+    { RoadHit _fh = road_at(foot_x, foot_y);       // rung F1: the ground under the feet
+      watch("foot_road", "%d", _fh.on_road);
+      watch("foot_pave", "%d", _fh.on_pave); }
     watch("ang", "%.0f", ang);
     watch("angvel", "%.0f", angVel);
     watch("cam_ang", "%.0f", cam_ang);
@@ -2888,7 +2898,7 @@ static float osm_pt_seg_d2(float px, float py, float ax, float ay, float bx, flo
 // roads; otherwise the STUB grid world (a point is ON a road within ZONE_LANE/2 of a grid line at the
 // zone pitch — AGREES with the bands draw_course paints by construction). Rung B swapped in the OSM body.
 static RoadHit road_at(float x, float y) {
-    RoadHit r; r.zone = zone_at(x, y); r.cls = r.zone; r.on_road = 0;
+    RoadHit r; r.zone = zone_at(x, y); r.cls = r.zone; r.on_road = 0; r.on_pave = 0;
 
     if (osm_loaded) {                                        // ── OSM: real Delft roads ──
         float mx = osm_cx + x / OSM_PPM;                     // pixels → metres, rig origin = bbox centre
@@ -2903,6 +2913,8 @@ static RoadHit road_at(float x, float y) {
                     int s = oidx[k];
                     float d2 = osm_pt_seg_d2(mx, my, oseg[s].ax, oseg[s].ay, oseg[s].bx, oseg[s].by);
                     if (d2 <= oseg[s].hw * oseg[s].hw && d2 < best) { best = d2; r.on_road = 1; r.cls = oseg[s].cls; }
+                    float pv = oseg[s].hw + FOOT_PAVE_M;     // F1: the pavement strip beside the carriageway
+                    if (d2 <= pv * pv) r.on_pave = 1;
                 }
             }
         return r;
@@ -2916,6 +2928,8 @@ static RoadHit road_at(float x, float y) {
     if (dx < 0) dx = -dx;
     if (dy < 0) dy = -dy;
     r.on_road = (dx <= hw || dy <= hw);
+    float pv = hw + FOOT_PAVE_M * OSM_PPM;                   // F1: same strip, stub world (px)
+    r.on_pave = (dx <= pv || dy <= pv);
     return r;
 }
 
@@ -3560,6 +3574,38 @@ void spec(void) {
     vx = FOOT_EXIT_SPD * 3; vy = 0;
     spec_tap('F');
     expect(mode == MODE_DRIVE, "F while rolling does NOT step out (stop first)");
-    vx = 0;
+    vx = 0; vy = 0;
+
+    // ── rung F1: the SURFACE drives the walk — road_at(), the same seam as the rig's grip ──
+    spec_tap('F');                                                  // out again
+    expect(mode == MODE_FOOT, "back out on foot for the surface tests");
+    rot(slx, sly, &swx, &swy);
+    // find one clear 12px eastward run on tarmac and one on grass, near the rig (loaded chunks
+    // = honest collision probes). "clear" = unblocked AND the surface holds for the whole run.
+    float rx = 0, ry = 0, gx = 0, gy = 0; int have_r = 0, have_g = 0;
+    for (float oy = -160; oy <= 160 && !(have_r && have_g); oy += 8)
+        for (float ox = -160; ox <= 160 && !(have_r && have_g); ox += 8) {
+            float cx = swx + ox, cy = swy + oy;
+            int road_run = 1, grass_run = 1;
+            for (float d = 0; d <= 12; d += 3) {
+                if (foot_blocked(cx + d, cy)) { road_run = grass_run = 0; break; }
+                RoadHit h = road_at(cx + d, cy);
+                if (!h.on_road) road_run = 0;
+                if (h.on_road || h.on_pave) grass_run = 0;
+            }
+            if (road_run  && !have_r) { rx = cx; ry = cy; have_r = 1; }
+            if (grass_run && !have_g) { gx = cx; gy = cy; have_g = 1; }
+        }
+    expect(have_r && have_g, "found a tarmac run and a grass run near the rig");
+    foot_x = rx; foot_y = ry;
+    key_down(KEY_RIGHT); step(15); key_up(KEY_RIGHT); step(1);
+    float droad = foot_x - rx;
+    foot_x = gx; foot_y = gy;
+    key_down(KEY_RIGHT); step(15); key_up(KEY_RIGHT); step(1);
+    float dgrass = foot_x - gx;
+    expect(droad > dgrass * 1.2f, "tarmac walks faster than grass (the surface drives the feet)");
+    expect(dgrass > 2.0f, "grass still walks, just slower");
+    { RoadHit h = road_at(rx, ry);
+      expect(h.on_pave, "a carriageway point is also on_pave (the strip contains the road)"); }
 }
 #endif
