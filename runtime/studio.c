@@ -1349,9 +1349,40 @@ bool paused(void) { return pause_active; }
 
 // draw the pause overlay into the canvas (native resolution) so it scales up
 // with the game and looks pixel-perfect — same renderer, same font, same pixels.
+// Pause-menu items. MULTIPLAYER appears only on a net-capable native build; the
+// same list drives the draw + the input below, so they can't drift.
+#ifdef DE_NET_BUILD
+static const char *pause_items[] = { "CONTINUE", "MULTIPLAYER", "RESTART" };
+#else
+static const char *pause_items[] = { "CONTINUE", "RESTART" };
+#endif
+#define PAUSE_N_ITEMS ((int)(sizeof pause_items / sizeof pause_items[0]))
+
+#ifdef DE_NET_BUILD
+// Relaunch this exact binary with --net-lobby appended, so the fresh process
+// boots into the Host/Join/Solo menu. Netplay needs its startup order (the
+// host's seed must reach the joiner before init()), so entering net mid-game is
+// a clean self-restart — the same execv() the RESTART item uses. Two standalone
+// launches on one machine can each pause → MULTIPLAYER → one Hosts, one Joins
+// 127.0.0.1. docs/design/multiplayer-research.md (rung 2.5).
+static void net_restart_into_lobby(void) {
+    if (!restart_argv) return;
+    int argc = 0; while (restart_argv[argc]) argc++;
+    for (int i = 0; i < argc; i++)                       // already flagged? relaunch as-is
+        if (strcmp(restart_argv[i], "--net-lobby") == 0) { execv(restart_argv[0], restart_argv); return; }
+    char **nv = (char **)malloc(sizeof(char *) * (size_t)(argc + 2));
+    if (!nv) { execv(restart_argv[0], restart_argv); return; }
+    for (int i = 0; i < argc; i++) nv[i] = restart_argv[i];
+    nv[argc]     = (char *)"--net-lobby";
+    nv[argc + 1] = NULL;
+    execv(nv[0], nv);
+    free(nv);                                            // reached only if execv failed
+}
+#endif
+
 static void draw_pause_canvas(void) {
     if (!pause_active) return;
-    const int bw = 120, bh = 50;
+    const int bw = 120, bh = 26 + PAUSE_N_ITEMS * 12;    // grows with the item count
     const int bx = (SCREEN_W - bw) / 2, by = (SCREEN_H - bh) / 2;
 
 
@@ -1365,13 +1396,12 @@ static void draw_pause_canvas(void) {
     const char *title = "PAUSED";
     print(title, bx + (bw - text_width(title)) / 2, by + 5, CLR_BLUE);
 
-    const char *items[] = { "CONTINUE", "RESTART" };
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < PAUSE_N_ITEMS; i++) {
         int col = (pause_sel == i) ? CLR_WHITE : CLR_DARK_GREY;
-        int ix  = bx + (bw - text_width(items[i])) / 2;
+        int ix  = bx + (bw - text_width(pause_items[i])) / 2;
         int iy  = by + 20 + i * 12;
         if (pause_sel == i) print("\x10", ix - 10, iy, CLR_WHITE);
-        print(items[i], ix, iy, col);
+        print(pause_items[i], ix, iy, col);
     }
 }
 
@@ -1836,12 +1866,17 @@ static void loop_step(void) {
         if (inp_pressed(KEY_ESCAPE)) {
             pause_active = false;
             de_master_volume(1.0f);
-        } else if (inp_pressed(KEY_UP))   { pause_sel = (pause_sel + 1) % 2; }
-        else if (inp_pressed(KEY_DOWN))   { pause_sel = (pause_sel + 1) % 2; }
+        } else if (inp_pressed(KEY_UP))   { pause_sel = (pause_sel + PAUSE_N_ITEMS - 1) % PAUSE_N_ITEMS; }
+        else if (inp_pressed(KEY_DOWN))   { pause_sel = (pause_sel + 1) % PAUSE_N_ITEMS; }
         else if (inp_pressed(KEY_ENTER) || inp_pressed(KEY_Z)) {
-            if (pause_sel == 0) {           // Continue
+            const char *sel = pause_items[pause_sel];
+            if (strcmp(sel, "CONTINUE") == 0) {          // Continue
                 pause_active = false;
                 de_master_volume(1.0f);
+#ifdef DE_NET_BUILD
+            } else if (strcmp(sel, "MULTIPLAYER") == 0) {  // relaunch into the Host/Join/Solo lobby
+                net_restart_into_lobby();
+#endif
             } else {                        // Restart
                 if (restart_argv) execv(restart_argv[0], restart_argv);
             }
