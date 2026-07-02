@@ -437,6 +437,26 @@ binary is **unsigned**, so the OS scares the recipient once:
 | **Windows** | SmartScreen "Windows protected your PC / unknown publisher" → *More info → Run anyway* | An **Authenticode** code-signing certificate (OV/EV from a CA, ~$100–400/yr); EV clears SmartScreen reputation immediately, OV warms up over installs. |
 | **macOS** | Gatekeeper "unidentified developer / can't be opened" → **right-click → Open** once (and a bare exported binary fails outright on another Mac — confirmed 2026-07-02: a colleague couldn't open it) | A **`.app` bundle** + **Developer ID Application** cert + **notarization** (`notarytool`) + **staple**. **Pipeline is built:** [`tools/mac-app.sh`](../../tools/mac-app.sh) (bundle → codesign → notarize → staple; header has the one-time setup). Blocked only on prerequisites: the maker has only an *Apple Development* cert, **not** a Developer ID one — mint it in Xcode (Accounts → Manage Certificates → + → Developer ID Application; paid account, Team ID `L4S453HYLF`), plus an app-specific password + `notarytool store-credentials`. **Do this on the home Mac** (where iOS signing is already set up); the Developer-ID private key is machine-bound (export a `.p12` to sign elsewhere). |
 
+**Two separate walls (learned 2026-07-02, when a colleague couldn't open a
+Slack'd binary).** The "couldn't open it" failure is easy to misdiagnose as a
+signing problem when the *first* wall is actually plumbing:
+
+1. **Transport strips the executable bit.** Slack / email / most transfers don't
+   preserve POSIX permissions, so a bare Mach-O exported `chmod +x` arrives on the
+   other Mac as a non-executable `0644` file — Finder won't run it, which reads as
+   "can't open it," *before Gatekeeper is even reached.* **Fix: always send it
+   zipped** — a `.zip` (or `ditto`) preserves the `+x` bit, and a `.app` (a folder)
+   must be zipped to send anyway.
+2. **Gatekeeper (unsigned + quarantine).** Even with `+x` restored, an unsigned
+   download triggers "unidentified developer / cannot be verified" (or "damaged").
+   **Fix: Developer ID sign + notarize** (`tools/mac-app.sh`).
+
+Isolate which wall a recipient hit, no signing needed: send the **zip**, have them
+unzip → **right-click → Open**. Runs (maybe after one "open anyway") ⇒ it was only
+the `+x` bit. "Unidentified developer / damaged" ⇒ Gatekeeper, signing required.
+Only a **notarized `.app`** double-clicks with *zero* friction (no zip dance, no
+right-click, no warning) — that's the end state.
+
 **Decision on file (2026-07-02):** ship **unsigned binaries for now** — fine for
 "send it to your kid, click through the one warning" and for the maker's own two
 Macs (right-click → Open). Signing/notarization is deferred, not cancelled;
