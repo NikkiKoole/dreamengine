@@ -174,7 +174,10 @@ Full design seed (band, brain, the original cute face, the IP guardrail,
 tribe/channels): [`tinyjam-cozy-adventure.md`](../marketing/tinyjam/tinyjam-cozy-adventure.md);
 go-to-market context in [`tinyjam-marketing.md`](../marketing/tinyjam/tinyjam-marketing.md) §3.10.
 
-**rebirth-classic notes** (added 2026-06-07): the only rack where every voice is
+**rebirth-classic notes** (added 2026-06-07; **promoted to its own design doc 2026-07-02:
+[`rebirth-classic.md`](rebirth-classic.md)** — full research pass, slot math, 320×240 accordion
+layout, the seeded generator, the 303-filter fidelity plan, and the case for taking the pilot
+slot from rebirth-house): the only rack where every voice is
 already a shipped cart (tb303 ×2, tr808, tr909) — zero new sound work, maximum
 homage. What it lacks is a generator: there is no acid station, and french house
 (house.c) is a *different idiom* — acid's 303 pattern IS the song, slide/accent

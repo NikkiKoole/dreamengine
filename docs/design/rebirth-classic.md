@@ -1,0 +1,216 @@
+# Rebirth-classic — the RB-338 homage rack: 2×303 + 808 + 909 in one cart
+
+STATUS: READY TO BUILD — designed (2026-07-02) from a four-thread research pass over the shipped
+machine carts, the effects surface, the generator precedents and the filter engine. Proposes taking
+the pilot slot in the [`tinyjam-racks.md`](tinyjam-racks.md) build order (rationale in §Why this
+pilot). Nothing built yet; the filter fidelity spike (§3) is the first increment.
+
+> The rebirth-classic row of the [`tinyjam-racks.md`](tinyjam-racks.md) rack table, promoted to its
+> own design. Maker direction captured here (2026-07-02): **build the cart first, self-contained —
+> no `rack.h` until a second rack earns it** (the radio.h second-customer rule); **patterns + song
+> chain are v1, not v2** ("so you can make a real longer song"); **320×240 with accordion panels**;
+> and **sonic fidelity is the bar** — "if we use a wrong filter we need a better one" — a new
+> engine filter is pre-approved if the A/B demands it.
+
+Companion reading: [`tinyjam-racks.md`](tinyjam-racks.md) (the rack program this belongs to; lane
+format, export tiers, trademark rule), [`tinyjam-racks-followup.md`](tinyjam-racks-followup.md)
+(bias knobs, JSON-diff export, the dancer), [`audio-notes.md`](audio-notes.md) §17/§21/§23 (the 303
+audit, the ladder, the Steiner), [`../guides/radio-station-howto.md`](../guides/radio-station-howto.md)
++ `runtime/radio.h` (seed rules the generator follows).
+
+## Why this pilot (the swap argument)
+
+`tinyjam-racks.md` gave the pilot slot to rebirth-house because its generator (house.c) exists and
+the seed-code handoff to a shipped station is the pipeline-proving constraint. The counter-case for
+classic-first, now research-backed:
+
+- **Zero seed-compat burden.** There is no acid station to trace-match — the "one dangerous part"
+  of the house pilot simply doesn't exist here. The generator is written seeded-native from day one.
+- **Every voice is already shipped and tuned** (tb303, tr808, tr909 carts) — zero new sound work
+  beyond the filter fidelity spike, which upgrades the shipped tb303 cart regardless.
+- **Acid is the simplest lane format**: two 303 lanes (note/slide/accent per step), drum trigger
+  lanes, harmony that barely moves. Minimal machinery to prove lanes, tap-editing, banks, chain,
+  save, WAV export — everything the pilot must prove *except* the radio handoff.
+- **It's the purest homage** — the rack that markets itself.
+
+Honest framing: **classic proves the rack chassis; house proves the radio handoff.** Whichever goes
+first, the other is customer #2 and triggers the `rack.h` extraction. This doc proposes classic
+first.
+
+## 1. Ground truth from the research pass (2026-07-02)
+
+### The machines, as shipped
+
+| Cart | Slots | What ports verbatim | What must change |
+|---|---|---|---|
+| `tb303.c` | 1 (`SLOT 9`) | voice recipe (~17 lines: saw/square + LP + drive + slapback), slide = `note_glide`+`note_pitch` on the held handle with **no re-trigger**, accent = vol 7 vs 5 + scaled env amount, 70% staccato gate, knob→param maps | all state is file-scope globals with `SLOT` hardcoded → wrap in a struct, instantiate ×2 on two slots. `bpm()`/echo are global engine state → owned by the rack transport, not the machine |
+| `tr808.c` | 14 (9..22) | all 16 voice recipes, choke (`instrument_choke`), presets, the offbeat-8th swing (admitted anachronism) | voice set curated down (§2 slot math); grid/knob code merges with the 909's (shared skeleton) |
+| `tr909.c` | 13 (9..21) | analog kick/snare/toms + FM-clang metal recipes, stroke family (flam 22ms / drag / ratchet), period-correct even-16th shuffle, metal-filter XY pad, choke | same skeleton merge; slots renumbered |
+
+The 808 and 909 carts are **near-identical skeletons** (same `Pat` struct, `grid[NV][STEPS]`,
+three-knob-per-voice system, preset format — every top-level symbol collides). The rack therefore
+builds **one drum-panel implementation with two voice tables**, not two copied panels. The 909's
+stroke chars (`x`/`f`/`d`/`r`) and `gstroke[][]` are the superset format; the 808 just doesn't use
+strokes.
+
+### Slot math (the one hard constraint)
+
+Definable slots are 5..31 (27; convention parks 9..31 = 23 for the cart). Full kits don't fit:
+2×303 (2) + 808 (14) + 909 (13) = **29**. Resolution — **curate the 808's rack voice set** (the
+909 stays complete; it's the star kit):
+
+- 808 keeps ≈9: BD, SD, CP, CB, MA, OH, CH + 2 toms (LT/HT sharing the tom slot-pair as today).
+- 808 cuts: congas ×3, clave, rimshot, cymbal — the voices acid house least missed. (ReBirth's own
+  panels were curated too.)
+- Total ≈ 2 + 9 + 13 = **24 slots**. Fits with a little headroom.
+
+Rejected alternatives: re-`instrument()`-ing shared analog slots per trigger (breaks set-and-hold,
+kills 808+909 kick layering); growing the engine past 32 slots (real blast radius, not earned by
+congas).
+
+### Effects: ReBirth's rack maps one-to-one onto existing master inserts
+
+| RB-338 effect | Engine call | Note |
+|---|---|---|
+| Distortion | `drive_insert(amount, mode, mix)` | reorderable `FX_DRIVE` |
+| Delay | `echo_insert(time, fb, tone, mix)` | reorderable `FX_ECHO`; tempo-synced times from the transport |
+| Compressor | `glue(0, amount, atk, rel)` | groovebox's `apply_fx()` is the reference idiom (PUMP/GLUE share the one master comp) |
+| PCF (pattern-controlled filter) | master `filter(mode, hz, res)` | **explicitly ride-safe every frame** — a sequencer lane driving it IS the PCF |
+
+Two rules to honor (both already bit other carts): `fx_order()` **replaces** the chain — every
+pedal used must be listed or it silently bypasses; and buffer effects are **set-on-change only**
+(copy groovebox's knob-moved gating). Ride-safe set: `filter`/`varispeed`/`note_*`/`fx_mod`.
+
+## 2. The design
+
+### One self-contained cart
+
+No `rack.h`. Machines are structs, not headers: a `Machine303` (voice + 16-step
+note/slide/accent/gate data + knobs) instantiated twice, and a `DrumPanel` (grid + stroke data +
+voice table + per-voice knobs) instantiated twice with the 808/909 tables. Copy recipes verbatim
+from the source carts — the rack embeds *recipes*, never carts.
+
+### 320×240, accordion panels (maker-confirmed)
+
+320×240 is precedented (`moog`/`fingerdrums` ship at it; `sh101` goes 460×300 if we ever need
+taller). Layout:
+
+- **Transport bar** (~24px, always visible): play/stop, BPM, shuffle, pattern bank A–D, chain
+  toggle, seed/song-code display.
+- **Five accordion strips**: 303-A, 303-B, 808, 909, FX/mixer. Folded strip ≈ 22px: name LED,
+  **live mini 16-tick playhead**, mute, tiny level meter — folded machines stay visibly *breathing*
+  (most of ReBirth's charm). Tap a strip to expand it; **one expanded at a time**.
+- **Expanded panel** gets ≈ 240 − 24 − 4×22 ≈ **~128px** (~150px if the FX strip folds into the
+  transport bar). The 909's grid needs ~100px at the shipped 9px row pitch — fits. The 303's
+  panel needs compacting from its full-screen layout (drop the help overlay, tighter roll).
+- **Two invariants**: sound never depends on what's expanded (the sequencer is global; the
+  accordion is pure view), and folded ≠ blind (the mini playheads).
+
+### Patterns + song mode: v1 (maker-confirmed)
+
+- **Global pattern snapshots**: one pattern = all machines' 16 steps together. Banks **A–D**
+  (format leaves room for A–H free — the bank index is a byte).
+- **One chain row** = song mode: up to 64 entries, one pattern per bar ≈ 2 minutes at 130 BPM —
+  a real track, and enough for WAV export to mean something.
+- The generator fills the banks as the arrangement: A sparse intro, B groove, C build (kick roll),
+  D drop — `tinyjam-racks.md`'s "sections become pattern banks," landing in v1.
+- Per-machine pattern locks (mix 303-A's pattern 3 with the 909's 1, real-RB-338 style) are a
+  compatible later extension: a chain entry grows from 1 index to 4.
+- Persistence: the whole song (banks + chain + knobs + fx) via `save_bytes()` — the same blob the
+  future `song.h` export tier reads (`tinyjam-racks.md` §Export).
+
+### The seeded acid generator (the genuinely new code)
+
+No station to stay compatible with, so it's written radio-idiom from scratch:
+`rad_seed_begin(&rs, seed)` + every compositional draw from the `srnd()` stream in fixed order
+(the radio.h seed rules; performance humanize stays on `rnd()`). Ingredients already proven:
+
+- **Musicality** from `tb303.c`'s `gen_random()`: root-heavy minor-pentatonic pool
+  `{0,0,0,3,5,7,10,12}`, ~72% gate, ~35% note-repeat, ~30% accent, ~25% slide, lands on the root.
+- **Seeded discipline** from `braindance.c`/`squarepusher.c` (both already roll srnd-seeded 16-step
+  acid lines cart-side).
+- **Extended to the rack**: fill both 303s (call-and-response: B answers A's line thinned/octaved),
+  pick drum presets/variations per bank, place the C-bank kick roll and D-bank open-hat lift, and
+  write the chain (e.g. `A A B B A B C D · B B …`).
+
+The seed displays as the 8-hex **song code** on the transport bar — shareable, typeable,
+reproducible. Acceptance test: same seed → identical trace, the standard radio trace-diff.
+
+## 3. Sonic fidelity — the filter is the product (maker-set bar)
+
+The research verdict on the acid path as shipped: `tb303.c` runs **`FILTER_LOW`, a clean linear
+12dB/oct 2-pole Chamberlin SVF** — no in-loop nonlinearity, no bass-thinning, no resonance
+compensation (audio-notes §17: the 303 squelch is "the filter driven into saturation, not the
+filter" — and our saturation is post-filter only). The real TB-303 is an ~18dB/oct **diode ladder**.
+What the engine has today:
+
+- **`FILTER_LADDER`** (`sound_ladder`, sound.h ~4309) — ZDF 4-pole transistor ladder: passband-bass
+  drain + self-oscillation near max res (the two signature behaviors `FILTER_LOW` can't do). But
+  it's the stripped port: single-rate, **linear** feedback, no calibrated resonance curve.
+- **`FILTER_STEINER`** — 2-pole with a diode-style tanh **in the feedback path**; docs already call
+  it "great for acid."
+- **navkit's ladder was deliberately not ported** (`~/Projects/navkit/soundsystem`,
+  `engines/synth.h` ~1323–1470): 2× polyphase-IIR oversampling, OTA Padé-tanh saturation on the
+  feedback loop, Juno-calibrated exponential resonance curve, thermal-noise self-oscillation
+  seeding, Q/frequency compensation. A proper 303 filter is a **port + diode-topology adaptation**,
+  not greenfield DSP. (navkit has no diode ladder either — its model is the Juno IR3109 lineage.)
+
+**The fidelity ladder, cheapest first, each rung gated by measurement + ears:**
+
+1. **A/B as-is**: render one committed acid pattern (deterministic `.script`) through `FILTER_LOW`
+   / `FILTER_LADDER` / `FILTER_STEINER` — one-line swaps in the voice recipe. `play.js --wav` →
+   `harmonic-spec.js` (resonance peak, bass-harmonic thinning) + `wav-envelope.js` (sweep contour)
+   + listening.
+2. **If none squelches** (expected: the ladder gets close, but linear feedback won't growl):
+   build **`FILTER_DIODE`** — ZDF diode ladder, ~18dB/oct character, saturation *inside* the loop,
+   porting navkit's oversampling + resonance calibration onto the existing `sound_ladder` skeleton.
+   **Pre-approved by the maker** (2026-07-02). Ships under the four-place API rule (+ audio-notes
+   §17-ledger entry) with the sound.h gates (`soundcheck` silence run, `tune-check --quiet`), and
+   before/after renders committed as acceptance evidence.
+3. Either way, **the winning filter upgrades the shipped `tb303.c`** — a fidelity gift independent
+   of the rack.
+
+Tooling gap worth closing in the same spike: no filter-sweep/frequency-response analyzer exists in
+`tools/`. A small **`filter-spec.js`** (fixed-pitch saw, stepped cutoff/res, reports slope at the
+knee + resonance peak + bass-thinning ratio) makes the verdict reproducible and re-blessable, in
+the house style of the other audio gates.
+
+Same bar applies down the rack, in order of audibility: the 303 filter (above) ≫ 909 kick attack
+click ≫ hat FM stand-ins (already the honest documented compromise for 6-bit ROM samples) ≫ the
+rest — already vouched for by their shipped carts.
+
+## 4. Identity & trademark
+
+Roland-flavored homage stays free (gallery/web); nothing Roland-skinned crosses a paywall — the
+paid identity gets original naming (`tinyjam-marketing.md` §2, the `tj-acid3`/`tj-drums9`
+convention). Precedent: `moog.c` ships titled **"dream synth."** The rack should follow suit from
+day one — original faceplate name, RB-338 in `lineage`/`homage` metadata where it belongs.
+
+## 5. Build order
+
+1. **Filter fidelity spike** (§3): the A/B, `filter-spec.js`, `FILTER_DIODE` if the verdict demands
+   it, tb303.c upgraded. Independent, ships value even if the rack stalls.
+2. **The cart, playable**: 320×240 accordion shell; Machine303 ×2 + DrumPanel ×2 with curated
+   slots; shared transport; banks A–D + chain row; `save_bytes` persistence. Hand-authored default
+   patterns (one per bank) so it's an instrument before it's a generator.
+3. **The seeded generator**: banks + chain from a song code; seed on the transport bar; trace-diff
+   acceptance test.
+4. **Export**: WAV button (arms the `.bake/wav_request` trigger); song-code display/entry. Stems =
+   solo-a-strip + re-render, a loop not a feature.
+5. Later, with the rack program: per-machine pattern locks, the bias knobs / JSON-diff export /
+   dancer from [`tinyjam-racks-followup.md`](tinyjam-racks-followup.md), `rack.h` when customer #2
+   arrives.
+
+## Open questions
+
+- **Chain length / structure** — 64 flat entries, or entries with a repeat count (`B×4`)? Flat is
+  simpler to edit on a strip; counts read better. Decide at the chain-row UI.
+- **808+909 both, always?** ReBirth v2 ran both kits simultaneously; the slot budget allows it.
+  But does the *generator* use both per song, or pick one per seed with the other muted?
+- **Shuffle scope** — one master shuffle knob (period-correct even-16ths), or per-machine like the
+  standalone carts (the 808's offbeat-8th anachronism preserved)? Lean: one master knob.
+- **PCF routing** — ReBirth's PCF was per-device; ours is the master `filter()`. Master-only for
+  v1, or a second `filter_inst` instance for one assignable device bus?
+- **303 panel compaction** — does the piano roll survive at ~128px height with touch targets, or
+  does the expanded 303 need a reduced flag-row layout (OCT/ACC/SLD as cell states instead of
+  separate rows)?
