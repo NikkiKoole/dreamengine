@@ -4127,7 +4127,13 @@ void camera_ex(int x, int y, float zoom, float angle) {
 #endif
     float zd = zoom > 1.0f ? zoom - 1.0f : 1.0f - zoom;
 #ifndef PLATFORM_WEB
-    if (smooth_on && smooth_rt_ok && zd > 0.002f) {       // fractional zoom → capture at 1:1
+    // smooth_zoom is a GPU-path device: its EndTextureMode/BeginTextureMode(smooth_rt) dance is
+    // INVALID during a software-canvas frame (the sw path never opens a render target — cf.
+    // sw_zoom_rect), and the leaked BeginTextureMode(canvas) from smooth_composite then swallows
+    // the present, freezing the window (bit sloop: smooth_zoom + speed-zoom under
+    // DE_SOFTWARE_CANVAS). The canvas doesn't need it anyway — sw_w2s scales fractional zoom
+    // axis-aligned (Option 2, no staircase), so just skip the capture on the sw path.
+    if (!sw_canvas_active && smooth_on && smooth_rt_ok && zd > 0.002f) {   // fractional zoom → capture at 1:1
         if (!smooth_capturing) {
             if (cam_active) EndMode2D();
             EndTextureMode();                              // leave the canvas

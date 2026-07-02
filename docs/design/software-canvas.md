@@ -340,6 +340,14 @@ be coalesced.
 > **Separately, `facegen` surfaced the still-open `zoom_rect`/`smooth_zoom` gap** — those sample
 > `canvas.texture` mid-`draw()`, which is stale under the canvas (uploaded only at end-of-frame), so
 > the magnified inset garbles. Distinct from rotation; the fix is a cbuf read-magnify-write.
+> **Update (2026-07-02): both halves closed.** `zoom_rect` got exactly that — `sw_zoom_rect`, a pure
+> cbuf read-magnify-write (dest-pixel-centre nearest, GPU POINT parity). `smooth_zoom` turned out to
+> be a different bug class: its `EndTextureMode`/`BeginTextureMode(smooth_rt)` capture dance ran
+> mid-sw-frame with **no render target open**, and `smooth_composite`'s leaked
+> `BeginTextureMode(canvas)` then swallowed the present — the window froze on the last good frame
+> (bit `sloop`: `smooth_zoom` + fractional speed-zoom under `DE_SOFTWARE_CANVAS`). Fix: skip the
+> capture when `sw_canvas_active` — the canvas already renders fractional zoom natively (`sw_w2s`
+> axis-aligned scale, Option 2), so smooth_zoom is a GPU-path-only device by construction.
 >
 > **Cross-device determinism (goal B) — verified for the algorithms, two gaps left open (2026-06-25).**
 > The drift this guards against is real: raw libm `cosf`/`sinf` differ ~1 ULP across arm64 / x86-64 /
@@ -379,9 +387,9 @@ be coalesced.
 > 32-entry nearest scan per texel, gated on `pal_active`** (zero cost otherwise) — fine for
 > correctness; a reverse LUT is the obvious speedup if a pal-heavy cart ever profiles hot.
 >
-> **Still open:**
-> - **`zoom_rect()` / `smooth_zoom()`** — texture-feedback ops that sample `canvas.texture`
->   mid-`draw()`, stale until the end-of-frame upload. Need a `sw_force_gpu` or a cbuf-readback.
+> **Still open:** nothing in this tier — `zoom_rect()` (cbuf readback: `sw_zoom_rect`) and
+> `smooth_zoom()` (skipped on the canvas — `sw_w2s` renders fractional zoom natively; the GPU
+> capture dance corrupted sw frames, see the 2026-07-02 update above) both resolved.
 
 ## When to enable it — HW vs SW (the per-cart rule)
 
