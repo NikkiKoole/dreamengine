@@ -1,0 +1,26 @@
+down 100 M
+down 104 1
+up 108 1
+click 120 40 189
+click 132 70 189
+click 144 100 189
+click 156 140 189
+click 168 180 189
+click 180 220 189
+click 192 260 189
+click 204 300 189
+down 220 6
+up 224 6
+up 236 M
+down 300 M
+down 304 6
+up 308 6
+down 312 4
+up 316 4
+up 328 M
+down 420 M
+down 424 4
+up 428 4
+down 432 1
+up 436 1
+up 448 M
