@@ -14,8 +14,8 @@
   "lineage": "Chassis after drummachine's beat()-clock sixteenth counter + keybed.h QWERTY note entry; the Song→Chain→Phrase nested-pattern model after LSDJ and the Dirtywave M8 (mnemonic FX, single-track phrase view, chain transpose). First cart on the shelf with song ARRANGEMENT — see docs/design/tracker-cart.md.",
   "description": {
     "summary": "A real music tracker: phrases of 16 steps chain into songs, four tracks, mnemonic FX — the LSDJ/M8 model on a 40-column screen.",
-    "detail": "Four independent tracks each walk a column of CHAINS; a chain strings PHRASES together with per-entry transpose (one bassline serves every chord); a phrase is 16 steps of note + instrument + one FX command (ARP POR VIB VOL CUT PAN RET DEL HOP TPO). Eight hand-tuned presets — lead, bass, bell, pluck, pad, kick, snare, hat — so drums and melody interleave on any track. A demo song is loaded on first boot; your edits autosave.",
-    "controls": "TAB or [ ] switch view · arrows move · type notes on A–L / W–P (Z/X octave) · ENTER drill in / place · -/= nudge, ,/. big nudge · Q note-off · BACKSPACE clear · C/V copy paste · SPACE play/stop · 1/2 tempo"
+    "detail": "Four independent tracks each walk a column of CHAINS; a chain strings PHRASES together with per-entry transpose (one bassline serves every chord); a phrase is 16 steps of note + instrument + one FX command (ARP POR VIB VOL CUT PAN RET DEL HOP TPO). Eight hand-tuned presets — lead, bass, bell, pluck, pad, kick, snare, hat — so drums and melody interleave on any track. A demo song is loaded on first boot; your edits autosave. Press R to ROLL A RANDOM SONG (B hops genre: CHIP, HOUSE, HIPHOP, DNB) — it rewrites the same phrase/chain slots every time, so you can flip through the views and read how each genre builds its groove.",
+    "controls": "TAB or [ ] switch view · arrows move · type notes on A–L / W–P (Z/X octave) · ENTER drill in / place · -/= nudge, ,/. big nudge · Q note-off · BACKSPACE clear · C/V copy paste · SPACE play/stop · 1/2 tempo · R random song · B genre"
   }
 }
 de:meta */
@@ -312,6 +312,132 @@ static void load_demo(void) {
     doc.song[0][1] = 0; doc.song[1][1] = 1; doc.song[2][1] = 4; doc.song[3][1] = 3;
 }
 
+// ── the random-song generator: LEARNING BY SEEING ──
+// Rerolls the SAME slots the demo song uses (phrases 0/1 drums, 2 bass, 3/4 lead,
+// 5 pad; chains 0-4; song rows 0/1), so the STRUCTURE stays recognizable across
+// rolls and only the musical content changes — flip through the views after a
+// roll and read how each genre builds its groove.
+enum { G_CHIP, G_HOUSE, G_HIPHOP, G_DNB, NGENRE };
+static const char *GNAME[NGENRE] = { "CHIP", "HOUSE", "HIPHOP", "DNB" };
+static int genre = G_CHIP;
+
+static const signed char PROGS[5][4] = {   // 4-chord minor progressions, as transposes
+    { 0, -4, 3, -2 },    // i VI III VII   (Am F C G)
+    { 0, -2, -4, -2 },   // i VII VI VII   (driving)
+    { 0, 3, -2, 5 },     // i III VII iv
+    { 0, -4, -2, 3 },    // i VI VII III
+    { 0, 0, 5, -2 },     // i i iv VII     (slow burn)
+};
+static const int PENT[8] = { 0, 3, 5, 7, 10, 12, 15, 17 };   // minor pentatonic
+
+// a lead phrase: a random walk on the pentatonic, FX sprinkled by genre flags
+static void gen_lead(int p, int density, int inst, bool arps, bool lazy) {
+    int idx = 2 + rnd(3);
+    for (int s = 0; s < 16; s += 2) {
+        if (rnd(100) >= density) continue;
+        idx = clampi(idx + rnd(5) - 2, 0, 7);
+        int fx = 0, val = 0;
+        if      (rnd(4) == 0)         { fx = TFX_VIB; val = (2 + rnd(3)) * 10 + 3 + rnd(4); }
+        else if (arps && rnd(5) == 0) { fx = TFX_ARP; val = 37; }          // minor arp
+        else if (lazy && rnd(3) == 0) { fx = TFX_DEL; val = 5 + rnd(8); }  // behind the beat
+        else if (rnd(6) == 0)         { fx = TFX_POR; val = 15 + rnd(25); }
+        put(p, s, 69 + PENT[idx], inst, fx, val);
+    }
+    put(p, 14 + rnd(2), NOFF, 0, 0, 0);   // breathe at the phrase turn
+}
+
+static void gen_song(void) {
+    for (int p = 0; p <= 5; p++) doc.phr[p] = (Phrase){ 0 };
+
+    for (int p = 0; p <= 1; p++) {   // drums: phrase 0 = groove, 1 = same + a fill
+        switch (genre) {
+        case G_CHIP:   // four-square backbeat, hats on the 8ths
+            put(p, 0, 36, I_KICK, 0, 0);  put(p, 8, 36, I_KICK, 0, 0);
+            if (rnd(2)) put(p, 6 + rnd(2) * 4, 36, I_KICK, TFX_VOL, 55);
+            put(p, 4, 58, I_SNAR, 0, 0);  put(p, 12, 58, I_SNAR, 0, 0);
+            for (int s = 2; s < 16; s += 2)
+                put(p, s, 92, I_HAT, (s % 4) ? TFX_VOL : 0, (s % 4) ? 40 : 0);
+            break;
+        case G_HOUSE:  // four on the floor, hats pushing the offbeats
+            for (int s = 0; s < 16; s += 4) put(p, s, 36, I_KICK, 0, 0);
+            for (int s = 2; s < 16; s += 4) put(p, s, 92, I_HAT, TFX_VOL, 70);
+            put(p, 4, 58, I_SNAR, 0, 0);  put(p, 12, 58, I_SNAR, 0, 0);
+            break;
+        case G_HIPHOP: // sparse kick, hats DRAGGED late with DEL — the drunk pocket
+            put(p, 0, 36, I_KICK, 0, 0);  put(p, 7 + rnd(2) * 3, 36, I_KICK, 0, 0);
+            put(p, 4, 58, I_SNAR, 0, 0);  put(p, 12, 58, I_SNAR, 0, 0);
+            for (int s = 2; s < 16; s += 2)
+                put(p, s, 92, I_HAT, (s % 4) ? TFX_DEL : 0, (s % 4) ? 5 + rnd(6) : 0);
+            break;
+        case G_DNB:    // the two-step: kick 0+10, snare 4+12, scattered hats
+            put(p, 0, 36, I_KICK, 0, 0);  put(p, 10, 36, I_KICK, 0, 0);
+            put(p, 4, 58, I_SNAR, 0, 0);  put(p, 12, 58, I_SNAR, 0, 0);
+            for (int s = 1; s < 16; s += 2)
+                if (rnd(2)) put(p, s, 92, I_HAT, TFX_VOL, 35);
+            break;
+        }
+    }
+    switch (genre) {   // the fill lives at the end of phrase 1
+        case G_CHIP:   put(1, 12, 58, I_SNAR, TFX_RET, 3); put(1, 14, 58, I_SNAR, TFX_VOL, 60); break;
+        case G_HOUSE:  put(1, 14, 92, I_HAT,  TFX_RET, 2); break;
+        case G_HIPHOP: put(1, 14, 36, I_KICK, TFX_VOL, 55); break;
+        case G_DNB:    put(1, 12, 58, I_SNAR, TFX_RET, 5); put(1, 8, 36, I_KICK, 0, 0); break;
+    }
+
+    switch (genre) {   // bass, phrase 2
+        case G_CHIP:   // driving 8ths, octave pops
+            for (int s = 0; s < 16; s += 2)
+                put(2, s, 45 + (rnd(4) == 0 ? 12 : 0), I_BASS, (s % 4) ? TFX_VOL : 0, (s % 4) ? 45 : 0);
+            break;
+        case G_HOUSE:  // the offbeat pump
+            for (int s = 2; s < 16; s += 4) put(2, s, 45, I_BASS, 0, 0);
+            put(2, 14, 57, I_BASS, 0, 0);
+            break;
+        case G_HIPHOP: // sparse, sliding
+            put(2, 0, 45, I_BASS, 0, 0);
+            put(2, 7, 45 + PENT[1 + rnd(2)], I_BASS, TFX_POR, 25 + rnd(20));
+            put(2, 10 + rnd(3), 45, I_BASS, TFX_VOL, 55);
+            break;
+        case G_DNB:    // long subs gliding under the break
+            put(2, 0, 33, I_BASS, 0, 0);
+            put(2, 8, 33 + PENT[1 + rnd(3)], I_BASS, TFX_POR, 50 + rnd(30));
+            break;
+    }
+
+    switch (genre) {   // lead, phrases 3 + 4 (the A/B pair the chain alternates)
+        case G_CHIP:   gen_lead(3, 75, I_LEAD, true, false); gen_lead(4, 75, I_LEAD, true, false); break;
+        case G_HOUSE:  { int i2 = rnd(2) ? I_BELL : I_PLUK;
+                         gen_lead(3, 40, i2, false, false);  gen_lead(4, 40, i2, false, false); } break;
+        case G_HIPHOP: { int i2 = rnd(2) ? I_PLUK : I_BELL;
+                         gen_lead(3, 45, i2, false, true);   gen_lead(4, 45, i2, false, true); } break;
+        case G_DNB:    gen_lead(3, 30, I_BELL, false, false); gen_lead(4, 30, I_BELL, false, false); break;
+    }
+
+    doc.phr[5] = (Phrase){ 0 };   // pad, phrase 5: one note a bar, swaying in the field
+    put(5, 0, 57, I_PAD, TFX_PAN, 20 + rnd(20));
+    put(5, 8, 57, I_PAD, TFX_PAN, 60 + rnd(20));
+
+    // chains + song: the demo's exact layout, over a rolled progression
+    const signed char *pr = PROGS[rnd(5)];
+    for (int c = 0; c < 5; c++)
+        for (int i = 0; i < CLEN; i++) doc.chn[c].ph[i] = NONE;
+    for (int i = 0; i < 4; i++) {
+        doc.chn[0].ph[i] = (i == 3) ? 1 : 0;  doc.chn[0].tr[i] = 0;
+        doc.chn[1].ph[i] = 2;                 doc.chn[1].tr[i] = pr[i];
+        doc.chn[2].ph[i] = (i % 2) ? 4 : 3;   doc.chn[2].tr[i] = pr[i];
+        doc.chn[3].ph[i] = 5;                 doc.chn[3].tr[i] = pr[i];
+        doc.chn[4].ph[i] = (i % 2) ? 3 : 4;   doc.chn[4].tr[i] = pr[i];
+    }
+    for (int t = 0; t < NTRK; t++)
+        for (int r = 0; r < SONG_LEN; r++) doc.song[t][r] = NONE;
+    doc.song[0][0] = 0; doc.song[1][0] = 1; doc.song[2][0] = 2; doc.song[3][0] = 3;
+    doc.song[0][1] = 0; doc.song[1][1] = 1; doc.song[2][1] = 4; doc.song[3][1] = 3;
+
+    static const int TLO[NGENRE] = { 128, 120, 84, 168 }, TRNG[NGENRE] = { 22, 8, 12, 8 };
+    tempo = TLO[genre] + rnd(TRNG[genre]);
+    doc.tempo = (unsigned char)tempo;
+}
+
 // ── keybed: a typed note previews AND (in the phrase view) writes the cell ──
 static void on_typed(int midi, int vel) { (void)vel; typed_note = midi; }
 
@@ -465,6 +591,16 @@ void update() {
         else play_start(view == V_SONG ? scur_r : 0);
     }
 
+    // ── the learning lever: R rolls a random song (B first hops genre), then plays ──
+    bool roll  = keyp('R') || tapp(92, 2, 32, 12);
+    bool gswap = keyp('B') || tapp(128, 2, 56, 12);
+    if (gswap) genre = (genre + 1) % NGENRE;
+    if (roll || gswap) {
+        gen_song();
+        dirty = true;
+        if (!playing) play_start(0);
+    }
+
     // ── transport: the drummachine sixteenth counter, anchored at play-start ──
     if (playing) {
         float pos16 = beat() * 4 + beat_pos() * 4.0f - anchor;
@@ -519,6 +655,7 @@ static void draw_help(void) {
         "ARROWS cursor", "TAB [ ] view", "ENTER  drill/place",
         "- = , . edit cell", "BKSP   clear", "Q      note off",
         "C V    copy paste", "SPACE  play/stop", "1 2    tempo",
+        "R      random song", "B      genre",
         "A..L   play notes", "Z X    octave", 0,
     };
     int y = LIST_Y + 2;
@@ -537,6 +674,10 @@ void draw() {
     // header: title + transport + the view tabs
     print("TRACKER", 4, 4, CLR_LIGHT_YELLOW);
     print(playing ? ">" : "#", 72, 4, playing ? CLR_GREEN : CLR_DARK_GREY);
+    rectfill(92, 2, 32, 11, CLR_DARK_GREY);  rect(92, 2, 32, 11, CLR_MEDIUM_GREY);
+    print("RND", 98, 4, CLR_LIGHT_GREY);
+    rectfill(128, 2, 56, 11, CLR_DARK_GREY); rect(128, 2, 56, 11, CLR_MEDIUM_GREY);
+    print(GNAME[genre], 134, 4, CLR_LIGHT_YELLOW);
     print_right(str("%d BPM", tempo), 316, 4, CLR_WHITE);
     for (int v = 0, x = 4; v < NVIEW; v++) {
         int w = text_width(VNAME[v]) + 8;
@@ -661,5 +802,23 @@ void spec(void) {
     for (int i = 0; i < 12; i++) seq_tick();
     expect_eq(trk[0].cpos, 1, "HOP at step 11 ended the phrase early (12-step meter)");
     expect_eq(trk[0].step, 0, "HOP restarted the next phrase at step 0");
+
+    // the random-song generator: every genre rolls a well-formed song
+    play_stop();
+    for (genre = 0; genre < NGENRE; genre++) {
+        gen_song();
+        expect(doc.phr[0].s[0].note == 36 && doc.phr[0].s[0].inst == I_KICK,
+               "rolled genre lands a kick on step 0");
+        int ok = 1;
+        for (int p = 0; p <= 5; p++)
+            for (int s = 0; s < PLEN; s++) {
+                unsigned char n = doc.phr[p].s[s].note;
+                if (n != 0 && n != NOFF && (n < 21 || n > 108)) ok = 0;
+            }
+        expect(ok, "all rolled notes in playable range");
+        expect(doc.song[0][0] == 0 && doc.song[2][1] == 4, "rolled song fills both rows");
+        expect(tempo >= 40 && tempo <= 260, "rolled tempo in range");
+    }
+    genre = G_CHIP;
 }
 #endif
