@@ -155,6 +155,7 @@ codebase is ours). Each = one cart, own faceplate identity, same chassis.
 |---|---|---|---|---|---|---|
 | **rebirth-classic** | acid techno — THE homage: 2×303 + 808 + 909, the RB-338 itself | 303 #1 (slide/accent acid line) | — (acid barely moves: one minor chord for bars) | 303 #2 | 808 + 909 banks side by side | the 303 filter knobs ARE the show |
 | **rebirth-house** (pilot) | disco/house | riff (I_STAB-ish) | stabs, voice-led | house bass | 808 bank | filter sweeps |
+| **yacht-rack** (→ promoted to [`yacht-rack.md`](yacht-rack.md) 2026-07-02 — the first chord-first rack: chart + interpreters, answers this doc's humanize question) | yacht rock / AOR (Steely Dan) | sax/synth/gtr-solo chair | FM epiano mu-chord comp (the chord ROW is the show) | fingered electric + approach runs | session/Purdie/CR-78 drummer chairs | MU-IFY / SUS-MELT flavor buttons |
 | **Spaghetti Western** | desert noir | musicalsaw/otamatone whistle (sine + drift — exists) | INSTR_PLUCK "tic-tac" baritone | sh101 sub | 808 cowbell/woodblock | jew's-harp twang (BPF saw, new ~10-liner) |
 | **Broken Fairground** | carnival macabre | stylophone buzz | omnichord, limping strum | 303-as-tuba (short decay, low) | 808 kick/snare + swing | steam calliope (detuned sines + noise puff, new) |
 | **Ancient Library** | dungeon synth | hurdygurdy drone+buzz | INSTR_FM "square-lute" | INSTR_MALLET stone marimba | 909 tuned −2 oct (war drums) | ghost choir (low sines, reverb) |
