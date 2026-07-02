@@ -21,7 +21,7 @@
   ],
   "description": {
     "summary": "A singing family of four otamatones - daddy, mommy, junior and the dog - each with its own voice, plus a live-looper so the whole household ends up singing rounds together.",
-    "detail": "Four otamatones drawn as a family, each a drag-to-play fretless ribbon with its OWN character: DADDY sings low and slow (lazy 90ms glide, dark muffled mouth, slow wide vibrato), MOMMY mid and graceful, JUNIOR high and jumpy (22ms glide, thin bright buzz, eager fast vibrato), and the DOG doesn't really sing - every press starts a WOOF (the note starts +6 semitones and drops), holding turns it into a HOWL that drifts sharp with a huge wobble, and it's permanently a little out of tune. Wiggle sideways off the ribbon to open each mouth (a resonant-filter wah - the faces' pixel mouths open to match). The LOOP: arm a member with its REC button and everything you play on it - the continuous pitch/mouth gesture, not quantized notes - records into a shared 8-beat tape loop and replays verbatim as a ghost dot on the ribbon while you layer the next family member on top. Two step-sequencer rows (BOOM/TICK) run underneath for rhythm, delia-style tap cells. The loop bar up top shows every member's recorded gestures as colored dots.",
+    "detail": "Four otamatones drawn as a family, each a drag-to-play fretless ribbon with its OWN character: DADDY sings low and slow (lazy 90ms glide, dark muffled mouth, slow wide vibrato), MOMMY mid and graceful, JUNIOR high and jumpy (22ms glide, thin bright buzz, eager fast vibrato), and the DOG doesn't really sing - a raspy driven growl (asymmetric fuzz after the resonant filter) with a breathy noise CHUFF on every attack: press = WOOF (the note starts +6 semitones and drops), holding turns it into a HOWL that drifts sharp with a huge wobble, and it's permanently a little out of tune. Wiggle sideways off the ribbon to open each mouth (a resonant-filter wah - the faces' pixel mouths open to match). The LOOP: arm a member with its REC button and everything you play on it - the continuous pitch/mouth gesture, not quantized notes - records into a shared 8-beat tape loop and replays verbatim as a ghost dot on the ribbon while you layer the next family member on top. Two step-sequencer rows (BOOM/TICK) run underneath for rhythm, delia-style tap cells. The loop bar up top shows every member's recorded gestures as colored dots.",
     "controls": "drag a stem to play (multitouch: one finger per family member) . wiggle sideways = open the mouth . REC arms that member's loop, X clears it, M mutes . tap BOOM/TICK cells for rhythm . 1-4 = a little yip from each member . UP/DOWN tempo"
   }
 }
@@ -48,7 +48,7 @@ de:meta */
 
 enum { C_DAD, C_MOM, C_KID, C_DOG, NC };
 enum { EV_ON, EV_CC, EV_OFF };
-enum { SL_DAD = 9, SL_MOM, SL_KID, SL_DOG, SL_BOOM, SL_TICK };
+enum { SL_DAD = 9, SL_MOM, SL_KID, SL_DOG, SL_BOOM, SL_TICK, SL_CHUFF };
 
 typedef struct { float pos; int kind; float pitch, mouth; int born; } Ev;
 
@@ -104,6 +104,8 @@ static void rec_ev(int c, int kind, float pitch, float mouth) {
     F->ev[F->n++] = (Ev){ lp, kind, pitch, mouth, loop_i };
 }
 
+static void dog_chuff(void) { schedule_hit(0, 60, SL_CHUFF, 4, 70); }
+
 static void rep_off(int c) {
     if (fam[c].rv >= 0) { note_off(fam[c].rv); fam[c].rv = -1; }
     fam[c].ron = 0;
@@ -113,6 +115,7 @@ static void fire_ev(int c, Ev *e) {
     Chr *F = &fam[c];
     if (e->kind == EV_ON) {
         if (F->rv >= 0) note_off(F->rv);
+        if (c == C_DOG) dog_chuff();                  // replayed woofs keep their bark
         F->rv = note_on((int)e->pitch, SL_DAD + c, SPEC[c].vol);
         note_glide(F->rv, SPEC[c].glide);
         F->ron = 1; F->squash = 1;
@@ -146,6 +149,7 @@ static void member_on(int c, int y) {
     Chr *F = &fam[c];
     float m = rib_midi(c, y);
     float start = (c == C_DOG) ? m + 6 : m;           // the dog WOOFS: starts high, drops
+    if (c == C_DOG) dog_chuff();
     F->v = note_on((int)start, SL_DAD + c, SPEC[c].vol);
     note_glide(F->v, SPEC[c].glide);
     F->pitch = m; F->held = 0; F->squash = 1;
@@ -172,6 +176,10 @@ void init(void) {
         fam[c].v = fam[c].rv = -1;
     }
     instrument_tune(SL_DOG, 0.35f);                   // the dog is a little off. always.
+    instrument_drive(SL_DOG, 0.65f);                  // ...and raspy: asym fuzz after the
+    instrument_drive_mode(SL_DOG, DRIVE_ASYM);        // resonant filter = the growl
+    instrument(SL_CHUFF, INSTR_NOISE, 1, 60, 0, 30);  // the breathy "hh" of each woof
+    instrument_filter(SL_CHUFF, FILTER_BAND, 900, 4);
 
     instrument(SL_BOOM, INSTR_SINE, 2, 100, 0, 55);   // soft floor thump
     instrument_filter(SL_BOOM, FILTER_LOW, 320, 2);
