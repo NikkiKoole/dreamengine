@@ -1,0 +1,25 @@
+# render.yaml — Render blueprint for THIS public repo (the published dreamengine
+# gallery): deploys the lockstep-netplay relay, which ALSO serves the gallery
+# itself. Connect Render (New → Blueprint) to NikkiKoole/dreamengine — the
+# private code repo (dreamengine-studio) never needs to be shared with Render.
+#
+# net-relay.js here is a COPY, synced from the code repo's tools/net-relay.js
+# on every publish (tools/publish-cart.sh) — don't edit it here.
+#
+# Because the relay serves the site too, games work straight off the Render
+# domain with NO ?relay= param (the web transport defaults to the page's host):
+#   https://<name>.onrender.com/pong/?room=play
+# github.io links still work as well, with the explicit param:
+#   https://nikkikoole.github.io/dreamengine/pong/?room=play&relay=wss://<name>.onrender.com
+#
+# Free-tier caveat: sleeps after ~15 idle min; first hit takes ~30-60s. Warm it
+# by opening the bare https://<name>.onrender.com/ first (the gallery answers).
+services:
+  - type: web
+    name: dreamengine-relay
+    runtime: node
+    region: frankfurt          # EU — lockstep is latency-sensitive; keep the hop short
+    plan: free
+    buildCommand: echo "zero-dep — no build"
+    startCommand: node net-relay.js --port $PORT --serve .
+    autoDeploy: false          # redeploy by hand; publishes shouldn't bounce live matches
