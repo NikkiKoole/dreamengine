@@ -1,6 +1,6 @@
 {
-  "name": "omnichord",
-  "short_name": "omnichord",
+  "name": "Strumharpy",
+  "short_name": "Strumharpy",
   "display": "fullscreen",
   "background_color": "#1b1c1f",
   "theme_color": "#1b1c1f",
@@ -11,5 +11,6 @@
       "sizes": "320x200",
       "type": "image/png"
     }
-  ]
+  ],
+  "players": 1
 }
